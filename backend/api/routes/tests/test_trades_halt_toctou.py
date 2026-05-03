@@ -65,7 +65,12 @@ def app_with_trades(
         "flip_after_call": 1,  # flip to True after this many calls
     }
 
-    async def _fake_submit(payload: Any, settings: Any, client_order_id: str | None = None) -> str:
+    async def _fake_submit(
+        payload: Any,
+        settings: Any,
+        client_order_id: str | None = None,
+        broker_credentials: Any | None = None,
+    ) -> str:
         probes["broker_posts"].append((payload, client_order_id))
         return f"broker-order-{len(probes['broker_posts'])}"
 

@@ -144,11 +144,11 @@ function PipelineFlow({ run }: { run: PipelineRun | null }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-between">
         {stages.map((stage, i) => (
-          <div key={stage.label} className="flex items-center gap-2 flex-1">
+          <div key={stage.label} className="flex min-w-0 items-center gap-2 sm:flex-1">
             <div className={cn(
-              "flex-1 rounded-lg border px-3 py-2 text-center",
+              "min-w-0 flex-1 rounded-lg border px-3 py-2 text-center",
               stage.count > 0
                 ? "border-primary/40 bg-primary/5"
                 : "border-border bg-[var(--surface)]"
@@ -159,7 +159,7 @@ function PipelineFlow({ run }: { run: PipelineRun | null }) {
               <p className="t-label mt-0.5">{stage.label}</p>
             </div>
             {i < stages.length - 1 && (
-              <span className="text-muted-foreground/40 text-sm shrink-0" aria-hidden>→</span>
+              <span className="hidden text-muted-foreground/40 text-sm shrink-0 sm:inline" aria-hidden>→</span>
             )}
           </div>
         ))}
@@ -893,8 +893,8 @@ export default function PipelinePage() {
             {/* Section 1: Current Positions */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <Target className="h-4 w-4 text-muted-foreground" aria-hidden />
-                <h2 className="t-display-section text-foreground">
+                <Target className="h-4 w-4 !text-[#5d7268]" aria-hidden />
+                <h2 className="t-display-section !text-[#12281f]">
                   Current positions
                 </h2>
                 {displayPositions.length > 0 && (
@@ -1009,8 +1009,8 @@ export default function PipelinePage() {
             {/* Section 2: Today's Pipeline Run */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <Zap className="h-4 w-4 text-muted-foreground" aria-hidden />
-                <h2 className="t-display-section text-foreground">
+                <Zap className="h-4 w-4 !text-[#5d7268]" aria-hidden />
+                <h2 className="t-display-section !text-[#12281f]">
                   Latest pipeline run
                 </h2>
               </div>
@@ -1100,9 +1100,9 @@ export default function PipelinePage() {
             {/* Section 3: History */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <Clock className="h-4 w-4 text-muted-foreground" aria-hidden />
-                <h2 className="t-display-section text-foreground">
-                  History &nbsp;<span className="t-meta">· last 7 days</span>
+                <Clock className="h-4 w-4 !text-[#5d7268]" aria-hidden />
+                <h2 className="t-display-section !text-[#12281f]">
+                  History &nbsp;<span className="t-meta !text-[#5d7268]">· last 7 days</span>
                 </h2>
               </div>
               {history.length === 0 ? (
@@ -1311,8 +1311,8 @@ export default function PipelinePage() {
             {/* Section 4: Performance Summary */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <TrendingUp className="h-4 w-4 text-muted-foreground" aria-hidden />
-                <h2 className="t-display-section text-foreground">
+                <TrendingUp className="h-4 w-4 !text-[#5d7268]" aria-hidden />
+                <h2 className="t-display-section !text-[#12281f]">
                   Performance summary
                 </h2>
               </div>

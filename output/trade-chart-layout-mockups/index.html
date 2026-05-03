@@ -1,0 +1,1799 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AlphaDesk Trade Chart Layout Mockups</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400;1,6..72,500&display=swap");
+
+    :root {
+      --bg: #0b0a09;
+      --panel: #11110f;
+      --panel-2: #17150f;
+      --panel-3: #1e1b13;
+      --line: rgba(236, 230, 210, 0.09);
+      --line-strong: rgba(236, 230, 210, 0.18);
+      --text: #ece6d2;
+      --muted: #a8a08d;
+      --faint: #6f6858;
+      --gold: #c9a66b;
+      --gold-2: #e0c070;
+      --up: #a8d04d;
+      --down: #e07856;
+      --ice: #8db3c4;
+      --amber: #d9a441;
+      --wine: #8a3a4a;
+      --font-ui: "Inter Tight", system-ui, sans-serif;
+      --font-display: "Newsreader", Georgia, serif;
+      --font-mono: "JetBrains Mono", "SF Mono", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-ui);
+      letter-spacing: 0;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(180deg, rgba(201, 166, 107, 0.06), transparent 360px),
+        var(--bg);
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .board {
+      max-width: 1680px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    .board-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: end;
+      margin-bottom: 22px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 18px;
+    }
+
+    .brand {
+      color: var(--gold);
+      font-family: var(--font-display);
+      font-size: 15px;
+      font-style: italic;
+      margin-bottom: 6px;
+    }
+
+    h1 {
+      margin: 0;
+      color: #f7f1dc;
+      font-family: var(--font-display);
+      font-size: 38px;
+      font-weight: 400;
+      line-height: 1.05;
+    }
+
+    .intro {
+      max-width: 820px;
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      height: 28px;
+      padding: 0 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: 4px;
+      color: var(--muted);
+      background: rgba(17, 17, 15, 0.72);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .swatch {
+      width: 18px;
+      height: 3px;
+      border-radius: 3px;
+      background: var(--gold);
+    }
+
+    .swatch.book {
+      background: linear-gradient(90deg, var(--down), var(--up));
+    }
+
+    .swatch.support {
+      background: var(--ice);
+    }
+
+    .swatch.resistance {
+      background: var(--amber);
+    }
+
+    .concept {
+      min-height: 860px;
+      margin: 28px 0 40px;
+      border: 1px solid var(--line-strong);
+      background: var(--panel);
+      box-shadow: 0 18px 70px rgba(0, 0, 0, 0.28);
+      overflow: hidden;
+    }
+
+    .concept-title {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: center;
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(5, 5, 3, 0.24);
+    }
+
+    .concept-title h2 {
+      margin: 0;
+      color: #f7f1dc;
+      font-size: 20px;
+      font-weight: 500;
+    }
+
+    .concept-title p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .score-row {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .score {
+      min-width: 76px;
+      padding: 7px 9px;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      border-radius: 4px;
+      text-align: right;
+    }
+
+    .score span {
+      display: block;
+      color: var(--faint);
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .score b {
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .desk-top {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      height: 48px;
+      border-bottom: 1px solid var(--line);
+      background: #0d0c0a;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 18px;
+      color: #f7f1dc;
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-style: italic;
+    }
+
+    .logo span {
+      color: var(--gold);
+    }
+
+    .tabs {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .tabs button,
+    .tool-button {
+      height: 28px;
+      border: 0;
+      border-radius: 3px;
+      padding: 0 10px;
+      background: transparent;
+      color: var(--muted);
+      cursor: default;
+      font-size: 12px;
+    }
+
+    .tabs .active,
+    .tool-button.active {
+      color: #f7f1dc;
+      background: var(--panel-3);
+    }
+
+    .market-strip {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 16px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .up {
+      color: var(--up);
+    }
+
+    .down {
+      color: var(--down);
+    }
+
+    .label {
+      color: var(--faint);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .mono {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .chart-svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .grid-line {
+      stroke: rgba(236, 230, 210, 0.065);
+      stroke-width: 1;
+    }
+
+    .price-path {
+      fill: none;
+      stroke: var(--gold-2);
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2.6;
+    }
+
+    .price-fill {
+      fill: url(#priceGlow);
+      opacity: 0.54;
+    }
+
+    .axis-text {
+      fill: var(--faint);
+      font-family: var(--font-mono);
+      font-size: 10px;
+    }
+
+    .sr-band-support {
+      fill: rgba(141, 179, 196, 0.14);
+      stroke: rgba(141, 179, 196, 0.5);
+      stroke-dasharray: 6 5;
+    }
+
+    .sr-band-resistance {
+      fill: rgba(217, 164, 65, 0.13);
+      stroke: rgba(217, 164, 65, 0.58);
+      stroke-dasharray: 7 4;
+    }
+
+    .sr-label {
+      fill: #f7f1dc;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+    }
+
+    .book-buy {
+      fill: rgba(168, 208, 77, 0.2);
+      stroke: rgba(168, 208, 77, 0.35);
+    }
+
+    .book-sell {
+      fill: rgba(224, 120, 86, 0.18);
+      stroke: rgba(224, 120, 86, 0.35);
+    }
+
+    .order-chip {
+      display: inline-flex;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 92px;
+      padding: 5px 7px;
+      border-radius: 3px;
+      background: rgba(236, 230, 210, 0.04);
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 10px;
+    }
+
+    .order-chip b {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .cmd-layout {
+      display: grid;
+      grid-template-columns: 74px minmax(720px, 1fr) 310px;
+      height: 810px;
+    }
+
+    .icon-rail {
+      display: grid;
+      grid-template-rows: repeat(8, 52px) 1fr;
+      place-items: center;
+      border-right: 1px solid var(--line);
+      background: #0d0c0a;
+    }
+
+    .rail-icon {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border: 1px solid transparent;
+      border-radius: 5px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .rail-icon.active {
+      border-color: rgba(201, 166, 107, 0.5);
+      background: rgba(201, 166, 107, 0.12);
+      color: var(--gold-2);
+    }
+
+    .cmd-main {
+      display: grid;
+      grid-template-rows: 74px 44px minmax(0, 1fr) 86px;
+      min-width: 0;
+      background: var(--bg);
+    }
+
+    .symbol-bar {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .symbol-name {
+      min-width: 190px;
+    }
+
+    .symbol-name b {
+      display: block;
+      color: #f7f1dc;
+      font-family: var(--font-display);
+      font-size: 34px;
+      font-style: italic;
+      font-weight: 400;
+      line-height: 1;
+    }
+
+    .symbol-name span {
+      display: block;
+      margin-top: 4px;
+      color: var(--faint);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .quote {
+      min-width: 138px;
+    }
+
+    .quote b {
+      display: block;
+      color: #f7f1dc;
+      font-family: var(--font-mono);
+      font-size: 26px;
+      font-weight: 400;
+      line-height: 1;
+    }
+
+    .quote span {
+      color: var(--up);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(92px, 1fr));
+      gap: 1px;
+      flex: 1;
+      min-width: 0;
+      background: var(--line);
+    }
+
+    .metric {
+      min-width: 0;
+      padding: 10px 12px;
+      background: #0e0d0b;
+    }
+
+    .metric b {
+      display: block;
+      margin-top: 4px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .overlay-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .overlay-group {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      height: 26px;
+      padding: 0 9px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: rgba(236, 230, 210, 0.035);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .toggle.on {
+      color: #f7f1dc;
+      border-color: rgba(201, 166, 107, 0.45);
+      background: rgba(201, 166, 107, 0.12);
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--gold);
+    }
+
+    .dot.support {
+      background: var(--ice);
+    }
+
+    .dot.resistance {
+      background: var(--amber);
+    }
+
+    .dot.book {
+      background: linear-gradient(135deg, var(--down), var(--up));
+    }
+
+    .cmd-chart {
+      position: relative;
+      min-height: 0;
+      padding: 16px 16px 16px 24px;
+    }
+
+    .chart-shell {
+      position: relative;
+      height: 100%;
+      border: 1px solid var(--line);
+      background:
+        linear-gradient(90deg, rgba(236, 230, 210, 0.025) 1px, transparent 1px) 0 0 / 88px 100%,
+        linear-gradient(180deg, rgba(236, 230, 210, 0.035) 1px, transparent 1px) 0 0 / 100% 64px,
+        #0b0a09;
+      overflow: hidden;
+    }
+
+    .cmd-chart .chart-shell {
+      border-radius: 0;
+    }
+
+    .depth-ribbon {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 112px;
+      border-left: 1px solid var(--line);
+      background: rgba(5, 5, 3, 0.38);
+      pointer-events: none;
+    }
+
+    .depth-row {
+      position: absolute;
+      right: 0;
+      height: 24px;
+      border-top: 1px solid rgba(236, 230, 210, 0.05);
+      border-bottom: 1px solid rgba(236, 230, 210, 0.05);
+    }
+
+    .depth-row.sell {
+      background: linear-gradient(90deg, transparent, rgba(224, 120, 86, 0.42));
+    }
+
+    .depth-row.buy {
+      background: linear-gradient(90deg, transparent, rgba(168, 208, 77, 0.42));
+    }
+
+    .inside-legend {
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      max-width: calc(100% - 150px);
+    }
+
+    .chart-callout {
+      position: absolute;
+      border: 1px solid var(--line-strong);
+      background: rgba(17, 17, 15, 0.88);
+      padding: 8px 9px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.3;
+      backdrop-filter: blur(12px);
+    }
+
+    .chart-callout b {
+      display: block;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .execution-strip {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+      gap: 10px;
+      padding: 14px 24px;
+      border-top: 1px solid var(--line);
+      background: #0d0c0a;
+    }
+
+    .field {
+      min-width: 0;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--faint);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .input-look {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 34px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--panel);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .trade-button {
+      align-self: end;
+      min-width: 132px;
+      height: 34px;
+      border: 0;
+      border-radius: 4px;
+      background: var(--gold);
+      color: #181006;
+      font-weight: 700;
+    }
+
+    .cmd-side {
+      display: grid;
+      grid-template-rows: 1fr 1fr 172px;
+      border-left: 1px solid var(--line);
+      min-width: 0;
+      background: #0e0d0b;
+    }
+
+    .side-panel {
+      min-height: 0;
+      border-bottom: 1px solid var(--line);
+      overflow: hidden;
+    }
+
+    .side-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 38px;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(236, 230, 210, 0.025);
+    }
+
+    .side-head b {
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .side-head span {
+      color: var(--faint);
+      font-family: var(--font-mono);
+      font-size: 10px;
+    }
+
+    .ladder {
+      padding: 8px 10px;
+    }
+
+    .ladder-row {
+      display: grid;
+      grid-template-columns: 1fr 66px 1fr;
+      gap: 6px;
+      align-items: center;
+      height: 22px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 10px;
+    }
+
+    .bar {
+      height: 14px;
+      border-radius: 2px;
+    }
+
+    .bar.sell {
+      justify-self: end;
+      background: rgba(224, 120, 86, 0.28);
+    }
+
+    .bar.buy {
+      background: rgba(168, 208, 77, 0.3);
+    }
+
+    .sr-list {
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .sr-item {
+      display: grid;
+      grid-template-columns: 7px 1fr auto;
+      gap: 9px;
+      align-items: center;
+      padding: 8px;
+      border: 1px solid var(--line);
+      background: rgba(236, 230, 210, 0.025);
+      border-radius: 4px;
+    }
+
+    .sr-item i {
+      width: 7px;
+      height: 34px;
+      border-radius: 4px;
+      background: var(--ice);
+    }
+
+    .sr-item.res i {
+      background: var(--amber);
+    }
+
+    .sr-item b {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .sr-item span {
+      color: var(--faint);
+      font-size: 10px;
+    }
+
+    .sr-item strong {
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .note-card {
+      padding: 14px;
+      background: rgba(201, 166, 107, 0.08);
+      color: var(--muted);
+      font-family: var(--font-display);
+      font-size: 15px;
+      font-style: italic;
+      line-height: 1.35;
+    }
+
+    .lab-layout {
+      height: 810px;
+      display: grid;
+      grid-template-rows: 52px minmax(0, 1fr) 176px;
+      background: var(--bg);
+    }
+
+    .lab-toolbar {
+      display: grid;
+      grid-template-columns: minmax(260px, auto) minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--line);
+      background: #0d0c0a;
+    }
+
+    .ticker-pill {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .ticker-pill b {
+      color: #f7f1dc;
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-style: italic;
+      font-weight: 400;
+    }
+
+    .ticker-pill span {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .segmented {
+      display: flex;
+      width: max-content;
+      max-width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      overflow: hidden;
+      justify-self: center;
+    }
+
+    .segmented button {
+      height: 30px;
+      border: 0;
+      border-right: 1px solid var(--line);
+      padding: 0 11px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .segmented button:last-child {
+      border-right: 0;
+    }
+
+    .segmented .active {
+      background: rgba(201, 166, 107, 0.14);
+      color: var(--gold-2);
+    }
+
+    .lab-chart {
+      position: relative;
+      min-height: 0;
+      background:
+        linear-gradient(90deg, rgba(236, 230, 210, 0.025) 1px, transparent 1px) 0 0 / 72px 100%,
+        linear-gradient(180deg, rgba(236, 230, 210, 0.04) 1px, transparent 1px) 0 0 / 100% 58px,
+        #0b0a09;
+    }
+
+    .lab-stage {
+      position: absolute;
+      inset: 14px 14px 14px 14px;
+      border: 1px solid var(--line);
+      overflow: hidden;
+    }
+
+    .lab-chart .chart-svg {
+      position: absolute;
+      inset: 0;
+    }
+
+    .heat-overlay {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, transparent 0 58%, rgba(224, 120, 86, 0.09) 58% 65%, transparent 65%),
+        linear-gradient(90deg, transparent 0 18%, rgba(168, 208, 77, 0.08) 18% 27%, transparent 27%),
+        radial-gradient(ellipse at 76% 24%, rgba(224, 120, 86, 0.18), transparent 18%),
+        radial-gradient(ellipse at 42% 78%, rgba(168, 208, 77, 0.2), transparent 20%);
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+
+    .price-scale {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 92px;
+      border-left: 1px solid var(--line);
+      background: rgba(5, 5, 3, 0.45);
+    }
+
+    .scale-tag {
+      position: absolute;
+      right: 8px;
+      min-width: 60px;
+      height: 20px;
+      padding: 3px 6px;
+      color: #0b0a09;
+      border-radius: 3px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      text-align: center;
+    }
+
+    .scale-tag.res {
+      background: var(--amber);
+      top: 21%;
+    }
+
+    .scale-tag.mid {
+      background: var(--gold);
+      top: 46%;
+    }
+
+    .scale-tag.sup {
+      background: var(--ice);
+      top: 74%;
+    }
+
+    .floating-book {
+      position: absolute;
+      left: 18px;
+      top: 18px;
+      width: 238px;
+      border: 1px solid var(--line-strong);
+      background: rgba(13, 12, 10, 0.86);
+      backdrop-filter: blur(14px);
+    }
+
+    .floating-book .book-title {
+      display: flex;
+      justify-content: space-between;
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .mini-depth {
+      display: grid;
+      gap: 4px;
+      padding: 8px 10px 10px;
+    }
+
+    .mini-depth-row {
+      display: grid;
+      grid-template-columns: 44px 1fr 44px;
+      gap: 7px;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .mini-track {
+      height: 10px;
+      background: rgba(236, 230, 210, 0.05);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .mini-track span {
+      display: block;
+      height: 100%;
+      background: linear-gradient(90deg, rgba(224, 120, 86, 0.36), rgba(168, 208, 77, 0.42));
+    }
+
+    .lab-inspector {
+      display: grid;
+      grid-template-columns: 270px minmax(0, 1fr) 290px;
+      min-height: 0;
+      border-top: 1px solid var(--line);
+      background: #0d0c0a;
+    }
+
+    .inspector-cell {
+      padding: 14px;
+      border-right: 1px solid var(--line);
+      min-width: 0;
+    }
+
+    .inspector-cell:last-child {
+      border-right: 0;
+    }
+
+    .slider-row {
+      display: grid;
+      grid-template-columns: 88px minmax(0, 1fr) 42px;
+      gap: 10px;
+      align-items: center;
+      height: 30px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .slider {
+      height: 4px;
+      border-radius: 4px;
+      background: rgba(236, 230, 210, 0.09);
+      overflow: hidden;
+    }
+
+    .slider span {
+      display: block;
+      height: 100%;
+      background: var(--gold);
+    }
+
+    .sr-timeline {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .sr-level {
+      min-width: 0;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--ice);
+      background: rgba(236, 230, 210, 0.025);
+    }
+
+    .sr-level.res {
+      border-top-color: var(--amber);
+    }
+
+    .sr-level b {
+      display: block;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .sr-level span {
+      color: var(--faint);
+      font-size: 10px;
+    }
+
+    .order-form {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .wide-button {
+      grid-column: 1 / -1;
+      height: 32px;
+      border: 1px solid rgba(168, 208, 77, 0.42);
+      border-radius: 4px;
+      background: rgba(168, 208, 77, 0.14);
+      color: var(--up);
+      font-weight: 700;
+    }
+
+    .split-layout {
+      height: 810px;
+      display: grid;
+      grid-template-columns: minmax(620px, 1.45fr) minmax(360px, 0.72fr);
+      background: var(--bg);
+    }
+
+    .split-left {
+      display: grid;
+      grid-template-rows: 58px minmax(0, 1fr) 116px;
+      min-width: 0;
+      border-right: 1px solid var(--line);
+    }
+
+    .split-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--line);
+      background: #0d0c0a;
+    }
+
+    .split-name {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .split-name b {
+      color: #f7f1dc;
+      font-family: var(--font-display);
+      font-size: 30px;
+      font-style: italic;
+      font-weight: 400;
+    }
+
+    .split-name span {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .split-tools {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .split-chart {
+      position: relative;
+      min-height: 0;
+      padding: 14px;
+      background:
+        linear-gradient(90deg, rgba(236, 230, 210, 0.025) 1px, transparent 1px) 0 0 / 82px 100%,
+        linear-gradient(180deg, rgba(236, 230, 210, 0.04) 1px, transparent 1px) 0 0 / 100% 62px,
+        #0b0a09;
+    }
+
+    .split-chart .chart-shell {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 186px;
+    }
+
+    .plot-area {
+      position: relative;
+      min-width: 0;
+    }
+
+    .plot-area .chart-svg {
+      position: absolute;
+      inset: 0;
+    }
+
+    .book-rail {
+      border-left: 1px solid var(--line);
+      background: rgba(5, 5, 3, 0.38);
+      display: grid;
+      grid-template-rows: 34px minmax(0, 1fr);
+      min-width: 0;
+    }
+
+    .book-rail-head {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      align-items: center;
+      padding: 0 8px;
+      border-bottom: 1px solid var(--line);
+      color: var(--faint);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .book-stack {
+      padding: 8px;
+      display: grid;
+      grid-template-rows: repeat(18, 1fr);
+      gap: 4px;
+      min-height: 0;
+    }
+
+    .book-level {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 58px;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 9px;
+    }
+
+    .depth-pill {
+      height: 100%;
+      min-height: 14px;
+      border-radius: 2px;
+      background: rgba(224, 120, 86, 0.25);
+    }
+
+    .book-level.bid .depth-pill {
+      background: rgba(168, 208, 77, 0.26);
+    }
+
+    .trade-ticket-row {
+      display: grid;
+      grid-template-columns: 1.2fr repeat(4, minmax(0, 1fr)) auto;
+      gap: 10px;
+      padding: 15px 18px;
+      border-top: 1px solid var(--line);
+      background: #0d0c0a;
+      align-items: end;
+    }
+
+    .split-right {
+      display: grid;
+      grid-template-rows: 214px minmax(0, 1fr) 204px;
+      min-width: 0;
+      background: #0e0d0b;
+    }
+
+    .position-card {
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .position-main {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 14px;
+      margin-top: 10px;
+    }
+
+    .position-main b {
+      color: #f7f1dc;
+      font-family: var(--font-mono);
+      font-size: 28px;
+      font-weight: 400;
+    }
+
+    .position-main span {
+      color: var(--up);
+      font-family: var(--font-mono);
+      font-size: 13px;
+    }
+
+    .risk-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .risk-grid .score {
+      min-width: 0;
+      text-align: left;
+    }
+
+    .overlay-cards {
+      padding: 12px;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .overlay-card {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      margin-bottom: 10px;
+      padding: 11px;
+      border: 1px solid var(--line);
+      background: rgba(236, 230, 210, 0.025);
+      border-left: 4px solid var(--ice);
+    }
+
+    .overlay-card.res {
+      border-left-color: var(--amber);
+    }
+
+    .overlay-card.book {
+      border-left-color: var(--gold);
+    }
+
+    .overlay-card b {
+      display: block;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .overlay-card span {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .overlay-card strong {
+      align-self: start;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .activity-feed {
+      border-top: 1px solid var(--line);
+      padding: 12px;
+      overflow: hidden;
+    }
+
+    .feed-row {
+      display: grid;
+      grid-template-columns: 54px 1fr auto;
+      gap: 9px;
+      align-items: center;
+      height: 30px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .feed-row:last-child {
+      border-bottom: 0;
+    }
+
+    .feed-row time,
+    .feed-row strong {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+    }
+
+    .feed-row strong {
+      color: var(--text);
+    }
+
+    @media (max-width: 1180px) {
+      .board {
+        padding: 18px;
+      }
+
+      .board-header,
+      .concept-title {
+        grid-template-columns: 1fr;
+      }
+
+      .legend,
+      .score-row {
+        justify-content: flex-start;
+      }
+
+      .concept {
+        min-height: auto;
+        overflow-x: auto;
+      }
+
+      .cmd-layout,
+      .lab-layout,
+      .split-layout {
+        width: 1120px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="board">
+    <header class="board-header">
+      <div>
+        <div class="brand">AlphaDesk mockup board</div>
+        <h1>Trade chart layout concepts</h1>
+        <p class="intro">Three static directions for a trade page where the chart is the primary work surface, Book liquidity is represented spatially, and support/resistance levels are visible as actionable overlays instead of afterthought annotations.</p>
+      </div>
+      <div class="legend" aria-label="Overlay legend">
+        <span class="chip"><i class="swatch"></i> Price</span>
+        <span class="chip"><i class="swatch book"></i> Book pressure</span>
+        <span class="chip"><i class="swatch support"></i> Support</span>
+        <span class="chip"><i class="swatch resistance"></i> Resistance</span>
+      </div>
+    </header>
+
+    <section class="concept" aria-labelledby="concept-command">
+      <div class="concept-title">
+        <div>
+          <h2 id="concept-command">Concept 01: Command Canvas</h2>
+          <p>Classic desk proportions with the chart expanded center-stage. Book pressure becomes a right-edge depth ribbon inside the chart while S/R levels remain in both the plot and the inspection rail.</p>
+        </div>
+        <div class="score-row">
+          <div class="score"><span>Graph Area</span><b>68%</b></div>
+          <div class="score"><span>Book Mode</span><b>Ribbon</b></div>
+          <div class="score"><span>S/R Mode</span><b>Bands</b></div>
+        </div>
+      </div>
+
+      <div class="desk-top">
+        <div class="logo"><span>α</span>AlphaDesk</div>
+        <div class="tabs">
+          <button>Overview</button>
+          <button class="active">Trade</button>
+          <button>Research</button>
+          <button>Journal</button>
+        </div>
+        <div class="market-strip">
+          <span>14:32:08 ET</span>
+          <span>SPY <b class="up">+0.42%</b></span>
+          <span>VIX <b class="down">18.2</b></span>
+        </div>
+      </div>
+
+      <div class="cmd-layout">
+        <nav class="icon-rail" aria-label="Desk tools">
+          <div class="rail-icon active">CH</div>
+          <div class="rail-icon">BK</div>
+          <div class="rail-icon">SR</div>
+          <div class="rail-icon">AI</div>
+          <div class="rail-icon">⚙</div>
+          <div class="rail-icon">1D</div>
+          <div class="rail-icon">5D</div>
+          <div class="rail-icon">1M</div>
+        </nav>
+
+        <div class="cmd-main">
+          <div class="symbol-bar">
+            <div class="symbol-name">
+              <b>Nvidia</b>
+              <span>NVDA · Nasdaq · Semis</span>
+            </div>
+            <div class="quote">
+              <b>134.82</b>
+              <span>+1.74 · +1.31%</span>
+            </div>
+            <div class="metric-grid">
+              <div class="metric"><span class="label">Volume</span><b>28.4M</b></div>
+              <div class="metric"><span class="label">Range</span><b>132.10-135.44</b></div>
+              <div class="metric"><span class="label">Regime Fit</span><b class="up">0.82</b></div>
+              <div class="metric"><span class="label">Spread</span><b>0.03</b></div>
+              <div class="metric"><span class="label">Book Imbal.</span><b class="up">+18%</b></div>
+            </div>
+          </div>
+
+          <div class="overlay-bar">
+            <div class="overlay-group">
+              <span class="toggle on"><i class="dot book"></i> Book ribbon</span>
+              <span class="toggle on"><i class="dot support"></i> Support</span>
+              <span class="toggle on"><i class="dot resistance"></i> Resistance</span>
+              <span class="toggle">VWAP</span>
+              <span class="toggle">Signals</span>
+            </div>
+            <div class="overlay-group mono">
+              <span class="order-chip">Bid <b>134.79</b></span>
+              <span class="order-chip">Ask <b>134.82</b></span>
+              <span class="order-chip">Depth <b>2.4M</b></span>
+            </div>
+          </div>
+
+          <div class="cmd-chart">
+            <div class="chart-shell">
+              <div class="inside-legend">
+                <span class="chip"><i class="swatch support"></i> S1 131.92</span>
+                <span class="chip"><i class="swatch support"></i> S2 128.70</span>
+                <span class="chip"><i class="swatch resistance"></i> R1 136.10</span>
+                <span class="chip"><i class="swatch resistance"></i> R2 139.30</span>
+              </div>
+              <svg class="chart-svg" viewBox="0 0 1000 520" preserveAspectRatio="none" role="img" aria-label="Large price chart with support, resistance, and book ribbon overlays">
+                <defs>
+                  <linearGradient id="priceGlow" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stop-color="#c9a66b" stop-opacity="0.36"/>
+                    <stop offset="100%" stop-color="#c9a66b" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <line class="grid-line" x1="0" y1="88" x2="1000" y2="88"/>
+                <line class="grid-line" x1="0" y1="176" x2="1000" y2="176"/>
+                <line class="grid-line" x1="0" y1="264" x2="1000" y2="264"/>
+                <line class="grid-line" x1="0" y1="352" x2="1000" y2="352"/>
+                <line class="grid-line" x1="0" y1="440" x2="1000" y2="440"/>
+                <rect class="sr-band-resistance" x="0" y="90" width="888" height="46"/>
+                <rect class="sr-band-support" x="0" y="356" width="888" height="52"/>
+                <rect class="sr-band-support" x="0" y="430" width="888" height="34"/>
+                <text class="sr-label" x="20" y="118">R1 supply shelf · 136.10</text>
+                <text class="sr-label" x="20" y="387">S1 prior demand · 131.92</text>
+                <text class="sr-label" x="20" y="452">S2 gap fill · 128.70</text>
+                <path class="price-fill" d="M0,371 C48,354 68,326 100,340 C151,361 180,314 230,310 C282,307 294,266 342,276 C394,287 416,224 462,216 C525,203 552,248 610,230 C666,213 686,152 744,161 C812,171 835,116 888,126 L888,520 L0,520 Z"/>
+                <path class="price-path" d="M0,371 C48,354 68,326 100,340 C151,361 180,314 230,310 C282,307 294,266 342,276 C394,287 416,224 462,216 C525,203 552,248 610,230 C666,213 686,152 744,161 C812,171 835,116 888,126"/>
+                <line x1="888" y1="126" x2="1000" y2="126" stroke="#c9a66b" stroke-width="1.4" stroke-dasharray="4 5"/>
+                <text class="axis-text" x="924" y="121">134.82</text>
+                <text class="axis-text" x="930" y="91">136.10</text>
+                <text class="axis-text" x="930" y="360">131.92</text>
+              </svg>
+              <div class="depth-ribbon">
+                <div class="depth-row sell" style="top: 78px; width: 88px;"></div>
+                <div class="depth-row sell" style="top: 112px; width: 106px;"></div>
+                <div class="depth-row sell" style="top: 146px; width: 72px;"></div>
+                <div class="depth-row sell" style="top: 184px; width: 48px;"></div>
+                <div class="depth-row buy" style="top: 270px; width: 44px;"></div>
+                <div class="depth-row buy" style="top: 318px; width: 82px;"></div>
+                <div class="depth-row buy" style="top: 356px; width: 112px;"></div>
+                <div class="depth-row buy" style="top: 412px; width: 94px;"></div>
+              </div>
+              <div class="chart-callout" style="right: 128px; top: 96px;">
+                <b>R1 absorption</b>
+                1.8M ask depth stacked within 0.28%
+              </div>
+              <div class="chart-callout" style="left: 44%; bottom: 86px;">
+                <b>S1 defended</b>
+                3 touches · 72% bounce rate
+              </div>
+            </div>
+          </div>
+
+          <div class="execution-strip">
+            <div class="field"><label>Side</label><div class="input-look">Buy <span class="up">●</span></div></div>
+            <div class="field"><label>Qty</label><div class="input-look">250 sh</div></div>
+            <div class="field"><label>Type</label><div class="input-look">Limit</div></div>
+            <div class="field"><label>Limit</label><div class="input-look">134.78</div></div>
+            <div class="field"><label>Risk</label><div class="input-look">0.42R</div></div>
+            <button class="trade-button">Stage Order</button>
+          </div>
+        </div>
+
+        <aside class="cmd-side">
+          <div class="side-panel">
+            <div class="side-head"><b>Book Ladder</b><span>Live depth</span></div>
+            <div class="ladder">
+              <div class="ladder-row"><div class="bar sell" style="width: 74%;"></div><span>135.16</span><span>18.2k</span></div>
+              <div class="ladder-row"><div class="bar sell" style="width: 58%;"></div><span>135.02</span><span>14.8k</span></div>
+              <div class="ladder-row"><div class="bar sell" style="width: 96%;"></div><span>134.91</span><span>25.6k</span></div>
+              <div class="ladder-row"><div class="bar sell" style="width: 67%;"></div><span>134.86</span><span>17.4k</span></div>
+              <div class="ladder-row"><div></div><span style="color: var(--gold-2);">134.82</span><span>last</span></div>
+              <div class="ladder-row"><span>22.1k</span><span>134.78</span><div class="bar buy" style="width: 82%;"></div></div>
+              <div class="ladder-row"><span>31.5k</span><span>134.62</span><div class="bar buy" style="width: 100%;"></div></div>
+              <div class="ladder-row"><span>19.3k</span><span>134.48</span><div class="bar buy" style="width: 62%;"></div></div>
+              <div class="ladder-row"><span>27.9k</span><span>134.20</span><div class="bar buy" style="width: 88%;"></div></div>
+            </div>
+          </div>
+          <div class="side-panel">
+            <div class="side-head"><b>S/R Stack</b><span>Weighted</span></div>
+            <div class="sr-list">
+              <div class="sr-item res"><i></i><div><b>Resistance R2</b><span>High-volume node · weekly</span></div><strong>139.30</strong></div>
+              <div class="sr-item res"><i></i><div><b>Resistance R1</b><span>Ask wall · intraday</span></div><strong>136.10</strong></div>
+              <div class="sr-item"><i></i><div><b>Support S1</b><span>Prior demand · 3 touches</span></div><strong>131.92</strong></div>
+              <div class="sr-item"><i></i><div><b>Support S2</b><span>Gap fill · 20d value</span></div><strong>128.70</strong></div>
+            </div>
+          </div>
+          <div class="note-card">
+            Book and S/R are linked: selecting any level highlights both the price band and matching depth concentration, making "why here?" visible before order entry.
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="concept" aria-labelledby="concept-lab">
+      <div class="concept-title">
+        <div>
+          <h2 id="concept-lab">Concept 02: Layer Lab</h2>
+          <p>A research-heavy layout that gives the chart almost the entire viewport. Overlays are treated like adjustable layers, with Book heat and S/R confidence controlled in a bottom inspector.</p>
+        </div>
+        <div class="score-row">
+          <div class="score"><span>Graph Area</span><b>74%</b></div>
+          <div class="score"><span>Book Mode</span><b>Heat</b></div>
+          <div class="score"><span>S/R Mode</span><b>Layered</b></div>
+        </div>
+      </div>
+
+      <div class="desk-top">
+        <div class="logo"><span>α</span>AlphaDesk</div>
+        <div class="tabs">
+          <button>Desk</button>
+          <button class="active">Layer Lab</button>
+          <button>Signals</button>
+        </div>
+        <div class="market-strip">
+          <span>Book imbalance <b class="up">+18%</b></span>
+          <span>Spread <b>0.03</b></span>
+        </div>
+      </div>
+
+      <div class="lab-layout">
+        <div class="lab-toolbar">
+          <div class="ticker-pill">
+            <b>NVDA</b>
+            <span>134.82 <b class="up">+1.31%</b></span>
+          </div>
+          <div class="segmented" aria-label="Time range">
+            <button>1m</button>
+            <button>5m</button>
+            <button class="active">15m</button>
+            <button>1h</button>
+            <button>1D</button>
+            <button>1W</button>
+          </div>
+          <div class="overlay-group">
+            <span class="toggle on"><i class="dot book"></i> Heat</span>
+            <span class="toggle on"><i class="dot support"></i> S/R</span>
+            <span class="toggle on"><i class="dot"></i> Price</span>
+          </div>
+        </div>
+
+        <div class="lab-chart">
+          <div class="lab-stage">
+            <div class="heat-overlay"></div>
+            <svg class="chart-svg" viewBox="0 0 1180 560" preserveAspectRatio="none" role="img" aria-label="Full width chart with heatmap and price scale S/R tags">
+              <defs>
+                <linearGradient id="priceGlow2" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="#e0c070" stop-opacity="0.33"/>
+                  <stop offset="100%" stop-color="#e0c070" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <line class="grid-line" x1="0" y1="86" x2="1180" y2="86"/>
+              <line class="grid-line" x1="0" y1="172" x2="1180" y2="172"/>
+              <line class="grid-line" x1="0" y1="258" x2="1180" y2="258"/>
+              <line class="grid-line" x1="0" y1="344" x2="1180" y2="344"/>
+              <line class="grid-line" x1="0" y1="430" x2="1180" y2="430"/>
+              <rect class="sr-band-resistance" x="0" y="104" width="1090" height="38"/>
+              <rect class="sr-band-support" x="0" y="378" width="1090" height="46"/>
+              <rect x="210" y="0" width="70" height="560" fill="rgba(168, 208, 77, 0.045)"/>
+              <rect x="704" y="0" width="82" height="560" fill="rgba(224, 120, 86, 0.052)"/>
+              <path d="M0,388 C72,402 108,346 164,352 C220,358 250,304 314,315 C370,325 432,270 486,284 C548,300 600,226 670,238 C735,249 760,176 826,190 C900,206 942,144 1012,154 C1056,160 1082,125 1090,132 L1090,560 L0,560 Z" fill="url(#priceGlow2)"/>
+              <path class="price-path" d="M0,388 C72,402 108,346 164,352 C220,358 250,304 314,315 C370,325 432,270 486,284 C548,300 600,226 670,238 C735,249 760,176 826,190 C900,206 942,144 1012,154 C1056,160 1082,125 1090,132"/>
+              <text class="sr-label" x="22" y="128">Resistance cluster: 136.10-136.42 · 78% confidence</text>
+              <text class="sr-label" x="22" y="407">Support shelf: 131.70-132.05 · 84% confidence</text>
+            </svg>
+            <div class="price-scale">
+              <div class="scale-tag res">R1 136.10</div>
+              <div class="scale-tag mid">134.82</div>
+              <div class="scale-tag sup">S1 131.92</div>
+            </div>
+            <div class="floating-book">
+              <div class="book-title"><span>Book Heat</span><span class="up">+18% bid</span></div>
+              <div class="mini-depth">
+                <div class="mini-depth-row"><span>135.20</span><div class="mini-track"><span style="width: 78%;"></span></div><span>24k</span></div>
+                <div class="mini-depth-row"><span>134.98</span><div class="mini-track"><span style="width: 54%;"></span></div><span>17k</span></div>
+                <div class="mini-depth-row"><span>134.82</span><div class="mini-track"><span style="width: 34%;"></span></div><span>last</span></div>
+                <div class="mini-depth-row"><span>134.62</span><div class="mini-track"><span style="width: 94%;"></span></div><span>31k</span></div>
+                <div class="mini-depth-row"><span>134.20</span><div class="mini-track"><span style="width: 86%;"></span></div><span>28k</span></div>
+              </div>
+            </div>
+            <div class="chart-callout" style="right: 124px; top: 152px;">
+              <b>Heat pocket</b>
+              Sellers refresh above R1; fade risk increases near 136.
+            </div>
+          </div>
+        </div>
+
+        <div class="lab-inspector">
+          <div class="inspector-cell">
+            <span class="label">Overlay opacity</span>
+            <div class="slider-row"><span>Book heat</span><div class="slider"><span style="width: 78%;"></span></div><b>78</b></div>
+            <div class="slider-row"><span>S/R zones</span><div class="slider"><span style="width: 64%; background: var(--ice);"></span></div><b>64</b></div>
+            <div class="slider-row"><span>VWAP</span><div class="slider"><span style="width: 42%; background: var(--amber);"></span></div><b>42</b></div>
+          </div>
+          <div class="inspector-cell">
+            <span class="label">Support / Resistance confidence</span>
+            <div class="sr-timeline">
+              <div class="sr-level res"><b>139.30</b><span>R2 · weekly node</span></div>
+              <div class="sr-level res"><b>136.10</b><span>R1 · ask wall</span></div>
+              <div class="sr-level"><b>131.92</b><span>S1 · defended</span></div>
+              <div class="sr-level"><b>128.70</b><span>S2 · gap fill</span></div>
+              <div class="sr-level"><b>126.44</b><span>S3 · value low</span></div>
+            </div>
+          </div>
+          <div class="inspector-cell">
+            <span class="label">Fast order</span>
+            <div class="order-form">
+              <div class="input-look">Buy</div>
+              <div class="input-look">250</div>
+              <div class="input-look">134.78</div>
+              <div class="input-look">0.42R</div>
+              <button class="wide-button">Stage at S/R Pullback</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="concept" aria-labelledby="concept-split">
+      <div class="concept-title">
+        <div>
+          <h2 id="concept-split">Concept 03: Split Focus</h2>
+          <p>A tighter trader layout: a very large plot, an embedded book ladder sharing the chart’s y-axis, and a right rail that explains overlay meaning, position risk, and recent level events.</p>
+        </div>
+        <div class="score-row">
+          <div class="score"><span>Graph Area</span><b>63%</b></div>
+          <div class="score"><span>Book Mode</span><b>Y-Axis</b></div>
+          <div class="score"><span>S/R Mode</span><b>Cards</b></div>
+        </div>
+      </div>
+
+      <div class="desk-top">
+        <div class="logo"><span>α</span>AlphaDesk</div>
+        <div class="tabs">
+          <button class="active">Trade</button>
+          <button>Book</button>
+          <button>Risk</button>
+          <button>Journal</button>
+        </div>
+        <div class="market-strip">
+          <span>Long 250 sh</span>
+          <span class="up">Unreal. +$435</span>
+        </div>
+      </div>
+
+      <div class="split-layout">
+        <div class="split-left">
+          <div class="split-head">
+            <div class="split-name">
+              <b>Nvidia</b>
+              <span>NVDA 134.82 <b class="up">+1.31%</b></span>
+            </div>
+            <div class="split-tools">
+              <span class="toggle on"><i class="dot support"></i> Demand</span>
+              <span class="toggle on"><i class="dot resistance"></i> Supply</span>
+              <span class="toggle on"><i class="dot book"></i> Ladder</span>
+            </div>
+          </div>
+
+          <div class="split-chart">
+            <div class="chart-shell">
+              <div class="plot-area">
+                <svg class="chart-svg" viewBox="0 0 850 560" preserveAspectRatio="none" role="img" aria-label="Price chart with embedded book ladder sharing the y-axis">
+                  <defs>
+                    <linearGradient id="priceGlow3" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stop-color="#e0c070" stop-opacity="0.32"/>
+                      <stop offset="100%" stop-color="#e0c070" stop-opacity="0"/>
+                    </linearGradient>
+                  </defs>
+                  <line class="grid-line" x1="0" y1="86" x2="850" y2="86"/>
+                  <line class="grid-line" x1="0" y1="172" x2="850" y2="172"/>
+                  <line class="grid-line" x1="0" y1="258" x2="850" y2="258"/>
+                  <line class="grid-line" x1="0" y1="344" x2="850" y2="344"/>
+                  <line class="grid-line" x1="0" y1="430" x2="850" y2="430"/>
+                  <rect class="sr-band-resistance" x="0" y="96" width="850" height="50"/>
+                  <rect class="sr-band-support" x="0" y="376" width="850" height="56"/>
+                  <path d="M0,398 C38,374 86,352 128,362 C174,374 216,314 262,326 C314,340 356,268 404,278 C450,288 496,226 552,236 C606,246 640,184 690,194 C754,206 786,148 850,154 L850,560 L0,560 Z" fill="url(#priceGlow3)"/>
+                  <path class="price-path" d="M0,398 C38,374 86,352 128,362 C174,374 216,314 262,326 C314,340 356,268 404,278 C450,288 496,226 552,236 C606,246 640,184 690,194 C754,206 786,148 850,154"/>
+                  <line x1="0" y1="154" x2="850" y2="154" stroke="#c9a66b" stroke-width="1.2" stroke-dasharray="4 6"/>
+                  <text class="sr-label" x="18" y="126">R1 · supply + ask wall</text>
+                  <text class="sr-label" x="18" y="408">S1 · demand shelf</text>
+                </svg>
+                <div class="chart-callout" style="right: 24px; top: 112px;"><b>R1 rejects</b> Ladder still heavy above price.</div>
+                <div class="chart-callout" style="left: 34px; bottom: 84px;"><b>S1 plan</b> Add only on defended retest.</div>
+              </div>
+              <aside class="book-rail" aria-label="Embedded book ladder">
+                <div class="book-rail-head"><span>Size</span><span>Price</span></div>
+                <div class="book-stack">
+                  <div class="book-level"><div class="depth-pill" style="width: 78%;"></div><span>136.22</span></div>
+                  <div class="book-level"><div class="depth-pill" style="width: 52%;"></div><span>136.04</span></div>
+                  <div class="book-level"><div class="depth-pill" style="width: 96%;"></div><span>135.88</span></div>
+                  <div class="book-level"><div class="depth-pill" style="width: 68%;"></div><span>135.44</span></div>
+                  <div class="book-level"><div class="depth-pill" style="width: 43%;"></div><span>135.10</span></div>
+                  <div class="book-level"><div class="depth-pill" style="width: 36%;"></div><span>134.90</span></div>
+                  <div class="book-level"><div class="depth-pill" style="width: 24%; background: rgba(201,166,107,0.5);"></div><span>134.82</span></div>
+                  <div class="book-level bid"><div class="depth-pill" style="width: 49%;"></div><span>134.70</span></div>
+                  <div class="book-level bid"><div class="depth-pill" style="width: 85%;"></div><span>134.42</span></div>
+                  <div class="book-level bid"><div class="depth-pill" style="width: 100%;"></div><span>134.20</span></div>
+                  <div class="book-level bid"><div class="depth-pill" style="width: 76%;"></div><span>133.88</span></div>
+                  <div class="book-level bid"><div class="depth-pill" style="width: 62%;"></div><span>133.44</span></div>
+                  <div class="book-level bid"><div class="depth-pill" style="width: 92%;"></div><span>132.10</span></div>
+                  <div class="book-level bid"><div class="depth-pill" style="width: 80%;"></div><span>131.92</span></div>
+                  <div class="book-level bid"><div class="depth-pill" style="width: 55%;"></div><span>131.48</span></div>
+                  <div class="book-level bid"><div class="depth-pill" style="width: 44%;"></div><span>130.90</span></div>
+                  <div class="book-level bid"><div class="depth-pill" style="width: 72%;"></div><span>128.70</span></div>
+                  <div class="book-level bid"><div class="depth-pill" style="width: 41%;"></div><span>127.88</span></div>
+                </div>
+              </aside>
+            </div>
+          </div>
+
+          <div class="trade-ticket-row">
+            <div class="field"><label>Plan</label><div class="input-look">Buy pullback into S1</div></div>
+            <div class="field"><label>Qty</label><div class="input-look">250</div></div>
+            <div class="field"><label>Entry</label><div class="input-look">134.78</div></div>
+            <div class="field"><label>Stop</label><div class="input-look">131.84</div></div>
+            <div class="field"><label>Target</label><div class="input-look">136.10</div></div>
+            <button class="trade-button">Stage</button>
+          </div>
+        </div>
+
+        <aside class="split-right">
+          <div class="position-card">
+            <span class="label">Position context</span>
+            <div class="position-main">
+              <b>250 sh</b>
+              <span>+$435.00</span>
+            </div>
+            <div class="risk-grid">
+              <div class="score"><span>Avg</span><b>133.08</b></div>
+              <div class="score"><span>Risk</span><b>0.42R</b></div>
+              <div class="score"><span>Room</span><b>0.95%</b></div>
+            </div>
+          </div>
+
+          <div class="overlay-cards">
+            <div class="overlay-card res"><div><b>R1 Supply</b><span>Ask wall aligns with prior intraday pivot. Book shows repeated replenishment.</span></div><strong>136.10</strong></div>
+            <div class="overlay-card book"><div><b>Book Imbalance</b><span>Bid-side depth is stronger below market, but sellers dominate the next 1.0% move.</span></div><strong class="up">+18%</strong></div>
+            <div class="overlay-card"><div><b>S1 Demand</b><span>Support is stronger because it combines volume node, VWAP reclaim, and three defended tests.</span></div><strong>131.92</strong></div>
+            <div class="overlay-card"><div><b>S2 Fallback</b><span>Gap-fill area becomes the invalidation zone for swing continuation.</span></div><strong>128.70</strong></div>
+          </div>
+
+          <div class="activity-feed">
+            <span class="label">Level activity</span>
+            <div class="feed-row"><time>14:31</time><span>Ask wall refreshed at R1</span><strong>+410k</strong></div>
+            <div class="feed-row"><time>14:22</time><span>S1 bounce held</span><strong class="up">3rd</strong></div>
+            <div class="feed-row"><time>13:58</time><span>Bid liquidity pulled</span><strong class="down">-22%</strong></div>
+            <div class="feed-row"><time>13:12</time><span>VWAP reclaim confirmed</span><strong>134.05</strong></div>
+            <div class="feed-row"><time>12:44</time><span>R1 first rejection</span><strong>136.08</strong></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const toggles = document.querySelectorAll(".toggle");
+    toggles.forEach((toggle) => {
+      toggle.addEventListener("click", () => toggle.classList.toggle("on"));
+    });
+  </script>
+</body>
+</html>

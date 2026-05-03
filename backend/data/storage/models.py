@@ -37,6 +37,7 @@ def _define_models() -> dict[str, Any]:
         Boolean,
         CheckConstraint,
         Column,
+        Date,
         DateTime,
         Float,
         Integer,
@@ -104,12 +105,214 @@ def _define_models() -> dict[str, Any]:
             Index("ix_options_underlying_expiry", "underlying", "expiry"),
         )
 
+    class TickerProfile(Base):
+        """Canonical, durable identity metadata for one ticker.
+
+        This is intentionally small in v1. Frequently changing market facts
+        live in ``TickerFact``; this table gives the rest of the app a stable
+        place to converge on symbol/company identity without re-fetching it
+        independently in each strategy or page.
+        """
+
+        __tablename__ = "ticker_profiles"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        symbol = Column(String(20), nullable=False, unique=True, index=True)
+        name = Column(String(255), nullable=True)
+        exchange = Column(String(64), nullable=True)
+        sector = Column(String(120), nullable=True)
+        industry = Column(String(160), nullable=True)
+        currency = Column(String(16), nullable=True)
+        cik = Column(String(32), nullable=True)
+        figi = Column(String(64), nullable=True)
+        profile_metadata = Column("metadata", JSONB, nullable=True, default=dict)
+        observed_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+        updated_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            onupdate=func.now(),
+        )
+
+    class TickerFact(Base):
+        """Reusable ticker-scoped fact with explicit freshness metadata."""
+
+        __tablename__ = "ticker_facts"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        symbol = Column(String(20), nullable=False, index=True)
+        namespace = Column(String(40), nullable=False, index=True)
+        key = Column(String(80), nullable=False, index=True)
+        value = Column(JSONB, nullable=False)
+        source = Column(String(80), nullable=False, index=True)
+        source_ref = Column(String(128), nullable=True)
+        as_of = Column(DateTime(timezone=True), nullable=True, index=True)
+        observed_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
+        source_updated_at = Column(DateTime(timezone=True), nullable=True)
+        expires_at = Column(DateTime(timezone=True), nullable=True, index=True)
+        stale_after_seconds = Column(Integer, nullable=True)
+        quality = Column(String(20), nullable=False, server_default="fresh", default="fresh", index=True)
+        is_demo = Column(Boolean, nullable=False, server_default="false", default=False)
+        schema_version = Column(Integer, nullable=False, server_default="1", default=1)
+        lineage_hash = Column(String(64), nullable=True, index=True)
+        created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+        updated_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            onupdate=func.now(),
+        )
+
+        __table_args__ = (
+            Index("ix_ticker_facts_latest", "symbol", "namespace", "key", "observed_at"),
+            Index("ix_ticker_facts_source_ref", "source", "source_ref"),
+        )
+
+    class TickerResearchRun(Base):
+        """Reusable external/LLM research run normalized by ticker."""
+
+        __tablename__ = "ticker_research_runs"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        run_id = Column(String(64), nullable=False, unique=True, index=True)
+        symbol = Column(String(20), nullable=False, index=True)
+        username = Column(String(128), nullable=True, index=True)
+        status = Column(String(32), nullable=False, index=True)
+        provider = Column(String(40), nullable=True)
+        deep_model = Column(String(120), nullable=True)
+        quick_model = Column(String(120), nullable=True)
+        analysts = Column(JSONB, nullable=False, default=list)
+        research_depth = Column(Integer, nullable=True)
+        trade_date = Column(Date, nullable=True)
+        summary_lines = Column(JSONB, nullable=False, default=list)
+        decision_text = Column(Text, nullable=True)
+        artifact_files = Column(JSONB, nullable=False, default=list)
+        request_payload = Column(JSONB, nullable=True)
+        error = Column(JSONB, nullable=True)
+        created_at = Column(DateTime(timezone=True), nullable=True)
+        started_at = Column(DateTime(timezone=True), nullable=True)
+        completed_at = Column(DateTime(timezone=True), nullable=True, index=True)
+        updated_at = Column(DateTime(timezone=True), nullable=True)
+        persisted_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+        __table_args__ = (
+            Index("ix_ticker_research_symbol_completed", "symbol", "completed_at"),
+            Index("ix_ticker_research_username_symbol", "username", "symbol"),
+        )
+
+    class User(Base):
+        """Durable application user profile.
+
+        Auth still accepts the env-configured admin as a compatibility
+        fallback, but every successful login is mirrored here and new users
+        are created here.  The username string remains the stable join key for
+        existing audit/session infrastructure.
+        """
+
+        __tablename__ = "users"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        username = Column(String(128), nullable=False, unique=True, index=True)
+        email = Column(String(255), nullable=True, unique=True, index=True)
+        password_hash = Column(String(255), nullable=True)
+        role = Column(String(32), nullable=False, server_default="user", default="user", index=True)
+        status = Column(String(32), nullable=False, server_default="active", default="active", index=True)
+        display_name = Column(String(160), nullable=True)
+        profile = Column(JSONB, nullable=True, default=dict)
+        created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+        updated_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            onupdate=func.now(),
+        )
+        last_login_at = Column(DateTime(timezone=True), nullable=True)
+
+        __table_args__ = (
+            Index("ix_users_status_role", "status", "role"),
+        )
+
+    class BrokerConnection(Base):
+        """Encrypted per-user brokerage connection.
+
+        Stores only encrypted credential material plus non-sensitive display
+        metadata. The active connection for a username/provider/environment is
+        used before falling back to server-wide env credentials.
+        """
+
+        __tablename__ = "broker_connections"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        username = Column(String(128), nullable=False, index=True)
+        provider = Column(String(32), nullable=False, index=True)
+        account_env = Column(String(16), nullable=False, server_default="paper", default="paper", index=True)
+        display_name = Column(String(160), nullable=True)
+        api_key_ciphertext = Column(Text, nullable=False)
+        secret_key_ciphertext = Column(Text, nullable=False)
+        key_last4 = Column(String(8), nullable=True)
+        status = Column(String(32), nullable=False, server_default="active", default="active", index=True)
+        is_default = Column(Boolean, nullable=False, server_default="true", default=True)
+        verified_at = Column(DateTime(timezone=True), nullable=True)
+        last_sync_at = Column(DateTime(timezone=True), nullable=True)
+        last_error = Column(Text, nullable=True)
+        broker_account_id = Column(String(128), nullable=True)
+        broker_metadata = Column("metadata", JSONB, nullable=True, default=dict)
+        created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+        updated_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            onupdate=func.now(),
+        )
+
+        __table_args__ = (
+            UniqueConstraint("username", "provider", "account_env", name="uq_broker_conn_user_provider_env"),
+            Index("ix_broker_conn_user_provider", "username", "provider", "status"),
+        )
+
+    class ReconciliationIssue(Base):
+        """Broker/local-ledger mismatch queued for user approval.
+
+        The periodic reconciler writes these rows instead of silently
+        mutating the local ledger. A user can approve the proposed action or
+        reject it, leaving a durable decision trail.
+        """
+
+        __tablename__ = "reconciliation_issues"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        issue_key = Column(String(160), nullable=False, unique=True, index=True)
+        username = Column(String(128), nullable=False, index=True)
+        broker_connection_id = Column(BigInteger, nullable=True, index=True)
+        provider = Column(String(32), nullable=False, server_default="alpaca", default="alpaca", index=True)
+        account_env = Column(String(16), nullable=False, server_default="paper", default="paper", index=True)
+        issue_type = Column(String(48), nullable=False, index=True)
+        severity = Column(String(16), nullable=False, server_default="warning", default="warning", index=True)
+        status = Column(String(24), nullable=False, server_default="open", default="open", index=True)
+        symbol = Column(String(32), nullable=True, index=True)
+        broker_order_id = Column(String(128), nullable=True, index=True)
+        client_order_id = Column(String(128), nullable=True, index=True)
+        local_trade_id = Column(BigInteger, nullable=True, index=True)
+        broker_snapshot = Column(JSONB, nullable=True)
+        local_snapshot = Column(JSONB, nullable=True)
+        proposed_action = Column(JSONB, nullable=False, default=dict)
+        detected_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
+        decided_at = Column(DateTime(timezone=True), nullable=True)
+        decided_by = Column(String(128), nullable=True)
+        resolution_note = Column(Text, nullable=True)
+
+        __table_args__ = (
+            Index("ix_recon_issues_user_status", "username", "status", "detected_at"),
+            Index("ix_recon_issues_type_status", "issue_type", "status"),
+        )
+
     class Trade(Base):
         """Trade journal entry tracking the full lifecycle of a trade."""
 
         __tablename__ = "trades"
 
         id = Column(Integer, primary_key=True, autoincrement=True)
+        username = Column(String(128), nullable=True, index=True)
         symbol = Column(String(20), nullable=False, index=True)
         strategy = Column(String(60), nullable=True, index=True)
         legs = Column(JSONB, nullable=True, default=list)
@@ -523,6 +726,12 @@ def _define_models() -> dict[str, Any]:
     _models_cache.update({
         "OHLCVBar": OHLCVBar,
         "OptionsSnapshot": OptionsSnapshot,
+        "TickerProfile": TickerProfile,
+        "TickerFact": TickerFact,
+        "TickerResearchRun": TickerResearchRun,
+        "User": User,
+        "BrokerConnection": BrokerConnection,
+        "ReconciliationIssue": ReconciliationIssue,
         "Trade": Trade,
         "Position": Position,
         "Watchlist": Watchlist,

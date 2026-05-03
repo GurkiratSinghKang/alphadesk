@@ -78,7 +78,10 @@
         # list them, so default-deny posture must be explicit.
         # ``fullscreen=(self)`` keeps the in-app full-screen chart toggle
         # working without permitting cross-origin iframes to take over.
-        Permissions-Policy "accelerometer=(), autoplay=(), browsing-topics=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(self), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), usb=(), web-share=(), xr-spatial-tracking=(), interest-cohort=()"
+        # ``web-share`` is intentionally omitted: Chromium no longer
+        # recognizes it as a Permissions-Policy feature and logs a warning on
+        # every navigation when it is present.
+        Permissions-Policy "accelerometer=(), autoplay=(), browsing-topics=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(self), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), usb=(), xr-spatial-tracking=(), interest-cohort=()"
         # Round-6 L-7: cross-origin isolation headers.
         # COOP "same-origin" prevents window stealing across origins.
         # COEP "credentialless" enforces that any cross-origin
@@ -127,10 +130,12 @@
         # browsers POST violations to /api/v1/security/csp-report
         # without blocking, so we can see exactly which inline
         # scripts/styles need hashing or nonce-wiring before flipping
-        # the enforced header. Once the violation log is empty for a
-        # week of normal traffic, the unsafe-inline above can be
-        # dropped and this Report-Only line removed.
-        >Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https:; style-src 'self' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss://{$DOMAIN:localhost}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests; report-uri /api/v1/security/csp-report"
+        # the enforced header. ``upgrade-insecure-requests`` intentionally
+        # stays only in the enforced policy above: Chromium ignores it in
+        # Report-Only and surfaces a console error on every page load.
+        # Once the violation log is empty for a week of normal traffic, the
+        # unsafe-inline above can be dropped and this Report-Only line removed.
+        >Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https:; style-src 'self' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss://{$DOMAIN:localhost}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; report-uri /api/v1/security/csp-report"
         -Server
         -X-Powered-By
         # BUG-051: strip the ``Via: 1.1 Caddy`` response header. Leaking the

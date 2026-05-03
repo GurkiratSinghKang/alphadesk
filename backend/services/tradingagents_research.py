@@ -865,6 +865,12 @@ async def _execute_tradingagents_run(username: str, run_id: str) -> None:
             }
         )
     await _store_record(username, record)
+    try:
+        from services.ticker_context import persist_tradingagents_research
+
+        await persist_tradingagents_research(username, record)
+    except Exception:
+        logger.debug("TradingAgents reusable research persistence failed", exc_info=True)
 
 
 async def _heartbeat_tradingagents_run(username: str, run_id: str, stop: asyncio.Event) -> None:

@@ -145,7 +145,7 @@ export default function RequestAccessForm() {
     return (
       <div className="flex flex-col gap-5">
         <div className="border-b border-[#d7e4d9] pb-5">
-          <div className="mb-4 inline-flex size-11 items-center justify-center rounded-[8px] border border-[#0f7a5d]/25 bg-[#e8f5ea] text-[#0f7a5d]">
+          <div className="mb-4 inline-flex size-11 items-center justify-center rounded-[8px] border border-[#b9d8c6] bg-[#e8f5ea] text-[#0f7a5d]">
             <CheckCircle className="h-5 w-5" aria-hidden weight="regular" />
           </div>
           <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-[#0f7a5d]">
@@ -158,7 +158,7 @@ export default function RequestAccessForm() {
             Reference {requestId || "queued"}. A human review is next; approved accounts receive credentials after risk policy and data entitlement checks.
           </p>
         </div>
-        <div className="grid gap-3 rounded-[8px] border border-[#d7e4d9] bg-[#f7fbf4] p-4">
+        <div className="grid gap-3 rounded-[8px] border border-[#d7e4d9] bg-white/70 p-4">
           <p className="font-sans text-[13px] font-medium text-[#12281f]">What happens next</p>
           <p className="font-sans text-[13px] leading-[1.55] text-[#5d7268]">
             We review the book context, trading mode, jurisdiction, and instrument set. If there is a fit, onboarding starts with paper routing and an operator walkthrough.
@@ -173,13 +173,13 @@ export default function RequestAccessForm() {
             setState("idle");
             setRequestId("");
           }}
-          className="h-12 rounded-[8px] bg-[#0f7a5d] font-sans text-[15px] font-semibold text-white hover:bg-[#0c654d]"
+          className="h-12 rounded-[8px]"
         >
           Submit another request
         </Button>
         <Link
           href="/login"
-          className="text-center font-sans text-[13px] font-medium text-[#0f7a5d] underline decoration-[#93cdb8] underline-offset-4 transition-colors hover:text-[#0c654d]"
+          className="text-center font-sans text-[13px] font-medium text-[#0f7a5d] underline decoration-[#0f7a5d]/35 underline-offset-4 transition-colors hover:text-[#0a5f49]"
         >
           Back to sign in
         </Link>
@@ -393,7 +393,7 @@ export default function RequestAccessForm() {
         size="lg"
         variant="primary"
         disabled={!canSubmit || state === "loading"}
-        className="h-12 rounded-[8px] bg-[#0f7a5d] font-sans text-[15px] font-semibold text-white shadow-[0_18px_38px_-28px_rgba(15,122,93,0.85)] hover:bg-[#0c654d]"
+        className="h-12 rounded-[8px]"
       >
         {state === "loading" ? (
           <CircleNotch className="mr-2 h-4 w-4 animate-spin" aria-hidden weight="regular" />

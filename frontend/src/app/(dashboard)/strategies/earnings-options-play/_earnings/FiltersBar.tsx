@@ -170,7 +170,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
           // Round-4 (CLUSTER E/9): 24×24 thumb classes for touch targets.
           className={cn("w-full md:w-32 max-w-full", SLIDER_THUMB_CLASSES)}
         />
-        <span className="font-mono text-[13px] tabular-nums">{localIvRank}</span>
+        <span className="font-mono text-[13px] tabular-nums text-[color:var(--fg-base)]">{localIvRank}</span>
       </label>
 
       {/* TIME — radiogroup (CLUSTER C/7). Replaces the previous select
@@ -244,7 +244,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
           onBlur={() => onSettleRef?.()}
           // Round-8 / MO-06: bump padding so the SORT select hits
           // 44px on phones; the ``py-0.5`` left it ~22px tall.
-          className="min-h-[44px] rounded border border-[color:var(--fg-border)] bg-transparent px-2 py-1.5 font-mono text-[12px]"
+          className="min-h-[44px] rounded border border-[color:var(--fg-border)] bg-transparent px-2 py-1.5 font-mono text-[12px] text-[color:var(--fg-base)]"
         >
           {SORT_OPTIONS.map((o) => (
             <option key={o.key} value={o.key}>{o.label}</option>

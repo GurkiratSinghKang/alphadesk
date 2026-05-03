@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import DashboardPageLayout from "@/components/layouts/DashboardPageLayout";
 import {
@@ -9,7 +9,6 @@ import {
   postEarningsFullResearch,
 } from "@/lib/api";
 import type {
-  CalendarRow,
   EarningsCandidateDecision,
   EarningsDetail,
   EarningsCalendarFilters,
@@ -27,6 +26,7 @@ import {
 import EarningsCalendarSidebar from "./_earnings/EarningsCalendarSidebar";
 import FiltersBar from "./_earnings/FiltersBar";
 import EarningsDetailPanel from "./_earnings/EarningsDetailPanel";
+import { useTickerContext } from "@/hooks/useQueries";
 
 /**
  * Round-4: tags _why_ a selection changed so DetailHeader can decide
@@ -177,6 +177,13 @@ export default function EarningsOptionsPlayPage() {
   // query — filter-mash + symbol-mash both cancel the previous request.
   const detailError = detailQuery.error && !isAbortError(detailQuery.error)
     ? (detailQuery.error as Error).message
+    : null;
+  const tickerContextQuery = useTickerContext(
+    selectedSymbol ? [selectedSymbol] : [],
+    ["quote", "options_summary", "earnings", "research"],
+  );
+  const tickerContext = selectedSymbol
+    ? tickerContextQuery.data?.symbols[selectedSymbol] ?? null
     : null;
 
   // ── Auto-select first symbol when calendar loads ─────────
@@ -481,6 +488,7 @@ export default function EarningsOptionsPlayPage() {
           <EarningsDetailPanel
             ref={detailPanelRef}
             detail={detail}
+            tickerContext={tickerContext}
             loading={loadingDetail}
             refetching={refetchingDetail}
             error={detailError}
@@ -505,20 +513,33 @@ export default function EarningsOptionsPlayPage() {
  * Dismissal persists in localStorage so power users see it once.
  */
 const INTRO_DISMISS_KEY = "alphadesk:earnings-intro-dismissed";
+const INTRO_DISMISS_EVENT = "alphadesk:earnings-intro-dismissed-change";
+
+function subscribeIntroDismissed(onStoreChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("storage", onStoreChange);
+  window.addEventListener(INTRO_DISMISS_EVENT, onStoreChange);
+  return () => {
+    window.removeEventListener("storage", onStoreChange);
+    window.removeEventListener(INTRO_DISMISS_EVENT, onStoreChange);
+  };
+}
+
+function readIntroDismissed() {
+  return safeGetItem(INTRO_DISMISS_KEY) === "1";
+}
 
 function StrategyIntroCard() {
-  const [mounted, setMounted] = useState(false);
-  const [dismissed, setDismissed] = useState(true);
-  useEffect(() => {
-    setDismissed(safeGetItem(INTRO_DISMISS_KEY) === "1");
-    setMounted(true);
-  }, []);
-  if (!mounted) return null;
+  const dismissed = useSyncExternalStore(
+    subscribeIntroDismissed,
+    readIntroDismissed,
+    () => true,
+  );
   if (dismissed) return null;
   return (
     <aside
       data-slot="earnings-intro"
-      className="mb-3 rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-4 py-3 text-[13px] leading-relaxed"
+      className="mb-3 rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-4 py-3 text-[13px] leading-relaxed text-fg-muted"
     >
       <p>
         <strong className="u-brand">This strategy looks for defined-risk earnings option trades.</strong>{" "}
@@ -531,9 +552,9 @@ function StrategyIntroCard() {
         type="button"
         onClick={() => {
           safeSetItem(INTRO_DISMISS_KEY, "1");
-          setDismissed(true);
+          window.dispatchEvent(new Event(INTRO_DISMISS_EVENT));
         }}
-        className="mt-2 t-meta underline u-muted hover:u-brand"
+        className="mt-2 t-meta underline text-fg-muted hover:text-brand"
       >
         Got it — don&apos;t show again
       </button>

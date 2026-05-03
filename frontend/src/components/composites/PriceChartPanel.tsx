@@ -4,7 +4,10 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 import Mono from "@/components/typography/Mono";
-import ChartPane from "@/components/charts/ChartPane";
+import ChartPane, {
+  type ChartOrderPlacement,
+  type ChartTradeOverlay,
+} from "@/components/charts/ChartPane";
 import { useMarketDepth } from "@/hooks/useMarketDepth";
 import { useShortcutHandler } from "@/hooks/useKeyboardShortcuts";
 import type {
@@ -58,6 +61,8 @@ export interface PriceChartPanelProps {
   onRetry?: () => void;
   /** Execution mode trims header chrome so the chart owns the workspace. */
   density?: "standard" | "execution";
+  tradeOverlays?: ChartTradeOverlay[];
+  chartOrderPlacement?: ChartOrderPlacement | null;
   className?: string;
 }
 
@@ -113,7 +118,7 @@ function DashSpan({ size = 13 }: { size?: number }) {
 
 export default function PriceChartPanel({
   symbol, quote, meta, series,
-  activeRange, onRangeChange, isLoading, error, onRetry, density = "standard", className,
+  activeRange, onRangeChange, isLoading, error, onRetry, density = "standard", tradeOverlays, chartOrderPlacement, className,
 }: PriceChartPanelProps) {
   const last = numberOrNull(quote.last);
   const change = numberOrNull(quote.change);
@@ -323,7 +328,13 @@ export default function PriceChartPanel({
           // chart-type toggle + drawing-tools rail + indicator menu).
           // ChartCanvas remains exported below for any caller that still
           // wants the minimal line-only version; the dashboard does not.
-          <ChartPane data={chartData} topOfBook={quote} marketDepth={marketDepth} />
+          <ChartPane
+            data={chartData}
+            topOfBook={quote}
+            marketDepth={marketDepth}
+            tradeOverlays={tradeOverlays}
+            chartOrderPlacement={chartOrderPlacement}
+          />
         )}
       </div>
     </section>

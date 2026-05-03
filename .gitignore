@@ -109,3 +109,4 @@ output/playwright/
 # Local Claude Code state
 # =============================================================================
 .claude/
+.gstack/

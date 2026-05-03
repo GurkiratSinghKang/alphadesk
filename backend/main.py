@@ -32,8 +32,9 @@ from core.database import init_db, close_db
 from core.logging import REQUEST_ID, configure_logging
 from core.redis import get_redis, close_redis
 from api.routes import market, screener, analysis, options, trades, portfolio, agents, webhooks
-from api.routes import symbols, strategies, market_overview, risk, pipeline, news
+from api.routes import symbols, strategies, market_overview, risk, pipeline, news, tickers
 from api.routes import tradingagents
+from api.routes import broker as broker_routes
 from api.routes import earnings
 from api.routes import access_requests as access_requests_routes
 from api.routes import metrics as metrics_routes
@@ -417,8 +418,10 @@ app.include_router(market_overview.router, prefix="/api/v1/market-overview", tag
 app.include_router(risk.router, prefix="/api/v1/risk", tags=["Risk"], dependencies=[Depends(require_auth)])
 app.include_router(pipeline.router, prefix="/api/v1/pipeline", tags=["Pipeline"], dependencies=[Depends(require_auth)])
 app.include_router(news.router, prefix="/api/v1/news", tags=["News"], dependencies=[Depends(require_auth)])
+app.include_router(tickers.router, prefix="/api/v1/tickers", tags=["Tickers"], dependencies=[Depends(require_auth)])
 app.include_router(earnings.router, prefix="/api/v1", tags=["Earnings"], dependencies=[Depends(require_auth)])
 app.include_router(tradingagents.router, prefix="/api/v1/tradingagents", tags=["TradingAgents"], dependencies=[Depends(require_auth)])
+app.include_router(broker_routes.router, prefix="/api/v1/broker", tags=["Broker"], dependencies=[Depends(require_auth)])
 # Round-7 / M-8: web-vitals beacon — public endpoint (sendBeacon
 # fires from unauth pages too, and require_auth would silently drop
 # every landing-page sample). Validated payload shape + per-IP

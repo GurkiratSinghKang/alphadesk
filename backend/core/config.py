@@ -132,6 +132,9 @@ class Settings(BaseSettings):
     ADMIN_PASSWORD_HASH: str = ""  # bcrypt hash
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours — trading terminal stays open all day
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    # 32+ random bytes recommended. Used to derive the AES-256-GCM key that
+    # encrypts user-supplied brokerage credentials at rest.
+    BROKER_CREDENTIAL_ENCRYPTION_KEY: SecretStr = SecretStr("")
 
     # --- Production ---
     PRODUCTION_ORIGIN: str = ""  # e.g. "https://alphadesk.example.com"

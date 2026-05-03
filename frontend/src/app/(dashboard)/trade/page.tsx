@@ -59,6 +59,7 @@ import {
   type ChartRange,
   type StagedOrder,
 } from "@/components/composites";
+import type { ChartOrderPlacement, ChartTradeOverlay } from "@/components/charts/ChartPane";
 import OptionsPayoffPanel from "@/components/options/OptionsPayoffPanel";
 import OptionsStrategyBuilder from "@/components/options/OptionsStrategyBuilder";
 import { getBars, getOrders, placeOrder } from "@/lib/api";
@@ -547,6 +548,10 @@ export default function TradePage() {
       if (brokerRejected) {
         setOrderError(`Order ${placedStatus}: broker or risk policy rejected the request.`);
       } else {
+        if (plainEquityPrefill) {
+          setPlainEquityPrefill(null);
+          setTicketDraft(null);
+        }
         setResetTick((t) => t + 1);
       }
       // Refresh recent orders strip immediately.
@@ -685,12 +690,57 @@ export default function TradePage() {
       }),
     [tradePreview, executionQuote, seriesError, seriesLoading, brokerDegraded],
   );
+  const chartOrderDraft = useMemo(
+    () =>
+      completeStagedOrder(
+        previewDefaults,
+        tradeContextSymbol,
+        urlStrategy ?? rail[0]?.id ?? "",
+      ),
+    [previewDefaults, rail, tradeContextSymbol, urlStrategy],
+  );
+  const showChartOrderDraft = isChartDraftMeaningful(
+    chartOrderDraft,
+    orderBarDefaults,
+    plainEquityPrefill != null,
+  );
+  const chartTradeOverlays = buildChartTradeOverlays({
+    positions: portfolioPositions,
+    orders: recentOrders,
+    symbol: tradeContextSymbol,
+    draft: activeContract || activeLegs.length > 0 || !showChartOrderDraft ? null : chartOrderDraft,
+    quote: executionQuote,
+    canSubmit: executionReadiness.canSubmit,
+    submitLabel: executionReadiness.submitLabel ?? "Place order",
+    submit: () => {
+      void handleSubmit(chartOrderDraft);
+    },
+    cancel: clearChartDraft,
+    error: orderError,
+  });
+  const chartOrderPlacement: ChartOrderPlacement | null =
+    activeContract || activeLegs.length > 0
+      ? null
+      : {
+          enabled: true,
+          side: chartOrderDraft.side,
+          label: "Chart limit",
+          hint: "Click the price-axis affordance to stage a limit; Place remains explicit.",
+          onStagePrice: (price, side) => stageLimitPreset(side, price),
+        };
+
+  function clearChartDraft() {
+    setPlainEquityPrefill(null);
+    setTicketDraft(null);
+    setResetTick((tick) => tick + 1);
+  }
+
   function stageLimitPreset(side: "buy" | "sell", price: number) {
     if (!Number.isFinite(price) || price <= 0) {
       toast({ type: "error", message: "No executable quote is available for that preset" });
       return;
     }
-    const qty = Number(orderBarDefaults.quantity);
+    const qty = Number(previewDefaults.quantity ?? orderBarDefaults.quantity);
     const normalizedQty = Number.isInteger(qty) && qty > 0 ? qty : 1;
     setActiveContract(null);
     setActiveLegs([]);
@@ -870,11 +920,11 @@ export default function TradePage() {
 
         <MobileTradeNav />
 
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,360px)]">
           <section
             id="trade-chart"
             aria-label="Primary chart"
-            className="surface-scan relative flex h-[clamp(430px,62dvh,560px)] scroll-mt-20 flex-col overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1 shadow-[0_24px_70px_-42px_rgba(16,22,17,0.58)] md:h-[clamp(680px,calc(100dvh-190px),960px)]"
+            className="surface-scan relative flex h-[clamp(480px,68dvh,640px)] scroll-mt-20 flex-col overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1 shadow-[0_24px_70px_-42px_rgba(16,22,17,0.58)] md:h-[clamp(720px,calc(100dvh-170px),1040px)]"
           >
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-hair px-4 py-3 text-fg">
               <div className="flex min-w-0 items-center gap-2">
@@ -897,6 +947,8 @@ export default function TradePage() {
               error={seriesError != null}
               onRetry={() => setChartReloadKey((k) => k + 1)}
               density="execution"
+              tradeOverlays={chartTradeOverlays}
+              chartOrderPlacement={chartOrderPlacement}
               className="h-full min-h-0 bg-bg-elev-1 text-fg"
             />
           </section>
@@ -1061,6 +1113,175 @@ function buildTradeUrlFromDraft(draft: OptionStrategyDraft, comboType: string | 
   if (draft.source === "earnings-options-play") params.set("strategy", draft.source);
   if (draft.quoteTimestamp != null) params.set("quote_ts", String(draft.quoteTimestamp));
   return `/trade?${params.toString()}`;
+}
+
+function completeStagedOrder(
+  defaults: Partial<StagedOrder>,
+  fallbackSymbol: string,
+  fallbackStrategyId: string,
+): StagedOrder {
+  const quantity = Number(defaults.quantity);
+  return {
+    strategyId: defaults.strategyId ?? fallbackStrategyId,
+    symbol: String(defaults.symbol ?? fallbackSymbol).toUpperCase(),
+    side: defaults.side === "sell" ? "sell" : "buy",
+    quantity: Number.isInteger(quantity) && quantity > 0 ? quantity : 1,
+    type: defaults.type ?? "market",
+    price: defaults.price,
+    stop: defaults.stop,
+    timeInForce: defaults.timeInForce,
+    bracket: defaults.bracket,
+    extendedHours: defaults.extendedHours,
+  };
+}
+
+function isChartDraftMeaningful(
+  draft: StagedOrder,
+  defaults: Partial<StagedOrder>,
+  hasChartPrefill: boolean,
+) {
+  if (hasChartPrefill) return true;
+  if (draft.type !== "market") return true;
+  if (draft.price != null || draft.stop != null || draft.bracket != null) return true;
+  if (draft.side !== defaults.side) return true;
+  if (draft.quantity !== defaults.quantity) return true;
+  return false;
+}
+
+function buildChartTradeOverlays({
+  positions,
+  orders,
+  symbol,
+  draft,
+  quote,
+  canSubmit,
+  submitLabel,
+  submit,
+  cancel,
+  error,
+}: {
+  positions: Position[];
+  orders: Order[];
+  symbol: string;
+  draft: StagedOrder | null;
+  quote: ExecutionQuote;
+  canSubmit: boolean;
+  submitLabel: string;
+  submit: () => void;
+  cancel: () => void;
+  error: string | null;
+}): ChartTradeOverlay[] {
+  const overlays: ChartTradeOverlay[] = [];
+  const normalized = symbol.toUpperCase();
+  const position = positions.find((p) => p.symbol.toUpperCase() === normalized);
+  if (position) {
+    const side = position.side === "short" || position.quantity < 0 ? "short" : "long";
+    const stopLoss = getOptionalPrice(position, "stopLoss", "stop_loss");
+    const takeProfit = getOptionalPrice(position, "takeProfit", "take_profit");
+    overlays.push({
+      id: `live:${position.symbol}`,
+      label: `${position.symbol} live position`,
+      status: "live",
+      side,
+      entry: safePositiveNumber(position.avgCost),
+      stopLoss,
+      takeProfit,
+      quantity: Math.abs(position.quantity),
+      summary:
+        stopLoss != null || takeProfit != null
+          ? `${formatCurrency(position.unrealizedPnl)} open P/L · protection visible`
+          : `${formatCurrency(position.unrealizedPnl)} open P/L · no bracket levels on record`,
+    });
+  }
+
+  for (const order of orders) {
+    if (!isWorkingOrderStatus(order.status)) continue;
+    if (underlyingFromTradeSymbol(order.symbol) !== normalized) continue;
+    const entry = entryPriceForOrder(order, quote);
+    if (entry == null) continue;
+    const stopLoss = getOptionalPrice(order, "stopLoss", "stop_loss");
+    const takeProfit = getOptionalPrice(order, "takeProfit", "take_profit");
+    overlays.push({
+      id: `order:${order.id}`,
+      label: `${order.side.toUpperCase()} ${order.quantity} ${order.symbol}`,
+      status: "pending",
+      side: order.side === "sell" ? "short" : "long",
+      entry,
+      stopLoss,
+      takeProfit,
+      quantity: order.quantity,
+      summary: `${order.status.replace("_", " ")} ${order.type.replace("_", " ")} order`,
+    });
+  }
+
+  if (draft && underlyingFromTradeSymbol(draft.symbol) === normalized) {
+    const entry = entryPriceForDraft(draft, quote);
+    if (entry != null) {
+      overlays.push({
+        id: `draft:${draft.symbol}:${draft.side}:${entry}`,
+        label: `${draft.side.toUpperCase()} ${draft.quantity} ${draft.symbol}`,
+        status: "draft",
+        side: draft.side === "sell" ? "short" : "long",
+        entry,
+        stopLoss: draft.bracket?.stopLoss ?? null,
+        takeProfit: draft.bracket?.takeProfit ?? null,
+        quantity: draft.quantity,
+        canSubmit,
+        submitLabel,
+        onSubmit: submit,
+        onCancel: cancel,
+        error,
+        summary: draft.bracket
+          ? `${riskRewardLabel(draft.side, entry, draft.bracket.stopLoss, draft.bracket.takeProfit)} · explicit submit required`
+          : "Click a chart price to move the limit; add brackets in the ticket for SL/TP zones.",
+      });
+    }
+  }
+
+  return overlays;
+}
+
+function entryPriceForDraft(draft: StagedOrder, quote: ExecutionQuote): number | null {
+  if ((draft.type === "limit" || draft.type === "stop_limit") && draft.price != null) {
+    return safePositiveNumber(draft.price);
+  }
+  if ((draft.type === "stop" || draft.type === "stop_limit") && draft.stop) {
+    return safePositiveNumber(Number(draft.stop));
+  }
+  return safePositiveNumber(quote.mid || quote.last);
+}
+
+function entryPriceForOrder(order: Order, quote: ExecutionQuote): number | null {
+  if ((order.type === "limit" || order.type === "stop_limit") && order.price != null) {
+    return safePositiveNumber(order.price);
+  }
+  if (order.type === "stop" || order.type === "stop_limit") {
+    return getOptionalPrice(order, "stopPrice", "stop_price");
+  }
+  return safePositiveNumber(quote.mid || quote.last);
+}
+
+function safePositiveNumber(value: unknown): number | null {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function getOptionalPrice<T extends object>(obj: T, camel: string, snake: string): number | null {
+  const record = obj as Record<string, unknown>;
+  const bracket = record.bracket as Record<string, unknown> | undefined;
+  return safePositiveNumber(record[camel] ?? record[snake] ?? bracket?.[camel] ?? bracket?.[snake]);
+}
+
+function riskRewardLabel(
+  side: "buy" | "sell",
+  entry: number,
+  stopLoss: number,
+  takeProfit: number,
+) {
+  const risk = side === "sell" ? stopLoss - entry : entry - stopLoss;
+  const reward = side === "sell" ? entry - takeProfit : takeProfit - entry;
+  if (risk <= 0 || reward <= 0) return "Bracket review needed";
+  return `${(reward / risk).toFixed(2)}R target`;
 }
 
 interface ExecutionReadiness {

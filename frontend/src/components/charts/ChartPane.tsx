@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
-import { TradingChart } from "@/components/charts/TradingChart";
+import { TradingChart, type PriceCoordinate } from "@/components/charts/TradingChart";
 import type { ChartType, Indicator, MarketDepthSnapshot, OHLCVBar } from "@/types";
 import type { Drawing, DrawingKind } from "@/components/charts/drawingPlugin";
 import { useChartDrawings } from "@/hooks/useChartDrawings";
@@ -46,12 +46,39 @@ export interface ChartPaneProps {
   data: OHLCVBar[];
   topOfBook?: TopOfBookQuote | null;
   marketDepth?: MarketDepthSnapshot | null;
+  tradeOverlays?: ChartTradeOverlay[];
+  chartOrderPlacement?: ChartOrderPlacement | null;
   /** Empty-state + error-state are handled by the parent so ChartPane
    *  stays focused on the live-data path. */
   isLoading?: boolean;
   error?: boolean;
   onRetry?: () => void;
   className?: string;
+}
+
+export interface ChartTradeOverlay {
+  id: string;
+  label: string;
+  status: "live" | "draft" | "pending" | "error";
+  side: "long" | "short";
+  entry: number | null;
+  stopLoss?: number | null;
+  takeProfit?: number | null;
+  quantity?: number | null;
+  summary?: string;
+  error?: string | null;
+  canSubmit?: boolean;
+  submitLabel?: string;
+  onSubmit?: () => void;
+  onCancel?: () => void;
+}
+
+export interface ChartOrderPlacement {
+  enabled: boolean;
+  side?: "buy" | "sell";
+  label?: string;
+  hint?: string;
+  onStagePrice: (price: number, side: "buy" | "sell") => void;
 }
 
 export interface TopOfBookQuote {
@@ -298,6 +325,8 @@ export default function ChartPane({
   data,
   topOfBook,
   marketDepth,
+  tradeOverlays = [],
+  chartOrderPlacement = null,
   isLoading,
   error,
   onRetry,
@@ -468,6 +497,14 @@ export default function ChartPane({
         : data,
     [data, replayEnabled, replayCursor],
   );
+  const tradeOverlayPrices = React.useMemo(
+    () => uniqueTradeOverlayPrices(tradeOverlays),
+    [tradeOverlays],
+  );
+  const [tradeOverlayCoordinates, setTradeOverlayCoordinates] = React.useState<PriceCoordinate[]>([]);
+  const handleOverlayPriceCoordinates = React.useCallback((coordinates: PriceCoordinate[]) => {
+    setTradeOverlayCoordinates(coordinates);
+  }, []);
 
   const marketStructure = React.useMemo(
     () => deriveMarketStructure(visibleData, { maxZones: 6, maxBlocks: 3, binCount: 32 }),
@@ -812,8 +849,12 @@ export default function ChartPane({
   ]);
 
   const chartPriceLines = React.useMemo(
-    () => [...bookPriceLines, ...structurePriceLines],
-    [bookPriceLines, structurePriceLines],
+    () => [
+      ...bookPriceLines,
+      ...structurePriceLines,
+      ...tradeOverlays.flatMap((overlay) => tradeOverlayPriceLines(overlay)),
+    ],
+    [bookPriceLines, structurePriceLines, tradeOverlays],
   );
 
   const chartDrawings = React.useMemo<Drawing[]>(
@@ -1330,6 +1371,8 @@ export default function ChartPane({
                 drawMode={drawMode}
                 drawings={chartDrawings}
                 drawingPriceLines={chartPriceLines}
+                overlayPrices={tradeOverlayPrices}
+                onOverlayPriceCoordinates={handleOverlayPriceCoordinates}
                 onChartClick={handleChartClick}
                 onDrawCrosshair={setHoverPoint}
                 // Round-12 / CH-2 (P1): wire OHLC hover to the overlay below.
@@ -1338,6 +1381,11 @@ export default function ChartPane({
                 onAlertHover={(price, y) =>
                   setAlertHover(price != null && y != null ? { price, y } : null)
                 }
+              />
+              <TradeOverlayLayer
+                overlays={tradeOverlays}
+                bars={visibleData}
+                coordinates={tradeOverlayCoordinates}
               />
               {/* Round-12 / CH-2: TradingView-style OHLC + indicator legend
                   overlay. Renders top-left so it never overlaps with the
@@ -1478,12 +1526,17 @@ export default function ChartPane({
                   (buy = profit, sell = loss) when in trade mode.
                   Same single button — one affordance, two roles. */}
               {alertHover && (() => {
-                const tradeMode = shiftHeld && lastClose != null;
+                const placementEnabled = chartOrderPlacement?.enabled === true;
+                const tradeMode = (placementEnabled || shiftHeld) && lastClose != null;
                 const side: "buy" | "sell" =
-                  tradeMode && alertHover.price < lastClose! ? "buy" : "sell";
+                  placementEnabled && chartOrderPlacement?.side
+                    ? chartOrderPlacement.side
+                    : tradeMode && alertHover.price < lastClose!
+                      ? "buy"
+                      : "sell";
                 const label = tradeMode ? (side === "buy" ? "B" : "S") : "+";
                 const ariaLabel = tradeMode
-                  ? `Place ${side} limit at ${alertHover.price.toFixed(2)}`
+                  ? `Stage ${side} limit at ${alertHover.price.toFixed(2)}`
                   : `Add price alert at ${alertHover.price.toFixed(2)}`;
                 const titleCopy = tradeMode
                   ? `${side === "buy" ? "Buy" : "Sell"} limit @ $${alertHover.price.toFixed(2)} · click to stage`
@@ -1506,7 +1559,9 @@ export default function ChartPane({
                       // the keydown listener can lag if the user holds
                       // Shift after the cursor lands on the button.
                       const isTrade = e.shiftKey && lastClose != null;
-                      if (isTrade) {
+                      if (placementEnabled) {
+                        chartOrderPlacement.onStagePrice(alertHover.price, side);
+                      } else if (isTrade) {
                         const orderSide: "buy" | "sell" =
                           alertHover.price < lastClose! ? "buy" : "sell";
                         window.dispatchEvent(
@@ -1544,6 +1599,264 @@ export default function ChartPane({
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function tradeOverlayPriceLines(overlay: ChartTradeOverlay) {
+  const lines: Array<{ price: number; color: string; label?: string }> = [];
+  const entryColor = overlay.status === "live" ? "rgba(201, 166, 107, 0.95)" : "rgba(224, 192, 112, 0.76)";
+  if (overlay.entry != null && Number.isFinite(overlay.entry)) {
+    lines.push({
+      price: overlay.entry,
+      color: entryColor,
+      label: `${overlay.status === "draft" ? "Draft" : overlay.status === "pending" ? "Working" : "Entry"} ${formatBookPrice(overlay.entry)}`,
+    });
+  }
+  if (overlay.stopLoss != null && Number.isFinite(overlay.stopLoss)) {
+    lines.push({
+      price: overlay.stopLoss,
+      color: "rgba(224, 120, 86, 0.9)",
+      label: `SL ${formatBookPrice(overlay.stopLoss)}`,
+    });
+  }
+  if (overlay.takeProfit != null && Number.isFinite(overlay.takeProfit)) {
+    lines.push({
+      price: overlay.takeProfit,
+      color: "rgba(168, 208, 77, 0.9)",
+      label: `TP ${formatBookPrice(overlay.takeProfit)}`,
+    });
+  }
+  return lines;
+}
+
+function uniqueTradeOverlayPrices(overlays: ChartTradeOverlay[]) {
+  const seen = new Set<string>();
+  const prices: number[] = [];
+  for (const overlay of overlays) {
+    for (const price of [overlay.entry, overlay.stopLoss, overlay.takeProfit]) {
+      if (price == null || !Number.isFinite(price)) continue;
+      const key = priceKey(price);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      prices.push(price);
+    }
+  }
+  return prices;
+}
+
+function priceKey(price: number) {
+  return price.toFixed(8);
+}
+
+interface OverlayTop {
+  value: number;
+  unit: "px" | "%";
+}
+
+function overlayTopCss(top: OverlayTop) {
+  return `${top.value}${top.unit}`;
+}
+
+function overlaySizeCss(a: OverlayTop, b: OverlayTop) {
+  const minimum = a.unit === "px" ? 14 : 1.4;
+  return `${Math.max(Math.abs(a.value - b.value), minimum)}${a.unit}`;
+}
+
+function TradeOverlayLayer({
+  overlays,
+  bars,
+  coordinates,
+}: {
+  overlays: ChartTradeOverlay[];
+  bars: OHLCVBar[];
+  coordinates?: PriceCoordinate[];
+}) {
+  const coordinateByPrice = React.useMemo(() => {
+    const map = new Map<string, number>();
+    for (const coordinate of coordinates ?? []) {
+      if (coordinate.y == null || !Number.isFinite(coordinate.y)) continue;
+      map.set(priceKey(coordinate.price), coordinate.y);
+    }
+    return map;
+  }, [coordinates]);
+  const exactPrices = React.useMemo(() => uniqueTradeOverlayPrices(overlays), [overlays]);
+  const canUseExactCoordinates =
+    exactPrices.length > 0 &&
+    exactPrices.every((price) => coordinateByPrice.has(priceKey(price)));
+  const scale = React.useMemo(() => {
+    const prices: number[] = [];
+    for (const bar of bars) prices.push(bar.high, bar.low);
+    for (const overlay of overlays) {
+      for (const price of [overlay.entry, overlay.stopLoss, overlay.takeProfit]) {
+        if (price != null && Number.isFinite(price)) prices.push(price);
+      }
+    }
+    if (!prices.length) return null;
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const pad = Math.max((max - min) * 0.08, Math.abs(max || 1) * 0.002);
+    return { min: min - pad, max: max + pad };
+  }, [bars, overlays]);
+
+  if ((!scale && !canUseExactCoordinates) || overlays.length === 0) return null;
+  const topFor = (price: number) => {
+    if (canUseExactCoordinates) {
+      return { value: coordinateByPrice.get(priceKey(price)) ?? 0, unit: "px" as const };
+    }
+    const fallbackScale = scale ?? { min: 0, max: 1 };
+    const span = fallbackScale.max - fallbackScale.min || 1;
+    return {
+      value: Math.max(2, Math.min(98, ((fallbackScale.max - price) / span) * 100)),
+      unit: "%" as const,
+    };
+  };
+
+  return (
+    <div
+      data-slot="chart-trade-overlays"
+      className="pointer-events-none absolute inset-x-0 top-0 bottom-0 z-[11] overflow-hidden"
+    >
+      {overlays.map((overlay) => (
+        <TradeOverlay key={overlay.id} overlay={overlay} topFor={topFor} />
+      ))}
+    </div>
+  );
+}
+
+function TradeOverlay({
+  overlay,
+  topFor,
+}: {
+  overlay: ChartTradeOverlay;
+  topFor: (price: number) => OverlayTop;
+}) {
+  const entry = overlay.entry;
+  if (entry == null || !Number.isFinite(entry)) return null;
+  const entryTop = topFor(entry);
+  const isLong = overlay.side === "long";
+  const stopTop =
+    overlay.stopLoss != null && Number.isFinite(overlay.stopLoss)
+      ? topFor(overlay.stopLoss)
+      : null;
+  const takeProfitTop =
+    overlay.takeProfit != null && Number.isFinite(overlay.takeProfit)
+      ? topFor(overlay.takeProfit)
+      : null;
+  const zone = (a: OverlayTop, b: OverlayTop, className: string) => (
+    <div
+      className={cn("absolute left-0 right-16 border-y", className)}
+      style={{
+        top: overlayTopCss(a.value <= b.value ? a : b),
+        height: overlaySizeCss(a, b),
+      }}
+    />
+  );
+
+  return (
+    <>
+      {takeProfitTop != null
+        ? zone(entryTop, takeProfitTop, "border-profit/25 bg-profit/10")
+        : null}
+      {stopTop != null
+        ? zone(entryTop, stopTop, "border-loss/25 bg-loss/10")
+        : null}
+      <TradeLevelRail
+        top={entryTop}
+        tone="entry"
+        label={overlay.status === "draft" ? "Draft entry" : overlay.status === "pending" ? "Working order" : "Entry"}
+        value={entry}
+        meta={overlay.quantity ? `${overlay.quantity} ${isLong ? "long" : "short"}` : overlay.status}
+      />
+      {stopTop != null && overlay.stopLoss != null ? (
+        <TradeLevelRail top={stopTop} tone="stop" label="Stop" value={overlay.stopLoss} meta="risk floor" />
+      ) : null}
+      {takeProfitTop != null && overlay.takeProfit != null ? (
+        <TradeLevelRail top={takeProfitTop} tone="target" label="Target" value={overlay.takeProfit} meta="take profit" />
+      ) : null}
+      {overlay.status === "draft" ? (
+        <div className="pointer-events-auto absolute bottom-3 left-1/2 flex max-w-[min(560px,calc(100%-6rem))] -translate-x-1/2 items-center gap-2 rounded border border-border-hair bg-bg-card/90 px-3 py-2 shadow-lg backdrop-blur-md">
+          <div className="min-w-0">
+            <p className="truncate font-mono text-[12px] font-semibold text-fg">
+              {overlay.label} · {formatBookPrice(entry)}
+            </p>
+            <p className="truncate text-[11px] text-fg-muted">
+              {overlay.summary ?? "Chart draft updates the ticket; submit remains explicit."}
+            </p>
+          </div>
+          {overlay.onCancel ? (
+            <button
+              type="button"
+              onClick={overlay.onCancel}
+              className="h-8 rounded border border-border-hair px-2.5 font-mono text-[11px] text-fg-muted hover:text-fg"
+            >
+              Cancel
+            </button>
+          ) : null}
+          {overlay.onSubmit ? (
+            <button
+              type="button"
+              disabled={!overlay.canSubmit}
+              onClick={overlay.onSubmit}
+              className="h-8 rounded border border-brand bg-brand px-3 font-mono text-[11px] font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              {overlay.submitLabel ?? "Place"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {overlay.error ? (
+        <div
+          className="absolute right-20 max-w-[260px] rounded border border-loss/30 bg-loss/10 px-2 py-1.5 text-[11px] text-loss"
+          style={{
+            top:
+              entryTop.unit === "px"
+                ? `${Math.max(8, entryTop.value - 40)}px`
+                : `${Math.max(2, entryTop.value - 5)}%`,
+          }}
+        >
+          {overlay.error}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function TradeLevelRail({
+  top,
+  tone,
+  label,
+  value,
+  meta,
+}: {
+  top: OverlayTop;
+  tone: "entry" | "stop" | "target";
+  label: string;
+  value: number;
+  meta: string;
+}) {
+  return (
+    <div className="absolute left-0 right-14" style={{ top: overlayTopCss(top) }}>
+      <div
+        className={cn(
+          "absolute inset-x-0 top-0 border-t",
+          tone === "entry" && "border-gold-300/80",
+          tone === "stop" && "border-loss/80",
+          tone === "target" && "border-profit/80",
+        )}
+      />
+      <div
+        className={cn(
+          "absolute right-0 top-0 -translate-y-1/2 rounded border bg-bg-card/90 px-2 py-1 font-mono text-[11px] shadow-sm backdrop-blur-md",
+          tone === "entry" && "border-gold-300/40 text-gold-300",
+          tone === "stop" && "border-loss/40 text-loss",
+          tone === "target" && "border-profit/40 text-profit",
+        )}
+      >
+        <span className="font-semibold">{label}</span>{" "}
+        <span>{formatBookPrice(value)}</span>
+        <span className="ml-1 text-fg-hint">{meta}</span>
       </div>
     </div>
   );

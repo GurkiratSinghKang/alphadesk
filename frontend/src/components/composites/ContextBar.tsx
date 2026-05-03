@@ -73,7 +73,7 @@ export default function ContextBar({ cells, className }: ContextBarProps) {
               {cell.delta ? (
                 <span
                   className={cn(
-                    "font-mono tabular-nums text-[13px]",
+                    "hidden font-mono tabular-nums text-[13px] sm:inline",
                     cell.deltaTone === "profit"
                       ? "text-up-500"
                       : cell.deltaTone === "loss"

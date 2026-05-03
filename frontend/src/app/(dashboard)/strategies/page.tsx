@@ -525,10 +525,10 @@ function Section({
     <section className="flex flex-col gap-3" data-section={dataSection}>
       <header className="flex items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-3">
-          <h2 className="t-h2 text-ink-1000">
+          <h2 className="t-h2 !text-[#12281f]">
             {title}
           </h2>
-          <Mono size="micro" className="text-fg-hint">
+          <Mono size="micro" className="!text-[#5d7268]">
             {String(count).padStart(2, "0")}
           </Mono>
         </div>
@@ -941,10 +941,10 @@ export default function StrategiesListingPage() {
               >
                 <header className="flex items-baseline justify-between gap-2">
                   <div className="flex items-baseline gap-3">
-                    <h2 className="t-h2 text-ink-1000">
+                    <h2 className="t-h2 !text-[#12281f]">
                       Research
                     </h2>
-                    <Mono size="micro" className="text-fg-hint">
+                    <Mono size="micro" className="!text-[#5d7268]">
                       {String(researchEntries.length).padStart(2, "0")}
                     </Mono>
                   </div>

@@ -28,7 +28,9 @@ import {
   type TradingAgentsRuntimeStatus,
   type TradingAgentsRunStatus,
 } from "@/lib/api";
+import { useTickerContext } from "@/hooks/useQueries";
 import { cn } from "@/lib/utils";
+import type { TickerContext, TickerFactEnvelope } from "@/types";
 
 const PROVIDERS = [
   { value: "", label: "System default" },
@@ -80,10 +82,29 @@ function formatDuration(started: string | null, completed: string | null, update
   return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
 }
 
-function formatTimeout(seconds: number) {
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.round(seconds / 60);
+function formatDepth(depth: number | null | undefined) {
+  const value = Number(depth);
+  if (!Number.isFinite(value) || value <= 0) return "System default";
+  return `${value} round${value === 1 ? "" : "s"}`;
+}
+
+function formatTimeout(seconds: number | null | undefined) {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value <= 0) return "System default";
+  if (value < 60) return `${value}s`;
+  const minutes = Math.round(value / 60);
   return `${minutes}m`;
+}
+
+function formatRateLimit(runsPerHour: number | null | undefined) {
+  const value = Number(runsPerHour);
+  if (!Number.isFinite(value) || value <= 0) return "No limit set";
+  return `${value}/hr`;
+}
+
+function displayText(value: string | null | undefined, fallback: string) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : fallback;
 }
 
 function stripMarkdown(value: string) {
@@ -331,6 +352,14 @@ export default function TradingAgentsResearchPage() {
   const selectedStatus = selectedRun?.status ?? null;
   const isActiveRun = selectedStatus === "queued" || selectedStatus === "running";
   const canStartRun = runtime?.ready === true;
+  const selectedRunSymbol = selectedRun?.symbol?.trim().toUpperCase() ?? "";
+  const tickerContextQuery = useTickerContext(
+    selectedRunSymbol ? [selectedRunSymbol] : [],
+    ["quote", "options_summary", "earnings", "research"],
+  );
+  const tickerContext = selectedRunSymbol
+    ? tickerContextQuery.data?.symbols[selectedRunSymbol] ?? null
+    : null;
 
   const refreshRuns = useCallback(async () => {
     setLoading(true);
@@ -511,7 +540,7 @@ export default function TradingAgentsResearchPage() {
           {!selectedRun ? (
             <EmptyResearchState />
           ) : (
-            <ResearchBrief run={selectedRun} isActiveRun={isActiveRun} />
+            <ResearchBrief run={selectedRun} isActiveRun={isActiveRun} tickerContext={tickerContext} />
           )}
         </section>
       </div>
@@ -706,11 +735,21 @@ function RunForm({
   );
 }
 
-function ResearchBrief({ run, isActiveRun }: { run: TradingAgentsRun; isActiveRun: boolean }) {
+function ResearchBrief({
+  run,
+  isActiveRun,
+  tickerContext,
+}: {
+  run: TradingAgentsRun;
+  isActiveRun: boolean;
+  tickerContext?: TickerContext | null;
+}) {
   const decisionText = run.decision_text?.trim() ?? "";
   const summary = run.summary_lines ?? [];
   const runAnalysts = Array.isArray(run.analysts) ? run.analysts : [];
   const artifactFiles = Array.isArray(run.artifact_files) ? run.artifact_files : [];
+  const runSymbol = displayText(run.symbol, "Unknown symbol");
+  const runProvider = displayText(run.provider, "system default");
   const sections = useMemo(() => splitMemoSections(decisionText), [decisionText]);
   const signal = extractSignal(decisionText, summary);
   const tone = signalTone(signal);
@@ -733,14 +772,14 @@ function ResearchBrief({ run, isActiveRun }: { run: TradingAgentsRun; isActiveRu
             </div>
             <div className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2">
               <h2 className="min-w-0 font-sans text-[36px] font-semibold leading-none tracking-tight text-fg md:text-[54px]">
-                {run.symbol}
+                {runSymbol}
               </h2>
               <span className="mb-1 whitespace-nowrap rounded-pill border border-border bg-bg-elev-1 px-3 py-1.5 font-mono text-[14px] text-fg-muted md:text-[16px]">
                 {run.trade_date ?? "No trade date"}
               </span>
             </div>
             <p className="mt-3 max-w-3xl text-[13px] leading-relaxed text-fg-muted">
-              {run.provider ?? "unknown"} research with {runAnalysts.length ? runAnalysts.map(analystLabel).join(", ") : "no selected"} analysts.
+              {runProvider} research with {runAnalysts.length ? runAnalysts.map(analystLabel).join(", ") : "no selected"} analysts.
             </p>
           </div>
 
@@ -759,7 +798,7 @@ function ResearchBrief({ run, isActiveRun }: { run: TradingAgentsRun; isActiveRu
 
         <div className="mt-5 grid grid-cols-2 gap-2 md:grid-cols-6">
           <Fact icon={Clock} label="Runtime" value={formatDuration(run.started_at, run.completed_at, run.updated_at)} />
-          <Fact icon={Gauge} label="Depth" value={`${run.research_depth} round${run.research_depth === 1 ? "" : "s"}`} />
+          <Fact icon={Gauge} label="Depth" value={formatDepth(run.research_depth)} />
           <Fact icon={UsersThree} label="Analysts" value={String(runAnalysts.length)} />
           <Fact icon={Target} label="Budget" value={formatTimeout(run.timeout_s)} />
           <Fact icon={Files} label="Artifacts" value={String(artifactFiles.length)} />
@@ -794,6 +833,7 @@ function ResearchBrief({ run, isActiveRun }: { run: TradingAgentsRun; isActiveRu
 
         <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
           {!thinMemo && !isActiveRun && <MemoNavigator sections={sections} />}
+          <TickerFactPanel context={tickerContext ?? null} />
           <KeyLevels levels={levels} />
           <ArtifactPanel files={artifactFiles} />
           <div className="rounded-lg border border-border-hair bg-bg-elev-1 p-4">
@@ -908,6 +948,62 @@ function MemoSectionList({
       </div>
     </section>
   );
+}
+
+function TickerFactPanel({ context }: { context: TickerContext | null }) {
+  if (!context) {
+    return (
+      <section className="rounded-lg border border-border-hair bg-bg-elev-1 p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-brand" weight="bold" />
+          <p className="t-label text-fg-muted">Ticker facts</p>
+        </div>
+        <p className="text-[12px] leading-relaxed text-fg-muted">
+          No shared ticker facts loaded for this report yet.
+        </p>
+      </section>
+    );
+  }
+  const rows: Array<[string, TickerFactEnvelope<Record<string, unknown>> | null | undefined]> = [
+    ["Quote", context.quote],
+    ["Options", context.optionsSummary],
+    ["Earnings", context.earnings],
+    ["Research", context.research],
+  ];
+  return (
+    <section className="rounded-lg border border-border-hair bg-bg-elev-1 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <ShieldCheck className="h-4 w-4 text-brand" weight="bold" />
+        <p className="t-label text-fg-muted">Ticker facts</p>
+      </div>
+      <div className="space-y-2">
+        {rows.map(([label, fact]) => (
+          <div
+            key={label}
+            className="flex items-center justify-between gap-3 rounded-md border border-border-hair bg-bg-card px-3 py-2"
+          >
+            <span className="font-sans text-[12.5px] text-fg">{label}</span>
+            {fact ? (
+              <span className="text-right font-mono text-[11px] text-fg-muted">
+                <span className={tickerFactQualityClass(fact.freshness.quality)}>
+                  {fact.freshness.quality}
+                </span>
+                {fact.freshness.asOf ? ` · ${formatStamp(fact.freshness.asOf)}` : ""}
+              </span>
+            ) : (
+              <span className="font-mono text-[11px] text-fg-hint">unavailable</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function tickerFactQualityClass(quality: string) {
+  if (quality === "fresh") return "text-profit";
+  if (quality === "unavailable") return "text-loss";
+  return "text-amber";
 }
 
 function ReadableMemo({ body }: { body: string }) {
@@ -1040,7 +1136,7 @@ function ThinMemoPanel({ run, signal }: { run: TradingAgentsRun; signal: string 
       <h3 className="mt-2 font-sans text-[22px] font-semibold tracking-tight text-fg">{signal}</h3>
       <p className="mt-3 max-w-2xl text-[13px] leading-relaxed text-fg-muted">
         This run was saved before the research wrapper emitted the full committee memo. The artifacts exist, but
-        the UI received only the terminal signal for {run.symbol}. A fresh run will populate the portfolio-manager
+        the UI received only the terminal signal for {displayText(run.symbol, "this symbol")}. A fresh run will populate the portfolio-manager
         decision, analyst evidence, debate, risk view, and price map.
       </p>
     </section>
@@ -1118,10 +1214,10 @@ function RuntimePanel({
       {runtime ? (
         <>
           <div className="grid grid-cols-2 gap-2">
-            <RuntimeFact label="Provider" value={runtime.provider} good={runtime.provider_key_configured} />
+            <RuntimeFact label="Provider" value={displayText(runtime.provider, "system")} good={runtime.provider_key_configured} />
             <RuntimeFact label="Wrapper" value={runtime.script_runnable ? "found" : "missing"} good={runtime.script_runnable} />
             <RuntimeFact label="Runtime" value={runtime.bootstrap_required ? "bootstrap" : runtime.installed_ref ?? "ready"} good />
-            <RuntimeFact label="Limit" value={`${runtime.runs_per_hour}/hr`} good={runtime.enabled} />
+            <RuntimeFact label="Limit" value={formatRateLimit(runtime.runs_per_hour)} good={runtime.enabled} />
           </div>
           <p className="mt-3 break-words font-mono text-[11px] leading-relaxed text-fg-hint" title={runtime.skill_home}>
             {runtime.deep_model} / {runtime.quick_model}
@@ -1193,7 +1289,7 @@ function RunHistory({
               >
                 <span className="min-w-0">
                   <span className="block font-mono text-[14px] font-semibold text-fg">
-                    {run.symbol} / {run.trade_date}
+                    {displayText(run.symbol, "Unknown")} / {displayText(run.trade_date, "No date")}
                   </span>
                   <span className="block break-words text-[12px] leading-relaxed text-fg-muted">
                     {signal} - {formatStamp(run.created_at)}

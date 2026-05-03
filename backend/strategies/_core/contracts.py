@@ -261,6 +261,7 @@ class StrategyInput(BaseModel):
     fundamentals: pd.DataFrame | None = None
     news: pd.DataFrame | None = None
     options_chains: dict[str, pd.DataFrame] = Field(default_factory=dict)
+    ticker_contexts: dict[str, Any] = Field(default_factory=dict)
 
     cash: Decimal
     equity: Decimal

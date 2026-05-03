@@ -42,6 +42,11 @@ export interface TradingChartHandle {
   fitContent: () => void;
 }
 
+export interface PriceCoordinate {
+  price: number;
+  y: number | null;
+}
+
 interface TradingChartProps {
   data?: OHLCVBar[];
   chartType?: ChartType;
@@ -96,6 +101,8 @@ interface TradingChartProps {
     takeProfit: number | null;
   } | null;
   drawingPriceLines?: Array<{ price: number; color: string; label?: string }>;
+  overlayPrices?: number[];
+  onOverlayPriceCoordinates?: (coordinates: PriceCoordinate[]) => void;
   /**
    * Fired when the user clicks on the chart canvas with a time+price the
    * drawing state machine can consume. Skipped when the click lands outside
@@ -422,7 +429,7 @@ function computeATR(bars: OHLCVBar[], period = 14): SingleValueData<Time>[] {
 
 export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
   function TradingChart(
-    { data, chartType = "candle", indicators = [], onCrosshairMove, onAlertHover, compareSeries, anchoredVwapIndex, events, onTimeRangeChange, positionLines, drawingPriceLines, onChartClick, onDrawCrosshair, drawMode, drawings, themeKey },
+    { data, chartType = "candle", indicators = [], onCrosshairMove, onAlertHover, compareSeries, anchoredVwapIndex, events, onTimeRangeChange, positionLines, drawingPriceLines, overlayPrices, onOverlayPriceCoordinates, onChartClick, onDrawCrosshair, drawMode, drawings, themeKey },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -443,8 +450,24 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
     // chart-creation effect without re-subscribing on every render.
     const onChartClickRef = useRef(onChartClick);
     const onDrawCrosshairRef = useRef(onDrawCrosshair);
+    const overlayPricesRef = useRef<number[]>(overlayPrices ?? []);
+    const onOverlayPriceCoordinatesRef = useRef(onOverlayPriceCoordinates);
     useEffect(() => { onChartClickRef.current = onChartClick; }, [onChartClick]);
     useEffect(() => { onDrawCrosshairRef.current = onDrawCrosshair; }, [onDrawCrosshair]);
+    useEffect(() => { overlayPricesRef.current = overlayPrices ?? []; }, [overlayPrices]);
+    useEffect(() => { onOverlayPriceCoordinatesRef.current = onOverlayPriceCoordinates; }, [onOverlayPriceCoordinates]);
+
+    const emitOverlayPriceCoordinates = useCallback(() => {
+      const cb = onOverlayPriceCoordinatesRef.current;
+      const series = mainSeriesRef.current;
+      if (!cb) return;
+      const prices = overlayPricesRef.current;
+      if (!series || prices.length === 0) {
+        cb([]);
+        return;
+      }
+      cb(prices.map((price) => ({ price, y: series.priceToCoordinate(price) })));
+    }, []);
 
     // Expose imperative handle
     useImperativeHandle(ref, () => ({
@@ -644,6 +667,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           if (range) {
             onTimeRangeChange(range.from, range.to);
           }
+          emitOverlayPriceCoordinates();
         });
       }
 
@@ -697,6 +721,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
         for (const entry of entries) {
           const { width, height } = entry.contentRect;
           chart.applyOptions({ width, height });
+          emitOverlayPriceCoordinates();
         }
       });
       observer.observe(containerRef.current);
@@ -1118,6 +1143,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           chart.timeScale().fitContent();
           didFitRef.current = true;
         }
+        requestAnimationFrame(emitOverlayPriceCoordinates);
       },
       // Key on ``events.length`` (primitive) — consumers commonly pass
       // a fresh ``[]`` literal which would otherwise reset the zoom on
@@ -1129,6 +1155,10 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
     useEffect(() => {
       if (data?.length) setChartData(data);
     }, [data, setChartData]);
+
+    useEffect(() => {
+      requestAnimationFrame(emitOverlayPriceCoordinates);
+    }, [overlayPrices, emitOverlayPriceCoordinates]);
 
     // Round-12 / CH-1: reset the fit-once flag when the user changes
     // chartType or toggles indicators, so the next render re-fits to

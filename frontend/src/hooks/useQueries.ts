@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { getMarketRegime, getMarketIndices, getStrategies, getPortfolioSummary, getPipelineStatus, getOptionsChain, getIVData, getPnlCalendar, getIndexSparklines, getMorningBrief } from "@/lib/api";
+import { getMarketRegime, getMarketIndices, getStrategies, getPortfolioSummary, getPipelineStatus, getOptionsChain, getIVData, getPnlCalendar, getIndexSparklines, getMorningBrief, getTickerContext } from "@/lib/api";
 
 export function useRegime() {
   return useQuery({
@@ -97,6 +97,27 @@ export function useMorningBrief() {
     queryKey: ['morningBrief'],
     queryFn: getMorningBrief,
     staleTime: 30 * 60 * 1000, // 30 min — brief doesn't change often
+    retry: 1,
+  });
+}
+
+export function useTickerContext(
+  symbols: readonly string[],
+  needs: readonly string[] = ["quote", "options_summary", "earnings", "research"],
+) {
+  const normalizedSymbols = Array.from(
+    new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean)),
+  );
+  const normalizedNeeds = Array.from(new Set(needs.map((need) => need.trim()).filter(Boolean)));
+  return useQuery({
+    queryKey: ['tickerContext', normalizedSymbols, normalizedNeeds],
+    queryFn: ({ signal }) => getTickerContext(normalizedSymbols, {
+      needs: normalizedNeeds,
+      onStale: "allow_with_warning",
+      signal,
+    }),
+    staleTime: 30 * 1000,
+    enabled: normalizedSymbols.length > 0,
     retry: 1,
   });
 }

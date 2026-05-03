@@ -240,10 +240,18 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     );
   }
 
+  const dashboardBanners = (
+    <>
+      <WsStatusBanner />
+      <SessionExpiryBanner />
+      <ApiDegradedBanner issues={activeApiIssues} onDismiss={() => setApiIssues({})} />
+    </>
+  );
+
   // ─── Flagship desk: overlays only, the page owns the viewport. ──
   if (isDeskRoute) {
     return (
-      <>
+      <div className="flex h-dvh min-h-dvh flex-col overflow-x-hidden bg-bg">
         {/* a11y audit r3 — WCAG 2.4.1: skip link must be emitted on the desk
             route too (previously only the non-desk branch had it). DeskLayout
             now exposes <main id="main-content"> so this anchor resolves. */}
@@ -259,23 +267,21 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           Skip to content
         </a>
         {/* edge-cases-audit-r3 P0 #6: surface WS reconnect / failed state
-            so users don't place trades on stale cached quotes. Only renders
-            when wsStatus !== "open". Thin enough (py-1.5) to avoid shifting
-            the desk grid noticeably. */}
-        <div className="pointer-events-none fixed inset-x-0 top-0 z-[70] flex flex-col [&>*]:pointer-events-auto">
-          <WsStatusBanner />
-          <SessionExpiryBanner />
-          <ApiDegradedBanner issues={activeApiIssues} onDismiss={() => setApiIssues({})} />
-        </div>
+            so users don't place trades on stale cached quotes. This used to
+            be fixed at top:0, which overlapped the mobile top bar; keep it
+            in normal flow and let the desk fill the remaining viewport. */}
+        <div className="relative z-[70] shrink-0">{dashboardBanners}</div>
         {/* Round 7 Fix 4 (P128): warn the user *before* a silent redirect
             so they can save unsaved order tickets / strategy drafts.
             Render only after refresh failure — null on the happy path. */}
-        {children}
+        <div className="min-h-0 flex-1 [&>[data-slot=dashboard-layout]]:h-full [&>[data-slot=dashboard-layout]]:min-h-0">
+          {children}
+        </div>
         <CommandPalette />
         <AICopilot />
         {overlayOpen && <ShortcutOverlay onClose={() => setOverlayOpen(false)} />}
         <OnboardingTour />
-      </>
+      </div>
     );
   }
 
@@ -295,11 +301,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </a>
 
       {/* edge-cases-audit-r3 P0 #6 — see desk branch comment above. */}
-      <div className="pointer-events-none fixed inset-x-0 top-0 z-[70] flex flex-col [&>*]:pointer-events-auto">
-        <WsStatusBanner />
-        <SessionExpiryBanner />
-        <ApiDegradedBanner issues={activeApiIssues} onDismiss={() => setApiIssues({})} />
-      </div>
+      <div className="relative z-[70] shrink-0">{dashboardBanners}</div>
       {/* Round 7 Fix 4 (P128): session-expiry warning banner. */}
       <TopBar />
       <StatusStrip />

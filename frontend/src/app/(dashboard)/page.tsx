@@ -621,6 +621,7 @@ export default function DeskPage() {
 
   return (
     <DashboardLayout
+      className="h-full min-h-0"
       topBar={
         <div
           onClickCapture={(e) => {

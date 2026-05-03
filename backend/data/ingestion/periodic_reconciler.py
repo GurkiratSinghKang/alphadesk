@@ -19,12 +19,11 @@ mis-counted in P&L.
 
 What this module does
 ---------------------
-Every 5 minutes (``_RECONCILE_INTERVAL_SECONDS``), spin through
-``_reconcile_last_24h`` with ``since = now - 1h``.  The 1-hour window is
-deliberately narrow — the boot path uses a Redis-cursor-driven window up
-to 30 days — so a live reconcile is a bounded operation even on a busy
-account.  Stragglers older than 1h are still caught by the next boot
-reconcile against the ``reconcile:last_success_ts`` cursor.
+Every 3 hours (``_RECONCILE_INTERVAL_SECONDS``), spin through active
+per-user Alpaca connections and call ``_reconcile_last_24h`` with
+``since = now - 3h``.  The reconciler now queues broker/local mismatches
+as ``reconciliation_issues`` rows instead of silently mutating the local
+ledger.  Users approve or reject those proposed changes from Settings.
 
 Redis lock
 ----------
@@ -66,18 +65,15 @@ logger = logging.getLogger(__name__)
 # Tunables
 # ---------------------------------------------------------------------------
 
-# How long between cycles.  5 minutes is the sweet spot: short enough
-# that a split-window trade is reconciled within one pipeline tick, long
-# enough that we don't hammer the broker /v2/orders endpoint.  Alpaca
-# rate-limits at 200 req/min so 12 req/hour is far below the floor.
-_RECONCILE_INTERVAL_SECONDS: int = 5 * 60
+# How long between cycles.  User-facing reconciliation is intentionally
+# review-gated, so a 3-hour cadence keeps broker calls light while still
+# catching drift within the same trading day.
+_RECONCILE_INTERVAL_SECONDS: int = 3 * 60 * 60
 
-# Window passed to ``_reconcile_last_24h``.  Narrower than the boot
-# reconcile on purpose — the boot path picks up the cursor-driven long
-# tail; the live path only needs to catch split-window orders since the
-# previous tick.  One hour covers cold-restart gaps where the container
-# came back within the restart-loop window.
-_LIVE_RECONCILE_WINDOW = timedelta(hours=1)
+# Window passed to ``_reconcile_last_24h``.  Matches the 3-hour tick so a
+# normal cycle rechecks the period since the last run.  The boot path still
+# owns the longer cursor-driven catch-up window.
+_LIVE_RECONCILE_WINDOW = timedelta(hours=3)
 
 # Redis lock for multi-worker safety.  Token-scoped release matches the
 # audit_log_cleanup pattern (UUID token; DELETE only if value == token).
@@ -156,6 +152,44 @@ async def _release_lock(token: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+async def _active_reconcile_usernames() -> list[str]:
+    """Return users with active Alpaca connections.
+
+    Best-effort: if the database is unavailable, fall back to the legacy
+    env-backed single-account reconcile path by returning an empty list.
+    """
+    try:
+        from core.config import settings
+        if settings.SKIP_DB_INIT:
+            return []
+        from sqlalchemy import select
+        from core.database import _get_session_factory
+        from data.storage.models import BrokerConnection
+
+        factory = _get_session_factory()
+        async with factory() as db:
+            rows = (
+                await db.execute(
+                    select(BrokerConnection.username)
+                    .where(BrokerConnection.provider == "alpaca")
+                    .where(BrokerConnection.status == "active")
+                    .distinct()
+                )
+            ).scalars().all()
+        return sorted({str(username) for username in rows if username})
+    except Exception:
+        logger.debug(
+            "periodic_reconciler: active-user lookup failed; using env fallback",
+            exc_info=True,
+        )
+        return []
+
+
+def _merge_counts(target: dict[str, int], delta: dict[str, int]) -> None:
+    for key in ("backfilled", "orphaned", "matched"):
+        target[key] = target.get(key, 0) + int(delta.get(key, 0))
+
+
 async def start_periodic_reconciler() -> None:
     """Start the background reconciler task.  Idempotent.
 
@@ -217,10 +251,21 @@ async def _run_one_cycle() -> dict[str, int]:
             # ``trades._is_trading_halted`` thin wrapper).
             from api.routes.trades import _reconcile_last_24h
             since = datetime.now(timezone.utc) - _LIVE_RECONCILE_WINDOW
-            counts = await _reconcile_last_24h(since=since)
+            usernames = await _active_reconcile_usernames()
+            if usernames:
+                counts = {"backfilled": 0, "orphaned": 0, "matched": 0}
+                for reconcile_username in usernames:
+                    user_counts = await _reconcile_last_24h(
+                        since=since,
+                        username=reconcile_username,
+                    )
+                    _merge_counts(counts, user_counts)
+            else:
+                counts = await _reconcile_last_24h(since=since)
             logger.info(
-                "periodic_reconciler: reconcile — since=%s backfilled=%d orphaned=%d matched=%d",
+                "periodic_reconciler: reconcile — since=%s users=%d backfilled=%d orphaned=%d matched=%d",
                 since.isoformat(),
+                len(usernames),
                 counts.get("backfilled", 0),
                 counts.get("orphaned", 0),
                 counts.get("matched", 0),

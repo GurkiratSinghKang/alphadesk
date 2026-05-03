@@ -132,7 +132,7 @@ export default function AuthProductFrame({
             <Link
               href="/login"
               className={
-                "rounded-[6px] px-3 py-2 font-sans transition-colors active:scale-[0.98] " +
+                "inline-flex min-h-11 items-center rounded-[6px] px-3 py-2 font-sans transition-colors active:scale-[0.98] " +
                 (activeLink === "login"
                   ? "bg-[#12281f] text-[#f8f7ef]"
                   : "text-[#5d7268] hover:bg-[#ecf4ed] hover:text-[#12281f]")
@@ -143,7 +143,7 @@ export default function AuthProductFrame({
             <Link
               href="/request-access"
               className={
-                "rounded-[6px] px-3 py-2 font-sans transition-colors active:scale-[0.98] " +
+                "inline-flex min-h-11 items-center rounded-[6px] px-3 py-2 font-sans transition-colors active:scale-[0.98] " +
                 (activeLink === "request"
                   ? "bg-[#12281f] text-[#f8f7ef]"
                   : "text-[#5d7268] hover:bg-[#ecf4ed] hover:text-[#12281f]")

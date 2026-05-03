@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
+  AlertTriangle,
   Bell,
   Shield,
   Key,
@@ -12,17 +13,131 @@ import {
   RefreshCw,
   Check,
   RotateCcw,
+  Trash2,
+  XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { DashboardPageLayout } from "@/components/layouts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useUIStore } from "@/stores/ui";
 import { usePreferencesStore } from "@/stores/preferences";
 import { useMarketStore } from "@/stores/market";
 import { PerformanceMetrics } from "@/components/dashboard/PerformanceMetrics";
-import { getTradeHistory, type TradeHistoryEntry } from "@/lib/api";
+import {
+  approveReconciliationIssue,
+  deleteBrokerConnection,
+  getBrokerConnections,
+  getBrokerProviders,
+  getReconciliationIssues,
+  getTradeHistory,
+  rejectReconciliationIssue,
+  runBrokerReconciliation,
+  saveBrokerConnection,
+  type BrokerConnection,
+  type BrokerProvider,
+  type BrokerProviderInfo,
+  type ReconciliationIssue,
+  type TradeHistoryEntry,
+} from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
+
+type BrokerEnv = "paper" | "live";
+type BrokerCredentialField = {
+  key: string;
+  label: string;
+  placeholder: string;
+  secret?: boolean;
+  optional?: boolean;
+};
+
+const BROKER_FORMS: Record<BrokerProvider, {
+  label: string;
+  envs: BrokerEnv[];
+  note: string;
+  fields: BrokerCredentialField[];
+}> = {
+  alpaca: {
+    label: "Alpaca",
+    envs: ["paper", "live"],
+    note: "API key + secret",
+    fields: [
+      { key: "api_key", label: "API key", placeholder: "PK..." },
+      { key: "secret_key", label: "Secret", placeholder: "Secret", secret: true },
+    ],
+  },
+  ibkr: {
+    label: "IBKR",
+    envs: ["paper", "live"],
+    note: "Client Portal Gateway",
+    fields: [
+      { key: "gateway_url", label: "Gateway URL", placeholder: "https://localhost:5000/v1/api" },
+      { key: "account_id", label: "Account", placeholder: "DU123456", optional: true },
+    ],
+  },
+  etrade: {
+    label: "E*TRADE",
+    envs: ["paper", "live"],
+    note: "OAuth 1.0a token set",
+    fields: [
+      { key: "consumer_key", label: "Consumer key", placeholder: "Key" },
+      { key: "consumer_secret", label: "Consumer secret", placeholder: "Secret", secret: true },
+      { key: "oauth_token", label: "Access token", placeholder: "OAuth token", secret: true },
+      { key: "oauth_token_secret", label: "Token secret", placeholder: "OAuth token secret", secret: true },
+      { key: "account_id_key", label: "Account key", placeholder: "Optional", optional: true },
+    ],
+  },
+  schwab: {
+    label: "Schwab",
+    envs: ["live"],
+    note: "OAuth 2.0 refresh token",
+    fields: [
+      { key: "client_id", label: "Client ID", placeholder: "App key" },
+      { key: "client_secret", label: "Client secret", placeholder: "Secret", secret: true },
+      { key: "refresh_token", label: "Refresh token", placeholder: "Refresh token", secret: true },
+      { key: "redirect_uri", label: "Redirect URI", placeholder: "https://127.0.0.1", optional: true },
+    ],
+  },
+};
+
+function formatIsoShort(iso: string | null): string {
+  if (!iso) return "Never";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function brokerErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : "Request failed";
+}
+
+function brokerLabel(provider: BrokerProvider | string): string {
+  return BROKER_FORMS[(provider as BrokerProvider)]?.label ?? provider.toUpperCase();
+}
+
+function issueTitle(issue: ReconciliationIssue): string {
+  if (issue.issue_type === "broker_missing_local") return "Broker order missing locally";
+  if (issue.issue_type === "local_missing_broker") return "Local order missing at broker";
+  if (issue.issue_type === "status_mismatch") return "Status mismatch";
+  return issue.issue_type.replace(/_/g, " ");
+}
+
+function actionLabel(issue: ReconciliationIssue): string {
+  const action = String(issue.proposed_action?.action ?? "");
+  if (action === "insert_trade") return "Add to local trade ledger";
+  if (action === "mark_orphaned") return "Mark local trade orphaned";
+  if (action === "update_trade_status") {
+    return `Update local status to ${String(issue.proposed_action?.status ?? "broker status")}`;
+  }
+  return "Review proposed update";
+}
 
 // ─── Toggle Switch ──────────────────────────────────────────
 
@@ -177,6 +292,137 @@ export default function SettingsPage() {
   // carefully-tuned setup.
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [resetDone, setResetDone] = useState(false);
+  const [brokerProvider, setBrokerProvider] = useState<BrokerProvider>("alpaca");
+  const [brokerEnv, setBrokerEnv] = useState<BrokerEnv>("paper");
+  const [brokerDisplayName, setBrokerDisplayName] = useState("");
+  const [brokerCredentials, setBrokerCredentials] = useState<Record<string, string>>({
+    gateway_url: "https://localhost:5000/v1/api",
+  });
+  const [brokerLoading, setBrokerLoading] = useState(true);
+  const [brokerSaving, setBrokerSaving] = useState(false);
+  const [reconcileRunning, setReconcileRunning] = useState(false);
+  const [issueBusyId, setIssueBusyId] = useState<number | null>(null);
+  const [connectionBusyId, setConnectionBusyId] = useState<number | null>(null);
+  const [brokerConnections, setBrokerConnections] = useState<BrokerConnection[]>([]);
+  const [brokerProviders, setBrokerProviders] = useState<BrokerProviderInfo[]>([]);
+  const [reconciliationIssues, setReconciliationIssues] = useState<ReconciliationIssue[]>([]);
+  const brokerForm = BROKER_FORMS[brokerProvider];
+  const hasActiveAlpaca = brokerConnections.some((c) => c.provider === "alpaca" && c.status === "active");
+
+  const loadBrokerData = useCallback(async () => {
+    setBrokerLoading(true);
+    try {
+      const [providers, connections, issues] = await Promise.all([
+        getBrokerProviders(),
+        getBrokerConnections(),
+        getReconciliationIssues("open"),
+      ]);
+      setBrokerProviders(providers);
+      setBrokerConnections(connections);
+      setReconciliationIssues(issues);
+    } catch (err) {
+      toast({
+        type: "error",
+        message: brokerErrorMessage(err),
+      });
+    } finally {
+      setBrokerLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    void loadBrokerData();
+  }, [loadBrokerData]);
+
+  useEffect(() => {
+    const allowed = BROKER_FORMS[brokerProvider].envs;
+    if (!allowed.includes(brokerEnv)) {
+      setBrokerEnv(allowed[0]);
+    }
+    if (brokerProvider === "ibkr") {
+      setBrokerCredentials((current) => ({
+        gateway_url: current.gateway_url || "https://localhost:5000/v1/api",
+        account_id: current.account_id || "",
+      }));
+    }
+  }, [brokerEnv, brokerProvider]);
+
+  async function handleSaveBrokerConnection(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const missing = brokerForm.fields.find((field) => (
+      !field.optional && !String(brokerCredentials[field.key] ?? "").trim()
+    ));
+    if (missing) {
+      toast({ type: "warning", message: `${missing.label} is required.` });
+      return;
+    }
+    setBrokerSaving(true);
+    try {
+      await saveBrokerConnection({
+        provider: brokerProvider,
+        credentials: brokerCredentials,
+        account_env: brokerEnv,
+        display_name: brokerDisplayName.trim() || null,
+      });
+      setBrokerCredentials(brokerProvider === "ibkr" ? { gateway_url: "https://localhost:5000/v1/api" } : {});
+      toast({ type: "success", message: "Broker connection verified and saved." });
+      await loadBrokerData();
+    } catch (err) {
+      toast({ type: "error", message: brokerErrorMessage(err) });
+    } finally {
+      setBrokerSaving(false);
+    }
+  }
+
+  async function handleDisableConnection(connection: BrokerConnection) {
+    const confirmed = window.confirm(
+      `Disable ${connection.provider.toUpperCase()} ${connection.account_env} connection ending ${connection.key_last4 ?? "unknown"}?`,
+    );
+    if (!confirmed) return;
+    setConnectionBusyId(connection.id);
+    try {
+      await deleteBrokerConnection(connection.id);
+      toast({ type: "success", message: "Broker connection disabled." });
+      await loadBrokerData();
+    } catch (err) {
+      toast({ type: "error", message: brokerErrorMessage(err) });
+    } finally {
+      setConnectionBusyId(null);
+    }
+  }
+
+  async function handleRunReconciliation() {
+    setReconcileRunning(true);
+    try {
+      const counts = await runBrokerReconciliation();
+      toast({
+        type: counts.backfilled + counts.orphaned > 0 ? "warning" : "success",
+        message: `${counts.matched} matched, ${counts.backfilled + counts.orphaned} queued for review.`,
+      });
+      await loadBrokerData();
+    } catch (err) {
+      toast({ type: "error", message: brokerErrorMessage(err) });
+    } finally {
+      setReconcileRunning(false);
+    }
+  }
+
+  async function handleIssueDecision(issue: ReconciliationIssue, approved: boolean) {
+    setIssueBusyId(issue.id);
+    try {
+      const action = approved ? approveReconciliationIssue : rejectReconciliationIssue;
+      await action(issue.id);
+      setReconciliationIssues((current) => current.filter((item) => item.id !== issue.id));
+      toast({
+        type: approved ? "success" : "info",
+        message: approved ? "Ledger update approved." : "Reconciliation issue rejected.",
+      });
+    } catch (err) {
+      toast({ type: "error", message: brokerErrorMessage(err) });
+    } finally {
+      setIssueBusyId(null);
+    }
+  }
 
   // ─── Export Handlers ──────────────────────────────────────
 
@@ -383,20 +629,299 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* API Keys / Broker Credentials. Intentionally shows only a "set
-            on server" status — never the key or secret itself (security). */}
+        {/* Brokerage */}
         <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
-          <div className="flex items-center gap-3 mb-3">
-            <Key className="h-4 w-4 text-muted-foreground" aria-hidden />
-            <h2 className="t-display-section text-foreground">API keys</h2>
-            <span className="t-label bg-brand/10 text-brand border border-brand/30 rounded-sm px-1.5 py-0.5">
-              Set on server
-            </span>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <Key className="h-4 w-4 text-muted-foreground" aria-hidden />
+              <h2 className="t-display-section text-foreground">Brokerage</h2>
+              <Badge
+                variant={brokerConnections.some((c) => c.status === "active") ? "active" : "idle"}
+                withDot
+              >
+                {brokerConnections.some((c) => c.status === "active") ? "Connected" : "Not connected"}
+              </Badge>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-10 text-xs"
+              onClick={() => void loadBrokerData()}
+              disabled={brokerLoading}
+            >
+              {brokerLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+              ) : (
+                <RefreshCw className="h-3 w-3" aria-hidden />
+              )}
+              Refresh
+            </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Alpaca API keys are configured on the server. Contact admin to update
-            brokerage credentials. Keys and secrets are never displayed here.
-          </p>
+
+          <form onSubmit={handleSaveBrokerConnection} className="space-y-3">
+            <div className="grid gap-3 lg:grid-cols-[minmax(160px,0.8fr)_minmax(180px,1fr)_1fr] lg:items-end">
+              <div>
+                <span className="t-label mb-1 block">Broker</span>
+                <div
+                  role="radiogroup"
+                  aria-label="Broker provider"
+                  className="grid grid-cols-2 overflow-hidden rounded-sm border border-border sm:flex"
+                >
+                  {(Object.keys(BROKER_FORMS) as BrokerProvider[]).map((provider) => (
+                    <button
+                      key={provider}
+                      type="button"
+                      role="radio"
+                      aria-checked={brokerProvider === provider}
+                      onClick={() => setBrokerProvider(provider)}
+                      className={cn(
+                        "min-h-9 px-3 text-[12px] font-semibold uppercase transition-colors",
+                        brokerProvider === provider
+                          ? "bg-brand/20 text-brand"
+                          : "text-muted-foreground hover:bg-accent/30 hover:text-foreground",
+                      )}
+                    >
+                      {BROKER_FORMS[provider].label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="t-label mb-1 block" htmlFor="broker-display-name">
+                  Label
+                </label>
+                <Input
+                  id="broker-display-name"
+                  value={brokerDisplayName}
+                  onChange={(e) => setBrokerDisplayName(e.target.value)}
+                  placeholder="Main paper"
+                  className="font-sans"
+                  maxLength={160}
+                />
+              </div>
+
+              <div>
+                <span className="t-label mb-1 block">Environment</span>
+                <div
+                  role="radiogroup"
+                  aria-label="Broker environment"
+                  className="flex h-9 overflow-hidden rounded-sm border border-border"
+                >
+                  {brokerForm.envs.map((env) => (
+                    <button
+                      key={env}
+                      type="button"
+                      role="radio"
+                      aria-checked={brokerEnv === env}
+                      onClick={() => setBrokerEnv(env)}
+                      className={cn(
+                        "flex-1 px-3 text-[12px] font-semibold uppercase transition-colors",
+                        brokerEnv === env
+                          ? env === "live"
+                            ? "bg-loss/15 text-loss"
+                            : "bg-brand/20 text-brand"
+                          : "text-muted-foreground hover:bg-accent/30 hover:text-foreground",
+                      )}
+                    >
+                      {env}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[repeat(5,minmax(150px,1fr))_auto] xl:items-end">
+              {brokerForm.fields.map((field) => (
+                <div key={field.key}>
+                  <label className="t-label mb-1 block" htmlFor={`broker-${field.key}`}>
+                    {field.label}
+                  </label>
+                  <Input
+                    id={`broker-${field.key}`}
+                    type={field.secret ? "password" : "text"}
+                    value={brokerCredentials[field.key] ?? ""}
+                    onChange={(e) => setBrokerCredentials((current) => ({
+                      ...current,
+                      [field.key]: e.target.value,
+                    }))}
+                    placeholder={field.placeholder}
+                    autoComplete="off"
+                    spellCheck={false}
+                    className={field.key === "gateway_url" || field.key === "redirect_uri" ? "font-sans" : undefined}
+                  />
+                </div>
+              ))}
+              <Button
+                type="submit"
+                className="h-10 text-xs"
+                disabled={brokerSaving}
+                aria-busy={brokerSaving}
+              >
+                {brokerSaving ? (
+                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                ) : (
+                  <Check className="h-3 w-3" aria-hidden />
+                )}
+                Verify & save
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="idle">{brokerForm.note}</Badge>
+              {brokerProvider !== "alpaca" && (
+                <Badge variant="paused">connection vault only</Badge>
+              )}
+              {brokerProviders.find((provider) => provider.provider === brokerProvider)?.trading_enabled && (
+                <Badge variant="active">order routing</Badge>
+              )}
+            </div>
+          </form>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            <div className="rounded-md border border-border bg-bg-elev-2/35 p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-xs font-medium text-foreground">Saved connections</p>
+                {brokerLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden />}
+              </div>
+              {brokerConnections.length === 0 ? (
+                <p className="t-meta">No saved brokerage connection.</p>
+              ) : (
+                <div className="space-y-2">
+                  {brokerConnections.map((connection) => (
+                    <div
+                      key={connection.id}
+                      className="flex items-center justify-between gap-3 rounded-sm border border-border bg-bg-elev-1 px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-xs font-semibold uppercase text-foreground">
+                            {brokerLabel(connection.provider)} {connection.account_env}
+                          </p>
+                          <Badge
+                            variant={connection.status === "active" ? "active" : "disabled"}
+                            withDot
+                          >
+                            {connection.status}
+                          </Badge>
+                          {connection.metadata?.trading_enabled !== true && (
+                            <Badge variant="paused">vault</Badge>
+                          )}
+                        </div>
+                        <p className="t-meta mt-1">
+                          {connection.display_name || "Unnamed"} · id ending {connection.key_last4 ?? "----"}
+                        </p>
+                        <p className="t-meta">
+                          Verified {formatIsoShort(connection.verified_at)} · synced {formatIsoShort(connection.last_sync_at)}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Disable broker connection"
+                        onClick={() => void handleDisableConnection(connection)}
+                        disabled={connectionBusyId === connection.id}
+                      >
+                        {connectionBusyId === connection.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                        ) : (
+                          <Trash2 className="h-4 w-4" aria-hidden />
+                        )}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-md border border-border bg-bg-elev-2/35 p-3">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-foreground">Reconciliation review</p>
+                  <p className="t-meta mt-0.5">
+                    {reconciliationIssues.length} open {reconciliationIssues.length === 1 ? "issue" : "issues"}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-10 text-xs"
+                  onClick={() => void handleRunReconciliation()}
+                  disabled={reconcileRunning || !hasActiveAlpaca}
+                  aria-busy={reconcileRunning}
+                >
+                  {reconcileRunning ? (
+                    <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                  ) : (
+                    <RefreshCw className="h-3 w-3" aria-hidden />
+                  )}
+                  Reconcile now
+                </Button>
+              </div>
+
+              {reconciliationIssues.length === 0 ? (
+                <p className="t-meta">No broker drift waiting for review.</p>
+              ) : (
+                <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1">
+                  {reconciliationIssues.map((issue) => (
+                    <div
+                      key={issue.id}
+                      className="rounded-sm border border-amber/30 bg-amber/5 p-3"
+                    >
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber" aria-hidden />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-xs font-semibold text-foreground">
+                              {issueTitle(issue)}
+                            </p>
+                            {issue.symbol && (
+                              <span className="t-num-md text-brand">{issue.symbol}</span>
+                            )}
+                          </div>
+                          <p className="t-meta mt-1">
+                            {actionLabel(issue)} · detected {formatIsoShort(issue.detected_at)}
+                          </p>
+                          <p className="t-meta break-all">
+                            Order {issue.client_order_id ?? issue.broker_order_id ?? "unknown"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-9 text-xs"
+                          onClick={() => void handleIssueDecision(issue, false)}
+                          disabled={issueBusyId === issue.id}
+                        >
+                          <XCircle className="h-3 w-3" aria-hidden />
+                          Reject
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-9 text-xs"
+                          onClick={() => void handleIssueDecision(issue, true)}
+                          disabled={issueBusyId === issue.id}
+                        >
+                          {issueBusyId === issue.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                          ) : (
+                            <Check className="h-3 w-3" aria-hidden />
+                          )}
+                          Approve
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Notifications */}

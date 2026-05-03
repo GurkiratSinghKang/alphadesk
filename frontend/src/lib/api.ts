@@ -4,6 +4,10 @@ import type {
   OHLCVBar,
   MarketDepthCapabilities,
   MarketDepthSnapshot,
+  TickerContext,
+  TickerContextResponse,
+  TickerFactEnvelope,
+  TickerFreshnessMeta,
   OptionsChain,
   Position,
   Order,
@@ -667,6 +671,111 @@ function parseTimestampMs(rawTs: unknown): number {
 function normalizeQuotePayloadTimestamp<T extends Quote>(quote: T): T {
   const rawTs: unknown = (quote as unknown as { timestamp?: unknown })?.timestamp;
   return { ...quote, timestamp: parseTimestampMs(rawTs) };
+}
+
+interface RawTickerFreshnessMeta {
+  observed_at: string;
+  as_of?: string | null;
+  source_updated_at?: string | null;
+  expires_at?: string | null;
+  stale_after_seconds?: number | null;
+  quality: TickerFreshnessMeta["quality"];
+  source: string;
+  schema_version: number;
+  is_demo: boolean;
+}
+
+interface RawTickerFactEnvelope {
+  value: unknown | null;
+  freshness: RawTickerFreshnessMeta;
+}
+
+interface RawTickerContext {
+  symbol: string;
+  quote?: RawTickerFactEnvelope | null;
+  options_summary?: RawTickerFactEnvelope | null;
+  earnings?: RawTickerFactEnvelope | null;
+  research?: RawTickerFactEnvelope | null;
+  news?: RawTickerFactEnvelope | null;
+  market_regime?: RawTickerFactEnvelope | null;
+  warnings?: { need: string; code: string; message: string }[];
+}
+
+interface RawTickerContextResponse {
+  symbols: Record<string, RawTickerContext>;
+  generated_at: string;
+}
+
+function mapTickerFreshness(raw: RawTickerFreshnessMeta): TickerFreshnessMeta {
+  return {
+    observedAt: raw.observed_at,
+    asOf: raw.as_of ?? null,
+    sourceUpdatedAt: raw.source_updated_at ?? null,
+    expiresAt: raw.expires_at ?? null,
+    staleAfterSeconds: raw.stale_after_seconds ?? null,
+    quality: raw.quality,
+    source: raw.source,
+    schemaVersion: raw.schema_version,
+    isDemo: raw.is_demo,
+  };
+}
+
+function mapTickerEnvelope(raw?: RawTickerFactEnvelope | null): TickerFactEnvelope<Record<string, unknown>> | null {
+  if (!raw) return null;
+  const value = raw.value && typeof raw.value === "object"
+    ? raw.value as Record<string, unknown>
+    : raw.value === null
+      ? null
+      : { value: raw.value };
+  return {
+    value,
+    freshness: mapTickerFreshness(raw.freshness),
+  };
+}
+
+function mapTickerContext(raw: RawTickerContext): TickerContext {
+  return {
+    symbol: raw.symbol,
+    quote: mapTickerEnvelope(raw.quote),
+    optionsSummary: mapTickerEnvelope(raw.options_summary),
+    earnings: mapTickerEnvelope(raw.earnings),
+    research: mapTickerEnvelope(raw.research),
+    news: mapTickerEnvelope(raw.news),
+    marketRegime: mapTickerEnvelope(raw.market_regime),
+    warnings: raw.warnings ?? [],
+  };
+}
+
+export interface TickerContextOptions {
+  needs?: string[];
+  maxAgeSeconds?: number;
+  onStale?: "allow" | "refresh" | "reject" | "allow_with_warning";
+  signal?: AbortSignal;
+}
+
+export async function getTickerContext(
+  symbols: string[],
+  options: TickerContextOptions = {},
+): Promise<TickerContextResponse> {
+  const normalized = symbols
+    .map((symbol) => symbol.trim().toUpperCase())
+    .filter(Boolean);
+  const params = new URLSearchParams();
+  params.set("symbols", Array.from(new Set(normalized)).join(","));
+  if (options.needs?.length) params.set("needs", options.needs.join(","));
+  if (options.maxAgeSeconds !== undefined) params.set("max_age_seconds", String(options.maxAgeSeconds));
+  if (options.onStale) params.set("on_stale", options.onStale);
+
+  const raw = await apiFetch<RawTickerContextResponse>(
+    `/api/v1/tickers/context?${params.toString()}`,
+    options.signal ? { signal: options.signal } : undefined,
+  );
+  return {
+    symbols: Object.fromEntries(
+      Object.entries(raw.symbols ?? {}).map(([symbol, context]) => [symbol, mapTickerContext(context)]),
+    ),
+    generatedAt: raw.generated_at,
+  };
 }
 
 export async function getQuote(symbol: string): Promise<Quote> {
@@ -1640,6 +1749,158 @@ export async function getOrders(status?: string): Promise<Order[]> {
       createdAt: (o.submitted_at as string) ?? new Date().toISOString(),
     };
   });
+}
+
+// ─── Broker Connections & Reconciliation ─────────────────────
+
+export interface BrokerConnection {
+  id: number;
+  provider: BrokerProvider;
+  account_env: "paper" | "live";
+  display_name: string | null;
+  key_last4: string | null;
+  status: string;
+  is_default: boolean;
+  verified_at: string | null;
+  last_sync_at: string | null;
+  last_error: string | null;
+  broker_account_id: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export type BrokerProvider = "alpaca" | "ibkr" | "etrade" | "schwab";
+
+export interface BrokerProviderInfo {
+  provider: BrokerProvider;
+  label: string;
+  auth_model: string;
+  account_envs: Array<"paper" | "live">;
+  trading_enabled: boolean;
+  reconciliation_enabled: boolean;
+  fields: string[];
+}
+
+export interface SaveBrokerConnectionPayload {
+  provider: BrokerProvider;
+  account_env: "paper" | "live";
+  display_name?: string | null;
+  credentials: Record<string, string>;
+}
+
+export interface SaveAlpacaConnectionPayload {
+  api_key: string;
+  secret_key: string;
+  account_env: "paper" | "live";
+  display_name?: string | null;
+}
+
+export interface ReconciliationIssue {
+  id: number;
+  issue_key: string;
+  provider: string;
+  account_env: "paper" | "live";
+  issue_type: string;
+  severity: string;
+  status: "open" | "approved" | "rejected" | string;
+  symbol: string | null;
+  broker_order_id: string | null;
+  client_order_id: string | null;
+  local_trade_id: number | null;
+  broker_snapshot: Record<string, unknown> | null;
+  local_snapshot: Record<string, unknown> | null;
+  proposed_action: Record<string, unknown>;
+  detected_at: string | null;
+  decided_at: string | null;
+  decided_by: string | null;
+  resolution_note: string | null;
+}
+
+export interface ReconciliationCounts {
+  backfilled: number;
+  orphaned: number;
+  matched: number;
+}
+
+export function getBrokerConnections(): Promise<BrokerConnection[]> {
+  return apiFetch<BrokerConnection[]>("/api/v1/broker/connections");
+}
+
+export function getBrokerProviders(): Promise<BrokerProviderInfo[]> {
+  return apiFetch<BrokerProviderInfo[]>("/api/v1/broker/providers");
+}
+
+export function saveBrokerConnection(
+  payload: SaveBrokerConnectionPayload,
+): Promise<BrokerConnection> {
+  return apiFetch<BrokerConnection>(
+    `/api/v1/broker/connections/${payload.provider}`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        account_env: payload.account_env,
+        display_name: payload.display_name ?? null,
+        credentials: payload.credentials,
+      }),
+      timeoutMs: 30_000,
+    },
+  );
+}
+
+export function saveAlpacaConnection(
+  payload: SaveAlpacaConnectionPayload,
+): Promise<BrokerConnection> {
+  return apiFetch<BrokerConnection>("/api/v1/broker/connections/alpaca", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    timeoutMs: 30_000,
+  });
+}
+
+export function deleteBrokerConnection(connectionId: number): Promise<void> {
+  return apiFetch<void>(`/api/v1/broker/connections/${connectionId}`, {
+    method: "DELETE",
+  });
+}
+
+export function getReconciliationIssues(
+  status: "open" | "all" | "approved" | "rejected" = "open",
+): Promise<ReconciliationIssue[]> {
+  return apiFetch<ReconciliationIssue[]>(
+    `/api/v1/broker/reconciliation/issues?status=${encodeURIComponent(status)}`,
+  );
+}
+
+export function runBrokerReconciliation(): Promise<ReconciliationCounts> {
+  return apiFetch<ReconciliationCounts>("/api/v1/broker/reconciliation/run", {
+    method: "POST",
+    timeoutMs: 45_000,
+  });
+}
+
+export function approveReconciliationIssue(
+  issueId: number,
+  note?: string,
+): Promise<ReconciliationIssue> {
+  return apiFetch<ReconciliationIssue>(
+    `/api/v1/broker/reconciliation/issues/${issueId}/approve`,
+    {
+      method: "POST",
+      body: JSON.stringify({ note: note ?? null }),
+    },
+  );
+}
+
+export function rejectReconciliationIssue(
+  issueId: number,
+  note?: string,
+): Promise<ReconciliationIssue> {
+  return apiFetch<ReconciliationIssue>(
+    `/api/v1/broker/reconciliation/issues/${issueId}/reject`,
+    {
+      method: "POST",
+      body: JSON.stringify({ note: note ?? null }),
+    },
+  );
 }
 
 // ─── Portfolio ───────────────────────────────────────────────

@@ -252,6 +252,31 @@ class DailyPipelineRunner:
                 fetch_warnings.append(
                     f"{self._strategy.META.name}: could not load options chains"
                 )
+        ticker_contexts = {}
+        required_contexts = tuple(getattr(self._strategy.META, "required_ticker_contexts", ()) or ())
+        if required_contexts and symbols:
+            try:
+                from services.ticker_context import get_ticker_context
+
+                context_response = await get_ticker_context(
+                    list(symbols),
+                    needs=list(required_contexts),
+                    on_stale="allow_with_warning",
+                )
+                ticker_contexts = {
+                    symbol: context.model_dump(mode="json")
+                    for symbol, context in context_response.symbols.items()
+                }
+                for symbol, context in context_response.symbols.items():
+                    for warning in context.warnings:
+                        fetch_warnings.append(
+                            f"{self._strategy.META.name}: {symbol} {warning.need} "
+                            f"{warning.code}: {warning.message}"
+                        )
+            except Exception:
+                fetch_warnings.append(
+                    f"{self._strategy.META.name}: could not load ticker contexts"
+                )
 
         # Round-6 / I-13: positions are not optional in live mode. If the
         # provider isn't wired, fail loudly here rather than silently feed
@@ -287,6 +312,7 @@ class DailyPipelineRunner:
             asof=asof, mode=mode, bars=bars, intraday_bars=intraday_bars,
             earnings=earnings, fundamentals=fundamentals,
             options_chains=options_chains,
+            ticker_contexts=ticker_contexts,
             cash=cash_value,
             equity=equity_value,
             positions=positions,

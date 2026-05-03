@@ -177,7 +177,13 @@ async def require_admin(username: str = Depends(require_auth)) -> str:
     against a proper role/permission record on the user row, but until then
     admin identity == "the singleton admin account".
     """
-    if username != settings.ADMIN_USERNAME:
+    try:
+        from services.users import is_admin_user
+        is_admin = await is_admin_user(username)
+    except Exception:
+        logger.warning("require_admin: user role lookup failed; falling back to configured admin", exc_info=True)
+        is_admin = username == settings.ADMIN_USERNAME
+    if not is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin role required",
@@ -531,13 +537,27 @@ async def login(request: LoginRequest, req: Request):
     # NOT close — the username compare runs strictly BEFORE bcrypt and
     # leaks the admin name one byte at a time over enough probes. The
     # canonical fix is a constant-time byte compare.
+    db_user = None
+    try:
+        from services.users import get_user
+        db_user = await get_user(submitted_username)
+    except Exception:
+        logger.warning("login: user DB lookup failed; falling back to configured admin only", exc_info=True)
+
     username_matches = hmac.compare_digest(
         submitted_username.encode("utf-8"),
         settings.ADMIN_USERNAME.encode("utf-8"),
     )
     active_admin_hash = _RUNTIME_ADMIN_HASH or settings.ADMIN_PASSWORD_HASH
+    db_user_hash = (
+        getattr(db_user, "password_hash", None)
+        if db_user is not None and getattr(db_user, "status", None) == "active"
+        else None
+    )
     target_hash = (
-        active_admin_hash
+        db_user_hash
+        if db_user_hash
+        else active_admin_hash
         if username_matches and active_admin_hash
         else _DUMMY_PASSWORD_HASH
     )
@@ -551,14 +571,11 @@ async def login(request: LoginRequest, req: Request):
         password_ok = False
 
     # Auth succeeds ONLY if (a) bcrypt matched AND (b) we compared against
-    # the real admin hash. The dummy-hash branch can never succeed: a match
-    # against the dummy hash would imply a bcrypt collision, and even then
-    # the explicit ``username_matches`` gate blocks it.
-    if not (
-        username_matches
-        and active_admin_hash
-        and password_ok
-    ):
+    # a real active user hash OR the configured admin hash. The dummy-hash
+    # branch can never succeed.
+    auth_matches_db_user = bool(db_user_hash and password_ok)
+    auth_matches_config_admin = bool(username_matches and active_admin_hash and password_ok and not db_user_hash)
+    if not (auth_matches_db_user or auth_matches_config_admin):
         # Audit the failed attempt. ``user`` records the *submitted* username
         # so investigations can see attempts against non-existent accounts.
         await _audit("login", user=submitted_username or "-", ip=client_ip, result="failure", req=req)
@@ -610,6 +627,17 @@ async def login(request: LoginRequest, req: Request):
 
     # Audit the successful login. Do NOT log the tokens or password hash.
     await _audit("login", user=submitted_username, ip=client_ip, result="success", req=req)
+
+    try:
+        from services.users import ensure_user_record
+        await ensure_user_record(
+            submitted_username,
+            role="admin" if submitted_username == settings.ADMIN_USERNAME else None,
+            password_hash=db_user_hash if auth_matches_db_user else None,
+            mark_login=True,
+        )
+    except Exception:
+        logger.debug("login: durable user profile sync failed", exc_info=True)
 
     # BUG-044: do not leak the JWT pair in the JSON body for browser clients.
     # Browsers rely on the HttpOnly ``access_token`` / ``refresh_token``

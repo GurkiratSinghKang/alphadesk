@@ -1053,15 +1053,18 @@ async def _fmp_headline_earnings_rescue(
 
 
 async def _load_quote(symbol: str) -> dict | None:
-    from services.market import fetch_quote
+    from services.ticker_context import get_ticker_fact
 
     try:
-        q = await fetch_quote(symbol)
+        fact = await get_ticker_fact(symbol, "quote", on_stale="allow_with_warning")
+        q = fact.value
+        if not isinstance(q, dict):
+            return None
         return {
-            "last": float(q.last),
-            "change": float(q.change),
-            "change_pct": float(q.changePct),
-            "timestamp": q.timestamp,
+            "last": float(q.get("last") or 0),
+            "change": float(q.get("change") or 0),
+            "change_pct": float(q.get("changePct", q.get("change_pct", 0)) or 0),
+            "timestamp": q.get("timestamp") or fact.freshness.as_of,
         }
     except Exception as e:
         # B-69: demoted to DEBUG. During an Alpaca outage this was
@@ -1150,6 +1153,73 @@ def _option_mid(contract: Any | None) -> float:
 
 
 async def _load_metrics(
+    symbol: str,
+    report_date: date | None = None,
+    report_time: str | None = None,
+    expiry: date | None = None,
+    client_host: str | None = None,  # B-33 — accepted for API parity; unused today
+) -> dict | None:
+    from services.ticker_context import LoadedFact, get_custom_ticker_fact
+
+    report_key = report_date.isoformat() if report_date else "unknown"
+    expiry_key = expiry.isoformat() if expiry else "auto"
+    time_key = (report_time or "DMT").upper()
+    fact_key = f"earnings_options:{report_key}:{time_key}:{expiry_key}"
+
+    async def _loader() -> LoadedFact:
+        value = await _compute_metrics_uncached(
+            symbol,
+            report_date=report_date,
+            report_time=report_time,
+            expiry=expiry,
+            client_host=client_host,
+        )
+        if value is None:
+            raise ValueError(f"earnings options metrics unavailable for {symbol}")
+        as_of = (
+            datetime(report_date.year, report_date.month, report_date.day, tzinfo=timezone.utc)
+            if report_date
+            else datetime.now(timezone.utc)
+        )
+        return LoadedFact(
+            value=value,
+            as_of=as_of,
+            source="demo" if value.get("chain_is_demo") or value.get("iv_is_demo") else "earnings_options_metrics",
+            stale_after_seconds=300,
+            is_demo=bool(value.get("chain_is_demo") or value.get("iv_is_demo")),
+        )
+
+    try:
+        fact = await get_custom_ticker_fact(
+            symbol,
+            namespace="earnings",
+            key=fact_key,
+            source="earnings_options_metrics",
+            stale_after_seconds=300,
+            loader=_loader,
+            on_stale="allow_with_warning",
+        )
+        if not isinstance(fact.value, dict):
+            return None
+        value = dict(fact.value)
+        if isinstance(value.get("option_expiry"), str):
+            try:
+                value["option_expiry"] = date.fromisoformat(value["option_expiry"])
+            except ValueError:
+                pass
+        return value
+    except Exception:
+        log.debug("ticker-context metrics path failed for %s; falling back", symbol, exc_info=True)
+        return await _compute_metrics_uncached(
+            symbol,
+            report_date=report_date,
+            report_time=report_time,
+            expiry=expiry,
+            client_host=client_host,
+        )
+
+
+async def _compute_metrics_uncached(
     symbol: str,
     report_date: date | None = None,
     report_time: str | None = None,
@@ -1578,6 +1648,21 @@ async def _run_structured_and_cache(
             payload,
             ttl_seconds=settings.EARNINGS_CLAUDE_STRUCTURED_TTL_HOURS * 3600,
         )
+        try:
+            from services.ticker_context import persist_custom_ticker_fact
+
+            await persist_custom_ticker_fact(
+                symbol,
+                namespace="research",
+                key=f"claude_structured:{context['report_date']}",
+                value=payload,
+                source="earnings_claude_structured",
+                as_of=_date_as_utc_datetime(context.get("report_date")),
+                source_ref=key,
+                stale_after_seconds=settings.EARNINGS_CLAUDE_STRUCTURED_TTL_HOURS * 3600,
+            )
+        except Exception:
+            log.debug("persist structured Claude ticker fact failed for %s", symbol, exc_info=True)
         return payload
     except Exception as e:
         # B-69: demoted to DEBUG — an Anthropic outage would otherwise
@@ -1612,7 +1697,7 @@ async def _run_structured_and_cache(
 # ``services.earnings_prompts._escape_tags_in_untrusted``.
 _CONTROL_CHARS = re.compile(r"[\u0000-\u001f\u007f\u2028\u2029]")
 # Tag names mirror the wrappers in services.earnings_prompts.
-_PROMPT_TAG_NAMES = ("headline", "company", "sector", "market_regime")
+_PROMPT_TAG_NAMES = ("headline", "company", "sector", "market_regime", "external_research")
 _LITERAL_TAG_RE = re.compile(
     r"</?(?:" + "|".join(_PROMPT_TAG_NAMES) + r")(?:\s[^>]*)?>",
     re.IGNORECASE,
@@ -1638,6 +1723,20 @@ def _sanitize_for_prompt(value: Any, *, max_len: int = 200) -> Any:
     return cleaned
 
 
+def _date_as_utc_datetime(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day, tzinfo=timezone.utc)
+    try:
+        parsed_date = date.fromisoformat(str(value)[:10])
+        return datetime(parsed_date.year, parsed_date.month, parsed_date.day, tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
 def _sanitize_prompt_context(context: dict) -> dict:
     """Apply :func:`_sanitize_for_prompt` to every untrusted string field.
 
@@ -1647,9 +1746,12 @@ def _sanitize_prompt_context(context: dict) -> dict:
     ``market_regime`` are all upstream-supplied and get scrubbed.
     """
     out = dict(context)
-    for k in ("company", "sector", "market_regime"):
+    for k in ("company", "sector", "market_regime", "external_research"):
         if k in out:
-            out[k] = _sanitize_for_prompt(out[k], max_len=200)
+            out[k] = _sanitize_for_prompt(
+                out[k],
+                max_len=1200 if k == "external_research" else 200,
+            )
     if isinstance(out.get("headlines"), list):
         out["headlines"] = [
             _sanitize_for_prompt(h, max_len=200) for h in out["headlines"][:5]
@@ -1663,6 +1765,41 @@ def _sanitize_prompt_context(context: dict) -> dict:
             for d, s in out["recent_beats_misses"][:8]
         ]
     return out
+
+
+def _format_external_research_for_prompt(value: Any) -> str:
+    if not isinstance(value, dict):
+        return "unavailable"
+    provider = str(value.get("provider") or "TradingAgents")
+    completed_at = str(value.get("completed_at") or "unknown time")
+    signal = ""
+    decision = str(value.get("decision_text") or "").strip()
+    summary_lines = [
+        str(line).strip()
+        for line in (value.get("summary_lines") or [])
+        if str(line).strip()
+    ][:4]
+    for candidate in [decision, *summary_lines]:
+        match = re.search(
+            r"\b(OVERWEIGHT|UNDERWEIGHT|NEUTRAL|HOLD|BUY|SELL|REDUCE|ACCUMULATE)\b",
+            candidate,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            signal = match.group(1).upper()
+            break
+    pieces = [
+        f"{provider} research completed at {completed_at}.",
+        f"Signal: {signal or 'not explicit'}.",
+    ]
+    if summary_lines:
+        pieces.append("Highlights: " + " | ".join(summary_lines))
+    if decision:
+        pieces.append("Memo excerpt: " + decision[:800])
+    disclaimer = value.get("advisory_disclaimer")
+    if isinstance(disclaimer, str) and disclaimer.strip():
+        pieces.append("Guardrail: " + disclaimer.strip())
+    return " ".join(pieces)
 
 
 async def _load_iv_term(symbol: str) -> tuple[list[dict] | None, bool]:
@@ -2540,7 +2677,9 @@ async def get_detail(symbol: str) -> EarningsDetail:
     if not meta:
         return await _build_stub_detail(symbol)
 
-    quote_t, metrics_t, ladder_t, news_payload_t, regime_t, iv_term_t, skew_t = (
+    from services.ticker_context import get_ticker_fact
+
+    quote_t, metrics_t, ladder_t, news_payload_t, regime_t, iv_term_t, skew_t, research_t = (
         await asyncio.gather(
             _load_quote(symbol),
             _load_metrics(
@@ -2558,6 +2697,7 @@ async def get_detail(symbol: str) -> EarningsDetail:
             _load_market_regime(),
             _load_iv_term(symbol),
             _load_skew(symbol),
+            get_ticker_fact(symbol, "research", on_stale="allow"),
             return_exceptions=True,
         )
     )
@@ -2578,6 +2718,10 @@ async def get_detail(symbol: str) -> EarningsDetail:
         # Defensive: tests / mocks may still return a bare list.
         iv_term = iv_term_t
     skew = skew_t if isinstance(skew_t, dict) else None
+    external_research = "unavailable"
+    if not isinstance(research_t, Exception):
+        research_value = getattr(research_t, "value", None)
+        external_research = _format_external_research_for_prompt(research_value)
 
     error_codes: list[str] = []
     news: list[dict] = []
@@ -2677,6 +2821,7 @@ async def get_detail(symbol: str) -> EarningsDetail:
         ),
         "headlines": _format_news_for_prompt(news),
         "market_regime": market_regime,
+        "external_research": external_research,
     }
     try:
         claude = await _load_claude_structured(symbol, context=claude_ctx)
@@ -2788,7 +2933,9 @@ async def _run_full_research_uncached(
         parse_full_response,
     )
 
-    quote, metrics, news, regime = await asyncio.gather(
+    from services.ticker_context import get_ticker_fact
+
+    quote, metrics, news, regime, research = await asyncio.gather(
         _load_quote(symbol),
         _load_metrics(
             symbol,
@@ -2797,6 +2944,7 @@ async def _run_full_research_uncached(
         ),
         _load_news(symbol),
         _load_market_regime(),
+        get_ticker_fact(symbol, "research", on_stale="allow"),
         return_exceptions=True,
     )
     # Round-4 CLUSTER 6 #24: scrub upstream-supplied strings before they
@@ -2810,6 +2958,11 @@ async def _run_full_research_uncached(
     historical_quarters = (
         metrics.get("historical_quarters", []) if isinstance(metrics, dict) else []
     )
+    external_research = "unavailable"
+    if not isinstance(research, Exception):
+        external_research = _format_external_research_for_prompt(
+            getattr(research, "value", None)
+        )
     prompt = build_full_prompt(
         symbol=symbol,
         company=safe_company,
@@ -2834,6 +2987,7 @@ async def _run_full_research_uncached(
             else "Unavailable (regime service failed; treat as neutral)"
         ),
         sector_peers_pct_change_5d={},  # wire once sector-peers helper exists
+        external_research=external_research,
     )
     # Round-4 CLUSTER 2 #9: shared singleton client. Constructing a fresh
     # ClaudeClient per call (re-instantiates anthropic.AsyncAnthropic +
@@ -2856,6 +3010,21 @@ async def _run_full_research_uncached(
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
     await cache.set(key, payload, ttl_seconds=24 * 3600)
+    try:
+        from services.ticker_context import persist_custom_ticker_fact
+
+        await persist_custom_ticker_fact(
+            symbol,
+            namespace="research",
+            key=f"claude_full:{meta['report_date']}",
+            value=payload,
+            source="earnings_claude_full",
+            as_of=_date_as_utc_datetime(meta.get("report_date")),
+            source_ref=key,
+            stale_after_seconds=24 * 3600,
+        )
+    except Exception:
+        log.debug("persist full Claude ticker fact failed for %s", symbol, exc_info=True)
     return ClaudeFullResearch(**payload)
 
 

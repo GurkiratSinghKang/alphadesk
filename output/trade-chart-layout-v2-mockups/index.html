@@ -1,0 +1,1645 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AlphaDesk Trade Chart Round 2 Mockups</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400;1,6..72,500&display=swap");
+
+    :root {
+      --bg: #0a0b0a;
+      --panel: #111210;
+      --panel-2: #171812;
+      --panel-3: #202016;
+      --line: rgba(238, 231, 208, 0.09);
+      --line-strong: rgba(238, 231, 208, 0.18);
+      --text: #eee7d0;
+      --muted: #aaa28e;
+      --faint: #716b5f;
+      --gold: #c9a66b;
+      --gold-2: #e4c16f;
+      --green: #a8d04d;
+      --green-soft: rgba(168, 208, 77, 0.16);
+      --red: #df7658;
+      --red-soft: rgba(223, 118, 88, 0.17);
+      --blue: #87b7c8;
+      --violet: #a99bd9;
+      --amber: #d9a441;
+      --font-ui: "Inter Tight", system-ui, sans-serif;
+      --font-display: "Newsreader", Georgia, serif;
+      --font-mono: "JetBrains Mono", "SF Mono", monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-ui);
+      letter-spacing: 0;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(180deg, rgba(201, 166, 107, 0.07), transparent 340px),
+        radial-gradient(circle at 52% -30%, rgba(135, 183, 200, 0.09), transparent 440px),
+        var(--bg);
+    }
+
+    button { font: inherit; }
+
+    .board {
+      width: min(1760px, 100%);
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    .board-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: end;
+      margin-bottom: 24px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand {
+      margin-bottom: 6px;
+      color: var(--gold);
+      font-family: var(--font-display);
+      font-size: 15px;
+      font-style: italic;
+    }
+
+    h1 {
+      margin: 0;
+      color: #f8f1d9;
+      font-family: var(--font-display);
+      font-size: 42px;
+      font-weight: 400;
+      line-height: 1.02;
+    }
+
+    .intro {
+      max-width: 920px;
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.42;
+    }
+
+    .legend {
+      display: flex;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      height: 28px;
+      padding: 0 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: 4px;
+      background: rgba(17, 18, 16, 0.72);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .swatch {
+      width: 18px;
+      height: 3px;
+      border-radius: 2px;
+      background: var(--gold);
+    }
+
+    .swatch.book { background: linear-gradient(90deg, var(--red), var(--green)); }
+    .swatch.stop { background: var(--red); }
+    .swatch.target { background: var(--green); }
+
+    .variant {
+      min-height: 880px;
+      margin: 0 0 34px;
+      border: 1px solid var(--line-strong);
+      background: var(--panel);
+      box-shadow: 0 22px 76px rgba(0, 0, 0, 0.32);
+      overflow: hidden;
+    }
+
+    .variant-title {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: center;
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(5, 5, 3, 0.28);
+    }
+
+    .variant-title h2 {
+      margin: 0;
+      color: #f8f1d9;
+      font-size: 21px;
+      font-weight: 600;
+    }
+
+    .variant-title p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .score-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .score {
+      min-width: 78px;
+      padding: 7px 9px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--panel-2);
+      text-align: right;
+    }
+
+    .score span {
+      display: block;
+      color: var(--faint);
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .score b {
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .desk-top {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      height: 48px;
+      border-bottom: 1px solid var(--line);
+      background: #0c0d0b;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 100%;
+      padding: 0 18px;
+      color: #f8f1d9;
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-style: italic;
+      border-right: 1px solid var(--line);
+    }
+
+    .logo span { color: var(--gold); }
+
+    .tabs,
+    .market-strip,
+    .chart-tools,
+    .tool-cluster,
+    .rail-actions,
+    .order-row {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .tabs { gap: 3px; padding-left: 10px; }
+
+    .tabs button,
+    .ghost-button,
+    .icon-button {
+      height: 28px;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--muted);
+      cursor: default;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .tabs button { padding: 0 10px; }
+
+    .tabs .active,
+    .ghost-button.active,
+    .icon-button.active {
+      background: var(--panel-3);
+      color: #f8f1d9;
+    }
+
+    .market-strip {
+      gap: 14px;
+      padding: 0 16px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .up { color: var(--green); }
+    .down { color: var(--red); }
+
+    .mono {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .label {
+      color: var(--faint);
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .hybrid-grid {
+      display: grid;
+      grid-template-columns: 64px minmax(760px, 1fr) 288px;
+      min-height: 832px;
+      background: var(--bg);
+    }
+
+    .left-tools {
+      display: grid;
+      grid-template-rows: repeat(9, 48px) 1fr;
+      place-items: center;
+      border-right: 1px solid var(--line);
+      background: #0c0d0b;
+    }
+
+    .tool-dot {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border: 1px solid transparent;
+      border-radius: 5px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .tool-dot.active {
+      border-color: rgba(201, 166, 107, 0.52);
+      background: rgba(201, 166, 107, 0.13);
+      color: var(--gold-2);
+    }
+
+    .main-stack {
+      display: grid;
+      grid-template-rows: 72px 42px minmax(0, 1fr) 68px;
+      min-width: 0;
+    }
+
+    .symbol-bar {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      min-width: 0;
+      padding: 0 22px;
+      border-bottom: 1px solid var(--line);
+      background: #0d0e0c;
+    }
+
+    .symbol-name {
+      min-width: 178px;
+    }
+
+    .symbol-name b {
+      display: block;
+      color: #f8f1d9;
+      font-family: var(--font-display);
+      font-size: 33px;
+      font-style: italic;
+      font-weight: 400;
+      line-height: 1;
+    }
+
+    .symbol-name span {
+      display: block;
+      margin-top: 3px;
+      color: var(--faint);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .quote b {
+      display: block;
+      color: #f8f1d9;
+      font-family: var(--font-mono);
+      font-size: 25px;
+      font-weight: 400;
+      line-height: 1;
+    }
+
+    .quote span {
+      color: var(--green);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .metric-strip {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(90px, 1fr));
+      gap: 1px;
+      flex: 1;
+      min-width: 0;
+      background: var(--line);
+    }
+
+    .metric {
+      min-width: 0;
+      padding: 10px 12px;
+      background: #0f100d;
+    }
+
+    .metric b {
+      display: block;
+      margin-top: 5px;
+      overflow: hidden;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .chart-toolbar {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 0 22px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .chart-tools,
+    .tool-cluster { gap: 6px; }
+
+    .ghost-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 9px;
+      border: 1px solid var(--line);
+      background: rgba(238, 231, 208, 0.035);
+      font-weight: 600;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--gold);
+    }
+
+    .dot.book { background: linear-gradient(180deg, var(--red), var(--green)); }
+    .dot.target { background: var(--green); }
+    .dot.stop { background: var(--red); }
+
+    .chart-frame {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+      background:
+        linear-gradient(90deg, rgba(238, 231, 208, 0.035) 1px, transparent 1px) 0 0 / 9.09% 100%,
+        linear-gradient(180deg, rgba(238, 231, 208, 0.06) 1px, transparent 1px) 0 0 / 100% 14.285%,
+        #0a0b0a;
+    }
+
+    .chart-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .grid-line {
+      stroke: rgba(238, 231, 208, 0.065);
+      stroke-width: 1;
+    }
+
+    .price-path {
+      fill: none;
+      stroke: var(--gold-2);
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2.8;
+    }
+
+    .price-fill { fill: url(#priceGlow); opacity: 0.58; }
+    .price-fill-2 { fill: url(#priceGlow2); opacity: 0.56; }
+
+    .axis-text {
+      fill: var(--faint);
+      font-family: var(--font-mono);
+      font-size: 10px;
+    }
+
+    .zone-profit {
+      fill: rgba(168, 208, 77, 0.12);
+      stroke: rgba(168, 208, 77, 0.46);
+      stroke-dasharray: 6 5;
+    }
+
+    .zone-stop {
+      fill: rgba(223, 118, 88, 0.13);
+      stroke: rgba(223, 118, 88, 0.48);
+      stroke-dasharray: 6 5;
+    }
+
+    .entry-line {
+      stroke: rgba(238, 231, 208, 0.78);
+      stroke-width: 1.2;
+      stroke-dasharray: 3 7;
+    }
+
+    .vwap-line {
+      stroke: rgba(135, 183, 200, 0.75);
+      stroke-width: 1.4;
+      stroke-dasharray: 7 6;
+    }
+
+    .zone-label {
+      fill: #f8f1d9;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+    }
+
+    .depth-ribbon {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 138px;
+      border-left: 1px solid var(--line-strong);
+      background: rgba(10, 11, 10, 0.64);
+      backdrop-filter: blur(7px);
+      pointer-events: none;
+    }
+
+    .depth-head,
+    .depth-row {
+      display: grid;
+      grid-template-columns: 1fr 54px;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .depth-head {
+      height: 32px;
+      padding: 0 8px;
+      border-bottom: 1px solid var(--line);
+      color: var(--faint);
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .depth-stack {
+      position: absolute;
+      inset: 32px 0 0;
+      display: grid;
+      grid-template-rows: repeat(22, 1fr);
+    }
+
+    .depth-row {
+      position: relative;
+      min-height: 0;
+      padding: 0 8px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 10px;
+    }
+
+    .depth-row::before {
+      content: "";
+      position: absolute;
+      top: 18%;
+      bottom: 18%;
+      right: 58px;
+      width: var(--w);
+      max-width: 70px;
+      border-radius: 2px;
+      background: rgba(223, 118, 88, 0.2);
+      border: 1px solid rgba(223, 118, 88, 0.24);
+    }
+
+    .depth-row.bid::before {
+      background: rgba(168, 208, 77, 0.2);
+      border-color: rgba(168, 208, 77, 0.24);
+    }
+
+    .depth-row.last {
+      color: #f8f1d9;
+      background: rgba(201, 166, 107, 0.12);
+    }
+
+    .depth-row span,
+    .depth-row b {
+      position: relative;
+      z-index: 1;
+      font-weight: 500;
+    }
+
+    .price-tag {
+      position: absolute;
+      right: 144px;
+      display: flex;
+      align-items: center;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 3px 0 0 3px;
+      color: #10110d;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      pointer-events: none;
+    }
+
+    .tag-entry { top: 45.4%; background: #eee7d0; }
+    .tag-target { top: 24.5%; background: var(--green); }
+    .tag-stop { top: 68.6%; background: var(--red); color: #1b0d09; }
+    .tag-last { top: 38.8%; background: var(--gold-2); }
+
+    .position-badge {
+      position: absolute;
+      left: 8.2%;
+      top: 43.2%;
+      width: 168px;
+      padding: 9px 10px;
+      border: 1px solid rgba(238, 231, 208, 0.26);
+      border-radius: 5px;
+      background: rgba(17, 18, 16, 0.78);
+      color: var(--muted);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.26);
+      backdrop-filter: blur(10px);
+      font-size: 11px;
+      pointer-events: none;
+    }
+
+    .position-badge b {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      color: #f8f1d9;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .order-handle {
+      position: absolute;
+      left: 61%;
+      z-index: 5;
+      display: grid;
+      grid-template-columns: 14px auto;
+      align-items: center;
+      height: 28px;
+      border: 1px solid rgba(238, 231, 208, 0.22);
+      border-radius: 4px;
+      background: rgba(17, 18, 16, 0.82);
+      color: var(--text);
+      box-shadow: 0 13px 28px rgba(0, 0, 0, 0.25);
+      backdrop-filter: blur(10px);
+      cursor: ns-resize;
+      user-select: none;
+    }
+
+    .order-handle::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      margin-left: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .order-handle span {
+      padding: 0 9px 0 5px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      white-space: nowrap;
+    }
+
+    .handle-target { top: 24.5%; color: var(--green); }
+    .handle-entry { top: 45.4%; color: #eee7d0; }
+    .handle-stop { top: 68.6%; color: var(--red); }
+
+    .native-ticket {
+      position: absolute;
+      right: 156px;
+      bottom: 20px;
+      z-index: 6;
+      width: 236px;
+      border: 1px solid rgba(238, 231, 208, 0.2);
+      border-radius: 5px;
+      background: rgba(17, 18, 16, 0.78);
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(12px);
+    }
+
+    .ticket-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      height: 32px;
+      padding: 0 9px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .ticket-body {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      padding: 8px;
+      background: rgba(238, 231, 208, 0.05);
+    }
+
+    .mini-field {
+      min-width: 0;
+      padding: 7px 6px;
+      background: #10110e;
+    }
+
+    .mini-field span {
+      display: block;
+      color: var(--faint);
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .mini-field b {
+      display: block;
+      margin-top: 4px;
+      overflow: hidden;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .native-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+      padding: 8px;
+    }
+
+    .action {
+      height: 30px;
+      border: 1px solid var(--line-strong);
+      border-radius: 4px;
+      background: rgba(238, 231, 208, 0.05);
+      color: var(--muted);
+      cursor: default;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .action.buy {
+      border-color: rgba(168, 208, 77, 0.4);
+      background: rgba(168, 208, 77, 0.16);
+      color: #d8f2a3;
+    }
+
+    .bottom-exec {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) repeat(5, minmax(84px, 0.75fr)) auto;
+      gap: 1px;
+      border-top: 1px solid var(--line);
+      background: var(--line);
+    }
+
+    .exec-cell {
+      min-width: 0;
+      padding: 10px 12px;
+      background: #0f100d;
+    }
+
+    .exec-cell b {
+      display: block;
+      margin-top: 4px;
+      overflow: hidden;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 500;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .exec-submit {
+      width: 104px;
+      border: 0;
+      background: var(--green);
+      color: #17200c;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .right-rail {
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      min-width: 0;
+      border-left: 1px solid var(--line);
+      background: #0f100d;
+    }
+
+    .rail-card {
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .position-main {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .position-main b {
+      color: #f8f1d9;
+      font-family: var(--font-mono);
+      font-size: 23px;
+      font-weight: 400;
+    }
+
+    .position-main span {
+      color: var(--green);
+      font-family: var(--font-mono);
+      font-size: 13px;
+    }
+
+    .risk-mini {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      margin-top: 13px;
+      background: var(--line);
+    }
+
+    .risk-mini div {
+      min-width: 0;
+      padding: 8px;
+      background: var(--panel-2);
+    }
+
+    .risk-mini b {
+      display: block;
+      margin-top: 4px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .rail-actions {
+      gap: 6px;
+      margin-top: 12px;
+    }
+
+    .rail-action {
+      flex: 1;
+      height: 30px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: rgba(238, 231, 208, 0.04);
+      color: var(--muted);
+      cursor: default;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .rail-action.live {
+      border-color: rgba(168, 208, 77, 0.4);
+      color: #d8f2a3;
+      background: rgba(168, 208, 77, 0.13);
+    }
+
+    .event-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .event {
+      display: grid;
+      grid-template-columns: 38px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .event time {
+      color: var(--faint);
+      font-family: var(--font-mono);
+      font-size: 10px;
+    }
+
+    .event strong {
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+    }
+
+    .level-stack {
+      display: grid;
+      gap: 9px;
+      margin-top: 12px;
+    }
+
+    .level-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-left-color: var(--blue);
+      border-radius: 5px;
+      background: rgba(238, 231, 208, 0.035);
+    }
+
+    .level-card.res { border-left-color: var(--red); }
+    .level-card.target { border-left-color: var(--green); }
+
+    .level-card b {
+      display: block;
+      color: #f8f1d9;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .level-card span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.25;
+    }
+
+    .level-card strong {
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .canvas-grid {
+      display: grid;
+      grid-template-rows: 48px minmax(780px, calc(100vh - 190px));
+      min-height: 832px;
+      background: var(--bg);
+    }
+
+    .canvas-toolbar {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      background: #0d0e0c;
+    }
+
+    .symbol-pill {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .symbol-pill b {
+      color: #f8f1d9;
+      font-family: var(--font-display);
+      font-size: 25px;
+      font-style: italic;
+      font-weight: 400;
+    }
+
+    .segmented {
+      display: inline-flex;
+      gap: 2px;
+      padding: 2px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: rgba(238, 231, 208, 0.035);
+    }
+
+    .segmented button {
+      width: 38px;
+      height: 24px;
+      border: 0;
+      border-radius: 3px;
+      background: transparent;
+      color: var(--muted);
+      cursor: default;
+      font-family: var(--font-mono);
+      font-size: 10px;
+    }
+
+    .segmented .active {
+      background: var(--panel-3);
+      color: #f8f1d9;
+    }
+
+    .canvas-stage {
+      position: relative;
+      overflow: hidden;
+      background:
+        linear-gradient(90deg, rgba(238, 231, 208, 0.035) 1px, transparent 1px) 0 0 / 8.333% 100%,
+        linear-gradient(180deg, rgba(238, 231, 208, 0.06) 1px, transparent 1px) 0 0 / 100% 12.5%,
+        #090a09;
+    }
+
+    .canvas-left-float,
+    .canvas-command,
+    .canvas-status,
+    .canvas-rail,
+    .canvas-scale {
+      position: absolute;
+      z-index: 6;
+    }
+
+    .canvas-left-float {
+      top: 16px;
+      left: 16px;
+      display: grid;
+      gap: 7px;
+      width: 38px;
+    }
+
+    .icon-button {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--line);
+      background: rgba(17, 18, 16, 0.68);
+      font-family: var(--font-mono);
+      backdrop-filter: blur(10px);
+    }
+
+    .canvas-command {
+      left: 72px;
+      bottom: 18px;
+      width: min(640px, calc(100% - 414px));
+      border: 1px solid rgba(238, 231, 208, 0.2);
+      border-radius: 5px;
+      background: rgba(17, 18, 16, 0.78);
+      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.32);
+      backdrop-filter: blur(12px);
+    }
+
+    .command-top {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: center;
+      height: 38px;
+      padding: 0 10px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .side-toggle {
+      display: inline-grid;
+      grid-template-columns: 1fr 1fr;
+      width: 126px;
+      gap: 2px;
+      padding: 2px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: rgba(238, 231, 208, 0.04);
+    }
+
+    .side-toggle button {
+      height: 25px;
+      border: 0;
+      border-radius: 3px;
+      color: var(--muted);
+      background: transparent;
+      cursor: default;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .side-toggle .buy {
+      background: rgba(168, 208, 77, 0.18);
+      color: #d8f2a3;
+    }
+
+    .order-row {
+      gap: 1px;
+      padding: 8px;
+      background: rgba(238, 231, 208, 0.05);
+    }
+
+    .order-row .mini-field {
+      flex: 1;
+      min-width: 70px;
+    }
+
+    .send-order {
+      align-self: stretch;
+      min-width: 94px;
+      border: 0;
+      background: var(--green);
+      color: #17200c;
+      cursor: default;
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .canvas-status {
+      top: 16px;
+      left: 72px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 34px;
+      padding: 0 10px;
+      border: 1px solid rgba(238, 231, 208, 0.17);
+      border-radius: 5px;
+      background: rgba(17, 18, 16, 0.68);
+      color: var(--muted);
+      font-size: 11px;
+      backdrop-filter: blur(10px);
+    }
+
+    .canvas-status b {
+      color: #f8f1d9;
+      font-family: var(--font-mono);
+      font-weight: 500;
+    }
+
+    .canvas-rail {
+      top: 16px;
+      right: 16px;
+      bottom: 16px;
+      width: 254px;
+      border: 1px solid rgba(238, 231, 208, 0.18);
+      border-radius: 5px;
+      background: rgba(17, 18, 16, 0.7);
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(12px);
+      overflow: hidden;
+    }
+
+    .canvas-rail .rail-card:last-child { border-bottom: 0; }
+
+    .canvas-scale {
+      top: 0;
+      right: 286px;
+      bottom: 0;
+      width: 116px;
+      border-left: 1px solid var(--line-strong);
+      background: rgba(10, 11, 10, 0.52);
+      backdrop-filter: blur(6px);
+      pointer-events: none;
+    }
+
+    .canvas-scale .depth-row { grid-template-columns: 1fr 50px; }
+    .canvas-scale .depth-row::before { right: 54px; max-width: 58px; }
+    .canvas-stage .price-tag { right: 408px; }
+    .canvas-stage .order-handle { left: auto; right: 420px; }
+    .canvas-stage .native-ticket { display: none; }
+
+    @media (max-width: 1180px) {
+      .board { padding: 18px; }
+      .board-header,
+      .variant-title { grid-template-columns: 1fr; }
+      .legend,
+      .score-row { justify-content: flex-start; }
+      .hybrid-grid { grid-template-columns: 54px minmax(0, 1fr); }
+      .right-rail { display: none; }
+      .metric-strip { grid-template-columns: repeat(3, minmax(86px, 1fr)); }
+      .bottom-exec { grid-template-columns: repeat(3, 1fr); }
+      .exec-submit { width: auto; height: 42px; }
+      .canvas-rail { display: none; }
+      .canvas-scale { right: 0; }
+      .canvas-stage .price-tag { right: 122px; }
+      .canvas-stage .order-handle { right: 134px; }
+      .canvas-command { width: calc(100% - 96px); right: 16px; }
+    }
+
+    @media (max-width: 760px) {
+      .board { padding: 12px; }
+      h1 { font-size: 32px; }
+      .desk-top { grid-template-columns: 1fr; height: auto; }
+      .logo, .tabs, .market-strip { min-height: 42px; border-right: 0; }
+      .hybrid-grid { grid-template-columns: 1fr; }
+      .left-tools { display: none; }
+      .main-stack { grid-template-rows: auto 42px 620px auto; }
+      .symbol-bar { flex-wrap: wrap; height: auto; padding: 14px; }
+      .chart-toolbar { grid-template-columns: 1fr; height: auto; padding: 10px 14px; }
+      .depth-ribbon { width: 112px; }
+      .price-tag { right: 118px; }
+      .native-ticket { right: 126px; width: 210px; }
+      .order-handle { left: 42%; }
+      .canvas-grid { grid-template-rows: auto 670px; }
+      .canvas-toolbar { grid-template-columns: 1fr; padding: 10px; }
+      .canvas-left-float { display: none; }
+      .canvas-status { left: 14px; }
+      .canvas-command { left: 14px; right: 128px; width: auto; }
+      .order-row { flex-wrap: wrap; }
+      .send-order { min-height: 36px; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="board">
+    <header class="board-header">
+      <div>
+        <div class="brand">AlphaDesk trade chart · round 2</div>
+        <h1>Chart-native execution with a live book spine.</h1>
+        <p class="intro">Two refinements combining the command-first chart from Concept 01 with the focused y-axis book ladder from Concept 03. Both keep the chart dominant while making position, stop, target, and order placement visible without blocking price action.</p>
+      </div>
+      <div class="legend" aria-label="Chart layer legend">
+        <span class="chip"><i class="swatch"></i> Entry</span>
+        <span class="chip"><i class="swatch stop"></i> Stop zone</span>
+        <span class="chip"><i class="swatch target"></i> Target zone</span>
+        <span class="chip"><i class="swatch book"></i> Book depth</span>
+      </div>
+    </header>
+
+    <section class="variant" aria-labelledby="hybrid-title">
+      <div class="variant-title">
+        <div>
+          <h2 id="hybrid-title">Hybrid Command Split</h2>
+          <p>Large execution chart, compact right rail, y-axis book ladder, and chart-native handles paired with a slim bottom command strip.</p>
+        </div>
+        <div class="score-row">
+          <div class="score"><span>Chart Area</span><b>72%</b></div>
+          <div class="score"><span>Rail</span><b>288px</b></div>
+          <div class="score"><span>Execute</span><b>Split</b></div>
+        </div>
+      </div>
+
+      <div class="desk-top">
+        <div class="logo"><span>α</span>AlphaDesk</div>
+        <nav class="tabs" aria-label="Primary">
+          <button class="active">Trade</button>
+          <button>Book</button>
+          <button>Risk</button>
+          <button>Journal</button>
+        </nav>
+        <div class="market-strip">
+          <span>NVDA</span>
+          <span>134.82</span>
+          <span class="up">+1.31%</span>
+          <span>Live</span>
+        </div>
+      </div>
+
+      <div class="hybrid-grid">
+        <aside class="left-tools" aria-label="Chart tools">
+          <div class="tool-dot active">⌖</div>
+          <div class="tool-dot">↕</div>
+          <div class="tool-dot">L</div>
+          <div class="tool-dot">R</div>
+          <div class="tool-dot">%</div>
+          <div class="tool-dot">A</div>
+          <div class="tool-dot">M</div>
+          <div class="tool-dot">⎋</div>
+          <div class="tool-dot">?</div>
+        </aside>
+
+        <div class="main-stack">
+          <div class="symbol-bar">
+            <div class="symbol-name">
+              <b>Nvidia</b>
+              <span>NVDA · Nasdaq equity</span>
+            </div>
+            <div class="quote">
+              <b>134.82</b>
+              <span>+1.74 today</span>
+            </div>
+            <div class="metric-strip">
+              <div class="metric"><span class="label">Position</span><b>Long 250 sh</b></div>
+              <div class="metric"><span class="label">Avg Entry</span><b>133.08</b></div>
+              <div class="metric"><span class="label">Open P/L</span><b class="up">+$435</b></div>
+              <div class="metric"><span class="label">Risk</span><b>0.42R</b></div>
+              <div class="metric"><span class="label">Book Bias</span><b class="up">+18% bid</b></div>
+            </div>
+          </div>
+
+          <div class="chart-toolbar">
+            <div class="chart-tools">
+              <button class="ghost-button active"><i class="dot"></i> Price</button>
+              <button class="ghost-button active"><i class="dot book"></i> Depth</button>
+              <button class="ghost-button active"><i class="dot target"></i> Bracket</button>
+              <button class="ghost-button active"><i class="dot stop"></i> Risk</button>
+            </div>
+            <div class="tool-cluster">
+              <button class="ghost-button">1m</button>
+              <button class="ghost-button active">5m</button>
+              <button class="ghost-button">15m</button>
+              <button class="ghost-button">1h</button>
+            </div>
+            <div class="mono up">Buying power $184,220</div>
+          </div>
+
+          <div class="chart-frame">
+            <svg class="chart-svg" viewBox="0 0 1240 640" preserveAspectRatio="none" role="img" aria-label="NVDA chart with position, risk zones, target zones, and y-axis book ladder">
+              <defs>
+                <linearGradient id="priceGlow" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="#e4c16f" stop-opacity="0.36"/>
+                  <stop offset="100%" stop-color="#e4c16f" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <line class="grid-line" x1="0" y1="80" x2="1240" y2="80"/>
+              <line class="grid-line" x1="0" y1="160" x2="1240" y2="160"/>
+              <line class="grid-line" x1="0" y1="240" x2="1240" y2="240"/>
+              <line class="grid-line" x1="0" y1="320" x2="1240" y2="320"/>
+              <line class="grid-line" x1="0" y1="400" x2="1240" y2="400"/>
+              <line class="grid-line" x1="0" y1="480" x2="1240" y2="480"/>
+              <rect class="zone-profit" x="0" y="118" width="1102" height="152"/>
+              <rect class="zone-stop" x="0" y="424" width="1102" height="118"/>
+              <path class="price-fill" d="M0,448 C52,426 92,392 148,404 C204,416 242,350 308,363 C368,376 410,300 472,312 C530,324 590,250 650,262 C718,276 766,198 832,214 C898,230 940,162 1008,174 C1050,184 1088,144 1102,154 L1102,640 L0,640 Z"/>
+              <path class="price-path" d="M0,448 C52,426 92,392 148,404 C204,416 242,350 308,363 C368,376 410,300 472,312 C530,324 590,250 650,262 C718,276 766,198 832,214 C898,230 940,162 1008,174 C1050,184 1088,144 1102,154"/>
+              <line class="vwap-line" x1="0" y1="346" x2="1102" y2="318"/>
+              <line class="entry-line" x1="0" y1="300" x2="1102" y2="300"/>
+              <text class="zone-label" x="24" y="146">TAKE PROFIT ZONE · 136.10 target / +0.95R</text>
+              <text class="zone-label" x="24" y="452">STOP-LOSS ZONE · invalid below 131.84</text>
+              <text class="zone-label" x="24" y="292">ENTRY · long 250 @ 133.08</text>
+              <text class="axis-text" x="1120" y="84">137.20</text>
+              <text class="axis-text" x="1120" y="164">136.10</text>
+              <text class="axis-text" x="1120" y="244">135.20</text>
+              <text class="axis-text" x="1120" y="324">134.82</text>
+              <text class="axis-text" x="1120" y="404">133.08</text>
+              <text class="axis-text" x="1120" y="484">131.84</text>
+            </svg>
+
+            <div class="position-badge">
+              <b><span>Long 250</span><span class="up">+$435</span></b>
+              Entry 133.08 · bracket armed · trail idle
+            </div>
+
+            <div class="order-handle handle-target"><span>TP 136.10</span></div>
+            <div class="order-handle handle-entry"><span>Add 134.58</span></div>
+            <div class="order-handle handle-stop"><span>SL 131.84</span></div>
+
+            <div class="price-tag tag-target">136.10 TP</div>
+            <div class="price-tag tag-last">134.82 Last</div>
+            <div class="price-tag tag-entry">133.08 Entry</div>
+            <div class="price-tag tag-stop">131.84 SL</div>
+
+            <aside class="depth-ribbon" aria-label="Y-axis book ladder">
+              <div class="depth-head"><span>Size</span><span>Price</span></div>
+              <div class="depth-stack">
+                <div class="depth-row" style="--w: 62%;"><span>21k</span><b>137.20</b></div>
+                <div class="depth-row" style="--w: 74%;"><span>28k</span><b>136.88</b></div>
+                <div class="depth-row" style="--w: 96%;"><span>44k</span><b>136.42</b></div>
+                <div class="depth-row" style="--w: 82%;"><span>39k</span><b>136.10</b></div>
+                <div class="depth-row" style="--w: 58%;"><span>24k</span><b>135.72</b></div>
+                <div class="depth-row" style="--w: 46%;"><span>19k</span><b>135.44</b></div>
+                <div class="depth-row" style="--w: 34%;"><span>14k</span><b>135.10</b></div>
+                <div class="depth-row" style="--w: 28%;"><span>11k</span><b>134.90</b></div>
+                <div class="depth-row last" style="--w: 22%;"><span>last</span><b>134.82</b></div>
+                <div class="depth-row bid" style="--w: 42%;"><span>18k</span><b>134.70</b></div>
+                <div class="depth-row bid" style="--w: 78%;"><span>36k</span><b>134.42</b></div>
+                <div class="depth-row bid" style="--w: 88%;"><span>41k</span><b>134.20</b></div>
+                <div class="depth-row bid" style="--w: 54%;"><span>23k</span><b>133.88</b></div>
+                <div class="depth-row bid" style="--w: 66%;"><span>31k</span><b>133.44</b></div>
+                <div class="depth-row bid" style="--w: 92%;"><span>49k</span><b>133.08</b></div>
+                <div class="depth-row bid" style="--w: 70%;"><span>34k</span><b>132.64</b></div>
+                <div class="depth-row bid" style="--w: 100%;"><span>56k</span><b>132.10</b></div>
+                <div class="depth-row bid" style="--w: 84%;"><span>40k</span><b>131.84</b></div>
+                <div class="depth-row bid" style="--w: 61%;"><span>27k</span><b>131.48</b></div>
+                <div class="depth-row bid" style="--w: 44%;"><span>17k</span><b>130.90</b></div>
+                <div class="depth-row bid" style="--w: 76%;"><span>32k</span><b>128.70</b></div>
+                <div class="depth-row bid" style="--w: 38%;"><span>13k</span><b>127.88</b></div>
+              </div>
+            </aside>
+
+            <div class="native-ticket">
+              <div class="ticket-head"><span>Chart order</span><span class="up">armed</span></div>
+              <div class="ticket-body">
+                <div class="mini-field"><span>Side</span><b>Buy</b></div>
+                <div class="mini-field"><span>Qty</span><b>100</b></div>
+                <div class="mini-field"><span>Limit</span><b>134.58</b></div>
+                <div class="mini-field"><span>Stop</span><b>131.84</b></div>
+                <div class="mini-field"><span>Target</span><b>136.10</b></div>
+                <div class="mini-field"><span>R/R</span><b>1.42</b></div>
+              </div>
+              <div class="native-actions">
+                <button class="action">Cancel</button>
+                <button class="action buy">Stage</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="bottom-exec">
+            <div class="exec-cell"><span class="label">Intent</span><b>Buy pullback while above VWAP</b></div>
+            <div class="exec-cell"><span class="label">Qty</span><b>100</b></div>
+            <div class="exec-cell"><span class="label">Limit</span><b>134.58</b></div>
+            <div class="exec-cell"><span class="label">Stop</span><b>131.84</b></div>
+            <div class="exec-cell"><span class="label">Target</span><b>136.10</b></div>
+            <div class="exec-cell"><span class="label">Risk</span><b>$274</b></div>
+            <button class="exec-submit">Stage</button>
+          </div>
+        </div>
+
+        <aside class="right-rail" aria-label="Compact trade rail">
+          <div class="rail-card">
+            <span class="label">Position</span>
+            <div class="position-main">
+              <b>250 sh</b>
+              <span>+$435</span>
+            </div>
+            <div class="risk-mini">
+              <div><span class="label">Avg</span><b>133.08</b></div>
+              <div><span class="label">Stop</span><b>131.84</b></div>
+              <div><span class="label">Target</span><b>136.10</b></div>
+            </div>
+            <div class="rail-actions">
+              <button class="rail-action">Flatten</button>
+              <button class="rail-action live">Protect</button>
+            </div>
+          </div>
+
+          <div class="rail-card">
+            <span class="label">Key levels</span>
+            <div class="level-stack">
+              <div class="level-card target"><div><b>TP Zone</b><span>Ask wall and R1 pivot overlap.</span></div><strong>136.10</strong></div>
+              <div class="level-card"><div><b>Entry</b><span>Long from defended reclaim.</span></div><strong>133.08</strong></div>
+              <div class="level-card res"><div><b>Stop Zone</b><span>Invalid under bid shelf.</span></div><strong>131.84</strong></div>
+            </div>
+          </div>
+
+          <div class="rail-card">
+            <span class="label">Book events</span>
+            <div class="event-list">
+              <div class="event"><time>14:31</time><span>R1 asks refreshed</span><strong>+44k</strong></div>
+              <div class="event"><time>14:22</time><span>Bid shelf defended</span><strong class="up">3rd</strong></div>
+              <div class="event"><time>13:58</time><span>Liquidity pulled</span><strong class="down">-22%</strong></div>
+              <div class="event"><time>13:12</time><span>VWAP reclaim</span><strong>134.05</strong></div>
+              <div class="event"><time>12:44</time><span>First R1 reject</span><strong>136.08</strong></div>
+            </div>
+          </div>
+
+          <div class="rail-card">
+            <span class="label">Execution quality</span>
+            <div class="risk-mini">
+              <div><span class="label">Slippage</span><b>0.03%</b></div>
+              <div><span class="label">Queue</span><b>41%</b></div>
+              <div><span class="label">Spread</span><b>$0.03</b></div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="variant" aria-labelledby="canvas-title">
+      <div class="variant-title">
+        <div>
+          <h2 id="canvas-title">Full Canvas Execute</h2>
+          <p>A nearly full-bleed chart where execution controls become chart furniture: floating toolbar, price-scale depth ribbon, compact status rail, and non-blocking bracket handles.</p>
+        </div>
+        <div class="score-row">
+          <div class="score"><span>Chart Area</span><b>84%</b></div>
+          <div class="score"><span>Rail</span><b>Float</b></div>
+          <div class="score"><span>Execute</span><b>Canvas</b></div>
+        </div>
+      </div>
+
+      <div class="desk-top">
+        <div class="logo"><span>α</span>AlphaDesk</div>
+        <nav class="tabs" aria-label="Primary">
+          <button class="active">Trade</button>
+          <button>Strategies</button>
+          <button>Risk</button>
+          <button>Reports</button>
+        </nav>
+        <div class="market-strip">
+          <span>Long 250 sh</span>
+          <span class="up">Open P/L +$435</span>
+          <span>Bracket armed</span>
+        </div>
+      </div>
+
+      <div class="canvas-grid">
+        <div class="canvas-toolbar">
+          <div class="symbol-pill">
+            <b>NVDA</b>
+            <span class="mono">134.82</span>
+            <span class="mono up">+1.31%</span>
+          </div>
+          <div class="chart-tools">
+            <span class="ghost-button active"><i class="dot"></i> Price</span>
+            <span class="ghost-button active"><i class="dot book"></i> Book</span>
+            <span class="ghost-button active"><i class="dot target"></i> Bracket</span>
+            <span class="ghost-button">VWAP</span>
+          </div>
+          <div class="segmented" aria-label="Time range">
+            <button>1m</button>
+            <button class="active">5m</button>
+            <button>15m</button>
+            <button>1h</button>
+            <button>1D</button>
+          </div>
+        </div>
+
+        <div class="canvas-stage">
+          <svg class="chart-svg" viewBox="0 0 1440 780" preserveAspectRatio="none" role="img" aria-label="Full canvas NVDA execution chart">
+            <defs>
+              <linearGradient id="priceGlow2" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stop-color="#e4c16f" stop-opacity="0.36"/>
+                <stop offset="100%" stop-color="#e4c16f" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <line class="grid-line" x1="0" y1="98" x2="1440" y2="98"/>
+            <line class="grid-line" x1="0" y1="196" x2="1440" y2="196"/>
+            <line class="grid-line" x1="0" y1="294" x2="1440" y2="294"/>
+            <line class="grid-line" x1="0" y1="392" x2="1440" y2="392"/>
+            <line class="grid-line" x1="0" y1="490" x2="1440" y2="490"/>
+            <line class="grid-line" x1="0" y1="588" x2="1440" y2="588"/>
+            <rect class="zone-profit" x="0" y="122" width="1160" height="178"/>
+            <rect class="zone-stop" x="0" y="520" width="1160" height="142"/>
+            <path class="price-fill-2" d="M0,552 C60,518 104,476 172,492 C240,510 286,422 360,438 C428,452 480,358 554,374 C622,388 684,292 758,310 C832,328 884,230 962,252 C1036,274 1086,178 1160,190 L1160,780 L0,780 Z"/>
+            <path class="price-path" d="M0,552 C60,518 104,476 172,492 C240,510 286,422 360,438 C428,452 480,358 554,374 C622,388 684,292 758,310 C832,328 884,230 962,252 C1036,274 1086,178 1160,190"/>
+            <line class="vwap-line" x1="0" y1="416" x2="1160" y2="382"/>
+            <line class="entry-line" x1="0" y1="368" x2="1160" y2="368"/>
+            <text class="zone-label" x="86" y="156">TAKE PROFIT · 136.10 / +$330 projected</text>
+            <text class="zone-label" x="86" y="552">STOP LOSS · 131.84 / -$310 max</text>
+            <text class="zone-label" x="86" y="354">EXISTING POSITION · 250 @ 133.08</text>
+          </svg>
+
+          <div class="canvas-left-float">
+            <button class="icon-button active">⌖</button>
+            <button class="icon-button">↕</button>
+            <button class="icon-button">R</button>
+            <button class="icon-button">%</button>
+            <button class="icon-button">M</button>
+          </div>
+
+          <div class="canvas-status">
+            <span>NVDA</span>
+            <b>134.82</b>
+            <span class="up">+1.31%</span>
+            <span>Long 250</span>
+            <b class="up">+$435</b>
+          </div>
+
+          <div class="position-badge" style="left: 14%; top: 45%;">
+            <b><span>Position</span><span class="up">+1.30R</span></b>
+            250 sh @ 133.08 · stop protected
+          </div>
+
+          <div class="order-handle handle-target"><span>Target 136.10</span></div>
+          <div class="order-handle handle-entry"><span>Buy add 134.58</span></div>
+          <div class="order-handle handle-stop"><span>Stop 131.84</span></div>
+
+          <div class="price-tag tag-target">136.10 TP</div>
+          <div class="price-tag tag-last">134.82 Last</div>
+          <div class="price-tag tag-entry">133.08 Entry</div>
+          <div class="price-tag tag-stop">131.84 SL</div>
+
+          <aside class="canvas-scale" aria-label="Depth ribbon">
+            <div class="depth-head"><span>Depth</span><span>Price</span></div>
+            <div class="depth-stack">
+              <div class="depth-row" style="--w: 62%;"><span>21k</span><b>137.20</b></div>
+              <div class="depth-row" style="--w: 74%;"><span>28k</span><b>136.88</b></div>
+              <div class="depth-row" style="--w: 96%;"><span>44k</span><b>136.42</b></div>
+              <div class="depth-row" style="--w: 82%;"><span>39k</span><b>136.10</b></div>
+              <div class="depth-row" style="--w: 58%;"><span>24k</span><b>135.72</b></div>
+              <div class="depth-row" style="--w: 46%;"><span>19k</span><b>135.44</b></div>
+              <div class="depth-row" style="--w: 34%;"><span>14k</span><b>135.10</b></div>
+              <div class="depth-row" style="--w: 28%;"><span>11k</span><b>134.90</b></div>
+              <div class="depth-row last" style="--w: 22%;"><span>last</span><b>134.82</b></div>
+              <div class="depth-row bid" style="--w: 42%;"><span>18k</span><b>134.70</b></div>
+              <div class="depth-row bid" style="--w: 78%;"><span>36k</span><b>134.42</b></div>
+              <div class="depth-row bid" style="--w: 88%;"><span>41k</span><b>134.20</b></div>
+              <div class="depth-row bid" style="--w: 54%;"><span>23k</span><b>133.88</b></div>
+              <div class="depth-row bid" style="--w: 66%;"><span>31k</span><b>133.44</b></div>
+              <div class="depth-row bid" style="--w: 92%;"><span>49k</span><b>133.08</b></div>
+              <div class="depth-row bid" style="--w: 70%;"><span>34k</span><b>132.64</b></div>
+              <div class="depth-row bid" style="--w: 100%;"><span>56k</span><b>132.10</b></div>
+              <div class="depth-row bid" style="--w: 84%;"><span>40k</span><b>131.84</b></div>
+              <div class="depth-row bid" style="--w: 61%;"><span>27k</span><b>131.48</b></div>
+              <div class="depth-row bid" style="--w: 44%;"><span>17k</span><b>130.90</b></div>
+              <div class="depth-row bid" style="--w: 76%;"><span>32k</span><b>128.70</b></div>
+              <div class="depth-row bid" style="--w: 38%;"><span>13k</span><b>127.88</b></div>
+            </div>
+          </aside>
+
+          <aside class="canvas-rail" aria-label="Floating execution rail">
+            <div class="rail-card">
+              <span class="label">Position</span>
+              <div class="position-main">
+                <b>250 sh</b>
+                <span>+$435</span>
+              </div>
+              <div class="risk-mini">
+                <div><span class="label">Avg</span><b>133.08</b></div>
+                <div><span class="label">R/R</span><b>1.42</b></div>
+                <div><span class="label">Trail</span><b>Off</b></div>
+              </div>
+            </div>
+            <div class="rail-card">
+              <span class="label">Bracket</span>
+              <div class="level-stack">
+                <div class="level-card target"><div><b>Take profit</b><span>Scale 50% into R1 ask wall.</span></div><strong>136.10</strong></div>
+                <div class="level-card res"><div><b>Stop loss</b><span>Hard stop under defended book shelf.</span></div><strong>131.84</strong></div>
+              </div>
+            </div>
+            <div class="rail-card">
+              <span class="label">Book tape</span>
+              <div class="event-list">
+                <div class="event"><time>14:31</time><span>Ask wall refresh</span><strong>136.42</strong></div>
+                <div class="event"><time>14:25</time><span>Bid shelf grows</span><strong class="up">+18%</strong></div>
+                <div class="event"><time>14:12</time><span>Spread stable</span><strong>$0.03</strong></div>
+              </div>
+            </div>
+          </aside>
+
+          <div class="canvas-command">
+            <div class="command-top">
+              <div class="side-toggle">
+                <button class="buy">Buy</button>
+                <button>Sell</button>
+              </div>
+              <div class="mono">Click price scale or drag handles to adjust bracket</div>
+              <span class="mono up">Ready</span>
+            </div>
+            <div class="order-row">
+              <div class="mini-field"><span>Qty</span><b>100</b></div>
+              <div class="mini-field"><span>Limit</span><b>134.58</b></div>
+              <div class="mini-field"><span>Stop</span><b>131.84</b></div>
+              <div class="mini-field"><span>Target</span><b>136.10</b></div>
+              <div class="mini-field"><span>Risk</span><b>$274</b></div>
+              <button class="send-order">Stage</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    document.querySelectorAll(".ghost-button, .icon-button").forEach((control) => {
+      control.addEventListener("click", () => control.classList.toggle("active"));
+    });
+
+    let activeHandle = null;
+    document.querySelectorAll(".order-handle").forEach((handle) => {
+      handle.addEventListener("pointerdown", (event) => {
+        activeHandle = handle;
+        handle.setPointerCapture(event.pointerId);
+      });
+
+      handle.addEventListener("pointermove", (event) => {
+        if (activeHandle !== handle) return;
+        const frame = handle.closest(".chart-frame, .canvas-stage");
+        const rect = frame.getBoundingClientRect();
+        const y = Math.min(Math.max(event.clientY - rect.top, 32), rect.height - 42);
+        handle.style.top = `${(y / rect.height) * 100}%`;
+      });
+
+      handle.addEventListener("pointerup", () => {
+        activeHandle = null;
+      });
+    });
+  </script>
+</body>
+</html>

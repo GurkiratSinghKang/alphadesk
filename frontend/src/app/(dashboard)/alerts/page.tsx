@@ -64,7 +64,40 @@ type AlertConditionUI =
 type AlertReferenceUI = "static" | "prev_close" | "session_open";
 type AlertScopeUI = "symbol" | "watchlist" | "strategy";
 
-function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
+function createOptimisticAlert(
+  value: unknown,
+  fallback: {
+    condition: AlertConditionUI;
+    price: number;
+    reference?: AlertReferenceUI;
+    reference_price?: number;
+    symbol: string;
+  },
+): PriceAlert {
+  const candidate = value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Partial<PriceAlert>)
+    : null;
+  return {
+    id:
+      typeof candidate?.id === "string" && candidate.id
+        ? candidate.id
+        : typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `local-${Date.now()}`,
+    symbol: typeof candidate?.symbol === "string" && candidate.symbol ? candidate.symbol : fallback.symbol,
+    price: Number.isFinite(Number(candidate?.price)) ? Number(candidate?.price) : fallback.price,
+    condition: candidate?.condition ?? fallback.condition,
+    triggered: candidate?.triggered === true,
+    triggered_at: candidate?.triggered_at ?? null,
+    created_at: candidate?.created_at ?? new Date().toISOString(),
+    reference: candidate?.reference ?? fallback.reference ?? null,
+    reference_price: candidate?.reference_price ?? fallback.reference_price ?? null,
+    position_id: candidate?.position_id ?? null,
+    expires_at: candidate?.expires_at ?? null,
+  };
+}
+
+function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void }) {
   const { toast } = useToast();
   const [symbol, setSymbol] = useState("");
   const [price, setPrice] = useState("");
@@ -147,9 +180,16 @@ function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
     }
     setSubmitting(true);
     try {
-      await createPriceAlert(sym, p, condition, {
+      const created = await createPriceAlert(sym, p, condition, {
         reference: isPercentMove ? reference : undefined,
         reference_price: staticRefPrice,
+      });
+      const nextAlert = createOptimisticAlert(created, {
+        condition,
+        price: p,
+        reference: isPercentMove ? reference : undefined,
+        reference_price: staticRefPrice,
+        symbol: sym,
       });
       const successMsg = isPercentMove
         ? `Alert created: ${sym} ${condition.replace("percent_move_", "")} ${p.toFixed(2)}% vs ${reference}`
@@ -158,7 +198,7 @@ function CreateAlertForm({ onCreated }: { onCreated: () => void }) {
       setSymbol("");
       setPrice("");
       setReferencePrice("");
-      onCreated();
+      onCreated(nextAlert);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to create alert";
       toast({ type: "error", message: msg });
@@ -554,6 +594,115 @@ function AlertRow({
   );
 }
 
+function AlertMobileCard({
+  alert,
+  onDelete,
+}: {
+  alert: PriceAlert;
+  onDelete: (id: string) => void;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  const [confirmArmed, setConfirmArmed] = useState(false);
+  const disarmTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (disarmTimer.current) window.clearTimeout(disarmTimer.current);
+    };
+  }, []);
+
+  const handleDeleteClick = async () => {
+    if (!confirmArmed) {
+      setConfirmArmed(true);
+      if (disarmTimer.current) window.clearTimeout(disarmTimer.current);
+      disarmTimer.current = window.setTimeout(() => setConfirmArmed(false), 4000);
+      return;
+    }
+    if (disarmTimer.current) window.clearTimeout(disarmTimer.current);
+    setDeleting(true);
+    await onDelete(alert.id);
+    setDeleting(false);
+    setConfirmArmed(false);
+  };
+
+  const rising = alert.condition === "above" || alert.condition === "percent_move_above";
+
+  return (
+    <article className={cn("px-4 py-3", alert.triggered && "opacity-60")}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            {alert.triggered ? (
+              <CheckCircle2 className="h-4 w-4 text-[var(--profit)]" />
+            ) : (
+              <Clock className="h-4 w-4 text-primary" />
+            )}
+            <span className="break-all font-mono text-[15px] font-semibold text-foreground">{alert.symbol}</span>
+            <Badge
+              variant={rising ? "default" : "destructive"}
+              className="px-1.5 text-[12px]"
+            >
+              {rising ? <ArrowUp className="mr-0.5 h-2.5 w-2.5" /> : <ArrowDown className="mr-0.5 h-2.5 w-2.5" />}
+              {alert.condition.replace("percent_move_", "")}
+              {alert.condition.startsWith("percent_move") && " %"}
+            </Badge>
+          </div>
+          <dl className="mt-3 grid grid-cols-2 gap-3 text-[12px]">
+            <div>
+              <dt className="t-label">Target</dt>
+              <dd className="mt-1 t-num-md text-foreground">
+                {alert.condition.startsWith("percent_move")
+                  ? `${(alert.price ?? 0).toFixed(2)}%`
+                  : `$${(alert.price ?? 0).toFixed(2)}`}
+              </dd>
+            </div>
+            <div>
+              <dt className="t-label">Status</dt>
+              <dd className={cn("mt-1 text-xs font-medium", alert.triggered ? "text-[var(--profit)]" : "text-primary")}>
+                {alert.triggered ? "Triggered" : "Active"}
+              </dd>
+            </div>
+            <div className="col-span-2">
+              <dt className="t-label">Date</dt>
+              <dd className="mt-1 t-meta">
+                {alert.triggered && alert.triggered_at
+                  ? `Triggered ${formatDate(alert.triggered_at)}`
+                  : `Created ${formatDate(alert.created_at)}`}
+              </dd>
+            </div>
+          </dl>
+        </div>
+        <button
+          onClick={handleDeleteClick}
+          disabled={deleting}
+          className={cn(
+            "inline-flex min-h-11 shrink-0 items-center justify-center rounded px-2 transition-colors disabled:opacity-50",
+            confirmArmed
+              ? "gap-1 bg-[var(--loss)]/15 text-[var(--loss)] ring-1 ring-[var(--loss)]/40 text-[12px] font-semibold"
+              : "w-11 text-muted-foreground hover:bg-[var(--loss)]/10 hover:text-[var(--loss)]",
+          )}
+          aria-label={
+            confirmArmed
+              ? `Confirm delete alert for ${alert.symbol}`
+              : `Delete alert for ${alert.symbol}`
+          }
+        >
+          {deleting ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : confirmArmed ? (
+            <>
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>Confirm?</span>
+            </>
+          ) : (
+            <Trash2 className="h-3.5 w-3.5" />
+          )}
+        </button>
+      </div>
+    </article>
+  );
+}
+
 // ─── Main Page ──────────────────────────────────────────────
 
 export default function AlertsPage() {
@@ -615,6 +764,12 @@ export default function AlertsPage() {
       toast({ type: "error", message: err instanceof Error ? err.message : "Failed to delete alert" });
     }
   };
+
+  const handleCreated = useCallback((alert: PriceAlert) => {
+    hasLoadedOnce.current = true;
+    setLoading(false);
+    setAlerts((prev) => [alert, ...prev.filter((item) => item.id !== alert.id)]);
+  }, []);
 
   const handleClearTriggered = async () => {
     const triggered = alerts.filter((a) => a.triggered);
@@ -786,7 +941,7 @@ export default function AlertsPage() {
       )}
 
       {/* Create Form */}
-      <CreateAlertForm onCreated={fetchAlerts} />
+      <CreateAlertForm onCreated={handleCreated} />
 
       {/* Loading */}
       {loading && (
@@ -809,35 +964,11 @@ export default function AlertsPage() {
       {/* Active Alerts */}
       {!loading && (
         <div className="rounded-lg border border-border bg-[var(--surface)] overflow-hidden">
-          {/* Header + column row only shown when there are alerts — the
-              centered empty-state block below is enough on its own. */}
-          {activeAlerts.length > 0 && (
-            <>
-              <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-[var(--panel)]/50">
-                <Clock className="h-3.5 w-3.5 text-primary" />
-                <span className="text-xs font-semibold text-foreground">
-                  Active Alerts ({activeAlerts.length})
-                </span>
-              </div>
-              <div className="flex items-center gap-3 px-4 py-1.5 border-b border-border/50">
-                {/* t-label: aligns column titles with the dashboard wave's
-                    eyebrow style instead of ad-hoc 10px caps styling. */}
-                <span className="w-4 shrink-0" />
-                <span className="w-16 shrink-0 t-label">Symbol</span>
-                <span className="w-32 shrink-0 t-label">Condition</span>
-                <span className="w-24 shrink-0 t-label">Target</span>
-                <span className="w-20 shrink-0 t-label">Status</span>
-                <span className="flex-1 t-label">Date</span>
-                <span className="w-8 shrink-0" />
-              </div>
-            </>
-          )}
-
-          <ScrollArea className="max-h-[400px]">
-            {activeAlerts.length === 0 ? (
-              // BUG-040 — empty-state voice aligned with analytics /
-              // reports: italic-serif sentence headline, sans
-              // sentence-case follow-up. Full sentences, full stops.
+          {activeAlerts.length === 0 ? (
+            <ScrollArea className="max-h-[400px]">
+              {/* BUG-040 — empty-state voice aligned with analytics /
+                  reports: italic-serif sentence headline, sans
+                  sentence-case follow-up. Full sentences, full stops. */}
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <AlertTriangle className="h-6 w-6 text-muted-foreground/30 mb-2" />
                 <p className="font-display italic text-[15px] text-fg">
@@ -847,18 +978,54 @@ export default function AlertsPage() {
                   Create one above to start watching a symbol or condition.
                 </p>
               </div>
-            ) : (
-              <div className="divide-y divide-border/50">
-                {activeAlerts.map((alert) => (
-                  <AlertRow
-                    key={alert.id}
-                    alert={alert}
-                    onDelete={handleDelete}
-                  />
-                ))}
+            </ScrollArea>
+          ) : (
+            <>
+            <div className="divide-y divide-border/50 sm:hidden">
+              {activeAlerts.map((alert) => (
+                <AlertMobileCard
+                  key={alert.id}
+                  alert={alert}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto scrollbar-thin sm:block">
+              {/* Header + column row only shown when there are alerts — the
+                  centered empty-state block above is enough on its own. */}
+              <div className="min-w-[720px]">
+                <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-[var(--panel)]/50">
+                  <Clock className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-xs font-semibold text-foreground">
+                    Active Alerts ({activeAlerts.length})
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 px-4 py-1.5 border-b border-border/50">
+                  {/* t-label: aligns column titles with the dashboard wave's
+                      eyebrow style instead of ad-hoc 10px caps styling. */}
+                  <span className="w-4 shrink-0" />
+                  <span className="w-16 shrink-0 t-label">Symbol</span>
+                  <span className="w-32 shrink-0 t-label">Condition</span>
+                  <span className="w-24 shrink-0 t-label">Target</span>
+                  <span className="w-20 shrink-0 t-label">Status</span>
+                  <span className="flex-1 t-label">Date</span>
+                  <span className="w-8 shrink-0" />
+                </div>
+                <ScrollArea className="max-h-[400px]">
+                  <div className="divide-y divide-border/50">
+                    {activeAlerts.map((alert) => (
+                      <AlertRow
+                        key={alert.id}
+                        alert={alert}
+                        onDelete={handleDelete}
+                      />
+                    ))}
+                  </div>
+                </ScrollArea>
               </div>
-            )}
-          </ScrollArea>
+            </div>
+            </>
+          )}
         </div>
       )}
 

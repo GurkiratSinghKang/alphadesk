@@ -60,6 +60,49 @@ export interface MarketDepthCapabilities {
   notes: string[];
 }
 
+// ─── Ticker Intelligence ─────────────────────────────────────
+
+export type TickerFactQuality = "fresh" | "stale" | "expired" | "unavailable" | "demo";
+
+export interface TickerFreshnessMeta {
+  observedAt: string;
+  asOf?: string | null;
+  sourceUpdatedAt?: string | null;
+  expiresAt?: string | null;
+  staleAfterSeconds?: number | null;
+  quality: TickerFactQuality;
+  source: string;
+  schemaVersion: number;
+  isDemo: boolean;
+}
+
+export interface TickerFactEnvelope<T = unknown> {
+  value: T | null;
+  freshness: TickerFreshnessMeta;
+}
+
+export interface TickerContextWarning {
+  need: string;
+  code: string;
+  message: string;
+}
+
+export interface TickerContext {
+  symbol: string;
+  quote?: TickerFactEnvelope<Record<string, unknown>> | null;
+  optionsSummary?: TickerFactEnvelope<Record<string, unknown>> | null;
+  earnings?: TickerFactEnvelope<Record<string, unknown>> | null;
+  research?: TickerFactEnvelope<Record<string, unknown>> | null;
+  news?: TickerFactEnvelope<Record<string, unknown>> | null;
+  marketRegime?: TickerFactEnvelope<Record<string, unknown>> | null;
+  warnings: TickerContextWarning[];
+}
+
+export interface TickerContextResponse {
+  symbols: Record<string, TickerContext>;
+  generatedAt: string;
+}
+
 // ─── Portfolio ────────────────────────────────────────────────
 
 // Round-11 / Y-12: ``PositionGreeks`` removed alongside ``Position.greeks``

@@ -71,7 +71,7 @@ export default function EarningsCalendarSidebar({
 
   if (error) {
     return (
-      <aside data-slot="earnings-calendar-sidebar" className="rounded border border-[color:var(--fg-border)] p-3">
+      <aside data-slot="earnings-calendar-sidebar" className="rounded border border-[#5d7268]/40 bg-white/60 p-3">
         <p className="t-label text-[color:var(--fg-neg)]">Error · {error}</p>
       </aside>
     );
@@ -82,9 +82,9 @@ export default function EarningsCalendarSidebar({
       <aside
         data-slot="earnings-calendar-sidebar"
         aria-busy="true"
-        className="rounded border border-[color:var(--fg-border)] p-3"
+        className="rounded border border-[#5d7268]/40 bg-white/60 p-3"
       >
-        <p className="font-mono text-[13px] text-[color:var(--fg-muted)]">Loading earnings…</p>
+        <p className="font-mono text-[13px] text-[#5d7268]">Loading earnings…</p>
       </aside>
     );
   }
@@ -100,8 +100,8 @@ export default function EarningsCalendarSidebar({
       filters,
     });
     return (
-      <aside data-slot="earnings-calendar-sidebar" className="rounded border border-[color:var(--fg-border)] p-3">
-        <p className="font-mono text-[13px] text-[color:var(--fg-muted)]">
+      <aside data-slot="earnings-calendar-sidebar" className="rounded border border-[#5d7268]/40 bg-white/60 p-3">
+        <p className="font-mono text-[13px] text-[#5d7268]">
           {emptyMessage}
           {onResetFilters && (
             <>

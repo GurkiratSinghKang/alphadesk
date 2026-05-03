@@ -771,7 +771,45 @@ def _alpaca_keys_empty() -> bool:
     )
 
 
-async def _fetch_position_qty(symbol: str) -> float | None:
+async def _alpaca_credentials_or_503(username: str | None = None):
+    from services.broker_connections import BrokerCredentialError, get_alpaca_credentials
+
+    try:
+        creds = await get_alpaca_credentials(username)
+    except BrokerCredentialError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if creds is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Broker not configured. Connect Alpaca in Settings or add "
+                "ALPACA_API_KEY and ALPACA_SECRET_KEY to the server env."
+            ),
+        )
+    return creds
+
+
+def _normalise_alpaca_status(raw: Any) -> str:
+    return {
+        "new": "submitted",
+        "accepted": "submitted",
+        "partially_filled": "partial_fill",
+        "filled": "filled",
+        "done_for_day": "filled",
+        "canceled": "cancelled",
+        "cancelled": "cancelled",
+        "expired": "cancelled",
+        "replaced": "cancelled",
+        "rejected": "rejected",
+        "stopped": "filled",
+        "suspended": "pending",
+        "pending_new": "pending",
+        "pending_cancel": "pending",
+        "pending_replace": "pending",
+    }.get(str(raw or "").lower(), "pending")
+
+
+async def _fetch_position_qty(symbol: str, *, username: str | None = None) -> float | None:
     """Return the signed current position qty for ``symbol`` from Alpaca.
 
     Wave 4P Fix 3 (P97) — used by the trade_kind classifier to decide
@@ -785,18 +823,12 @@ async def _fetch_position_qty(symbol: str) -> float | None:
     second-chance authoritative classification from a fresh broker
     snapshot when the fill event arrives.
     """
-    if _alpaca_keys_empty():
-        return None
     try:
-        from core.config import settings
-        headers = {
-            "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
-            "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
-        }
+        creds = await _alpaca_credentials_or_503(username)
         async with httpx.AsyncClient(timeout=2.0) as client:
             resp = await client.get(
-                f"{settings.ALPACA_BASE_URL}/v2/positions/{symbol}",
-                headers=headers,
+                f"{creds.base_url}/v2/positions/{symbol}",
+                headers=creds.headers,
             )
             if resp.status_code == 404:
                 # Alpaca returns 404 when the account has no open position
@@ -821,6 +853,7 @@ async def _classify_trade_kind_pre_submit(
     *,
     symbol: str,
     submit_side: "OrderSide",
+    username: str | None = None,
 ) -> str | None:
     """Compute ``trade_kind`` for a new order based on the pre-fill position.
 
@@ -841,7 +874,7 @@ async def _classify_trade_kind_pre_submit(
     stamp the correct classification at fill time.
     """
     try:
-        qty = await _fetch_position_qty(symbol)
+        qty = await _fetch_position_qty(symbol, username=username)
     except Exception:
         qty = None
     if qty is None:
@@ -1005,11 +1038,7 @@ async def create_order(
             logger.debug("Could not resolve halt TTL for response", exc_info=True)
         raise HTTPException(status_code=503, detail=halted_detail)
 
-    if _alpaca_keys_empty():
-        raise HTTPException(
-            status_code=503,
-            detail="Broker not configured. Add ALPACA_API_KEY and ALPACA_SECRET_KEY to .env to enable trading.",
-        )
+    broker_creds = await _alpaca_credentials_or_503(username)
 
     # persona-40 F2 / persona-65 F1 / Wave-A bypass-fix: Idempotency-Key
     # support with race-safe ordering.
@@ -1385,7 +1414,12 @@ async def create_order(
     # a transient broker error would lock the user out of resubmitting until
     # the 600s TTL expired.
     try:
-        order_id = await _submit_to_broker(payload, settings, client_order_id=client_order_id)
+        order_id = await _submit_to_broker(
+            payload,
+            settings,
+            client_order_id=client_order_id,
+            broker_credentials=broker_creds,
+        )
     except Exception:
         if idem_cache_key is not None:
             try:
@@ -1540,6 +1574,7 @@ async def create_order(
             trade_kind = await _classify_trade_kind_pre_submit(
                 symbol=payload.legs[0].symbol,
                 submit_side=first_leg_side,
+                username=username,
             )
 
             # Stamp the correlation id onto the legs JSON so ``reconcile``
@@ -1571,6 +1606,7 @@ async def create_order(
             factory = _get_session_factory()
             async with factory() as db:
                 trade = Trade(
+                    username=username,
                     symbol=payload.legs[0].symbol,
                     strategy=payload.strategy,
                     legs=legs_payload,
@@ -1581,7 +1617,7 @@ async def create_order(
                     trade_kind=trade_kind,
                     client_order_id=client_order_id,
                     broker_order_id=order_id,
-                    account_env=_env,
+                    account_env=broker_creds.account_env or _env,
                 )
                 db.add(trade)
                 await db.flush()
@@ -1635,6 +1671,7 @@ async def list_orders(
     status: OrderStatus | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0, le=1000),
+    username: str = Depends(require_auth),
 ) -> list[OrderResponse]:
     """List recent orders, optionally filtered by status.
 
@@ -1652,17 +1689,9 @@ async def list_orders(
     instead of being silently accepted (Alpaca then returned wrong-sized
     pages or an opaque 400).
     """
-    if _alpaca_keys_empty():
-        return []
-
     try:
-        from core.config import settings
         import httpx
-
-        headers = {
-            "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
-            "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
-        }
+        creds = await _alpaca_credentials_or_503(username)
 
         params: dict[str, Any] = {"limit": limit, "nested": "true"}
         # When the caller passes an explicit status filter, forward it
@@ -1688,8 +1717,8 @@ async def list_orders(
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
-                f"{settings.ALPACA_BASE_URL}/v2/orders",
-                headers=headers,
+                f"{creds.base_url}/v2/orders",
+                headers=creds.headers,
                 params=params,
             )
             if resp.status_code != 200:
@@ -1822,19 +1851,8 @@ async def cancel_order(
 
     J-5 (Round-6) — every successful cancel writes an audit_log row.
     """
-    if _alpaca_keys_empty():
-        raise HTTPException(
-            status_code=503,
-            detail="Broker not configured. Add ALPACA_API_KEY and ALPACA_SECRET_KEY to .env to enable trading.",
-        )
-
-    from core.config import settings
     import httpx
-
-    headers = {
-        "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
-        "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
-    }
+    creds = await _alpaca_credentials_or_503(username)
 
     # L-13 — ownership check. Look up the local Trade row by
     # broker_order_id. If its client_order_id encodes a different
@@ -1848,8 +1866,8 @@ async def cancel_order(
     _terminal = {"filled", "canceled", "cancelled", "expired", "rejected", "replaced"}
     async with httpx.AsyncClient(timeout=10.0) as client:
         get_resp = await client.get(
-            f"{settings.ALPACA_BASE_URL}/v2/orders/{order_id}",
-            headers=headers,
+            f"{creds.base_url}/v2/orders/{order_id}",
+            headers=creds.headers,
         )
         if get_resp.status_code == 404:
             raise HTTPException(status_code=404, detail="Order not found")
@@ -1861,8 +1879,8 @@ async def cancel_order(
         # attempt and let the broker's response shape the error.
 
         resp = await client.delete(
-            f"{settings.ALPACA_BASE_URL}/v2/orders/{order_id}",
-            headers=headers,
+            f"{creds.base_url}/v2/orders/{order_id}",
+            headers=creds.headers,
         )
         if resp.status_code == 404:
             raise HTTPException(status_code=404, detail="Order not found")
@@ -2023,7 +2041,7 @@ async def _enforce_cancel_ownership(order_id: str, username: str) -> None:
 
 
 @router.get("/positions", response_model=list[PositionResponse])
-async def list_positions() -> list[PositionResponse]:
+async def list_positions(username: str = Depends(require_auth)) -> list[PositionResponse]:
     """Fetch all open positions from the broker.
 
     Round-5 F-6: each position now carries its originating strategy id,
@@ -2032,22 +2050,15 @@ async def list_positions() -> list[PositionResponse]:
     when no matching Trade exists (manually opened position from before
     strategy tagging shipped).
     """
-    if _alpaca_keys_empty():
-        return []
-
     try:
-        from core.config import settings
         import httpx
-
-        headers = {
-            "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
-            "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
-        }
+        from core.config import settings
+        creds = await _alpaca_credentials_or_503(username)
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
-                f"{settings.ALPACA_BASE_URL}/v2/positions",
-                headers=headers,
+                f"{creds.base_url}/v2/positions",
+                headers=creds.headers,
             )
             if resp.status_code != 200:
                 raise HTTPException(status_code=resp.status_code, detail="Failed to fetch positions")
@@ -5241,6 +5252,7 @@ async def _submit_to_broker(
     request: CreateOrderRequest,
     settings: Any,
     client_order_id: str | None = None,
+    broker_credentials: Any | None = None,
 ) -> str:
     """Submit the order to Alpaca and return the broker order ID.
 
@@ -5259,7 +5271,17 @@ async def _submit_to_broker(
     # list enforcement happens upstream in ``_reject_if_live_forbidden``;
     # ``_submit_to_broker`` is the last-line URL/intent check.
     from core.config import is_live_alpaca_base_url as _is_live_url
-    if _is_live_url(settings.ALPACA_BASE_URL) and not getattr(
+    base_url = broker_credentials.base_url if broker_credentials is not None else settings.ALPACA_BASE_URL
+    headers = (
+        broker_credentials.headers
+        if broker_credentials is not None
+        else {
+            "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
+            "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
+        }
+    )
+
+    if _is_live_url(base_url) and not getattr(
         settings, "LIVE_TRADING_ENABLED", False
     ):
         raise HTTPException(
@@ -5272,11 +5294,6 @@ async def _submit_to_broker(
         )
 
     import httpx
-
-    headers = {
-        "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
-        "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
-    }
 
     if len(request.legs) == 1:
         # Single-leg order
@@ -5350,7 +5367,7 @@ async def _submit_to_broker(
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.post(
-            f"{settings.ALPACA_BASE_URL}/v2/orders",
+            f"{base_url}/v2/orders",
             headers=headers,
             json=body,
         )
@@ -5388,17 +5405,114 @@ async def _submit_to_broker(
 # ---------------------------------------------------------------------------
 
 
-async def _reconcile_last_24h(since: datetime | None = None) -> dict[str, int]:
+def _client_order_owner(client_order_id: str | None) -> str | None:
+    if not client_order_id:
+        return None
+    if client_order_id.startswith("manual_"):
+        tail = client_order_id[len("manual_"):]
+        return tail.split("_", 1)[0] if "_" in tail else tail or None
+    return client_order_id.split("_", 1)[0] if "_" in client_order_id else None
+
+
+def _order_username_slug(username: str | None) -> str | None:
+    if not username:
+        return None
+    return re.sub(r"[^A-Za-z0-9\-]", "", username)[:32] or None
+
+
+def _client_order_matches_username(
+    client_order_id: str | None,
+    username: str | None,
+) -> bool:
+    if username is None:
+        return True
+    owner = _client_order_owner(client_order_id)
+    return owner is None or owner in {username, _order_username_slug(username)}
+
+
+def _trade_snapshot(trade: Any) -> dict[str, Any]:
+    return {
+        "id": trade.id,
+        "username": getattr(trade, "username", None),
+        "symbol": trade.symbol,
+        "strategy": trade.strategy,
+        "status": trade.status,
+        "client_order_id": trade.client_order_id,
+        "broker_order_id": trade.broker_order_id,
+        "entry_time": trade.entry_time.isoformat() if trade.entry_time else None,
+        "filled_at": trade.filled_at.isoformat() if trade.filled_at else None,
+        "filled_avg_price": float(trade.filled_avg_price) if trade.filled_avg_price is not None else None,
+        "legs": trade.legs,
+    }
+
+
+async def _queue_reconciliation_issue(
+    db: Any,
+    ReconciliationIssue: Any,
+    *,
+    issue_key: str,
+    username: str,
+    issue_type: str,
+    proposed_action: dict[str, Any],
+    broker_snapshot: dict[str, Any] | None = None,
+    local_snapshot: dict[str, Any] | None = None,
+    broker_connection_id: int | None = None,
+    account_env: str = "paper",
+    severity: str = "warning",
+    symbol: str | None = None,
+    broker_order_id: str | None = None,
+    client_order_id: str | None = None,
+    local_trade_id: int | None = None,
+) -> bool:
+    existing = (
+        await db.execute(
+            select(ReconciliationIssue).where(ReconciliationIssue.issue_key == issue_key)
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        if existing.status == "open":
+            existing.broker_snapshot = broker_snapshot
+            existing.local_snapshot = local_snapshot
+            existing.proposed_action = proposed_action
+            existing.detected_at = datetime.now(timezone.utc)
+        return False
+    db.add(
+        ReconciliationIssue(
+            issue_key=issue_key,
+            username=username,
+            broker_connection_id=broker_connection_id,
+            provider="alpaca",
+            account_env=account_env,
+            issue_type=issue_type,
+            severity=severity,
+            status="open",
+            symbol=symbol,
+            broker_order_id=broker_order_id,
+            client_order_id=client_order_id,
+            local_trade_id=local_trade_id,
+            broker_snapshot=broker_snapshot,
+            local_snapshot=local_snapshot,
+            proposed_action=proposed_action,
+        )
+    )
+    return True
+
+
+async def _reconcile_last_24h(
+    since: datetime | None = None,
+    *,
+    username: str | None = None,
+) -> dict[str, int]:
     """Core reconciliation logic. Shared by POST /trades/reconcile and the
     boot-time lifespan hook so both see the same semantics.
 
     Returns a dict: ``{"backfilled": N, "orphaned": M, "matched": K}``.
 
-    * ``backfilled`` — Alpaca rows for which no local Trade existed: inserted
-      as ``status="reconciled"`` so they count toward P&L / position tracking.
+    * ``backfilled`` — Alpaca rows for which no local Trade existed: queued as
+      reconciliation issues for user approval.
     * ``orphaned`` — local Trades in ``submitted`` status from the window
-      whose ``client_order_id`` is not present on the Alpaca side: marked
-      ``status="orphaned"`` so they stop inflating position counts.
+      whose ``client_order_id`` is not present on the Alpaca side: queued as
+      reconciliation issues for user approval.
     * ``matched`` — rows where both sides agree (informational only).
 
     ``since`` parameter (Wave B / persona-72 F4): explicit lower-bound for
@@ -5410,25 +5524,21 @@ async def _reconcile_last_24h(since: datetime | None = None) -> dict[str, int]:
     """
     result = {"backfilled": 0, "orphaned": 0, "matched": 0}
 
-    if _alpaca_keys_empty():
+    try:
+        creds = await _alpaca_credentials_or_503(username)
+    except HTTPException:
         return result
-
-    from core.config import settings
 
     # Reconcile window — parameterised so the boot hook can widen it to
     # match ``reconcile:last_success_ts`` in Redis (F4).  Defaults to
     # 24h which is what the admin route always wanted.
     since_dt = since or (datetime.now(timezone.utc) - timedelta(hours=24))
     since_iso = since_dt.isoformat()
-    headers = {
-        "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
-        "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
-    }
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
-                f"{settings.ALPACA_BASE_URL}/v2/orders",
-                headers=headers,
+                f"{creds.base_url}/v2/orders",
+                headers=creds.headers,
                 params={
                     "status": "all",
                     "limit": 500,
@@ -5456,6 +5566,7 @@ async def _reconcile_last_24h(since: datetime | None = None) -> dict[str, int]:
     # DB-less modes skip DB reconciliation but still return the totals from
     # the broker-side scan (useful for oncall to confirm the broker is
     # reachable).
+    from core.config import settings
     if settings.SKIP_DB_INIT:
         result["matched"] = len(alpaca_orders)
         return result
@@ -5463,7 +5574,7 @@ async def _reconcile_last_24h(since: datetime | None = None) -> dict[str, int]:
     try:
         from sqlalchemy import select
         from core.database import _get_session_factory
-        from data.storage.models import Trade
+        from data.storage.models import BrokerConnection, ReconciliationIssue, Trade
     except Exception:
         logger.warning("reconcile: DB imports failed", exc_info=True)
         return result
@@ -5480,12 +5591,18 @@ async def _reconcile_last_24h(since: datetime | None = None) -> dict[str, int]:
                 .where(Trade.entry_time >= since_dt)
                 .order_by(Trade.entry_time.desc())
             )
+            if username is not None:
+                q = q.where((Trade.username == username) | (Trade.username.is_(None)))
             trades = (await db.execute(q)).scalars().all()
 
             # Build a lookup of the local client_order_id set.
             local_client_ids: set[str] = set()
             local_by_client_id: dict[str, Trade] = {}
             for t in trades:
+                if t.client_order_id:
+                    local_client_ids.add(t.client_order_id)
+                    local_by_client_id.setdefault(t.client_order_id, t)
+                    continue
                 for leg in (t.legs or []):
                     if isinstance(leg, dict):
                         coid = leg.get("client_order_id")
@@ -5494,14 +5611,50 @@ async def _reconcile_last_24h(since: datetime | None = None) -> dict[str, int]:
                             local_by_client_id.setdefault(coid, t)
                             break
 
-            # 1. Backfill — Alpaca rows with a client_order_id we don't have.
-            #    We intentionally only backfill orders that carry our
+            # 1. Flag missing-local — Alpaca rows with a client_order_id we don't have.
+            #    We intentionally only flag orders that carry our
             #    ``manual_*`` or ``{strategy}_*`` prefix so we don't import
             #    third-party-originated orders (e.g. orders placed through
             #    the Alpaca app directly by the same account owner).
             for coid, o in by_client_id.items():
+                owner = _client_order_owner(coid)
+                if not _client_order_matches_username(coid, username):
+                    continue
                 if coid in local_client_ids:
-                    result["matched"] += 1
+                    local_trade = local_by_client_id[coid]
+                    broker_status = _normalise_alpaca_status(o.get("status"))
+                    local_status = str(local_trade.status or "").lower()
+                    compatible = (
+                        broker_status == local_status
+                        or (broker_status in {"submitted", "pending"} and local_status in {"submitted", "pending", "open"})
+                    )
+                    if compatible:
+                        result["matched"] += 1
+                    else:
+                        created = await _queue_reconciliation_issue(
+                            db,
+                            ReconciliationIssue,
+                            issue_key=f"alpaca:status:{coid}:{broker_status}",
+                            username=username or owner or "admin",
+                            broker_connection_id=creds.broker_connection_id,
+                            account_env=creds.account_env,
+                            issue_type="status_mismatch",
+                            severity="warning",
+                            symbol=o.get("symbol"),
+                            broker_order_id=o.get("id"),
+                            client_order_id=coid,
+                            local_trade_id=local_trade.id,
+                            broker_snapshot=o,
+                            local_snapshot=_trade_snapshot(local_trade),
+                            proposed_action={
+                                "action": "update_trade_status",
+                                "status": broker_status,
+                                "filled_at": o.get("filled_at"),
+                                "filled_avg_price": o.get("filled_avg_price"),
+                            },
+                        )
+                        if created:
+                            result["orphaned"] += 1
                     continue
                 try:
                     symbol = o.get("symbol", "")
@@ -5552,43 +5705,42 @@ async def _reconcile_last_24h(since: datetime | None = None) -> dict[str, int]:
                             _env = "live" if is_live_alpaca_base_url() else "paper"
                         except Exception:
                             _env = "paper"
-                    trade = Trade(
+                    created = await _queue_reconciliation_issue(
+                        db,
+                        ReconciliationIssue,
+                        issue_key=f"alpaca:missing_local:{coid}",
+                        username=username or owner or "admin",
+                        broker_connection_id=creds.broker_connection_id,
+                        account_env=creds.account_env or _env,
+                        issue_type="broker_missing_local",
+                        severity="warning",
                         symbol=symbol,
-                        strategy=None,
-                        legs=[{
-                            "symbol": symbol,
-                            "side": side,
-                            "qty": qty,
-                            "order_type": o.get("type", "market"),
-                            "limit_price": (float(o["limit_price"]) if o.get("limit_price") else None),
-                            "stop_price": (float(o["stop_price"]) if o.get("stop_price") else None),
-                            "client_order_id": coid,
-                        }],
-                        entry_time=entry_time,
-                        entry_price=entry_price or None,
-                        status="reconciled",
-                        notes=f"Reconciled from broker (alpaca_id={o.get('id')})",
-                        side=persisted_side,
-                        trade_kind=reconciled_trade_kind,
-                        client_order_id=coid,
                         broker_order_id=o.get("id"),
-                        account_env=_env,
+                        client_order_id=coid,
+                        broker_snapshot=o,
+                        proposed_action={
+                            "action": "insert_trade",
+                            "status": "reconciled",
+                            "side": persisted_side,
+                            "trade_kind": reconciled_trade_kind,
+                            "entry_time": entry_time.isoformat(),
+                            "entry_price": entry_price or None,
+                        },
                     )
-                    db.add(trade)
-                    await db.flush()
-                    result["backfilled"] += 1
+                    if created:
+                        result["backfilled"] += 1
                 except Exception:
                     logger.warning(
                         "reconcile: failed to backfill Alpaca order %s",
                         o.get("id"), exc_info=True,
                     )
 
-            # 2. Orphan — local "submitted" rows whose client_order_id has
+            # 2. Flag orphan — local "submitted" rows whose client_order_id has
             #    no Alpaca counterpart in the last-24h window.
             for t in trades:
                 if t.status != "submitted":
                     continue
-                coid: str | None = None
+                coid: str | None = t.client_order_id
                 for leg in (t.legs or []):
                     if isinstance(leg, dict) and leg.get("client_order_id"):
                         coid = leg["client_order_id"]
@@ -5596,11 +5748,35 @@ async def _reconcile_last_24h(since: datetime | None = None) -> dict[str, int]:
                 if not coid:
                     # Pre-client_order_id row — can't safely decide. Skip.
                     continue
+                if not _client_order_matches_username(coid, username):
+                    continue
                 if coid in by_client_id:
                     # Already matched above.
                     continue
-                t.status = "orphaned"
-                result["orphaned"] += 1
+                created = await _queue_reconciliation_issue(
+                    db,
+                    ReconciliationIssue,
+                    issue_key=f"alpaca:missing_broker:{coid}",
+                    username=username or getattr(t, "username", None) or _client_order_owner(coid) or "admin",
+                    broker_connection_id=creds.broker_connection_id,
+                    account_env=creds.account_env,
+                    issue_type="local_missing_broker",
+                    severity="warning",
+                    symbol=t.symbol,
+                    broker_order_id=t.broker_order_id,
+                    client_order_id=coid,
+                    local_trade_id=t.id,
+                    local_snapshot=_trade_snapshot(t),
+                    proposed_action={"action": "mark_orphaned", "status": "orphaned"},
+                )
+                if created:
+                    result["orphaned"] += 1
+
+            if creds.broker_connection_id is not None:
+                row = await db.get(BrokerConnection, creds.broker_connection_id)
+                if row is not None:
+                    row.last_sync_at = datetime.now(timezone.utc)
+                    row.last_error = None
 
             await db.commit()
     except Exception:

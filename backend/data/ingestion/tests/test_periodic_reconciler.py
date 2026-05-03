@@ -1,7 +1,7 @@
 """Unit tests for the Wave 6β periodic broker-vs-ledger reconciler.
 
 Exercises the per-cycle path (``_run_one_cycle``) directly so we don't
-have to wait on the 5-minute sleep loop.  The Redis lock machinery is
+have to wait on the 3-hour sleep loop.  The Redis lock machinery is
 stubbed via fakeredis so the multi-worker "second worker sees lock
 held" case can be tested deterministically.
 
@@ -110,7 +110,7 @@ async def test_single_worker_runs_reconcile_and_drain(
 
     assert counts == {"backfilled": 1, "orphaned": 0, "matched": 5}
     assert len(stub_reconcile["reconcile_calls"]) == 1
-    # The ``since`` arg should be roughly "now - 1h" (we don't freeze
+    # The ``since`` arg should be roughly "now - 3h" (we don't freeze
     # time but just confirm it's not None).
     assert stub_reconcile["reconcile_calls"][0]["since"] is not None
     assert stub_reconcile["drain_calls"] == 1

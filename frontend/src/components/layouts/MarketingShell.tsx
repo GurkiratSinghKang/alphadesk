@@ -115,13 +115,13 @@ export default function MarketingShell({
           <div className="ml-auto flex items-center gap-3">
             <Link
               href="/login"
-              className="font-sans text-[13px] text-fg-dim transition-colors hover:text-fg"
+              className="inline-flex min-h-11 items-center rounded-sm px-2 font-sans text-[13px] text-fg-dim transition-colors hover:text-fg"
             >
               Sign in
             </Link>
             <Link
               href="/request-access"
-              className="rounded-sm bg-brand px-4 py-2 font-sans text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-gold-300"
+              className="inline-flex min-h-11 items-center rounded-sm bg-brand px-4 py-2 font-sans text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-gold-300"
               style={{ letterSpacing: "0.01em" }}
             >
               Request access

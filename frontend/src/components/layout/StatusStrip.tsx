@@ -130,14 +130,15 @@ export function StatusStrip() {
       {isDemo && (
         <Link
           href="/settings"
-          className="ml-auto flex items-center gap-1.5 border-l border-border/50 pl-4 text-amber hover:text-foreground"
+          aria-label="Demo data. Link Alpaca in settings."
+          className="ml-0 flex shrink-0 items-center gap-1.5 border-l border-border/50 pl-3 text-amber hover:text-foreground sm:ml-auto sm:pl-4"
           title="AlphaDesk hasn't seen Alpaca credentials yet. Click to configure."
         >
           <span
             className="inline-block h-1.5 w-1.5 rounded-full bg-amber"
             aria-hidden
           />
-          <span className="font-semibold uppercase tracking-[0.1em] text-[12px]">
+          <span className="hidden font-semibold uppercase tracking-[0.1em] text-[12px] sm:inline">
             Demo data
           </span>
           <span className="hidden sm:inline text-[12px] text-muted-foreground">

@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { ArrowUpCircle, Bookmark, X } from "lucide-react";
-import type { EarningsCandidateDecision, EarningsDetail, EarningsErrorCode } from "@/types";
+import type { EarningsCandidateDecision, EarningsDetail, EarningsErrorCode, TickerContext, TickerFactEnvelope } from "@/types";
 import type { SelectionSource } from "../page";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +31,7 @@ import { buildEarningsStrategyDraft } from "./payoffDraft";
 
 export interface EarningsDetailPanelProps {
   detail: EarningsDetail | null;
+  tickerContext?: TickerContext | null;
   loading: boolean;
   /** Round-4 (CLUSTER D/10): stale data on screen, fetching fresh data —
    *  drives the dim opacity + aria-busy without flipping to the loading
@@ -72,6 +73,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
   function EarningsDetailPanel(
     {
       detail,
+      tickerContext = null,
       loading,
       refetching = false,
       error,
@@ -85,15 +87,24 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
     ref,
   ) {
   const isWide = useIsWide(1200);
-  const [undoDecision, setUndoDecision] = useState<{
-    previous: EarningsCandidateDecision | null;
-    next: EarningsCandidateDecision | null;
-  } | null>(null);
+  const detailSymbol = detail?.symbol ?? null;
+  const [undoDecisionState, setUndoDecisionState] = useState<{
+    symbol: string | null;
+    decision: {
+      previous: EarningsCandidateDecision | null;
+      next: EarningsCandidateDecision | null;
+    } | null;
+  }>({ symbol: null, decision: null });
+  const undoDecision =
+    undoDecisionState.symbol === detailSymbol ? undoDecisionState.decision : null;
   const commitCandidateDecision = (
     next: EarningsCandidateDecision | null,
   ) => {
     if (!onCandidateDecision) return;
-    setUndoDecision({ previous: candidateDecision ?? null, next });
+    setUndoDecisionState({
+      symbol: detailSymbol,
+      decision: { previous: candidateDecision ?? null, next },
+    });
     onCandidateDecision(next);
     if (next && typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("alphadesk:earnings-select-next"));
@@ -102,13 +113,9 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
   const undoCandidateDecision = () => {
     if (!undoDecision || !onCandidateDecision) return;
     onCandidateDecision(undoDecision.previous);
-    setUndoDecision(null);
+    setUndoDecisionState({ symbol: detailSymbol, decision: null });
   };
   const swipeHandlers = useCandidateDecisionSwipe(commitCandidateDecision);
-
-  useEffect(() => {
-    setUndoDecision(null);
-  }, [detail?.symbol]);
 
   // Slice-6 / CH-3F: which defined-risk strategy is the user hovering?
   // Set by ``TradeButtonRow`` via the new ``onHoverStrategy`` callback;
@@ -167,10 +174,10 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         ref={ref}
         data-slot="earnings-detail-panel"
         aria-busy="true"
-        className="rounded border border-[color:var(--fg-border)] p-4"
+        className="rounded border border-[#5d7268]/40 bg-white/60 p-4"
       >
         <div role="status" aria-live="polite" aria-atomic="true">
-          <p className="font-mono text-[13px] text-[color:var(--fg-muted)]">Loading detail…</p>
+          <p className="font-mono text-[13px] text-[#5d7268]">Loading detail…</p>
         </div>
       </section>
     );
@@ -180,9 +187,9 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
       <section
         ref={ref}
         data-slot="earnings-detail-panel"
-        className="rounded border border-[color:var(--fg-border)] p-4"
+        className="rounded border border-[#5d7268]/40 bg-white/60 p-4"
       >
-        <p className="font-mono text-[13px] text-[color:var(--fg-muted)]">Select a symbol from the sidebar.</p>
+        <p className="font-mono text-[13px] text-[#5d7268]">Select a symbol from the sidebar.</p>
       </section>
     );
   }
@@ -241,6 +248,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
           )}
         </div>
       )}
+      <TickerFreshnessStrip context={tickerContext} />
       <DetailHeader
         symbol={detail.symbol} company={detail.company} sector={detail.sector}
         reportDate={detail.reportDate} reportTime={detail.reportTime}
@@ -438,6 +446,59 @@ function isInteractiveSwipeTarget(target: EventTarget | null): boolean {
       'a,button,input,select,textarea,[role="button"],[contenteditable="true"]',
     ),
   );
+}
+
+function TickerFreshnessStrip({ context }: { context: TickerContext | null }) {
+  if (!context) return null;
+  const items: Array<[string, TickerFactEnvelope<Record<string, unknown>> | null | undefined]> = [
+    ["Quote", context.quote],
+    ["Options", context.optionsSummary],
+    ["Earnings", context.earnings],
+    ["Research", context.research],
+  ];
+  const visible = items.filter(([, fact]) => fact?.freshness);
+  if (!visible.length) return null;
+  return (
+    <div
+      data-slot="ticker-freshness-strip"
+      className="mb-3 flex flex-wrap items-center gap-2 rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-elev-1)] px-3 py-2"
+    >
+      {visible.map(([label, fact]) => (
+        <span
+          key={label}
+          className="inline-flex items-center gap-1.5 rounded-pill border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] px-2.5 py-1 font-mono text-[11px] text-[color:var(--fg-muted)]"
+        >
+          <span className="uppercase tracking-[0.08em]">{label}</span>
+          <span className={freshnessClass(fact!.freshness.quality)}>
+            {fact!.freshness.quality}
+          </span>
+          {fact!.freshness.asOf && (
+            <span className="text-[color:var(--fg-hint)]">
+              {formatFreshnessTime(fact!.freshness.asOf)}
+            </span>
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function freshnessClass(quality: string) {
+  if (quality === "fresh") return "text-profit";
+  if (quality === "demo") return "text-amber";
+  if (quality === "stale" || quality === "expired") return "text-amber";
+  return "text-loss";
+}
+
+function formatFreshnessTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function CandidateDecisionBar({

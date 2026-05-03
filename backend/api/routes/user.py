@@ -56,13 +56,73 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 
-from core.auth import require_auth, verify_password
+from api.routes.auth import MIN_PASSWORD_LENGTH, require_admin
+from core.auth import hash_password, require_auth, verify_password
 from core.config import settings
 
 logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("alphadesk.audit")
 
 router = APIRouter()
+
+
+@router.get("/me")
+async def get_current_user_profile(username: str = Depends(require_auth)) -> dict[str, Any]:
+    """Return the durable profile row for the authenticated user.
+
+    The env-configured admin is mirrored into the users table on first read so
+    existing deployments gain a user database without a separate migration
+    command.
+    """
+    from services.users import ensure_user_record, get_user, user_to_dict
+
+    row = await get_user(username)
+    if row is None:
+        row = await ensure_user_record(
+            username,
+            role="admin" if username == settings.ADMIN_USERNAME else "user",
+        )
+    if row is None:
+        return {
+            "username": username,
+            "role": "admin" if username == settings.ADMIN_USERNAME else "user",
+            "status": "active",
+            "profile": {},
+        }
+    return user_to_dict(row)
+
+
+@router.post("/admin/users", status_code=201)
+async def create_user(
+    request: CreateUserRequest,
+    _: str = Depends(require_admin),
+) -> dict[str, Any]:
+    """Admin endpoint for creating a durable AlphaDesk user."""
+    username = request.username.strip()
+    if not username or len(username) > 128:
+        raise HTTPException(status_code=422, detail="Username is required and must be <=128 chars")
+    if request.role not in {"user", "admin"}:
+        raise HTTPException(status_code=422, detail="role must be user or admin")
+    if len(request.password) < MIN_PASSWORD_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Password must be at least {MIN_PASSWORD_LENGTH} characters",
+        )
+    from services.users import get_user, ensure_user_record, user_to_dict
+
+    existing = await get_user(username)
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="User already exists")
+    row = await ensure_user_record(
+        username,
+        email=request.email,
+        password_hash=hash_password(request.password),
+        role=request.role,
+        display_name=request.display_name,
+    )
+    if row is None:
+        raise HTTPException(status_code=503, detail="User database unavailable")
+    return user_to_dict(row)
 
 
 # ---------------------------------------------------------------------------
@@ -100,6 +160,14 @@ class EraseRequest(BaseModel):
 
     confirm: bool
     password: str
+
+
+class CreateUserRequest(BaseModel):
+    username: str
+    email: str | None = None
+    password: str
+    role: str = "user"
+    display_name: str | None = None
 
 
 # ---------------------------------------------------------------------------
