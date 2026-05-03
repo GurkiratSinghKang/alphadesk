@@ -1944,7 +1944,7 @@ async def test_load_metrics_hv_iv_ratio_is_none_when_hv_missing():
     with patch("services.options.fetch_iv_analysis", fake_iv_analysis), \
          patch("services.options.fetch_chain", fake_chain), \
          patch.object(svc, "_load_historical_earnings", AsyncMock(return_value=None)):
-        metrics = await svc._load_metrics("NVDA", report_date=date(2026, 4, 30))
+        metrics = await svc._compute_metrics_uncached("NVDA", report_date=date(2026, 4, 30))
 
     assert metrics is not None
     assert metrics["iv_rank"] is None
@@ -2009,7 +2009,7 @@ async def test_load_metrics_populates_atm_premium_yields():
     with patch("services.options.fetch_iv_analysis", fake_iv_analysis), \
          patch("services.options.fetch_chain", fake_chain), \
          patch.object(svc, "_load_historical_earnings", AsyncMock(return_value=historical)):
-        metrics = await svc._load_metrics("NVDA", report_date=date(2026, 4, 30))
+        metrics = await svc._compute_metrics_uncached("NVDA", report_date=date(2026, 4, 30))
 
     assert metrics is not None
     assert metrics["premium_yield_call_atm"] == 0.03
@@ -2070,7 +2070,7 @@ async def test_load_metrics_uses_post_earnings_expiry_for_amc_reports():
     with patch("services.options.fetch_iv_analysis", fake_iv_analysis), \
          patch("services.options.fetch_chain", fake_chain), \
          patch.object(svc, "_load_historical_earnings", AsyncMock(return_value=None)):
-        metrics = await svc._load_metrics(
+        metrics = await svc._compute_metrics_uncached(
             "AAPL",
             report_date=date(2026, 4, 30),
             report_time="AMC",
