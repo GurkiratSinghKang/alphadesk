@@ -210,10 +210,10 @@ function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void
 
   return (
     <form onSubmit={handleSubmit} className="rounded-lg border border-border bg-[var(--surface)] p-4">
-      <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+      <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
         <Plus className="h-4 w-4 text-primary" />
         Create Alert
-      </h3>
+      </h2>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div>
           <label htmlFor="alert-symbol" className="text-[12px] uppercase tracking-wider text-muted-foreground">

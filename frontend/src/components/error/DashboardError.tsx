@@ -42,11 +42,11 @@ export default function DashboardErrorPage({
   route,
   surface,
   headline,
-  fallbackMessage = "An unexpected error occurred.",
+  fallbackMessage = "The page failed to render — refresh, or jump to a different surface. The desk has been notified.",
   fullScreen = false,
 }: DashboardErrorPageProps) {
   const resolvedRoute = route ?? surface ?? "Error";
-  const resolvedHeadline = headline ?? (surface ? `${surface} hit a snag` : "Something went wrong");
+  const resolvedHeadline = headline ?? (surface ? `${surface} hit a snag` : "This surface hit a snag");
 
   useEffect(() => {
     // Surface to browser console with route context; production telemetry
