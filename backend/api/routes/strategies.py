@@ -296,11 +296,10 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "claude-alpha": {
         "name": "Claude Alpha",
-        "description": "Planned Claude-assisted stock-picking concept. No backend implementation or live orders yet; requires a point-in-time prompt contract, replay harness, and risk gates before activation.",
-        # Wave 6γ (persona-109 P2): listed in ``PLANNED_STRATEGY_ROUTE_IDS``
-        # (see ``backend/strategies/registry.py``) — no backend package yet.
-        # Surfacing ``ACTIVE`` misrepresented state; ``PLANNED`` is the
-        # honest signal and matches ``implementation_stage()``.
+        "description": "LLM-driven equity selection (research-mode v0). The replay-cache infrastructure + scoring abstraction + risk filters are in place; the live Claude prompt path is gated until the OOS replay validates. v0 uses a deterministic fallback scorer (momentum × log-liquidity composite) — NOT alpha — so the rest of the pipeline is exercisable without per-trial LLM cost. See backend/strategies/claude_alpha/spec.md for the v1 path.",
+        # Plan C.1: backend strategy package landed; kind='research' so the
+        # engine excludes from the autonomous run loop. Status reflects the
+        # fact that it's registered but won't trade autonomously.
         "status": StrategyStatus.PLANNED,
         "invested_amount": 0,
         "total_return_pct": 0,
