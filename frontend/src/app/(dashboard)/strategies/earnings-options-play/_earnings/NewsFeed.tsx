@@ -31,7 +31,7 @@ export default function NewsFeed({ news }: NewsFeedProps) {
     // whether the feed is simply quiet.
     return (
       <section data-slot="news-feed" className="mt-4">
-        <h3 className="t-display-section italic text-[13px]">
+        <h3 className="t-section-cap italic">
           News{" "}
           <span className="t-label u-muted" title="Filtered for stock-price relevance — see trader docs.">
             · price-driving
@@ -52,7 +52,7 @@ export default function NewsFeed({ news }: NewsFeedProps) {
 
   return (
     <section data-slot="news-feed" className="mt-4">
-      <h3 className="t-display-section italic text-[13px]">
+      <h3 className="t-section-cap italic">
         News{" "}
         <span className="t-label u-muted" title="Filtered for stock-price relevance: tier-1 sources, headlines mentioning the symbol, ranked by category match × recency.">
           · price-driving

@@ -9,7 +9,7 @@ export default function HistoricalMoves({ historical }: HistoricalMovesProps) {
   if (!historical || historical.quarters.length === 0) {
     return (
       <section data-slot="historical-moves" className="mt-4">
-        <h3 className="t-display-section italic text-[13px]">Historical earnings</h3>
+        <h3 className="t-section-cap italic">Historical earnings</h3>
         <p className="mt-1 t-mono text-[12px] u-muted">
           — no quarterly data available.
         </p>
@@ -19,7 +19,7 @@ export default function HistoricalMoves({ historical }: HistoricalMovesProps) {
   const maxAbs = Math.max(...historical.quarters.map((q) => Math.abs(q.nextDayMovePct)), 0.01);
   return (
     <section data-slot="historical-moves" className="mt-4">
-      <h3 className="t-display-section italic text-[13px]">
+      <h3 className="t-section-cap italic">
         Historical earnings{" "}
         <span className="t-label u-muted">· last {historical.quarters.length}q</span>
       </h3>

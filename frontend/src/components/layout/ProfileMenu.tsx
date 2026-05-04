@@ -7,6 +7,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
+import { useDestructiveAction } from "@/components/destructive/useDestructiveAction";
 import { useUIStore } from "@/stores/ui";
 import { usePreferencesStore, type ThemePreference } from "@/stores/preferences";
 import { usePortfolioStore } from "@/stores/portfolio";
@@ -42,6 +44,7 @@ export function ProfileMenu() {
   const { toast } = useToast();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [modeConfirmOpen, setModeConfirmOpen] = useState(false);
+  const destructive = useDestructiveAction();
   const pathname = usePathname();
 
   // Resolve display name from JWT once per mount — HttpOnly cookies are not
@@ -80,7 +83,7 @@ export function ProfileMenu() {
     setTradingMode("paper");
   };
 
-  async function handleLogout() {
+  async function executeLogout() {
     // Use the absolute API base so cross-origin deployments hit the real
     // backend instead of 404ing on the frontend origin.
     const base = env.API_URL || "";
@@ -99,6 +102,19 @@ export function ProfileMenu() {
     // HttpOnly cookies can't be cleared from JS — rely on the backend's
     // Set-Cookie: Max-Age=0 header in the /logout response.
     window.location.href = "/login";
+  }
+
+  function handleLogout() {
+    destructive.request({
+      title: "Sign out",
+      description: "End the current session.",
+      consequences: [
+        "Unsaved order tickets and strategy drafts are lost.",
+        "You'll need to sign in again to resume.",
+      ],
+      confirmLabel: "Sign out",
+      onConfirm: executeLogout,
+    });
   }
 
   // Wave 29 persona-1 #7 (option C): "Got it" closes the dialog without
@@ -206,6 +222,18 @@ export function ProfileMenu() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {destructive.pending && (
+        <DestructiveConfirmModal
+          open={true}
+          onOpenChange={(open) => !open && destructive.dismiss()}
+          loading={destructive.loading}
+          title={destructive.pending.title}
+          description={destructive.pending.description}
+          consequences={destructive.pending.consequences}
+          confirmLabel={destructive.pending.confirmLabel}
+          onConfirm={destructive.fire}
+        />
+      )}
     </>
   );
 }

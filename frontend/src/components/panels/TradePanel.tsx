@@ -46,6 +46,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
+import { useDestructiveAction } from "@/components/destructive/useDestructiveAction";
 
 // ─── Trade Builder ───────────────────────────────────────────
 
@@ -543,7 +545,7 @@ function TradeBuilderTab() {
             </>
           ) : (
             <>
-              <AlertTriangle className="mr-1.5 h-4 w-4" /> Submit LIVE Order
+              <AlertTriangle className="mr-1.5 h-4 w-4" /> Place live order
             </>
           )}
         </Button>
@@ -553,7 +555,7 @@ function TradeBuilderTab() {
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirm Order</DialogTitle>
+            <DialogTitle>Confirm order</DialogTitle>
             <DialogDescription>
               Review your order details before submitting.
             </DialogDescription>
@@ -605,7 +607,7 @@ function TradeBuilderTab() {
               )}
             >
               {submitting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-              Confirm Order
+              {tradingMode === "live" ? "Confirm live order" : "Confirm order"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -691,74 +693,7 @@ function PositionsTab() {
   useEffect(() => {
     const handler = (e: Event) => {
       const action = (e as CustomEvent<string>).detail;
-      if (action === "positions:close-all") {
-        if (positions.length === 0) {
-          toast({ type: "info", message: "No open positions to close." });
-          return;
-        }
-        const confirmed = window.confirm(
-          `Close ALL ${fmtPlural(positions.length, "position")}? This will sell all holdings.`
-        );
-        if (confirmed) {
-          // Place market sell orders for each position.
-          // Persona 74-5/74-10 — each ``placeOrder`` is awaited by the
-          // outer ``Promise.all`` but the old code swallowed its own
-          // rejection with ``.catch(() => null)``, so the user saw the
-          // optimistic "Closing …" success toast even when every
-          // request failed. Surface individual failures via a toast.
-          Promise.all(
-            positions.map((p) =>
-              placeOrder({
-                symbol: p.symbol,
-                side: p.side === "short" ? "buy" : "sell",
-                type: "market",
-                quantity: p.quantity,
-              }).catch((e: unknown) => {
-                const msg = e instanceof Error ? e.message : "Unknown error";
-                toast({
-                  type: "error",
-                  message: `Action failed: ${p.symbol} — ${msg}`,
-                });
-                return null;
-              })
-            )
-          ).then(() => {
-            toast({ type: "success", message: `Closing ${fmtPlural(positions.length, "position")}...` });
-          });
-        }
-      } else if (action === "positions:flatten") {
-        if (positions.length === 0) {
-          toast({ type: "info", message: "No open positions to flatten." });
-          return;
-        }
-        const confirmed = window.confirm(
-          `Flatten portfolio? This will close all ${fmtPlural(positions.length, "position")} at market price.`
-        );
-        if (confirmed) {
-          // Persona 74-5/74-10 — same fix as "close-all" above: surface
-          // per-position failures instead of swallowing them with
-          // ``.catch(() => null)``.
-          Promise.all(
-            positions.map((p) =>
-              placeOrder({
-                symbol: p.symbol,
-                side: p.side === "short" ? "buy" : "sell",
-                type: "market",
-                quantity: p.quantity,
-              }).catch((e: unknown) => {
-                const msg = e instanceof Error ? e.message : "Unknown error";
-                toast({
-                  type: "error",
-                  message: `Action failed: ${p.symbol} — ${msg}`,
-                });
-                return null;
-              })
-            )
-          ).then(() => {
-            toast({ type: "success", message: "Portfolio flatten orders submitted." });
-          });
-        }
-      } else if (action === "positions:stop-loss") {
+      if (action === "positions:stop-loss") {
         const pos = positions.find((p) => p.symbol.split(" ")[0] === selectedSymbol);
         if (!pos) {
           toast({ type: "info", message: `No position for ${selectedSymbol}.` });
@@ -945,6 +880,9 @@ function OrdersTab() {
   // "Cancelling…" feedback and the button stays disabled until the
   // backend confirms the 204.
   const [cancelling, setCancelling] = useState<Set<string>>(new Set());
+  // Pending destructive action — managed by the hook which also owns
+  // the in-flight loading boolean so the modal disables while confirming.
+  const destructive = useDestructiveAction();
 
   // Fetch orders from API on mount
   useEffect(() => {
@@ -985,7 +923,7 @@ function OrdersTab() {
     rejected: "bg-[var(--loss)]/15 text-[var(--loss)] border-[var(--loss)]/30",
   };
 
-  const handleCancel = async (id: string) => {
+  const executeCancelOrder = async (id: string) => {
     // Don't re-enter while a cancel is already in flight for this order.
     if (cancelling.has(id)) return;
     setCancelling((prev) => {
@@ -1011,6 +949,24 @@ function OrdersTab() {
         return next;
       });
     }
+  };
+
+  const handleCancel = (id: string) => {
+    const o = orders.find((ord) => ord.id === id);
+    const priceStr = o?.price != null ? `$${o.price.toFixed(2)}` : "market";
+    const qty = o?.quantity ?? "";
+    const sym = o?.symbol ?? "";
+    const side = o?.side ?? "";
+    destructive.request({
+      title: "Cancel order",
+      description: `Working ${side} ${qty} ${sym} at ${priceStr}.`,
+      consequences: [
+        "Removes the order from the broker's working queue.",
+        "Any partial fills already executed remain on the book.",
+      ],
+      confirmLabel: "Cancel order",
+      onConfirm: () => executeCancelOrder(id),
+    });
   };
 
   return (
@@ -1084,6 +1040,18 @@ function OrdersTab() {
           </div>
         ))}
       </div>
+      {destructive.pending && (
+        <DestructiveConfirmModal
+          open={true}
+          onOpenChange={(open) => !open && destructive.dismiss()}
+          loading={destructive.loading}
+          title={destructive.pending.title}
+          description={destructive.pending.description}
+          consequences={destructive.pending.consequences}
+          confirmLabel={destructive.pending.confirmLabel}
+          onConfirm={destructive.fire}
+        />
+      )}
     </div>
   );
 }

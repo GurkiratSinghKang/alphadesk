@@ -29,7 +29,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 
 // 2026-04-21 polish — reports page lifted onto the editorial token ladder
 // matching /analytics + the dashboard hero:
-//   .t-display-section  22 serif italic       — section headers
+//   .t-section-cap  italic (13px from --fs-section-cap) — section headers
 //   .t-label            12 sans caps 0.12em   — table/field eyebrows
 //   .t-num-md           16 mono tabular-med   — row numbers + %
 //   .t-num-lg           20 mono tabular-med   — summary-tile scalars
@@ -146,7 +146,7 @@ function SectionCard({
         <Icon className="h-4 w-4 text-fg-muted shrink-0" aria-hidden />
         <div className="flex flex-col gap-0.5 min-w-0 flex-1">
           {eyebrow ? <span className="t-label">{eyebrow}</span> : null}
-          <h2 className="t-display-section text-ink-1000 truncate">{title}</h2>
+          <h2 className="t-section-cap text-ink-1000 truncate">{title}</h2>
         </div>
         {open ? (
           <ChevronDown className="h-4 w-4 text-fg-muted shrink-0" aria-hidden />
@@ -1451,7 +1451,7 @@ export default function ReportsPage() {
           <div className="rounded-xl border border-border bg-[var(--panel)] px-8 py-12">
             <div className="flex flex-col gap-4 max-w-[640px]">
               <span className="t-label">§ AWAITING DATA</span>
-              <p className="t-display-section">
+              <p className="t-section-cap">
                 Reports become available after your first closed trades.
               </p>
               <p className="font-sans text-[13px] leading-relaxed text-fg-muted">

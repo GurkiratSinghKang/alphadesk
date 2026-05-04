@@ -38,6 +38,8 @@ import {
 } from "@/components/composites";
 import { DashboardLayout } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
+import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
+import { useDestructiveAction } from "@/components/destructive/useDestructiveAction";
 import {
   cancelOrder,
   getOrders,
@@ -200,6 +202,9 @@ export default function DeskPage() {
       setSelectedStrategyId(q);
     }
   }, [searchParams, rail]);
+
+  /* ─── Destructive action confirmation ──────────────────── */
+  const destructive = useDestructiveAction();
 
   /* ─── Book tab + live orders count for context bar ─────── */
   const [bookTab, setBookTab] = useState<PositionTab>("positions");
@@ -411,12 +416,9 @@ export default function DeskPage() {
   }, []);
 
   /**
-   * Cancel a working order from the Orders tab.
-   *
-   * Removes the order optimistically from the store so the UI updates
-   * before the network roundtrip; on failure we re-pull to correct.
+   * Execute a cancel after user confirms via the DestructiveConfirmModal.
    */
-  const handleCancelOrder = useCallback(
+  const executeCancelOrder = useCallback(
     async (id: string) => {
       try {
         await cancelOrder(id);
@@ -434,6 +436,36 @@ export default function DeskPage() {
       }
     },
     [toast, refreshPortfolio]
+  );
+
+  /**
+   * Cancel a working order from the Orders tab.
+   *
+   * Shows a confirmation modal before firing the cancel request.
+   */
+  const handleCancelOrder = useCallback(
+    (id: string) => {
+      const o = ordersFromStore.find((ord) => ord.id === id);
+      const rawAny = o as unknown as Record<string, unknown> | undefined;
+      const limitPrice =
+        o?.price ??
+        (typeof rawAny?.limit_price === "number" ? (rawAny.limit_price as number) : undefined);
+      const priceStr = limitPrice != null ? `$${limitPrice.toFixed(2)}` : "market";
+      const qty = o?.quantity ?? "";
+      const sym = o?.symbol ?? "";
+      const side = o?.side ?? "";
+      destructive.request({
+        title: "Cancel order",
+        description: `Working ${side} ${qty} ${sym} at ${priceStr}.`,
+        consequences: [
+          "Removes the order from the broker's working queue.",
+          "Any partial fills already executed remain on the book.",
+        ],
+        confirmLabel: "Cancel order",
+        onConfirm: () => executeCancelOrder(id),
+      });
+    },
+    [ordersFromStore, executeCancelOrder]
   );
 
   // Phase-2 / KP-1: listen for the Cmd+K palette's "Cancel all working
@@ -626,6 +658,7 @@ export default function DeskPage() {
   }, [router]);
 
   return (
+    <>
     <DashboardLayout
       className="h-full min-h-0"
       topBar={
@@ -721,6 +754,19 @@ export default function DeskPage() {
         />
       }
     />
+    {destructive.pending && (
+      <DestructiveConfirmModal
+        open={true}
+        onOpenChange={(open) => !open && destructive.dismiss()}
+        loading={destructive.loading}
+        title={destructive.pending.title}
+        description={destructive.pending.description}
+        consequences={destructive.pending.consequences}
+        confirmLabel={destructive.pending.confirmLabel}
+        onConfirm={destructive.fire}
+      />
+    )}
+    </>
   );
 }
 

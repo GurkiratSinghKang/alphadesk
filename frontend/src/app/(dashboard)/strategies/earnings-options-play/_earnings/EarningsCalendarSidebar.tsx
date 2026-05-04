@@ -147,7 +147,7 @@ export default function EarningsCalendarSidebar({
       </p>
       {grouped.map(({ date, label, rows: dayRows }) => (
         <div key={date} data-slot="day-group" className="mb-3">
-          <h3 className="t-display-section italic text-[13px] pb-1 border-b border-[color:var(--fg-border)]">
+          <h3 className="t-section-cap italic pb-1 border-b border-[color:var(--fg-border)]">
             {label} <span className="t-label text-[color:var(--fg-muted)]">· {fmtPlural(dayRows.length, "report")}</span>
           </h3>
           <ul className="mt-1 space-y-0.5">
