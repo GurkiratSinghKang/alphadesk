@@ -106,7 +106,7 @@ function MetricGrid({ summary, compact }: { summary: PayoffSummary; compact: boo
       {metrics.map((metric) => (
         <div key={metric.label} className="min-w-0 bg-bg px-3 py-3">
           <p className="t-label text-fg-hint">{metric.label}</p>
-          <p className={cn("mt-2 truncate font-mono text-[14px] font-semibold tabular-nums", metric.tone)}>
+          <p className={cn("mt-2 truncate font-mono text-body-sm font-semibold tabular-nums", metric.tone)}>
             {metric.value}
           </p>
         </div>
@@ -172,7 +172,7 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
             : "Hover for P/L"}
         </div>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[11px] text-fg-muted">
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-eyebrow text-fg-muted">
         <span>At expiration</span>
         {summary.spotPrice != null ? <span>Spot {formatCurrency(summary.spotPrice)}</span> : null}
         {summary.expiries[0] ? <span>Expiry {summary.expiries[0]}</span> : null}

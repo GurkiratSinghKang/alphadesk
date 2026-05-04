@@ -205,6 +205,7 @@
   --fs-body: 15px;       /* was 14px; raised — inputs, row symbols, nav */
   --fs-body-sm: 13px;    /* secondary UI text */
   --fs-label: 12px;      /* was 10.5px — ALL caps eyebrows, field captions */
+  --fs-eyebrow: 11px;    /* QA r3-2 — uppercase eyebrow micro-labels (29 site convergence) */
   --fs-hint: 13px;       /* was 11px — hint text kept above label floor */
   --fs-micro: 12px;      /* was 9.5px — alias retained; clamped to floor */
   --fs-meta: 13px;       /* clock, timestamps, micro footers, reject reasons */

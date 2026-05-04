@@ -152,6 +152,7 @@
   --text-body: var(--fs-body);
   --text-body-sm: var(--fs-body-sm);
   --text-label: var(--fs-label);
+  --text-eyebrow: var(--fs-eyebrow);
 
   /* QA r6a — Spacing scale wired from design-tokens, with half-step extras */
   --spacing-0_5: 2px;

@@ -181,7 +181,7 @@ export default function PriceChartPanel({
       <header className="flex flex-wrap items-baseline gap-4 md:gap-6 px-4 md:px-6 pt-3 md:pt-3.5 pb-3 border-b border-border-hair">
         <div className="flex items-baseline gap-3">
           <span
-            className="font-display italic text-h2 md:text-[26px] text-ink-1000"
+            className="font-display italic text-h2 md:text-h1 text-ink-1000"
             style={{ letterSpacing: 0, lineHeight: 1 }}
           >{symbol.name}</span>
           <span
@@ -192,7 +192,7 @@ export default function PriceChartPanel({
 
         <div className="flex items-baseline gap-2">
           <span
-            className="font-mono tabular-nums text-[24px] md:text-[32px] font-light text-ink-1000"
+            className="font-mono tabular-nums text-h2 md:text-display-sm font-light text-ink-1000"
             style={{ letterSpacing: 0, lineHeight: 1 }}
           >
             {last == null ? <DashSpan size={32} /> : last.toFixed(2)}
@@ -280,7 +280,7 @@ export default function PriceChartPanel({
             className="flex flex-col items-center justify-center gap-2.5 h-full min-h-[200px]"
           >
             <span
-              className={cn("font-sans text-[14px] font-medium", executionDensity ? "text-fg" : "italic text-fg-muted")}
+              className={cn("font-sans text-body-sm font-medium", executionDensity ? "text-fg" : "italic text-fg-muted")}
               style={{ letterSpacing: 0 }}
             >
               {executionDensity ? "Chart data is temporarily limited." : "Failed to load chart data."}

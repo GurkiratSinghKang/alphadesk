@@ -94,7 +94,7 @@ export default function DecisionStrip({ structured, metrics }: DecisionStripProp
       {/* EXPECTED MOVE — signed % with band copy */}
       <div className="flex flex-col">
         <span className="t-label u-muted">Expected move</span>
-        <span className="font-mono text-[24px] leading-tight tabular-nums">
+        <span className="font-mono text-h2 leading-tight tabular-nums">
           {expMovePct != null ? `±${fmtPct(Math.abs(expMovePct), 1)}` : "—"}
         </span>
         <span className="t-meta u-muted mt-0.5">

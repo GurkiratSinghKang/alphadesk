@@ -158,7 +158,7 @@ export default function OptionsStrategyBuilder({
         <header className="flex items-center justify-between gap-3 border-b border-border-hair px-4 py-3">
           <div>
             <p className="t-label text-fg-hint">Strategy builder</p>
-            <h2 className="text-[18px] font-semibold text-ink-1000">Build and preview options risk</h2>
+            <h2 className="text-h3 font-semibold text-ink-1000">Build and preview options risk</h2>
           </div>
           <button
             type="button"
@@ -178,7 +178,7 @@ export default function OptionsStrategyBuilder({
                 <input
                   value={symbolDraft}
                   onChange={(event) => setSymbolDraft(event.target.value.toUpperCase())}
-                  className="h-10 rounded-sm border border-border bg-bg-elev-1 px-3 font-mono text-[14px] text-fg outline-none focus-visible:border-brand"
+                  className="h-10 rounded-sm border border-border bg-bg-elev-1 px-3 font-mono text-body-sm text-fg outline-none focus-visible:border-brand"
                   autoCapitalize="characters"
                 />
                 <button

@@ -122,7 +122,7 @@ export default function AuthProductFrame({
             </span>
             <span className="min-w-0">
               <span className="block truncate font-sans text-body font-semibold tracking-tight">AlphaDesk</span>
-              <span className="hidden truncate font-mono text-[11px] uppercase tracking-[0.16em] text-[#5d7268] sm:block">
+              <span className="hidden truncate font-mono text-eyebrow uppercase tracking-[0.16em] text-[#5d7268] sm:block">
                 AI trading terminal
               </span>
             </span>
@@ -164,7 +164,7 @@ export default function AuthProductFrame({
           <div className="relative grid gap-7 p-4 sm:p-6 lg:p-8 xl:grid-cols-[minmax(0,1fr)_minmax(360px,430px)] xl:items-stretch xl:gap-8">
             <section className="order-1 flex min-w-0 flex-col gap-5 xl:col-start-1 xl:row-start-1 xl:h-full">
               <div className="max-w-[760px] pt-2 sm:pt-5">
-                <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-[#0f7a5d]">
+                <p className="font-mono text-eyebrow font-semibold uppercase tracking-[0.22em] text-[#0f7a5d]">
                   {eyebrow}
                 </p>
                 <h1 className="mt-5 max-w-[12ch] font-sans text-4xl font-semibold leading-[0.95] tracking-tight text-[#12281f] sm:text-5xl lg:text-6xl">
@@ -177,14 +177,14 @@ export default function AuthProductFrame({
                 <div className="mt-7 flex flex-wrap gap-3">
                   <Link
                     href={primaryCta.href}
-                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[8px] bg-brand px-5 font-sans text-[14px] font-semibold text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_1px_2px_rgba(0,0,0,0.08)] transition-colors hover:bg-gold-300 active:scale-[0.98]"
+                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[8px] bg-brand px-5 font-sans text-body-sm font-semibold text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_1px_2px_rgba(0,0,0,0.08)] transition-colors hover:bg-gold-300 active:scale-[0.98]"
                   >
                     {primaryCta.label}
                     <AuthFrameIcon kind="arrow" className="size-4" />
                   </Link>
                   <Link
                     href={secondaryCta.href}
-                    className="inline-flex min-h-12 items-center justify-center rounded-[8px] border border-[#c9d9ce] bg-white/70 px-5 font-sans text-[14px] font-semibold text-[#12281f] shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] transition-colors hover:border-[#0f7a5d]/35 hover:bg-white active:scale-[0.98]"
+                    className="inline-flex min-h-12 items-center justify-center rounded-[8px] border border-[#c9d9ce] bg-white/70 px-5 font-sans text-body-sm font-semibold text-[#12281f] shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] transition-colors hover:border-[#0f7a5d]/35 hover:bg-white active:scale-[0.98]"
                   >
                     {secondaryCta.label}
                   </Link>
@@ -224,7 +224,7 @@ export default function AuthProductFrame({
                       {panelSubtitle}
                     </p>
                   </div>
-                  <span className="rounded-[6px] border border-[#0f7a5d]/20 bg-white/70 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#0f7a5d]">
+                  <span className="rounded-[6px] border border-[#0f7a5d]/20 bg-white/70 px-2 py-1 font-mono text-eyebrow uppercase tracking-[0.14em] text-[#0f7a5d]">
                     Trust
                   </span>
                 </div>
@@ -251,13 +251,13 @@ export default function AuthProductFrame({
 
         <section className="mt-6 grid gap-5 lg:grid-cols-[minmax(260px,0.55fr)_minmax(0,1fr)] lg:items-start">
           <div className="rounded-[8px] border border-[#d7e4d9] bg-white/60 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
-            <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-[#0f7a5d]">
+            <p className="font-mono text-eyebrow font-semibold uppercase tracking-[0.18em] text-[#0f7a5d]">
               Product rhythm
             </p>
             <h2 className="mt-3 max-w-[14ch] font-sans text-h1 font-semibold leading-[1] tracking-tight text-[#12281f]">
               From hunch to habit, without losing the thread.
             </h2>
-            <p className="mt-4 font-sans text-[14px] leading-[1.65] text-[#40574c]">
+            <p className="mt-4 font-sans text-body-sm leading-[1.65] text-[#40574c]">
               The marketing promise is simple: AlphaDesk gives serious traders a calmer loop for deciding, challenging, routing, and learning.
             </p>
           </div>
@@ -277,12 +277,12 @@ export default function AuthProductFrame({
                     <span className="grid size-10 place-items-center rounded-[8px] bg-[#ecf4ed] text-[#0f7a5d]">
                       <AuthFrameIcon kind={item.icon} className="size-5" />
                     </span>
-                    <span className="font-mono text-[11px] text-[#819188]">{String(index + 1).padStart(2, "0")}</span>
+                    <span className="font-mono text-eyebrow text-[#819188]">{String(index + 1).padStart(2, "0")}</span>
                   </div>
-                  <p className="mt-5 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[#0f7a5d]">
+                  <p className="mt-5 font-mono text-eyebrow font-semibold uppercase tracking-[0.16em] text-[#0f7a5d]">
                     {item.label}
                   </p>
-                  <h3 className="mt-2 font-sans text-[18px] font-semibold tracking-tight text-[#12281f]">{item.title}</h3>
+                  <h3 className="mt-2 font-sans text-h3 font-semibold tracking-tight text-[#12281f]">{item.title}</h3>
                   <p className="mt-2 font-sans text-body-sm leading-[1.6] text-[#5d7268]">{item.detail}</p>
                 </article>
               );
@@ -292,10 +292,10 @@ export default function AuthProductFrame({
 
         <section className="mt-5 grid gap-4 rounded-[8px] border border-[#d7e4d9] bg-[#12281f] p-5 text-[#f8f7ef] shadow-[0_30px_80px_-56px_rgba(18,40,31,0.65)] lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.55fr)]">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#75d9af]">
+            <p className="font-mono text-eyebrow uppercase tracking-[0.18em] text-[#75d9af]">
               Evidence, with the caveats in view
             </p>
-            <h2 className="mt-3 max-w-[18ch] font-sans text-[26px] font-semibold leading-[1.05] tracking-tight">
+            <h2 className="mt-3 max-w-[18ch] font-sans text-h1 font-semibold leading-[1.05] tracking-tight">
               The numbers support the story; they do not replace judgment.
             </h2>
             <p className="mt-3 max-w-[66ch] font-sans text-body-sm leading-[1.65] text-[#c7d6ce]">

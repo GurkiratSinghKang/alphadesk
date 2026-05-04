@@ -599,7 +599,7 @@ function RunForm({
     >
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h2 className="font-sans text-[18px] font-semibold tracking-tight text-fg">Research setup</h2>
+          <h2 className="font-sans text-h3 font-semibold tracking-tight text-fg">Research setup</h2>
           <p className="mt-1 text-label leading-relaxed text-fg-muted">
             Multi-agent report saved as an auditable artifact.
           </p>
@@ -641,7 +641,7 @@ function RunForm({
           <select
             value={provider}
             onChange={(event) => setProvider(event.target.value)}
-            className="h-10 rounded-md border border-border bg-bg-elev-1 px-3 font-sans text-[14px] text-fg outline-none transition focus:border-brand"
+            className="h-10 rounded-md border border-border bg-bg-elev-1 px-3 font-sans text-body-sm text-fg outline-none transition focus:border-brand"
           >
             {PROVIDERS.map((item) => (
               <option key={item.value} value={item.value}>
@@ -654,7 +654,7 @@ function RunForm({
           <select
             value={researchDepth}
             onChange={(event) => setResearchDepth(Number(event.target.value))}
-            className="h-10 rounded-md border border-border bg-bg-elev-1 px-3 font-sans text-[14px] text-fg outline-none transition focus:border-brand"
+            className="h-10 rounded-md border border-border bg-bg-elev-1 px-3 font-sans text-body-sm text-fg outline-none transition focus:border-brand"
           >
             <option value={1}>1 round</option>
             <option value={2}>2 rounds</option>
@@ -728,7 +728,7 @@ function RunForm({
           rows={4}
           maxLength={500}
           placeholder="Catalyst, position context, or question"
-          className="resize-none rounded-md border border-border bg-bg-elev-1 px-3 py-2 font-sans text-[14px] leading-relaxed text-fg outline-none transition focus:border-brand"
+          className="resize-none rounded-md border border-border bg-bg-elev-1 px-3 py-2 font-sans text-body-sm leading-relaxed text-fg outline-none transition focus:border-brand"
         />
       </Field>
     </form>
@@ -765,16 +765,16 @@ function ResearchBrief({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="t-label text-fg-muted">Selected report</span>
-              <span className={cn("inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-1 text-[11px] font-semibold uppercase", tone.border, tone.bg, tone.text)}>
+              <span className={cn("inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-1 text-eyebrow font-semibold uppercase", tone.border, tone.bg, tone.text)}>
                 {renderStatusIcon(run.status, cn("h-3.5 w-3.5", run.status === "running" && "animate-spin"))}
                 {run.status}
               </span>
             </div>
             <div className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2">
-              <h2 className="min-w-0 font-sans text-[36px] font-semibold leading-none tracking-tight text-fg md:text-[54px]">
+              <h2 className="min-w-0 font-sans text-display-md font-semibold leading-none tracking-tight text-fg md:text-[54px]">
                 {runSymbol}
               </h2>
-              <span className="mb-1 whitespace-nowrap rounded-pill border border-border bg-bg-elev-1 px-3 py-1.5 font-mono text-[14px] text-fg-muted md:text-numeric-md">
+              <span className="mb-1 whitespace-nowrap rounded-pill border border-border bg-bg-elev-1 px-3 py-1.5 font-mono text-body-sm text-fg-muted md:text-numeric-md">
                 {run.trade_date ?? "No trade date"}
               </span>
             </div>
@@ -785,7 +785,7 @@ function ResearchBrief({
 
           <div className={cn("min-w-[220px] rounded-lg border p-4", tone.border, tone.soft)}>
             <p className="t-label text-fg-muted">Decision signal</p>
-            <p className={cn("mt-2 font-mono text-[26px] font-semibold leading-none tracking-tight", tone.text)}>
+            <p className={cn("mt-2 font-mono text-h1 font-semibold leading-none tracking-tight", tone.text)}>
               {signal}
             </p>
             <p className="mt-3 text-label leading-relaxed text-fg-muted">
@@ -863,7 +863,7 @@ function DecisionHighlights({ highlights }: { highlights: string[] }) {
             className="group rounded-md border border-border-hair bg-bg-elev-1 px-3 py-3 transition duration-200 hover:-translate-y-0.5 hover:border-border"
           >
             <div className="flex gap-3">
-              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-brand/35 bg-brand/10 font-mono text-[10px] text-brand">
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-brand/35 bg-brand/10 font-mono text-eyebrow text-brand">
                 {index + 1}
               </span>
               <p className="min-w-0 break-words text-body-sm leading-relaxed text-fg">{line}</p>
@@ -892,7 +892,7 @@ function MemoNavigator({ sections }: { sections: MemoSection[] }) {
             className="group flex items-start justify-between gap-3 rounded-md border border-transparent px-2 py-2 transition duration-200 hover:border-border-hair hover:bg-bg-card"
           >
             <span className="break-words text-[12.5px] leading-relaxed text-fg group-hover:text-brand">{section.title}</span>
-            <span className="shrink-0 font-mono text-[11px] text-fg-hint">
+            <span className="shrink-0 font-mono text-eyebrow text-fg-hint">
               {memoSectionLineCount(section.body)} lines
             </span>
           </a>
@@ -922,7 +922,7 @@ function MemoSectionList({
             Source sections stay collapsed until you need the supporting text.
           </p>
         </div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-fg-hint">
+        <p className="font-mono text-eyebrow uppercase tracking-[0.12em] text-fg-hint">
           {displaySections.length} sections / {lineCount} lines / {decisionChars.toLocaleString()} chars
         </p>
       </div>
@@ -936,7 +936,7 @@ function MemoSectionList({
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
               <span className="break-words font-sans text-body font-semibold text-fg">{section.title}</span>
               <span className="flex shrink-0 items-center gap-2">
-                <span className="font-mono text-[11px] text-fg-hint">{memoSectionLineCount(section.body)} lines</span>
+                <span className="font-mono text-eyebrow text-fg-hint">{memoSectionLineCount(section.body)} lines</span>
                 <CaretRight className="h-4 w-4 text-fg-muted transition group-open:rotate-90" weight="bold" />
               </span>
             </summary>
@@ -984,14 +984,14 @@ function TickerFactPanel({ context }: { context: TickerContext | null }) {
           >
             <span className="font-sans text-[12.5px] text-fg">{label}</span>
             {fact ? (
-              <span className="text-right font-mono text-[11px] text-fg-muted">
+              <span className="text-right font-mono text-eyebrow text-fg-muted">
                 <span className={tickerFactQualityClass(fact.freshness.quality)}>
                   {fact.freshness.quality}
                 </span>
                 {fact.freshness.asOf ? ` · ${formatStamp(fact.freshness.asOf)}` : ""}
               </span>
             ) : (
-              <span className="font-mono text-[11px] text-fg-hint">unavailable</span>
+              <span className="font-mono text-eyebrow text-fg-hint">unavailable</span>
             )}
           </div>
         ))}
@@ -1105,7 +1105,7 @@ function ArtifactPanel({ files }: { files: string[] }) {
       {files.length ? (
         <div className="flex flex-wrap gap-2">
           {files.map((file) => (
-            <span key={file} className="rounded-pill border border-border bg-bg-card px-2.5 py-1 font-mono text-[11px] text-fg-muted">
+            <span key={file} className="rounded-pill border border-border bg-bg-card px-2.5 py-1 font-mono text-eyebrow text-fg-muted">
               {file}
             </span>
           ))}
@@ -1189,7 +1189,7 @@ function RuntimePanel({
     <section className="rounded-lg border border-border bg-bg-card p-4">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <h2 className="font-sans text-[18px] font-semibold tracking-tight text-fg">Runtime</h2>
+          <h2 className="font-sans text-h3 font-semibold tracking-tight text-fg">Runtime</h2>
           <p className="mt-1 text-label leading-relaxed text-fg-muted">
             {runtime
               ? runtime.ready
@@ -1219,7 +1219,7 @@ function RuntimePanel({
             <RuntimeFact label="Runtime" value={runtime.bootstrap_required ? "bootstrap" : runtime.installed_ref ?? "ready"} good />
             <RuntimeFact label="Limit" value={formatRateLimit(runtime.runs_per_hour)} good={runtime.enabled} />
           </div>
-          <p className="mt-3 break-words font-mono text-[11px] leading-relaxed text-fg-hint" title={runtime.skill_home}>
+          <p className="mt-3 break-words font-mono text-eyebrow leading-relaxed text-fg-hint" title={runtime.skill_home}>
             {runtime.deep_model} / {runtime.quick_model}
           </p>
           {warnings.length > 0 && (
@@ -1257,7 +1257,7 @@ function RunHistory({
   return (
     <section className="rounded-lg border border-border bg-bg-card p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-sans text-[18px] font-semibold tracking-tight text-fg">Run history</h2>
+        <h2 className="font-sans text-h3 font-semibold tracking-tight text-fg">Run history</h2>
         <button
           type="button"
           onClick={refreshRuns}
@@ -1288,7 +1288,7 @@ function RunHistory({
                 )}
               >
                 <span className="min-w-0">
-                  <span className="block font-mono text-[14px] font-semibold text-fg">
+                  <span className="block font-mono text-body-sm font-semibold text-fg">
                     {displayText(run.symbol, "Unknown")} / {displayText(run.trade_date, "No date")}
                   </span>
                   <span className="block break-words text-label leading-relaxed text-fg-muted">

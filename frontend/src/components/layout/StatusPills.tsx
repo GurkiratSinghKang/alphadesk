@@ -24,7 +24,7 @@ function RegimePill({
   return (
     <Tooltip>
       <TooltipTrigger
-        className="flex items-center gap-1.5 rounded-sm px-2 py-1 text-[11px] font-mono text-fg-muted hover:bg-bg-elev-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        className="flex items-center gap-1.5 rounded-sm px-2 py-1 text-eyebrow font-mono text-fg-muted hover:bg-bg-elev-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         aria-label={`Market regime: ${displayLabel}`}
       >
         <span
@@ -58,7 +58,7 @@ function VixPill({ vixLevel }: { vixLevel: number | null }) {
     <Tooltip>
       <TooltipTrigger
         className={cn(
-          "flex items-center gap-1 rounded-sm px-2 py-1 text-[11px] font-mono hover:bg-bg-elev-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          "flex items-center gap-1 rounded-sm px-2 py-1 text-eyebrow font-mono hover:bg-bg-elev-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         )}
         aria-label={`VIX: ${display}`}
       >
@@ -83,7 +83,7 @@ function SessionPill({ mode }: { mode: "paper" | "live" }) {
     <Tooltip>
       <TooltipTrigger
         className={cn(
-          "flex items-center gap-1.5 rounded-sm px-2 py-1 text-[11px] font-mono hover:bg-bg-elev-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+          "flex items-center gap-1.5 rounded-sm px-2 py-1 text-eyebrow font-mono hover:bg-bg-elev-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
           isLive ? "text-loss" : "text-profit"
         )}
         aria-label={`Session mode: ${isLive ? "LIVE trading" : "Paper trading"}`}

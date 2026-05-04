@@ -1355,7 +1355,7 @@ function BetaWeightedDeltaCard() {
         </div>
         <div>
           <p className="t-label mb-1">Net delta · raw</p>
-          <p className="font-mono tabular-nums text-[18px] text-ink-1000">
+          <p className="font-mono tabular-nums text-h3 text-ink-1000">
             {greeks.netDelta > 0 ? "+" : ""}
             {greeks.netDelta.toFixed(2)}
           </p>

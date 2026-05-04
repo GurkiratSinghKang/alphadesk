@@ -59,6 +59,6 @@ describe("DetailHeader", () => {
     const header = container.querySelector('[data-slot="detail-header"]');
     expect(header?.className).toContain("flex-col");
     expect(header?.className).toContain("sm:flex-row");
-    expect(container.querySelector(".t-num-hero")?.className).toContain("text-[40px]");
+    expect(container.querySelector(".t-num-hero")?.className).toContain("text-numeric-hero");
   });
 });

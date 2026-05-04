@@ -136,7 +136,7 @@ export default function StatusBar({
           className="w-[280px]"
         >
           <div className="flex flex-col gap-3">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-fg-muted">
+            <p className="text-eyebrow font-medium uppercase tracking-wide text-fg-muted">
               Service status
             </p>
             <SystemDetailGrid pills={pills} />

@@ -120,7 +120,7 @@ export default function DetailHeader({
               {freshness.kind === "live" ? "LIVE" : `DELAYED ${freshness.age}`}
             </span>
           )}
-          <div className="t-num-hero min-w-0 max-w-full text-[40px] tracking-[0] sm:text-numeric-hero">
+          <div className="t-num-hero min-w-0 max-w-full text-numeric-hero tracking-[0]">
             {quote ? fmtCurrency(quote.last, "USD") : "—"}
           </div>
         </div>

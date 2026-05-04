@@ -86,7 +86,7 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
               </span>
               <div className="min-w-0">
                 <p className="truncate font-sans text-body-sm font-semibold tracking-tight">AlphaDesk workspace</p>
-                <p className="truncate font-mono text-[10px] uppercase tracking-[0.14em] text-[#819188]">
+                <p className="truncate font-mono text-eyebrow uppercase tracking-[0.14em] text-[#819188]">
                   Idea to order
                 </p>
               </div>
@@ -106,7 +106,7 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
                     Ask, test, adjust size, and keep the decision record in one flow.
                   </p>
                 </div>
-                <span className="rounded-[8px] bg-[#ecf4ed] px-2 py-1 font-mono text-[10px] text-[#0f7a5d]">
+                <span className="rounded-[8px] bg-[#ecf4ed] px-2 py-1 font-mono text-eyebrow text-[#0f7a5d]">
                   AAPL
                 </span>
               </div>
@@ -145,7 +145,7 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
               <div className="rounded-[8px] border border-[#d7e4d9] bg-[#10281f] p-3 text-[#f8f7ef]">
                 <div className="flex items-center gap-2">
                   <Brain className="size-4 text-[#75d9af]" aria-hidden weight="regular" />
-                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#75d9af]">
+                  <p className="font-mono text-eyebrow uppercase tracking-[0.16em] text-[#75d9af]">
                     AI challenge
                   </p>
                 </div>
@@ -194,7 +194,7 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
 
         <aside className="grid min-h-0 gap-3 sm:grid-rows-[1fr_auto]">
           <div className="flex min-h-0 flex-col rounded-[8px] border border-white/12 bg-white/[0.12] p-3 text-[#f8f7ef] backdrop-blur-xl">
-            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#75d9af]">Today’s loop</p>
+            <p className="font-mono text-eyebrow uppercase tracking-[0.16em] text-[#75d9af]">Today’s loop</p>
             <div className="mt-3 grid flex-1 content-start gap-2">
               {[
                 ["Research", "Thesis saved"],
@@ -224,7 +224,7 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
 
           <div className="relative overflow-hidden rounded-[8px] border border-white/12 bg-[#f7fbf4] p-3 text-[#12281f]">
             <ShieldCheck className="size-5 text-[#0f7a5d]" aria-hidden weight="regular" />
-            <p className="mt-3 font-sans text-[14px] font-semibold">Controls before speed.</p>
+            <p className="mt-3 font-sans text-body-sm font-semibold">Controls before speed.</p>
             <p className="mt-2 font-sans text-label leading-[1.5] text-[#5d7268]">
               Paper mode, review history, and notes stay visible before any live workflow.
             </p>
