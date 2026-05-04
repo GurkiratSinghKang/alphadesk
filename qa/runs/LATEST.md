@@ -2,10 +2,14 @@
 
 > **Pointer file for downstream analysis agents.** Update the run ID below when you produce a newer canonical sweep.
 
-**Latest canonical run:** `2026-05-04T02-58-02Z`
-**Base URL captured:** `https://tradingalpha.net` (post PR #1, #2, #3 deploys)
-**Manifest:** `qa/runs/2026-05-04T02-58-02Z/manifest.json`
+**Latest canonical run:** `2026-05-04T19-42-49Z`
+**Base URL captured:** `https://tradingalpha.net` (post PR #5–#31 deploys — full R1+R2+R3+R4 stack)
+**Manifest:** `qa/runs/2026-05-04T19-42-49Z/manifest.json`
 **Coverage:** 378 steps · 372 pass · 0 fail · 6 skip · 144 PNG snapshots across desktop-1440 + mobile-390
+
+Previous canonical runs:
+- `qa/runs/2026-05-04T15-47-19Z/manifest.json` (post R1+R2+R3-1)
+- `qa/runs/2026-05-04T02-58-02Z/manifest.json` (pre-sprint baseline)
 **Audit reports built on this run:**
 - `qa/reviews/pillars/01-copywriting.md` (Score 2/4)
 - `qa/reviews/pillars/02-visuals.md` (Score 2/4)
