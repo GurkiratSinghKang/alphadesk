@@ -38,7 +38,7 @@ def upgrade() -> None:
         sa.Column("resolved_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("resolved_by", sa.String(length=120), nullable=True),
         sa.PrimaryKeyConstraint("id"),
-        sa.CheckConstraint("layer IN (1, 2, 3)", name="ck_sde_layer_valid"),
+        sa.CheckConstraint("layer IN (1, 2, 3)", name="layer_valid"),
     )
     # One unresolved manual event per strategy: enforce via partial unique index.
     op.create_index(
