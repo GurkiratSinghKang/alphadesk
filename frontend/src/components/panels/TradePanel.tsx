@@ -47,6 +47,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
+import { useDestructiveAction } from "@/components/destructive/useDestructiveAction";
 
 // ─── Trade Builder ───────────────────────────────────────────
 
@@ -692,74 +693,7 @@ function PositionsTab() {
   useEffect(() => {
     const handler = (e: Event) => {
       const action = (e as CustomEvent<string>).detail;
-      if (action === "positions:close-all") {
-        if (positions.length === 0) {
-          toast({ type: "info", message: "No open positions to close." });
-          return;
-        }
-        const confirmed = window.confirm(
-          `Close ALL ${fmtPlural(positions.length, "position")}? This will sell all holdings.`
-        );
-        if (confirmed) {
-          // Place market sell orders for each position.
-          // Persona 74-5/74-10 — each ``placeOrder`` is awaited by the
-          // outer ``Promise.all`` but the old code swallowed its own
-          // rejection with ``.catch(() => null)``, so the user saw the
-          // optimistic "Closing …" success toast even when every
-          // request failed. Surface individual failures via a toast.
-          Promise.all(
-            positions.map((p) =>
-              placeOrder({
-                symbol: p.symbol,
-                side: p.side === "short" ? "buy" : "sell",
-                type: "market",
-                quantity: p.quantity,
-              }).catch((e: unknown) => {
-                const msg = e instanceof Error ? e.message : "Unknown error";
-                toast({
-                  type: "error",
-                  message: `Action failed: ${p.symbol} — ${msg}`,
-                });
-                return null;
-              })
-            )
-          ).then(() => {
-            toast({ type: "success", message: `Closing ${fmtPlural(positions.length, "position")}...` });
-          });
-        }
-      } else if (action === "positions:flatten") {
-        if (positions.length === 0) {
-          toast({ type: "info", message: "No open positions to flatten." });
-          return;
-        }
-        const confirmed = window.confirm(
-          `Flatten portfolio? This will close all ${fmtPlural(positions.length, "position")} at market price.`
-        );
-        if (confirmed) {
-          // Persona 74-5/74-10 — same fix as "close-all" above: surface
-          // per-position failures instead of swallowing them with
-          // ``.catch(() => null)``.
-          Promise.all(
-            positions.map((p) =>
-              placeOrder({
-                symbol: p.symbol,
-                side: p.side === "short" ? "buy" : "sell",
-                type: "market",
-                quantity: p.quantity,
-              }).catch((e: unknown) => {
-                const msg = e instanceof Error ? e.message : "Unknown error";
-                toast({
-                  type: "error",
-                  message: `Action failed: ${p.symbol} — ${msg}`,
-                });
-                return null;
-              })
-            )
-          ).then(() => {
-            toast({ type: "success", message: "Portfolio flatten orders submitted." });
-          });
-        }
-      } else if (action === "positions:stop-loss") {
+      if (action === "positions:stop-loss") {
         const pos = positions.find((p) => p.symbol.split(" ")[0] === selectedSymbol);
         if (!pos) {
           toast({ type: "info", message: `No position for ${selectedSymbol}.` });
@@ -946,15 +880,9 @@ function OrdersTab() {
   // "Cancelling…" feedback and the button stays disabled until the
   // backend confirms the 204.
   const [cancelling, setCancelling] = useState<Set<string>>(new Set());
-  // Pending destructive action — set when user clicks Cancel order button;
-  // cleared on confirm or dismiss.
-  const [pendingDestructive, setPendingDestructive] = useState<{
-    title: string;
-    description: string;
-    consequences: string[];
-    confirmLabel: string;
-    onConfirm: () => void | Promise<void>;
-  } | null>(null);
+  // Pending destructive action — managed by the hook which also owns
+  // the in-flight loading boolean so the modal disables while confirming.
+  const destructive = useDestructiveAction();
 
   // Fetch orders from API on mount
   useEffect(() => {
@@ -1020,7 +948,6 @@ function OrdersTab() {
         next.delete(id);
         return next;
       });
-      setPendingDestructive(null);
     }
   };
 
@@ -1030,7 +957,7 @@ function OrdersTab() {
     const qty = o?.quantity ?? "";
     const sym = o?.symbol ?? "";
     const side = o?.side ?? "";
-    setPendingDestructive({
+    destructive.request({
       title: "Cancel order",
       description: `Working ${side} ${qty} ${sym} at ${priceStr}.`,
       consequences: [
@@ -1113,11 +1040,16 @@ function OrdersTab() {
           </div>
         ))}
       </div>
-      {pendingDestructive && (
+      {destructive.pending && (
         <DestructiveConfirmModal
           open={true}
-          onOpenChange={(open) => !open && setPendingDestructive(null)}
-          {...pendingDestructive}
+          onOpenChange={(open) => !open && destructive.dismiss()}
+          loading={destructive.loading}
+          title={destructive.pending.title}
+          description={destructive.pending.description}
+          consequences={destructive.pending.consequences}
+          confirmLabel={destructive.pending.confirmLabel}
+          onConfirm={destructive.fire}
         />
       )}
     </div>

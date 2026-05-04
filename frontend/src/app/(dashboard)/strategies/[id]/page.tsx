@@ -6,6 +6,7 @@ import { notFound, useParams, useRouter } from "next/navigation";
 import { Pause, Play, ArrowRight } from "lucide-react";
 
 import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
+import { useDestructiveAction } from "@/components/destructive/useDestructiveAction";
 import Display from "@/components/typography/Display";
 import Eyebrow from "@/components/typography/Eyebrow";
 import Mono from "@/components/typography/Mono";
@@ -343,13 +344,7 @@ export default function StrategyDetailPage() {
   const [range, setRange] = useState<EquityRange>("3M");
   const [toggling, setToggling] = useState(false);
   const [benchmark, setBenchmark] = useState<EquityPoint[]>([]);
-  const [pendingDestructive, setPendingDestructive] = useState<{
-    title: string;
-    description: string;
-    consequences: string[];
-    confirmLabel: string;
-    onConfirm: () => void | Promise<void>;
-  } | null>(null);
+  const destructive = useDestructiveAction();
   // Persona 71-8 — on navigation from ``/strategies → /strategies/[id]``
   // we move keyboard / AT focus to the banner (when it renders) or the
   // hero wrapper. The ``tabIndex={-1}`` makes the element
@@ -450,7 +445,6 @@ export default function StrategyDetailPage() {
       toast({ type: "error", message: msg });
     } finally {
       setToggling(false);
-      setPendingDestructive(null);
     }
   }
 
@@ -462,7 +456,7 @@ export default function StrategyDetailPage() {
       return;
     }
     // Pause is destructive — confirm first.
-    setPendingDestructive({
+    destructive.request({
       title: "Pause strategy",
       description: `${meta.name} stops generating new signals.`,
       consequences: [
@@ -909,11 +903,16 @@ export default function StrategyDetailPage() {
           at /risk.
         </p>
       </footer>
-      {pendingDestructive && (
+      {destructive.pending && (
         <DestructiveConfirmModal
           open={true}
-          onOpenChange={(open) => !open && setPendingDestructive(null)}
-          {...pendingDestructive}
+          onOpenChange={(open) => !open && destructive.dismiss()}
+          loading={destructive.loading}
+          title={destructive.pending.title}
+          description={destructive.pending.description}
+          consequences={destructive.pending.consequences}
+          confirmLabel={destructive.pending.confirmLabel}
+          onConfirm={destructive.fire}
         />
       )}
     </div>

@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
+import { useDestructiveAction } from "@/components/destructive/useDestructiveAction";
 import { useUIStore } from "@/stores/ui";
 import { usePreferencesStore, type ThemePreference } from "@/stores/preferences";
 import { usePortfolioStore } from "@/stores/portfolio";
@@ -43,13 +44,7 @@ export function ProfileMenu() {
   const { toast } = useToast();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [modeConfirmOpen, setModeConfirmOpen] = useState(false);
-  const [pendingDestructive, setPendingDestructive] = useState<{
-    title: string;
-    description: string;
-    consequences: string[];
-    confirmLabel: string;
-    onConfirm: () => void | Promise<void>;
-  } | null>(null);
+  const destructive = useDestructiveAction();
   const pathname = usePathname();
 
   // Resolve display name from JWT once per mount — HttpOnly cookies are not
@@ -110,7 +105,7 @@ export function ProfileMenu() {
   }
 
   function handleLogout() {
-    setPendingDestructive({
+    destructive.request({
       title: "Sign out",
       description: "End the current session.",
       consequences: [
@@ -227,11 +222,16 @@ export function ProfileMenu() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {pendingDestructive && (
+      {destructive.pending && (
         <DestructiveConfirmModal
           open={true}
-          onOpenChange={(open) => !open && setPendingDestructive(null)}
-          {...pendingDestructive}
+          onOpenChange={(open) => !open && destructive.dismiss()}
+          loading={destructive.loading}
+          title={destructive.pending.title}
+          description={destructive.pending.description}
+          consequences={destructive.pending.consequences}
+          confirmLabel={destructive.pending.confirmLabel}
+          onConfirm={destructive.fire}
         />
       )}
     </>

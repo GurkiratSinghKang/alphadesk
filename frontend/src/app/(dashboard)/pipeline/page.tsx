@@ -21,6 +21,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
+import { useDestructiveAction } from "@/components/destructive/useDestructiveAction";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton, SkeletonStack } from "@/components/ui/skeleton";
 import {
@@ -298,13 +299,7 @@ export default function PipelinePage() {
   const [cancelling, setCancelling] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [retryAfter, setRetryAfter] = useState<number | null>(null);
-  const [pendingDestructive, setPendingDestructive] = useState<{
-    title: string;
-    description: string;
-    consequences: string[];
-    confirmLabel: string;
-    onConfirm: () => void | Promise<void>;
-  } | null>(null);
+  const destructive = useDestructiveAction();
   // Tick state — the running card needs to re-render every second so the
   // "Elapsed" clock advances. The server status only refreshes every 2s,
   // so without this `setNow` the elapsed counter would jump by 2s.
@@ -590,13 +585,12 @@ export default function PipelinePage() {
       }
     } finally {
       setCancelling(false);
-      setPendingDestructive(null);
     }
   };
 
   const handleCancel = () => {
     const runName = status?.run_id ? `Run #${status.run_id.slice(0, 8)}` : "Current run";
-    setPendingDestructive({
+    destructive.request({
       title: "Cancel pipeline run",
       description: `${runName} aborts mid-step.`,
       consequences: [
@@ -1512,11 +1506,16 @@ export default function PipelinePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {pendingDestructive && (
+      {destructive.pending && (
         <DestructiveConfirmModal
           open={true}
-          onOpenChange={(open) => !open && setPendingDestructive(null)}
-          {...pendingDestructive}
+          onOpenChange={(open) => !open && destructive.dismiss()}
+          loading={destructive.loading}
+          title={destructive.pending.title}
+          description={destructive.pending.description}
+          consequences={destructive.pending.consequences}
+          confirmLabel={destructive.pending.confirmLabel}
+          onConfirm={destructive.fire}
         />
       )}
     </DashboardPageLayout>

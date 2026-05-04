@@ -29,7 +29,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 
 // 2026-04-21 polish — reports page lifted onto the editorial token ladder
 // matching /analytics + the dashboard hero:
-//   .t-section-cap  22 serif italic       — section headers
+//   .t-section-cap  italic (13px from --fs-section-cap) — section headers
 //   .t-label            12 sans caps 0.12em   — table/field eyebrows
 //   .t-num-md           16 mono tabular-med   — row numbers + %
 //   .t-num-lg           20 mono tabular-med   — summary-tile scalars

@@ -39,6 +39,7 @@ import {
 import { DashboardLayout } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
+import { useDestructiveAction } from "@/components/destructive/useDestructiveAction";
 import {
   cancelOrder,
   getOrders,
@@ -203,13 +204,7 @@ export default function DeskPage() {
   }, [searchParams, rail]);
 
   /* ─── Destructive action confirmation ──────────────────── */
-  const [pendingDestructive, setPendingDestructive] = useState<{
-    title: string;
-    description: string;
-    consequences: string[];
-    confirmLabel: string;
-    onConfirm: () => void | Promise<void>;
-  } | null>(null);
+  const destructive = useDestructiveAction();
 
   /* ─── Book tab + live orders count for context bar ─────── */
   const [bookTab, setBookTab] = useState<PositionTab>("positions");
@@ -438,8 +433,6 @@ export default function DeskPage() {
       } catch (err) {
         const message = err instanceof Error ? err.message : "Cancel failed";
         toast({ type: "error", message });
-      } finally {
-        setPendingDestructive(null);
       }
     },
     [toast, refreshPortfolio]
@@ -461,7 +454,7 @@ export default function DeskPage() {
       const qty = o?.quantity ?? "";
       const sym = o?.symbol ?? "";
       const side = o?.side ?? "";
-      setPendingDestructive({
+      destructive.request({
         title: "Cancel order",
         description: `Working ${side} ${qty} ${sym} at ${priceStr}.`,
         consequences: [
@@ -761,11 +754,16 @@ export default function DeskPage() {
         />
       }
     />
-    {pendingDestructive && (
+    {destructive.pending && (
       <DestructiveConfirmModal
         open={true}
-        onOpenChange={(open) => !open && setPendingDestructive(null)}
-        {...pendingDestructive}
+        onOpenChange={(open) => !open && destructive.dismiss()}
+        loading={destructive.loading}
+        title={destructive.pending.title}
+        description={destructive.pending.description}
+        consequences={destructive.pending.consequences}
+        confirmLabel={destructive.pending.confirmLabel}
+        onConfirm={destructive.fire}
       />
     )}
     </>

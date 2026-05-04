@@ -14,7 +14,7 @@ import { useAccountEquity, equityAtPoint, startingEquity } from "@/lib/accountEq
 // were set in bland `text-sm font-semibold`, KPI values in unopinionated
 // `text-xs font-medium`. Three shared classes pulled from
 // `styles/design-tokens.css` bring this page onto the same ladder:
-//   .t-section-cap  22 serif italic       — section headers
+//   .t-section-cap  italic (13px from --fs-section-cap) — section headers
 //   .t-label            12 sans caps 0.12em   — KPI eyebrows
 //   .t-num-md           16 mono tabular-med   — row numbers / percents
 // Kept local to avoid touching shared composites.
