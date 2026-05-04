@@ -154,6 +154,7 @@ IMPLEMENTED_STRATEGY_ROUTE_IDS: frozenset[str] = frozenset({
     "orb",
     "vwap-strategy",
     "earnings-options-play",
+    "dividend-capture",
     "sector-rotation",
     "mean-reversion",
 })
@@ -161,7 +162,6 @@ IMPLEMENTED_STRATEGY_ROUTE_IDS: frozenset[str] = frozenset({
 #: Strategies advertised in the catalogue but not yet implemented.
 PLANNED_STRATEGY_ROUTE_IDS: frozenset[str] = frozenset({
     "claude-alpha",
-    "dividend-capture",
     "gap-fill",
     "vcp-breakout",
 })

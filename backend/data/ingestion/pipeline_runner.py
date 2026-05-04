@@ -54,7 +54,7 @@ ET = ZoneInfo("America/New_York")
 # ─── Strategy Groups by Optimal Run Time ────────────────────
 
 # Pre-market analysis (6:00 AM) — scan overnight events
-PREMARKET_STRATEGIES = ["pead", "regime_adaptive"]
+PREMARKET_STRATEGIES = ["pead", "regime_adaptive", "dividend_capture"]
 
 # ─── Wave 6α Fix 7 (persona-124 P1): 09:30 MOO window for PEAD ───
 # Bernard & Thomas (1989) specifies PEAD T+1 entries at the OPEN price,

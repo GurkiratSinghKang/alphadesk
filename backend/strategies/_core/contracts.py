@@ -262,6 +262,12 @@ class StrategyInput(BaseModel):
     news: pd.DataFrame | None = None
     options_chains: dict[str, pd.DataFrame] = Field(default_factory=dict)
     ticker_contexts: dict[str, Any] = Field(default_factory=dict)
+    # Plan C.2: dividend calendar, pre-fetched by the runner. Required
+    # columns: ``symbol``, ``ex_date`` (or ``date``), ``cash_amount``;
+    # optional: ``record_date``, ``payment_date``, ``declaration_date``.
+    # Strategies that don't consume dividends ignore this field;
+    # dividend_capture pivots its entire signal off it.
+    dividends: pd.DataFrame | None = None
 
     cash: Decimal
     equity: Decimal
