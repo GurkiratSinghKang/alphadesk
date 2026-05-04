@@ -154,7 +154,7 @@ function MorningBriefContent({
           P&L tokens so it stays on-brand (chartreuse → ice for profit,
           coral → gold for loss). */}
       <div
-        className="absolute inset-x-0 top-0 h-[2px]"
+        className="absolute inset-x-0 top-0 h-0.5"
         style={{
           background: isUp
             ? "linear-gradient(90deg, var(--profit) 0%, var(--ice-500) 100%)"

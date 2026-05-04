@@ -24,7 +24,7 @@ export default function HistoricalMoves({ historical }: HistoricalMovesProps) {
         <span className="t-label u-muted">· last {historical.quarters.length}q</span>
       </h3>
       <div className="mt-2 flex items-end gap-3">
-        <div className="relative flex h-[48px] items-end gap-1 pr-10">
+        <div className="relative flex h-12 items-end gap-1 pr-10">
           {historical.quarters.map((q) => {
             const pct = q.nextDayMovePct;
             const h = Math.max(6, (Math.abs(pct) / maxAbs) * 44);

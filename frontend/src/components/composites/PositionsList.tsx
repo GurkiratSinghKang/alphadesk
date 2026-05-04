@@ -258,7 +258,7 @@ export default function PositionsList({
                   </td>
 
                   <td className="align-middle py-2.5 pr-2.5">
-                    <div className="flex flex-col gap-[2px]">
+                    <div className="flex flex-col gap-0.5">
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-display italic text-label text-fg-dim truncate">
                           {p.strategyName}
@@ -344,7 +344,7 @@ export default function PositionsList({
                   </td>
 
                   <td className="align-middle py-2.5 pr-2.5">
-                    <div className="flex flex-col gap-[2px] min-w-0">
+                    <div className="flex flex-col gap-0.5 min-w-0">
                       <span className="font-mono text-body-sm text-fg-dim truncate block">
                         {priceLabel}
                       </span>
