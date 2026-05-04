@@ -250,3 +250,59 @@ class TestLayer2DailyPnL:
         ks.check_layer2_daily_pnl("pead", ctx)
         events = [ev for ev in repo._events.values() if ev.strategy == "pead" and ev.layer == 2]
         assert len(events) == 1
+
+
+class TestLayer3Manual:
+    def test_no_unresolved_event_returns_enabled(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        d = ks.check_layer3_manual("pead")
+        assert d.enabled is True
+
+    def test_unresolved_layer3_event_returns_disabled(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        repo.insert(DisabledEvent(
+            id=None, strategy="pead", layer=3,
+            triggered_at=datetime.now(timezone.utc),
+            manual_actor="alice",
+            reason="suspected data feed issue",
+        ))
+        ks = KillSwitch(repo=repo)
+        d = ks.check_layer3_manual("pead")
+        assert d.enabled is False
+        assert d.layer == 3
+        assert "suspected data feed issue" in d.reason
+
+    def test_resolved_event_returns_enabled(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ev = repo.insert(DisabledEvent(
+            id=None, strategy="pead", layer=3,
+            triggered_at=datetime.now(timezone.utc),
+            manual_actor="alice",
+        ))
+        repo.resolve(ev.id, resolved_by="alice")
+        ks = KillSwitch(repo=repo)
+        d = ks.check_layer3_manual("pead")
+        assert d.enabled is True
+
+    def test_unrelated_strategy_unaffected(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        repo.insert(DisabledEvent(
+            id=None, strategy="orb", layer=3,
+            triggered_at=datetime.now(timezone.utc),
+        ))
+        ks = KillSwitch(repo=repo)
+        assert ks.check_layer3_manual("pead").enabled is True
+        assert ks.check_layer3_manual("orb").enabled is False
+
+    def test_layer1_event_does_not_trigger_layer3(self) -> None:
+        # An auto-disable from Layer 1 should not satisfy Layer 3's check.
+        # (Layers are independent; only manual Layer-3 inserts gate Layer 3.)
+        repo = InMemoryDisabledEventsRepo()
+        repo.insert(DisabledEvent(
+            id=None, strategy="pead", layer=1,
+            triggered_at=datetime.now(timezone.utc),
+        ))
+        ks = KillSwitch(repo=repo)
+        d = ks.check_layer3_manual("pead")
+        assert d.enabled is True

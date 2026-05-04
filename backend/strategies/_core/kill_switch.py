@@ -217,3 +217,25 @@ class KillSwitch:
             reason=f"layer2: ratio {ratio:.2%} <= threshold {self.layer2_threshold:.2%}",
             metrics={"alloc_capital": ctx.alloc_capital, "realized_today": ctx.realized_today, "ratio": ratio},
         )
+
+    # -- Layer 3: manual emergency disable --------------------------------
+
+    def check_layer3_manual(self, strategy: str) -> Decision:
+        ev = self.repo.latest_unresolved_for_strategy(strategy, layer=3)
+        if ev is None:
+            return Decision(
+                enabled=True,
+                layer=0,
+                reason="layer3: no unresolved manual event",
+                metrics={},
+            )
+        return Decision(
+            enabled=False,
+            layer=3,
+            reason=f"layer3: manual disable — {ev.reason or 'no reason given'}",
+            metrics={
+                "event_id": ev.id,
+                "manual_actor": ev.manual_actor,
+                "triggered_at": ev.triggered_at.isoformat() if ev.triggered_at else None,
+            },
+        )
