@@ -48,6 +48,40 @@ def test_fill_simulator_sell_slippage():
     assert fills[0].price == Decimal("99.99")        # 100 − 1bps
 
 
+def test_fill_simulator_multileg_skips_when_no_options_provider(caplog):
+    """Plan B.1: multi-leg signal with no options_provider is skipped + logged.
+
+    Pre-B.1, multi-leg signals slipped through the symbol lookup and emitted
+    nothing silently. Now they're recognized and either dispatched (when an
+    options_provider is wired) or skipped with a structured warning so
+    operators see the gap.
+    """
+    import logging
+    from strategies._core.contracts import OptionLeg
+
+    cfg = BacktestConfig(start=date(2024, 1, 1), end=date(2024, 12, 31),
+                         options_provider=None)
+    sim = FillSimulator(cfg)
+    # Reset class-level warn flag so this test isn't order-sensitive
+    FillSimulator._multileg_warned = False
+    leg = OptionLeg(
+        occ_symbol="SPY240301C00500000",
+        side="buy",
+        quantity=1,
+    )
+    signal = Signal(
+        symbol="SPY",
+        asof=date(2024, 1, 1),
+        order_type=OrderType.MKT,
+        quantity=1,
+        legs=[leg],
+    )
+    with caplog.at_level(logging.WARNING, logger="alphadesk.strategies._core.fills"):
+        fills = sim.fill([signal], next_bars={}, asof=date(2024, 1, 2))
+    assert fills == []  # no fill emitted
+    assert any("multi-leg" in r.message.lower() for r in caplog.records)
+
+
 def test_portfolio_apply_fill_updates_position_and_cash():
     p = Portfolio(Decimal("100000"))
     p.apply_fill(type("F", (), {
