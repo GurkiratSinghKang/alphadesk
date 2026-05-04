@@ -139,6 +139,39 @@
   --radius-lg: var(--radius-lg);
   --radius-xl: var(--radius-xl);
   --radius-pill: var(--radius-pill);
+
+  /* QA r6a — Typography size scale wired from design-tokens */
+  --text-display-lg: var(--fs-display-lg);
+  --text-display-md: var(--fs-display-md);
+  --text-h1: var(--fs-h1);
+  --text-h2: var(--fs-h2);
+  --text-h3: var(--fs-h3);
+  --text-numeric-hero: var(--fs-numeric-hero);
+  --text-numeric-lg: var(--fs-numeric-lg);
+  --text-numeric-md: var(--fs-numeric-md);
+  --text-body: var(--fs-body);
+  --text-body-sm: var(--fs-body-sm);
+  --text-label: var(--fs-label);
+
+  /* QA r6a — Spacing scale wired from design-tokens, with half-step extras */
+  --spacing-0_5: 2px;
+  --spacing-1: var(--space-1);
+  --spacing-1_5: 6px;
+  --spacing-2: var(--space-2);
+  --spacing-3: var(--space-3);
+  --spacing-4: var(--space-4);
+  --spacing-5: var(--space-5);
+  --spacing-6: var(--space-6);
+  --spacing-8: var(--space-8);
+  --spacing-10: var(--space-10);
+  --spacing-12: var(--space-12);
+  --spacing-16: var(--space-16);
+  --spacing-24: var(--space-24);
+
+  /* QA r6a — Shadow tokens */
+  --shadow-1: var(--shadow-1);
+  --shadow-2: var(--shadow-2);
+  --shadow-hair: var(--shadow-hair);
 }
 
 /* ─── Fallback defaults ─────────────────────────────────────────── */
