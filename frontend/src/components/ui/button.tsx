@@ -12,8 +12,6 @@ import { cn } from "@/lib/utils"
  *  - ghost      transparent, hover muted background
  *  - buy        chartreuse tint, uppercase tracked label
  *  - sell       coral tint, uppercase tracked label
- *  - buy-solid  solid chartreuse bg with `text-profit-foreground` (near-black)
- *  - sell-solid solid coral bg with `text-loss-foreground` (near-white)
  *  - link       gold text + gold-dim underline, no padding
  *
  * Sizes: xs · sm (26px) · default (md, 34px) · lg (42px) · icon variants preserved.
@@ -51,10 +49,6 @@ const buttonVariants = cva(
           "bg-transparent text-fg-dim hover:text-fg hover:bg-bg-elev-1",
         buy: "bg-up-500/10 text-up-500 border-up-500/30 hover:bg-up-500/20 uppercase tracking-[0.1em] text-[12px]",
         sell: "bg-down-500/10 text-down-500 border-down-500/30 hover:bg-down-500/20 uppercase tracking-[0.1em] text-[12px]",
-        "buy-solid":
-          "bg-profit text-profit-foreground border-transparent hover:bg-up-700 uppercase tracking-[0.08em]",
-        "sell-solid":
-          "bg-loss text-loss-foreground border-transparent hover:bg-down-700 uppercase tracking-[0.08em]",
         link: "bg-transparent text-brand border-0 border-b border-brand-dim rounded-none px-0 h-auto hover:text-gold-300",
 
         // Legacy aliases — keep older callers working

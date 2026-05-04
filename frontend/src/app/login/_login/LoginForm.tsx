@@ -392,7 +392,7 @@ export default function LoginForm() {
         type="submit"
         size="lg"
         variant="primary"
-        className="mt-1 h-12 w-full rounded-[8px] bg-[#0f7a5d] font-sans text-[15px] font-semibold text-white shadow-[0_18px_38px_-28px_rgba(15,122,93,0.85)] hover:bg-[#0c654d]"
+        className="mt-1 h-12 w-full rounded-[8px] font-sans text-[15px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_1px_2px_rgba(0,0,0,0.08)]"
         disabled={disabled}
       >
         {loading ? (
