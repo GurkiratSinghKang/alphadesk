@@ -912,7 +912,7 @@ export default function PipelinePage() {
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <Target className="h-4 w-4" aria-hidden />
-                <h2 className="t-section-cap">
+                <h2 className="t-section-display">
                   Current positions
                 </h2>
                 {displayPositions.length > 0 && (
@@ -1028,7 +1028,7 @@ export default function PipelinePage() {
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <Zap className="h-4 w-4" aria-hidden />
-                <h2 className="t-section-cap">
+                <h2 className="t-section-display">
                   Latest pipeline run
                 </h2>
               </div>
@@ -1093,7 +1093,7 @@ export default function PipelinePage() {
               <div className="rounded-xl border border-border bg-[var(--surface)] p-5">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h2 className="t-section-cap text-foreground">
+                    <h2 className="t-section-display text-foreground">
                       Build or backtest
                     </h2>
                     <p className="t-meta u-muted mt-1">
@@ -1119,7 +1119,7 @@ export default function PipelinePage() {
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <Clock className="h-4 w-4" aria-hidden />
-                <h2 className="t-section-cap">
+                <h2 className="t-section-display">
                   History &nbsp;<span className="t-meta">· last 7 days</span>
                 </h2>
               </div>
@@ -1330,7 +1330,7 @@ export default function PipelinePage() {
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <TrendingUp className="h-4 w-4" aria-hidden />
-                <h2 className="t-section-cap">
+                <h2 className="t-section-display">
                   Performance summary
                 </h2>
               </div>
