@@ -37,6 +37,7 @@ import EquityPanel, {
 import SignalSection from "./_strategy/SignalSection";
 import PositionsSection from "./_strategy/PositionsSection";
 import LimitationsSection from "./_strategy/LimitationsSection";
+import KillSwitchStatusPanel from "./_strategy/KillSwitchStatusPanel";
 import StrategyDisclosure from "@/components/strategies/StrategyDisclosure";
 
 // ─── Slug alias (canonical strategy ids) ────────────────────────
@@ -793,10 +794,19 @@ export default function StrategyDetailPage() {
         />
       </section>
 
-      {/* § 04 References */}
+      {/* § 04 Health (kill-switch). Admin-only — quietly hides for non-admins. */}
+      <section className="flex flex-col gap-6">
+        <SectionRule tag="§ 04 · Health" />
+        <KillSwitchStatusPanel
+          strategyId={strategyId}
+          strategyName={meta.shortName ?? meta.name ?? strategyId}
+        />
+      </section>
+
+      {/* § 05 References */}
       {academicSources.length > 0 ? (
         <section className="flex flex-col gap-4">
-          <SectionRule tag="§ 04 · References" />
+          <SectionRule tag="§ 05 · References" />
           <ul className="flex flex-col gap-2">
             {academicSources.map((src, i) => (
               <li
@@ -810,10 +820,10 @@ export default function StrategyDetailPage() {
         </section>
       ) : null}
 
-      {/* § 05 Known limitations */}
+      {/* § 06 Known limitations */}
       {knownLimitations.length > 0 ? (
         <section className="flex flex-col gap-4">
-          <SectionRule tag="§ 05 · Known limitations" />
+          <SectionRule tag="§ 06 · Known limitations" />
           <LimitationsSection items={knownLimitations} />
         </section>
       ) : null}

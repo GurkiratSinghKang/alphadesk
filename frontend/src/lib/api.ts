@@ -517,6 +517,65 @@ export function getStrategyAnalytics(strategyId: string) {
   return apiFetch<StrategyAnalytics>(`/api/v1/strategies/${strategyId}/analytics`);
 }
 
+// ── Kill-switch (Plan B.5) ────────────────────────────────────────────────
+
+export interface DisabledEvent {
+  id: number;
+  strategy: string;
+  /** 1 = drawdown, 2 = daily-pnl, 3 = manual */
+  layer: 1 | 2 | 3;
+  triggered_at: string; // ISO datetime
+  reason: string | null;
+  manual_actor: string | null;
+  peak_nav: number | null;
+  current_nav: number | null;
+  realized_pnl: number | null;
+  alloc_capital: number | null;
+  threshold: number | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+}
+
+export interface EmergencyDisableResponse {
+  success: boolean;
+  event_id: number | null;
+  message: string;
+}
+
+export interface ReEnableResponse {
+  success: boolean;
+  resolved_event_id: number | null;
+  message: string;
+}
+
+export function getStrategyDisabledEvents(strategyId: string, includeResolved = false) {
+  const params = includeResolved ? "?include_resolved=true" : "";
+  return apiFetch<DisabledEvent[]>(
+    `/api/v1/strategies/${encodeURIComponent(strategyId)}/disabled-events${params}`,
+  );
+}
+
+export function emergencyDisableStrategy(strategyId: string, reason: string) {
+  return apiFetch<EmergencyDisableResponse>(
+    `/api/v1/strategies/${encodeURIComponent(strategyId)}/emergency-disable`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    },
+  );
+}
+
+export function reEnableStrategy(strategyId: string) {
+  return apiFetch<ReEnableResponse>(
+    `/api/v1/strategies/${encodeURIComponent(strategyId)}/re-enable`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    },
+  );
+}
+
 export interface StrategyPositionDetail {
   symbol: string;
   shares: number;
