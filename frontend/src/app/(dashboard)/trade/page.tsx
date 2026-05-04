@@ -66,6 +66,7 @@ import { getBars, getOrders, placeOrder } from "@/lib/api";
 import { barsRequestForRange } from "@/lib/chartRange";
 import { parseOccSymbol } from "@/lib/occ";
 import { ORDER_BAR_DEFAULTS, isValidOrderQty } from "@/lib/orderDefaults";
+import { isMarketOpen } from "@/lib/marketHours";
 import { isWorkingOrderStatus } from "@/lib/orders";
 import type { OptionStrategyDraft, OptionStrategyLeg } from "@/lib/optionsPayoff";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -166,6 +167,10 @@ export default function TradePage() {
   const tradeContextSymbol = urlUnderlyingSymbol ?? selectedSymbol;
   // Wave 14 perf-audit-r3 P0 #3: scoped to selected symbol only.
   const selectedQuote = useQuote(tradeContextSymbol);
+  // QA r1 A2: when an option contract is staged, also subscribe to the
+  // contract's own quote so OrderBar telemetry can surface the option market
+  // (bid/ask/spread) instead of the underlying stock's. Underlying freshness
+  // remains the broker-degraded gate (see buildExecutionReadiness).
   const { data: strategiesResp } = useStrategies();
 
   const rail = useMemo(() => toRailItems(strategiesResp), [strategiesResp]);
@@ -349,6 +354,16 @@ export default function TradePage() {
   const quote = toQuote(selectedQuote ?? undefined);
   const meta = toMetaCells(selectedQuote ?? undefined);
   const symbol = toMarketSymbol(tradeContextSymbol);
+  // QA r1 A2: option-contract quote (single-leg). useQuote("") returns null
+  // and is a no-op subscription, so this is cheap when no contract is staged.
+  const optionContractRawQuote = useQuote(activeContract?.occ ?? "");
+  const optionContractQuote = useMemo(
+    () =>
+      activeContract && optionContractRawQuote
+        ? toQuote(optionContractRawQuote)
+        : null,
+    [activeContract, optionContractRawQuote],
+  );
   const quoteTone = quote.change > 0 ? "text-profit" : quote.change < 0 ? "text-loss" : "text-fg-muted";
   const [symbolDraft, setSymbolDraft] = useState(tradeContextSymbol);
   useEffect(() => {
@@ -474,12 +489,16 @@ export default function TradePage() {
       brokerDegraded,
       tradeContextSymbol,
     });
+    const nowEpochSubmit = Date.now() / 1000;
     const submittedReadiness = buildExecutionReadiness({
       preview: submittedPreview,
       quote: executionQuote,
       chartLimited: seriesError != null,
       chartLoading: seriesLoading,
       brokerDegraded,
+      quoteAgeSeconds:
+        quote.timestamp == null ? null : Math.max(0, nowEpochSubmit - quote.timestamp),
+      marketOpen: isMarketOpen(),
     });
 	    if (!submittedReadiness.canSubmit) {
 	      fail(submittedReadiness.blocker ?? "Resolve the execution gate before submitting.");
@@ -628,6 +647,30 @@ export default function TradePage() {
     setTicketDraft(null);
   }, [orderBarDefaults]);
   const executionQuote = buildExecutionQuote(quote);
+  // QA r1 A2: when an option contract is staged, build a parallel
+  // executionQuote from the contract's own quote. Fall back to a placeholder
+  // when the option quote hasn't arrived yet — better to show "--" than the
+  // underlying stock's bid/ask under an options ticket.
+  const optionExecutionQuote = useMemo(
+    () => (optionContractQuote ? buildExecutionQuote(optionContractQuote) : null),
+    [optionContractQuote],
+  );
+  // What the OrderBar telemetry cards (Bid / Ask / Spread) should show.
+  // Multi-leg combos: per-leg pricing has no single combo bid/ask, so we
+  // surface "--" rather than misleadingly showing the underlying.
+  const telemetryQuote =
+    activeLegs.length > 0
+      ? null
+      : activeContract
+        ? optionExecutionQuote
+        : executionQuote;
+  const telemetryBidLabel =
+    telemetryQuote?.bidLabel ?? (activeLegs.length > 0 ? "per leg" : "--");
+  const telemetryAskLabel =
+    telemetryQuote?.askLabel ?? (activeLegs.length > 0 ? "per leg" : "--");
+  const telemetrySpreadLabel =
+    telemetryQuote?.spreadLabel ?? (activeLegs.length > 0 ? "combo" : "--");
+  const telemetrySpreadTone = telemetryQuote?.spreadTone ?? "text-fg-muted";
   const payoffDraft = useMemo(
     () =>
       buildOptionPayoffDraft({
@@ -679,6 +722,12 @@ export default function TradePage() {
       tradeContextSymbol,
     ],
   );
+  const quoteAgeSeconds = useMemo(() => {
+    if (quote.timestamp == null) return null;
+    const nowEpoch = Date.now() / 1000;
+    return Math.max(0, nowEpoch - quote.timestamp);
+  }, [quote.timestamp]);
+  const marketOpen = useMemo(() => isMarketOpen(), []);
   const executionReadiness = useMemo(
     () =>
       buildExecutionReadiness({
@@ -687,8 +736,10 @@ export default function TradePage() {
         chartLimited: seriesError != null,
         chartLoading: seriesLoading,
         brokerDegraded,
+        quoteAgeSeconds,
+        marketOpen,
       }),
-    [tradePreview, executionQuote, seriesError, seriesLoading, brokerDegraded],
+    [tradePreview, executionQuote, seriesError, seriesLoading, brokerDegraded, quoteAgeSeconds, marketOpen],
   );
   const chartOrderDraft = useMemo(
     () =>
@@ -876,9 +927,9 @@ export default function TradePage() {
 
           <div className="grid grid-cols-2 gap-px bg-border-hair xl:grid-cols-4">
             <TradeTelemetryCard icon={ChartLine} label={primaryQuoteLabel} value={primaryQuoteValue} valueClassName={primaryQuoteTone} />
-            <TradeTelemetryCard icon={Crosshair} label="Bid" value={executionQuote.bidLabel} />
-            <TradeTelemetryCard icon={ArrowsLeftRight} label="Ask" value={executionQuote.askLabel} />
-            <TradeTelemetryCard icon={Rows} label="Spread" value={executionQuote.spreadLabel} valueClassName={executionQuote.spreadTone} />
+            <TradeTelemetryCard icon={Crosshair} label="Bid" value={telemetryBidLabel} />
+            <TradeTelemetryCard icon={ArrowsLeftRight} label="Ask" value={telemetryAskLabel} />
+            <TradeTelemetryCard icon={Rows} label="Spread" value={telemetrySpreadLabel} valueClassName={telemetrySpreadTone} />
           </div>
 
           <div className="bg-bg-elev-1 p-3 md:p-4">
@@ -1350,12 +1401,16 @@ function buildExecutionReadiness({
   chartLimited,
   chartLoading,
   brokerDegraded,
+  quoteAgeSeconds,
+  marketOpen,
 }: {
   preview: PreTradePreview;
   quote: ExecutionQuote;
   chartLimited: boolean;
   chartLoading: boolean;
   brokerDegraded: boolean;
+  quoteAgeSeconds: number | null;
+  marketOpen: boolean;
 }): ExecutionReadiness {
   const hardBlock = preview.checks.find((check) => check.tone === "block");
   const review = preview.checks.find((check) => check.tone === "warn");
@@ -1377,6 +1432,41 @@ function buildExecutionReadiness({
 
   if (hardBlock) {
     const quoteBlocked = hardBlock.label === "Quote freshness" || !quote.hasTwoSided;
+    // Distinguish a stale-feed outage from a temporary user-fixable gap.
+    // > 1h stale during regular hours = upstream feed problem; user can do
+    // nothing, so we mirror brokerDegraded copy. Outside regular hours, a
+    // weekend/overnight gap is expected — say so plainly instead of asking
+    // the user to "resolve" it.
+    const feedSeverelyStale =
+      quoteBlocked && quoteAgeSeconds != null && quoteAgeSeconds > 3600;
+    if (feedSeverelyStale && marketOpen) {
+      return {
+        label: "Limited",
+        tone: "loss",
+        headline: "Market data feed delayed",
+        detail: "We have not received a fresh quote for this symbol in over an hour. The desk has been alerted; submission resumes when the feed catches up.",
+        canSubmit: false,
+        blocker: `Feed delayed · last quote ${formatAgeDuration(quoteAgeSeconds)} old.`,
+        submitLabel: "Feed delayed — try again shortly",
+        destination: "Submit locked while market data feed is delayed",
+        reviewCopy: "Live send locked · market data feed delayed",
+        icon: Plug,
+      };
+    }
+    if (feedSeverelyStale && !marketOpen) {
+      return {
+        label: "Closed",
+        tone: "muted",
+        headline: "Market is closed — no live quote",
+        detail: "Live two-sided quotes resume at the next regular session. You can still review and stage the ticket; submission unlocks at the open.",
+        canSubmit: false,
+        blocker: `Market closed · last quote ${formatAgeDuration(quoteAgeSeconds)} old.`,
+        submitLabel: "Awaiting market open",
+        destination: "Submit unlocks at next regular session open",
+        reviewCopy: "Submit locked · market closed",
+        icon: Clock,
+      };
+    }
     return {
       label: "Blocked",
       tone: "loss",

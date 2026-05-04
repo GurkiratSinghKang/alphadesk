@@ -12,21 +12,12 @@ export const spec = {
     { kind: "wait", for: "networkidle", timeout: 15000 },
     { kind: "snapshot", label: "initial" },
 
-    // Strategy rail — desktop only. On mobile the rail is hidden
-    // (`hidden md:block`) and strategies are reached via the TopBar
-    // hamburger sheet (covered by TopBar tests). The desktop rail click
-    // is best-effort — if no matching rail/card is visible, skip cleanly.
-    {
-      kind: "click-if-present",
-      selector: "[data-testid=strategy-rail] [role=button], [data-testid^=strategy-card]",
-      label: "strategy-rail-click",
-    },
-    { kind: "wait", for: "networkidle", timeout: 8000 },
-    { kind: "snapshot", label: "after-strategy-click" },
-
-    // Back to dashboard.
-    { kind: "navigate", to: "/" },
-    { kind: "wait", for: "networkidle", timeout: 8000 },
+    // QA r1 C2: the standalone strategy-rail was removed in the 2026-04-20
+    // dashboard redesign (rail is now reached via TopBar hamburger sheet).
+    // The previous `[data-testid=strategy-rail]` selector was permanently
+    // dead (verified — components on the dashboard use `data-slot=`, no
+    // `data-testid` attributes are present). Step removed; strategy
+    // navigation coverage lives in topbar.mjs / strategies-list.mjs.
 
     // Command palette — Cmd+K / Ctrl+K. Known harness artifact: headless
     // Chromium's `page.keyboard.press("Control+K")` doesn't reliably trigger

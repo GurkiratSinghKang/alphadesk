@@ -22,7 +22,23 @@ export const metadata: Metadata = {
  */
 export default function LoginResetPage() {
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-[720px] flex-col gap-10 px-6 py-16">
+    <>
+      {/* QA r1 B2: skip link + landmark structure (matches dashboard layout
+          pattern). Previously this page had no <main>, no skip-link, no
+          banner — fails WCAG 2.4.1 (Bypass Blocks) and 1.3.1 (Info and
+          Relationships). */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:w-auto focus:h-auto focus:min-h-[44px] focus:inline-flex focus:items-center focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:bg-primary focus:text-primary-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:rounded-md"
+      >
+        Skip to content
+      </a>
+      <main
+        id="main-content"
+        role="main"
+        tabIndex={-1}
+        className="mx-auto flex min-h-screen w-full max-w-[720px] flex-col gap-10 px-6 py-16"
+      >
       <nav
         className="flex items-center gap-2 font-sans text-[12px] text-fg-muted"
         aria-label="Breadcrumb"
@@ -78,6 +94,7 @@ export default function LoginResetPage() {
           Back to sign in
         </Link>
       </div>
-    </div>
+      </main>
+    </>
   );
 }
