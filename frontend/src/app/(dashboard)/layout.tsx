@@ -232,7 +232,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       );
     }
     return (
-      <div className="alpha-auth-shell flex min-h-screen flex-col overflow-x-hidden">
+      <div className="flex min-h-screen flex-col overflow-x-hidden bg-bg">
         <div className="h-12 border-b border-border bg-ink-050" />
         <div className="h-7 border-b border-border bg-ink-100" />
         <main className="flex-1" />
@@ -286,8 +286,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }
 
   // ─── Non-desk dashboard pages keep the pre-F3 chrome. ──────────
+  // QA r1 A3: removed `alpha-auth-shell` here — that class paints a cream
+  // gradient meant for the marketing/auth frame (login, request-access).
+  // Dashboard pages without their own `bg-bg` override (notably
+  // strategies/[id]) were rendering as cream-on-cream ghost text.
   return (
-    <div className="alpha-auth-shell flex min-h-screen flex-col overflow-x-hidden">
+    <div className="flex min-h-screen flex-col overflow-x-hidden bg-bg">
       {/* a11y audit r3 — WCAG 1.4.3: previous focus:text-white on gold bg
           was 2.4:1 (fails AA). Use focus:text-primary-foreground (near-black
           on gold ≈ 8:1). */}

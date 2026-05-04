@@ -26,11 +26,36 @@ const VIEWPORTS = {
   "mobile-390": { width: 390, height: 844, isMobile: true },
 };
 
+// QA r1 C3: extended from 6 → 22 routes so every shipped surface gets the
+// strict tap-target / contrast / focus / overflow audit. Cases without a
+// matching FIRST_VIEWPORT_EXPECTATIONS entry still get every quality check
+// run; only the optional route-integrity / visible-text-grouping checks are
+// skipped. New cases will need a `--update-baseline` run on first execution.
 const CASES = [
+  // Authenticated app
   { name: "dashboard-desktop", path: "/", viewport: "desktop-1440" },
   { name: "trade-desktop", path: "/trade", viewport: "desktop-1440" },
   { name: "strategies-desktop", path: "/strategies", viewport: "desktop-1440" },
+  { name: "strategies-detail-desktop", path: "/strategies/momentum-quality", viewport: "desktop-1440" },
+  { name: "strategies-earnings-desktop", path: "/strategies/earnings-options-play", viewport: "desktop-1440" },
+  { name: "strategies-tar-desktop", path: "/strategies/trading-agents-research", viewport: "desktop-1440" },
   { name: "analytics-desktop", path: "/analytics", viewport: "desktop-1440" },
+  { name: "alerts-desktop", path: "/alerts", viewport: "desktop-1440" },
+  { name: "pipeline-desktop", path: "/pipeline", viewport: "desktop-1440" },
+  { name: "reports-desktop", path: "/reports", viewport: "desktop-1440" },
+  { name: "settings-desktop", path: "/settings", viewport: "desktop-1440" },
+  // Public / auth-adjacent
+  { name: "login-desktop", path: "/login", viewport: "desktop-1440" },
+  { name: "login-reset-desktop", path: "/login/reset", viewport: "desktop-1440" },
+  { name: "request-access-desktop", path: "/request-access", viewport: "desktop-1440" },
+  { name: "about-desktop", path: "/about", viewport: "desktop-1440" },
+  { name: "contact-desktop", path: "/contact", viewport: "desktop-1440" },
+  { name: "docs-desktop", path: "/docs", viewport: "desktop-1440" },
+  { name: "help-earnings-desktop", path: "/help/earnings-data", viewport: "desktop-1440" },
+  { name: "privacy-desktop", path: "/privacy", viewport: "desktop-1440" },
+  { name: "terms-desktop", path: "/terms", viewport: "desktop-1440" },
+  { name: "risk-desktop", path: "/risk", viewport: "desktop-1440" },
+  // Mobile spot-checks for the highest-traffic surfaces
   { name: "dashboard-mobile", path: "/", viewport: "mobile-390" },
   { name: "trade-mobile", path: "/trade", viewport: "mobile-390" },
 ];

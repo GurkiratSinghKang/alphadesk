@@ -98,7 +98,8 @@ $RECYCLE.BIN/
 # =============================================================================
 # QA harness output
 # =============================================================================
-qa/runs/
+qa/runs/*
+!qa/runs/LATEST.md
 qa/visual/current/
 qa/visual/diff/
 qa/visual/manifest.json
