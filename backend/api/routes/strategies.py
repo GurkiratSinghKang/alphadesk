@@ -313,9 +313,9 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "mean-reversion": {
         "name": "Mean Reversion",
-        "description": "Planned quality-conditioned mean-reversion concept. No backend implementation or live orders yet; use rsi2-reversal for the implemented Connors RSI(2) strategy.",
-        # Wave 6γ (persona-109 P2): planned-only catalogue entry.
-        "status": StrategyStatus.PLANNED,
+        "description": "Long-only weekly-cadence reversal on US large-caps trading > 2σ below their 60-day MA, gated on Piotroski F-score ≥ 5 (quality) and a 7-session pre-earnings skip. Distinct from rsi2-reversal (which is 2-3 session Connors RSI(2)); this is the slower, fundamentally aware book documented by De Bondt-Thaler (1985) + Piotroski (2000). 30-day time-stop or MA-cross exit, whichever first.",
+        # Plan C.4: backend strategy package landed; status is now ACTIVE.
+        "status": StrategyStatus.ACTIVE,
         "invested_amount": 0,
         "total_return_pct": 0,
         "sharpe_ratio": 0,

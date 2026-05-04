@@ -90,9 +90,10 @@ POST_OR_STRATEGIES = ["orb", "vwap"]
 MIDDAY_STRATEGIES = ["pairs_trading", "kama_breakout"]
 
 # Close window (3:30 PM) — MOC entry strategies + VRP scan
+# Plan C.4: removed `mean_reversion` from this list — its real scheduling
+# is weekly (Friday 3:30 PM), per its spec; it now lives in WEEKLY_STRATEGIES.
 CLOSE_STRATEGIES = [
     "rsi2_reversal",    # Connors: enter at close
-    "mean_reversion",   # End-of-day scan for oversold
     "vrp_harvest",      # IV surface established by 3 PM
     "earnings_vol",     # T-1 entries for upcoming earnings
 ]
@@ -105,8 +106,12 @@ MONTHLY_STRATEGIES = [
     "sector_rotation",  # 11-GICS-sector top-N rotation with bond fallback (Plan C.5)
 ]
 
-# Weekly (Friday 3:30 PM) — regime and cointegration refresh
-WEEKLY_STRATEGIES = ["regime_adaptive", "pairs_trading"]
+# Weekly (Friday 3:30 PM) — regime + cointegration + slow mean-reversion
+WEEKLY_STRATEGIES = [
+    "regime_adaptive",
+    "pairs_trading",
+    "mean_reversion",  # Slow / quality-conditioned reversal book (Plan C.4)
+]
 
 # ─── Schedule Windows ───────────────────────────────────────
 
