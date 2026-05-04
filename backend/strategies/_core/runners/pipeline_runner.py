@@ -29,6 +29,45 @@ from strategies._core.providers import ProviderBundle
 PositionsProvider = Callable[[date], list[Position] | Awaitable[list[Position]]]
 
 
+def invoke_strategy_with_kill_switch(
+    strategy: Any,
+    input: Any,
+    params: Any,
+    kill_switch: Any,
+    kill_switch_context: Any,
+) -> Any:
+    """Wrap strategy.run() with a kill-switch check.
+
+    Backtest and signal runners do NOT use this wrapper — they bypass the
+    kill-switch by design. Pipeline runner is the only production caller.
+
+    If ``kill_switch is None``, the strategy runs directly (used for tests
+    and for runner instances configured without a kill-switch).
+
+    Returns either:
+      - the strategy's normal StrategyResult, if kill-switch enabled
+      - a no-op StrategyResult with kill_switch_disabled diagnostic, if disabled
+    """
+    if kill_switch is None:
+        return strategy.run(input, params)
+
+    decision = kill_switch.is_enabled(strategy.name, kill_switch_context)
+    if not decision.enabled:
+        return StrategyResult(
+            signals=[],
+            diagnostics={
+                "kill_switch_disabled": True,
+                "kill_switch_layer": decision.layer,
+                "kill_switch_reason": decision.reason,
+                **decision.metrics,
+            },
+            warnings=[
+                f"Strategy {strategy.name} disabled by kill-switch layer {decision.layer}: {decision.reason}"
+            ],
+        )
+    return strategy.run(input, params)
+
+
 class StateStore:
     """Abstract state persistence — read/write a strategy's state dict.
 
@@ -320,6 +359,14 @@ class DailyPipelineRunner:
             seed=seed,
             rng=np.random.default_rng(seed),
         )
+        # TODO(kill-switch-wire-up): replace this call with
+        # invoke_strategy_with_kill_switch(strategy=self._strategy, input=input,
+        # params=params, kill_switch=self._kill_switch,
+        # kill_switch_context=KillSwitchContext(peak_nav=..., current_nav=...,
+        # alloc_capital=..., realized_today=...)). Deferred from Task 9 because
+        # peak_nav/alloc_capital/realized_today require plumbing through
+        # master_agent + trade_ledger; the wrapper itself is unit-tested in
+        # test_kill_switch_pipeline.py.
         result = self._strategy.run(input, params)
         if fetch_warnings:
             result.warnings = [*fetch_warnings, *(result.warnings or [])]
