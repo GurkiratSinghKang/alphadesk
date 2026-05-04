@@ -116,3 +116,24 @@ class TestPipelineRunnerKillSwitch:
         )
         mock_strategy.run.assert_called_once()
         assert result.diagnostics.get("ran") is True
+
+
+class TestBacktestBypassesKillSwitch:
+    def test_backtest_runner_does_not_import_kill_switch(self) -> None:
+        """Backtests must not consult the kill-switch — verify by inspection."""
+        from pathlib import Path
+        backtest_path = Path(__file__).resolve().parents[1] / "runners" / "backtest_runner.py"
+        text = backtest_path.read_text()
+        assert "kill_switch" not in text.lower(), (
+            "backtest_runner.py imports or references kill_switch; "
+            "backtests must always run regardless of production state."
+        )
+
+    def test_signal_runner_does_not_import_kill_switch(self) -> None:
+        from pathlib import Path
+        signal_path = Path(__file__).resolve().parents[1] / "runners" / "signal_runner.py"
+        text = signal_path.read_text()
+        assert "kill_switch" not in text.lower(), (
+            "signal_runner.py imports or references kill_switch; "
+            "signal replay must always run regardless of production state."
+        )
