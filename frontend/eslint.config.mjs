@@ -14,6 +14,35 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  // QA r2-3 — ban TOKEN-EQUIVALENT arbitrary-px escapes. Codemods (PR #14, #15)
+  // migrated existing escapes to wired tokens; this rule prevents new ones.
+  // Design-intentional arbitrary px (e.g. min-h-[44px] tap targets, h-[260px]
+  // chart heights) are still allowed — only the values with an exact token
+  // equivalent are banned.
+  {
+    files: ["src/**/*.{ts,tsx,js,jsx}"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "Literal[value=/\\btext-\\[(12|13|15|16|17|20|22|28|48)px\\]/]",
+          message: "Use text-* token utilities (text-label, text-body-sm, text-body, text-numeric-md, text-h3, text-numeric-lg, text-h2, text-h1, text-numeric-hero) — these px values have wired tokens. See qa/reviews/UI-REMEDIATION-PLAN.md §0.",
+        },
+        {
+          selector: "Literal[value=/\\b(p|pl|pr|pt|pb|px|py|m|ml|mr|mt|mb|mx|my|gap|gap-x|gap-y|space-x|space-y|w|h|min-w|min-h|max-w|max-h|top|bottom|left|right|inset-x|inset-y)-\\[(2|4|6|8|12|16|20|24|32|40|48|64|96)px\\]/]",
+          message: "Use spacing-* token utilities (gap-3, p-4, etc. — Tailwind defaults match the wired --space-* scale) — these px values have exact-token equivalents. See qa/reviews/UI-REMEDIATION-PLAN.md §0.",
+        },
+        {
+          selector: "TemplateElement[value.raw=/\\btext-\\[(12|13|15|16|17|20|22|28|48)px\\]/]",
+          message: "Use text-* token utilities — these px values have wired tokens.",
+        },
+        {
+          selector: "TemplateElement[value.raw=/\\b(p|pl|pr|pt|pb|px|py|m|ml|mr|mt|mb|mx|my|gap|gap-x|gap-y|space-x|space-y|w|h|min-w|min-h|max-w|max-h|top|bottom|left|right|inset-x|inset-y)-\\[(2|4|6|8|12|16|20|24|32|40|48|64|96)px\\]/]",
+          message: "Use spacing-* token utilities — these px values have exact-token equivalents.",
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;
