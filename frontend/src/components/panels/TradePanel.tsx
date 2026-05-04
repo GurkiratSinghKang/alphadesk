@@ -1457,7 +1457,7 @@ function JournalTab() {
                       autoFocus
                       onKeyDown={(e) => { if (e.key === "Enter") handleSaveNote(entry.id); }}
                     />
-                    <button onClick={() => handleSaveNote(entry.id)} className="h-6 px-2 rounded bg-primary text-label font-medium text-primary-foreground">Save</button>
+                    <button onClick={() => handleSaveNote(entry.id)} className="h-6 px-2 rounded bg-primary text-label font-medium text-primary-foreground">Save note</button>
                     <button onClick={() => { setEditingId(null); setNoteText(""); }} className="h-6 px-2 rounded border border-border text-label text-muted-foreground">Cancel</button>
                   </div>
                 ) : (

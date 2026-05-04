@@ -230,7 +230,7 @@ function ShareCard({ data }: { data: ShareCardData }) {
       {/* AI Summary */}
       {data.summary && (
         <div className="rounded-lg bg-primary/5 border border-primary/10 px-3 py-2 mb-4">
-          <div className="text-label text-primary/70 mb-1 font-medium">AI Analysis</div>
+          <div className="text-label text-primary/70 mb-1 font-medium">AI analysis</div>
           <p className="text-label text-foreground/80 leading-relaxed line-clamp-3">
             {data.summary}
           </p>
@@ -524,7 +524,7 @@ export function ShareTradeButton({ symbol: symbolProp, analysis, pnl, pnlPct }: 
         ctx.fillRect(20, yOffset, width - 40, 50);
         ctx.fillStyle = brand;
         ctx.font = `500 10px ${fontUi}`;
-        ctx.fillText("AI Analysis", 28, yOffset + 14);
+        ctx.fillText("AI analysis", 28, yOffset + 14);
         ctx.fillStyle = fg;
         ctx.font = `11px ${fontUi}`;
         const summaryTruncated = cardData.summary.length > 100 ? cardData.summary.slice(0, 100) + "..." : cardData.summary;

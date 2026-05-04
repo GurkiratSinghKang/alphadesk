@@ -267,7 +267,7 @@ export function StrategyTemplates({ open, onClose }: StrategyTemplatesProps) {
       } catch {
         toast({
           type: "error",
-          message: "Couldn't read current strategy states — aborting template",
+          message: "Couldn't read current strategy states — template cancelled.",
         });
         setActivating(false);
         return;

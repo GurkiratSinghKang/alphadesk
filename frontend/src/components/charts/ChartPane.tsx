@@ -201,7 +201,7 @@ const DRAWING_TOOLS: { id: DrawingTool; label: string; icon: React.ReactNode; di
   },
   {
     id: "text",
-    label: "Text (coming soon)",
+    label: "Text (in development)",
     disabled: true,
     icon: (
       <svg aria-hidden="true" width="13" height="13" viewBox="0 0 13 13" fill="none">

@@ -74,7 +74,7 @@ export function StrategyBuilder() {
       // lands, toast so the click is acknowledged instead of silent.
       toast({
         type: "info",
-        message: "Backtest engine coming soon — AI refinement is available today",
+        message: "Backtest engine is in development — AI refinement is available today.",
       });
     } finally {
       setBacktestRunning(false);

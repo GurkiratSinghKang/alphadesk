@@ -648,7 +648,7 @@ export default function OrderBar({
             </span>
           </span>
           <span className="shrink-0 font-mono text-label text-brand">
-            {advancedOpen ? "Hide" : "Show"}
+            {advancedOpen ? "Hide details" : "Show details"}
           </span>
         </button>
         {advancedOpen ? (
