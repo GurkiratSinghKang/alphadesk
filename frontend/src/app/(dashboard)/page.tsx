@@ -935,7 +935,7 @@ function DashboardCommandCenter({
                 </div>
                 <h2
                   id="dashboard-command-title"
-                  className="mt-3 text-[26px] font-semibold leading-[1.04] tracking-tight text-ink-1000 md:text-[32px]"
+                  className="mt-3 text-h1 font-semibold leading-[1.04] tracking-tight text-ink-1000 md:text-display-sm"
                   style={{ letterSpacing: 0 }}
                 >
                   Control room
@@ -945,7 +945,7 @@ function DashboardCommandCenter({
                 </p>
                 <div className="mt-4 rounded-md border border-border-hair bg-bg px-3 py-3">
                   <p className="t-label text-fg-hint">System readiness</p>
-                  <p className="mt-1 text-[14px] font-semibold leading-snug text-ink-1000">
+                  <p className="mt-1 text-body-sm font-semibold leading-snug text-ink-1000">
                     {dashboardReadiness.title}
                   </p>
                   <p className="mt-1 text-body-sm leading-relaxed text-fg-muted">
@@ -1106,7 +1106,7 @@ function MobilePriorityBrief({
           <StatusChip tone={escalationCount > 0 ? "amber" : "profit"} label={`${escalationCount} gate${escalationCount === 1 ? "" : "s"}`} />
         </div>
         <div className="mt-3 rounded-md border border-border-hair bg-bg px-3 py-3">
-          <p className="text-[14px] font-semibold leading-snug text-ink-1000">
+          <p className="text-body-sm font-semibold leading-snug text-ink-1000">
             {readiness.title}
           </p>
           <p className="mt-1 line-clamp-2 text-body-sm leading-snug text-fg-muted">
@@ -1445,7 +1445,7 @@ function FocusTickerPanel({
         </div>
         <div className="mt-2 flex items-end justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate font-mono text-[42px] font-medium leading-none tracking-tight text-fg">{symbol}</p>
+            <p className="truncate font-mono text-numeric-hero font-medium leading-none tracking-tight text-fg">{symbol}</p>
             <p className={cn("mt-2 font-mono text-body", tone)}>
               {hasQuote
                 ? `${formatCurrency(quote.last)} · ${quote.changePct >= 0 ? "+" : ""}${quote.changePct.toFixed(2)}%`

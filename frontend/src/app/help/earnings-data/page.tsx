@@ -66,7 +66,7 @@ export default function EarningsDataHelpPage() {
           {SECTIONS.map((section) => (
             <section key={section.tag}>
               <SectionRule tag={`§ ${section.tag}`} />
-              <h2 className="mt-5 font-display text-[24px] italic text-fg">
+              <h2 className="mt-5 font-display text-h2 italic text-fg">
                 {section.title}
               </h2>
               <div className="mt-4 flex flex-col gap-4">

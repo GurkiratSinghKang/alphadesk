@@ -148,17 +148,17 @@ export default function RequestAccessForm() {
           <div className="mb-4 inline-flex size-11 items-center justify-center rounded-[8px] border border-[#b9d8c6] bg-[#e8f5ea] text-[#0f7a5d]">
             <CheckCircle className="h-5 w-5" aria-hidden weight="regular" />
           </div>
-          <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-[#0f7a5d]">
+          <p className="font-mono text-eyebrow font-semibold uppercase tracking-[0.18em] text-[#0f7a5d]">
             § 02 · CONFIRMATION
           </p>
-          <h2 className="mt-3 font-sans text-[24px] font-semibold leading-tight tracking-tight text-[#12281f]">
+          <h2 className="mt-3 font-sans text-h2 font-semibold leading-tight tracking-tight text-[#12281f]">
             Request received
           </h2>
           <p className="mt-2 font-sans text-body-sm leading-[1.55] text-[#5d7268]">
             The desk reviews requests in batches — typically within one trading session. You'll get an email at the address above when access is provisioned.
           </p>
           {requestId && (
-            <p className="mt-1 font-mono text-[11px] text-[#8fad99]">
+            <p className="mt-1 font-mono text-eyebrow text-[#8fad99]">
               Ref {requestId}
             </p>
           )}
@@ -195,10 +195,10 @@ export default function RequestAccessForm() {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       <div className="border-b border-[#d7e4d9] pb-5">
-        <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-[#0f7a5d]">
+        <p className="font-mono text-eyebrow font-semibold uppercase tracking-[0.18em] text-[#0f7a5d]">
           Access intake
         </p>
-        <h2 className="mt-3 font-sans text-[24px] font-semibold leading-tight tracking-tight text-[#12281f]">
+        <h2 className="mt-3 font-sans text-h2 font-semibold leading-tight tracking-tight text-[#12281f]">
           Start your workspace request
         </h2>
         <p className="mt-2 font-sans text-body-sm leading-[1.55] text-[#5d7268]">

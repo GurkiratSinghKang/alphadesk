@@ -237,10 +237,10 @@ export default function LoginForm() {
       </noscript>
 
       <div className="border-b border-[#d7e4d9] pb-5">
-        <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-[#0f7a5d]">
+        <p className="font-mono text-eyebrow font-semibold uppercase tracking-[0.18em] text-[#0f7a5d]">
           Welcome back
         </p>
-        <h2 className="mt-3 font-sans text-[24px] font-semibold leading-tight tracking-tight text-[#12281f]">
+        <h2 className="mt-3 font-sans text-h2 font-semibold leading-tight tracking-tight text-[#12281f]">
           Open your workspace
         </h2>
         <p className={`mt-2 ${authMutedClass}`}>
@@ -378,7 +378,7 @@ export default function LoginForm() {
           >
             Clear local timer
           </button>
-          <p className="font-sans text-[11px] text-[#8f7260]">(server lockout still in effect)</p>
+          <p className="font-sans text-eyebrow text-[#8f7260]">(server lockout still in effect)</p>
         </div>
       )}
 

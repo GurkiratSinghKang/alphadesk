@@ -1781,7 +1781,7 @@ function TradeOverlay({
             <p className="truncate font-mono text-label font-semibold text-fg">
               {overlay.label} · {formatBookPrice(entry)}
             </p>
-            <p className="truncate text-[11px] text-fg-muted">
+            <p className="truncate text-eyebrow text-fg-muted">
               {overlay.summary ?? "Chart draft updates the ticket; submit remains explicit."}
             </p>
           </div>
@@ -1789,7 +1789,7 @@ function TradeOverlay({
             <button
               type="button"
               onClick={overlay.onCancel}
-              className="h-8 rounded border border-border-hair px-2.5 font-mono text-[11px] text-fg-muted hover:text-fg"
+              className="h-8 rounded border border-border-hair px-2.5 font-mono text-eyebrow text-fg-muted hover:text-fg"
             >
               Cancel
             </button>
@@ -1799,7 +1799,7 @@ function TradeOverlay({
               type="button"
               disabled={!overlay.canSubmit}
               onClick={overlay.onSubmit}
-              className="h-8 rounded border border-brand bg-brand px-3 font-mono text-[11px] font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45"
+              className="h-8 rounded border border-brand bg-brand px-3 font-mono text-eyebrow font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45"
             >
               {overlay.submitLabel ?? "Place"}
             </button>
@@ -1808,7 +1808,7 @@ function TradeOverlay({
       ) : null}
       {overlay.error ? (
         <div
-          className="absolute right-20 max-w-[260px] rounded border border-loss/30 bg-loss/10 px-2 py-1.5 text-[11px] text-loss"
+          className="absolute right-20 max-w-[260px] rounded border border-loss/30 bg-loss/10 px-2 py-1.5 text-eyebrow text-loss"
           style={{
             top:
               entryTop.unit === "px"
@@ -1848,7 +1848,7 @@ function TradeLevelRail({
       />
       <div
         className={cn(
-          "absolute right-0 top-0 -translate-y-1/2 rounded border bg-bg-card/90 px-2 py-1 font-mono text-[11px] shadow-sm backdrop-blur-md",
+          "absolute right-0 top-0 -translate-y-1/2 rounded border bg-bg-card/90 px-2 py-1 font-mono text-eyebrow shadow-sm backdrop-blur-md",
           tone === "entry" && "border-gold-300/40 text-gold-300",
           tone === "stop" && "border-loss/40 text-loss",
           tone === "target" && "border-profit/40 text-profit",

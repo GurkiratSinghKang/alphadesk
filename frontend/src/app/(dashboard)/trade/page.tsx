@@ -956,7 +956,7 @@ export default function TradePage() {
             </div>
             <h1
               data-slot="trade-symbol"
-              className="mt-3 text-h1 font-semibold leading-[1.04] tracking-tight text-ink-1000 md:text-[34px]"
+              className="mt-3 text-h1 font-semibold leading-[1.04] tracking-tight text-ink-1000 md:text-display-md"
               style={{ letterSpacing: 0 }}
             >
               Trade · {symbol.ticker}

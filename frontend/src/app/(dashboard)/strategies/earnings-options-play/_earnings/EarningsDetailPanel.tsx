@@ -493,7 +493,7 @@ function TickerFreshnessStrip({ context }: { context: TickerContext | null }) {
       {visible.map(([label, fact]) => (
         <span
           key={label}
-          className="inline-flex items-center gap-1.5 rounded-pill border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] px-2.5 py-1 font-mono text-[11px] text-[color:var(--fg-muted)]"
+          className="inline-flex items-center gap-1.5 rounded-pill border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] px-2.5 py-1 font-mono text-eyebrow text-[color:var(--fg-muted)]"
         >
           <span className="uppercase tracking-[0.08em]">{label}</span>
           <span className={freshnessClass(fact!.freshness.quality)}>

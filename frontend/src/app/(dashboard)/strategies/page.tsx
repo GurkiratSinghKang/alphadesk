@@ -246,7 +246,7 @@ function StrategyCatalogCard({
       <header className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <div
-            className="font-display italic text-[19px] leading-[1.1] text-fg"
+            className="font-display italic text-h3 leading-[1.1] text-fg"
             style={{ letterSpacing: 0 }}
           >
             {s.displayName}
@@ -452,7 +452,7 @@ function StrategyReadinessWorkbench({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="t-label text-fg-hint">Strategy readiness workbench</p>
-          <h2 className="mt-2 text-[18px] font-semibold leading-tight text-ink-1000">Scan what can trade, what needs data, and why live is blocked.</h2>
+          <h2 className="mt-2 text-h3 font-semibold leading-tight text-ink-1000">Scan what can trade, what needs data, and why live is blocked.</h2>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           <ReadinessDatum label="Ready" value={counts.ready} tone="profit" />
@@ -497,7 +497,7 @@ function ReadinessDatum({
   return (
     <div className="rounded-md border border-border-hair bg-bg px-3 py-2">
       <p className="t-label text-fg-hint">{label}</p>
-      <p className={cn("mt-1 font-mono text-[18px] leading-tight", readinessChipClass(tone).split(" ").find((part) => part.startsWith("text-")) ?? "text-fg")}>
+      <p className={cn("mt-1 font-mono text-h3 leading-tight", readinessChipClass(tone).split(" ").find((part) => part.startsWith("text-")) ?? "text-fg")}>
         {value}
       </p>
     </div>

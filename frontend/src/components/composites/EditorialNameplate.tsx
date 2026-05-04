@@ -38,7 +38,7 @@ export default function EditorialNameplate({
       )}
     >
       <div
-        className="flex items-baseline gap-1.5 font-display italic text-[32px] text-ink-1000"
+        className="flex items-baseline gap-1.5 font-display italic text-display-sm text-ink-1000"
         style={{ letterSpacing: 0, lineHeight: 1 }}
       >
         <span className="text-brand">α</span>
