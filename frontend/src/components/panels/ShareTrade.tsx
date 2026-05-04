@@ -379,7 +379,10 @@ export function ShareTradeButton({ symbol: symbolProp, analysis, pnl, pnlPct }: 
       const brand = token("--brand", "#c9a66b");
       const profit = token("--profit", "#a8d04d");
       const loss = token("--loss", "#e07856");
-      const amber = token("--amber-500", "#d9a441");
+      // QA r4-2 — moved from deprecated --amber-500 to --state-warning;
+      // this canvas paint represents a "caution" technical score (neither
+      // profit nor loss tier), which is exactly the warning intent.
+      const amber = token("--state-warning", "#d9a441");
       const fg = token("--fg", "#ece6d2");
       const fgMuted = token("--fg-muted", "#7d7665");
       const fgHint = token("--fg-hint", "#5b5547");
