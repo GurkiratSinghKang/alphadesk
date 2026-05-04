@@ -86,7 +86,7 @@ self.addEventListener("fetch", (event) => {
   // fallback. Skip the intercept for /trade routes — let the browser
   // surface its own offline dialog if connectivity is truly gone, but
   // never lose trade state via SW.
-  if (url.pathname.startsWith("/trade")) {
+  if (url.pathname === "/trade" || url.pathname.startsWith("/trade/")) {
     return; // do not call event.respondWith — browser handles the request
   }
 
