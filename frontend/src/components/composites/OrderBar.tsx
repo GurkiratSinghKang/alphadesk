@@ -480,55 +480,64 @@ export default function OrderBar({
       </Field>
 
       <Field label="Side">
-        {/* persona-99 #2 — stack Buy/Sell on separate rows below md with a
-            24px gap, and use solid destructive colour for Sell so the
-            visual cue goes beyond the label. Single-tap Sell arms a
-            confirmation state; second tap commits. Desktop (md+) keeps the
-            inline row with the tinted variants.
+        {/* r6b / BUG-03: replaced saturated filled Buy/Sell blocks with a
+            segmented control using semantic dots (border + dot only, neutral
+            background). The downstream "Place order" button is the
+            unambiguous gold primary action — the segmented control just
+            routes which side the order takes.
 
-            BUG-036 — WCAG 4.1.2: a pair of toggle buttons representing a
-            mutually-exclusive choice should be announced as a radio group.
-            Wrap in role="radiogroup" with an accessible name, and mark
-            each option as role="radio" + aria-checked. */}
+            BUG-036 — WCAG 4.1.2: radiogroup semantics preserved. */}
         <div
           role="radiogroup"
           aria-label="Order side"
-          className="flex flex-col md:flex-row gap-6 md:gap-1.5 w-full col-span-2 md:col-span-1"
+          className="flex border border-border-hair rounded-sm overflow-hidden col-span-2 md:col-span-1"
         >
-          <Button
+          <button
             type="button"
-            variant="buy-solid"
             role="radio"
             aria-checked={side === "buy"}
             data-active={side === "buy" || undefined}
             disabled={ticketLocked}
             onClick={() => handleSideClick("buy")}
             className={cn(
-              "min-h-11 min-w-11 md:min-h-10 md:min-w-0 w-full md:w-auto md:flex-initial",
-              // Desktop falls back to the tinted variant look so we keep
-              // the editorial workstation palette at the desk resolutions.
-              "md:!bg-up-500/10 md:!text-up-500 md:!border-up-500/30",
-              side !== "buy" && "!border-border-hair !bg-bg-elev-2 !text-fg-muted md:!border-up-500/25 md:!bg-up-500/5 md:!text-up-100"
+              "flex items-center gap-2 px-4 py-2 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:pointer-events-none disabled:opacity-55 transition-colors",
+              side === "buy"
+                ? "bg-bg-elev-2 border-r border-up-500/40 text-fg"
+                : "bg-transparent border-r border-border-hair text-fg-muted hover:text-fg"
             )}
           >
-            Buy
-          </Button>
-          <Button
+            <span
+              className={cn(
+                "size-1.5 rounded-full shrink-0",
+                side === "buy" ? "bg-up-500" : "border border-fg-muted"
+              )}
+              aria-hidden
+            />
+            BUY
+          </button>
+          <button
             type="button"
-            variant="sell-solid"
             role="radio"
             aria-checked={side === "sell"}
             data-active={side === "sell" || undefined}
             disabled={ticketLocked}
             onClick={() => handleSideClick("sell")}
             className={cn(
-              "min-h-11 min-w-11 md:min-h-10 md:min-w-0 w-full md:w-auto md:flex-initial",
-              "md:!bg-down-500/10 md:!text-down-500 md:!border-down-500/30",
-              side !== "sell" && !sellArming && "!border-border-hair !bg-bg-elev-2 !text-fg-muted md:!border-down-500/25 md:!bg-down-500/5 md:!text-down-100"
+              "flex items-center gap-2 px-4 py-2 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:pointer-events-none disabled:opacity-55 transition-colors",
+              side === "sell"
+                ? "bg-bg-elev-2 border-l border-down-500/40 text-fg"
+                : "bg-transparent border-l border-border-hair text-fg-muted hover:text-fg"
             )}
           >
-            {sellArming ? "Tap again to confirm" : "Sell"}
-          </Button>
+            <span
+              className={cn(
+                "size-1.5 rounded-full shrink-0",
+                side === "sell" ? "bg-down-500" : "border border-fg-muted"
+              )}
+              aria-hidden
+            />
+            {sellArming ? "TAP AGAIN" : "SELL"}
+          </button>
         </div>
       </Field>
 

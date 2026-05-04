@@ -88,7 +88,8 @@ describe("Trade page deep-link pre-fill", () => {
       expect((getByLabelText("Order type") as HTMLSelectElement).value).toBe("limit");
       expect((getByLabelText("Price") as HTMLInputElement).value).toBe("123.45");
       expect((getByLabelText("Strategy") as HTMLSelectElement).value).toBe("earnings-options-play");
-      expect(getByRole("radio", { name: "Sell" })).toHaveAttribute("aria-checked", "true");
+      // r6b: BUY/SELL segmented control uses uppercase labels per design-system contract.
+      expect(getByRole("radio", { name: "SELL" })).toHaveAttribute("aria-checked", "true");
     });
   });
 

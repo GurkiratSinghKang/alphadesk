@@ -177,7 +177,7 @@ export default function AuthProductFrame({
                 <div className="mt-7 flex flex-wrap gap-3">
                   <Link
                     href={primaryCta.href}
-                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[8px] bg-[#0f7a5d] px-5 font-sans text-[14px] font-semibold text-white shadow-[0_22px_48px_-30px_rgba(15,122,93,0.75)] transition-colors hover:bg-[#0c654d] active:scale-[0.98]"
+                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[8px] bg-brand px-5 font-sans text-[14px] font-semibold text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_1px_2px_rgba(0,0,0,0.08)] transition-colors hover:bg-gold-300 active:scale-[0.98]"
                   >
                     {primaryCta.label}
                     <AuthFrameIcon kind="arrow" className="size-4" />
