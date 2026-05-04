@@ -152,11 +152,16 @@ export default function RequestAccessForm() {
             Request received
           </p>
           <h2 className="mt-3 font-sans text-[24px] font-semibold leading-tight tracking-tight text-[#12281f]">
-            The desk has your details
+            Request received
           </h2>
           <p className="mt-2 font-sans text-[13px] leading-[1.55] text-[#5d7268]">
-            Reference {requestId || "queued"}. A human review is next; approved accounts receive credentials after risk policy and data entitlement checks.
+            The desk reviews requests in batches — typically within one trading session. You'll get an email at the address above when access is provisioned.
           </p>
+          {requestId && (
+            <p className="mt-1 font-mono text-[11px] text-[#8fad99]">
+              Ref {requestId}
+            </p>
+          )}
         </div>
         <div className="grid gap-3 rounded-[8px] border border-[#d7e4d9] bg-white/70 p-4">
           <p className="font-sans text-[13px] font-medium text-[#12281f]">What happens next</p>

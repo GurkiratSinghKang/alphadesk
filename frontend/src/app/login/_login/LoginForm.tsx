@@ -161,7 +161,7 @@ export default function LoginForm() {
             setError("Enter your authenticator code to complete sign-in.");
             return;
           }
-          setError(body.detail ?? "Invalid username or password");
+          setError(body.detail ?? "Those credentials didn't match. Confirm the username, the password, and that Caps Lock is off.");
           const nextList = pruneFailures([...failures, Date.now()], Date.now());
           setFailures(nextList);
           writeFailures(nextList);
@@ -204,7 +204,7 @@ export default function LoginForm() {
         );
         window.location.assign("/");
       } catch {
-        setError("Failed to connect to server");
+        setError("Sign-in failed before the desk could verify you. Refresh and retry; if it persists, email support@tradingalpha.net.");
       } finally {
         setLoading(false);
       }
@@ -376,8 +376,9 @@ export default function LoginForm() {
             onClick={handleResetLockout}
             className="self-start rounded-[6px] font-sans text-[12px] text-[#5d7268] underline decoration-[#b4c4b9] underline-offset-4 transition-colors hover:text-[#0f7a5d]"
           >
-            Reset lockout
+            Clear local timer
           </button>
+          <p className="font-sans text-[11px] text-[#8f7260]">(server lockout still in effect)</p>
         </div>
       )}
 

@@ -33,6 +33,7 @@ import {
   getChangeTextClass,
   cn,
 } from "@/lib/utils";
+import { fmtPlural } from "@/lib/intl";
 import { HelpCircle } from "@/components/ui/HelpCircle";
 import { safeGetItem, safeSetItem } from "@/lib/storage";
 import { PnlCalendar } from "@/components/panels/PnlCalendar";
@@ -696,7 +697,7 @@ function PositionsTab() {
           return;
         }
         const confirmed = window.confirm(
-          `Close ALL ${positions.length} position(s)? This will sell all holdings.`
+          `Close ALL ${fmtPlural(positions.length, "position")}? This will sell all holdings.`
         );
         if (confirmed) {
           // Place market sell orders for each position.
@@ -722,7 +723,7 @@ function PositionsTab() {
               })
             )
           ).then(() => {
-            toast({ type: "success", message: `Closing ${positions.length} position(s)...` });
+            toast({ type: "success", message: `Closing ${fmtPlural(positions.length, "position")}...` });
           });
         }
       } else if (action === "positions:flatten") {
@@ -731,7 +732,7 @@ function PositionsTab() {
           return;
         }
         const confirmed = window.confirm(
-          `Flatten portfolio? This will close all ${positions.length} position(s) at market price.`
+          `Flatten portfolio? This will close all ${fmtPlural(positions.length, "position")} at market price.`
         );
         if (confirmed) {
           // Persona 74-5/74-10 — same fix as "close-all" above: surface

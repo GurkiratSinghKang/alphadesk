@@ -25,7 +25,9 @@ export interface DashboardErrorPageProps {
   /** Next.js-provided callback that re-renders the segment. */
   reset: () => void;
   /** Route identifier for logging and the eyebrow tag (e.g. "analytics"). */
-  route: string;
+  route?: string;
+  /** Surface label (e.g. "Strategies catalogue"). Drives route + headline when route/headline are omitted. */
+  surface?: string;
   /** Contextual headline (e.g. "Analytics failed to load"). */
   headline?: string;
   /** Fallback body shown when `error.message` is empty. */
@@ -38,25 +40,29 @@ export default function DashboardErrorPage({
   error,
   reset,
   route,
-  headline = "Something went wrong",
-  fallbackMessage = "An unexpected error occurred.",
+  surface,
+  headline,
+  fallbackMessage = "The page failed to render — refresh, or jump to a different surface. The desk has been notified.",
   fullScreen = false,
 }: DashboardErrorPageProps) {
+  const resolvedRoute = route ?? surface ?? "Error";
+  const resolvedHeadline = headline ?? (surface ? `${surface} hit a snag` : "This surface hit a snag");
+
   useEffect(() => {
     // Surface to browser console with route context; production telemetry
     // hooks can subscribe to this same shape.
     // eslint-disable-next-line no-console
-    console.error(`[AlphaDesk error · ${route}]`, {
+    console.error(`[AlphaDesk error · ${resolvedRoute}]`, {
       message: error.message,
       digest: error.digest,
       stack: error.stack,
     });
-  }, [error, route]);
+  }, [error, resolvedRoute]);
 
   const message =
-    (error.message && error.message.trim().length > 0
+    error.message && error.message.trim().length > 0
       ? error.message
-      : fallbackMessage) ?? fallbackMessage;
+      : fallbackMessage;
 
   const wrapperClass = fullScreen
     ? "flex min-h-screen items-center justify-center bg-bg text-fg"
@@ -65,11 +71,11 @@ export default function DashboardErrorPage({
   return (
     <div className={wrapperClass}>
       <div className="flex w-full max-w-[560px] flex-col gap-6 px-6 py-12">
-        <Eyebrow as="div">&sect; &middot; {route || "Error"}</Eyebrow>
+        <Eyebrow as="div">&sect; &middot; {resolvedRoute}</Eyebrow>
 
         <div className="flex flex-col gap-3">
           <Display size="md" as="h1" className="max-w-[18ch]">
-            {headline}
+            {resolvedHeadline}
           </Display>
           <p className="font-display italic text-[15px] leading-snug text-fg-muted">
             {message}

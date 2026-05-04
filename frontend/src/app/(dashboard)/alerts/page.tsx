@@ -24,6 +24,7 @@ import {
 } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
+import { fmtPlural } from "@/lib/intl";
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -210,10 +211,10 @@ function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void
 
   return (
     <form onSubmit={handleSubmit} className="rounded-lg border border-border bg-[var(--surface)] p-4">
-      <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+      <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
         <Plus className="h-4 w-4 text-primary" />
         Create Alert
-      </h3>
+      </h2>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div>
           <label htmlFor="alert-symbol" className="text-[12px] uppercase tracking-wider text-muted-foreground">
@@ -784,9 +785,9 @@ export default function AlertsPage() {
       })
     );
     if (failed > 0) {
-      toast({ type: "error", message: `Failed to delete ${failed} alert(s)` });
+      toast({ type: "error", message: `Failed to delete ${fmtPlural(failed, "alert")}` });
     } else {
-      toast({ type: "success", message: `Cleared ${triggered.length} triggered alert(s)` });
+      toast({ type: "success", message: `Cleared ${fmtPlural(triggered.length, "triggered alert")}` });
     }
     fetchAlerts();
   };
@@ -803,7 +804,7 @@ export default function AlertsPage() {
       })
     );
     if (failed > 0) {
-      toast({ type: "error", message: `Failed to delete ${failed} alert(s)` });
+      toast({ type: "error", message: `Failed to delete ${fmtPlural(failed, "alert")}` });
     } else {
       toast({ type: "success", message: "All alerts deleted" });
     }
@@ -911,7 +912,6 @@ export default function AlertsPage() {
       title="Alerts & triggers"
       actions={headerActions}
     >
-
       {/* Round-8 killer-move 2: alerts hero summary line. The page
           previously had no anchor — a 30%-vertical Create form
           dominated even when alerts existed. This 1-line t-meta
