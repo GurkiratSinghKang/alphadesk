@@ -114,6 +114,7 @@ WEEKLY_STRATEGIES = [
     "regime_adaptive",
     "pairs_trading",
     "mean_reversion",  # Slow / quality-conditioned reversal book (Plan C.4)
+    "vcp_breakout",    # Minervini VCP breakout — paper-only (Plan C.6)
 ]
 
 # ─── Schedule Windows ───────────────────────────────────────

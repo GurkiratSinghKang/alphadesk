@@ -326,9 +326,11 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "vcp-breakout": {
         "name": "VCP Breakout",
-        "description": "Planned Volatility Contraction Pattern breakout concept. No backend implementation or live orders yet; needs a pattern detector, intraday breakout confirmation, and a replayed OOS artifact.",
-        # Wave 6γ (persona-109 P2): planned-only catalogue entry.
-        "status": StrategyStatus.PLANNED,
+        "description": "Mark Minervini's Volatility Contraction Pattern: Stage-2 uptrend stocks forming progressively tighter consolidation bases on declining volume; entry on breakout above final pivot with volume ≥ 1.5× average. 8% risk-stop + 20% profit-take + 60-session time-stop. Russell-1000 growth universe; weekly screen + (future) realtime intraday breakout detection. Paper-only until live evidence graduates the strategy.",
+        # Plan C.6: backend strategy package landed; status is now ACTIVE.
+        # paper_only=True on the StrategyMeta gates DailyPipelineRunner from
+        # routing this to live mode until the operator explicitly flips it.
+        "status": StrategyStatus.ACTIVE,
         "invested_amount": 0,
         "total_return_pct": 0,
         "sharpe_ratio": 0,
