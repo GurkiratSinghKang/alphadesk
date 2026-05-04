@@ -184,7 +184,7 @@ export default function MarketingShell({
           style={{ letterSpacing: "0.05em" }}
         >
           <span>&copy; {year} AlphaDesk Labs &middot; Not a broker-dealer</span>
-          <span>&alpha; &middot; made with discipline</span>
+          <span>&alpha; &middot; Operator-grade execution</span>
         </div>
       </div>
     </div>

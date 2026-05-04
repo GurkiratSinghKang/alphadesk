@@ -744,7 +744,7 @@ export function CommandPalette() {
             onClick={handleConfirmLive}
             data-testid="confirm-live-confirm"
           >
-            Got it
+            Understood
           </Button>
         </DialogFooter>
       </DialogContent>

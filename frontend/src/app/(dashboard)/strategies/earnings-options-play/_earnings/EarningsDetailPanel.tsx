@@ -555,7 +555,7 @@ function CandidateDecisionBar({
       />
       <CandidateDecisionButton
         active={decision === "saved"}
-        label="Save"
+        label="Save candidate"
         icon={<Bookmark className="h-3.5 w-3.5" aria-hidden />}
         onClick={() => commitDecision("saved")}
       />

@@ -298,6 +298,7 @@ interface LiveSignalFeedProps {
 }
 
 export function LiveSignalFeed({ pipelineLog }: LiveSignalFeedProps) {
+  const router = useRouter();
   const [expanded, setExpanded] = useState(false);
   const [signals, setSignals] = useState<Signal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -463,10 +464,16 @@ export function LiveSignalFeed({ pipelineLog }: LiveSignalFeedProps) {
           ) : visibleSignals.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8">
               <Radio className="h-6 w-6 mb-2 opacity-30 text-muted-foreground" />
-              <p className="text-xs text-muted-foreground">No signals yet</p>
+              <p className="text-xs text-muted-foreground">No signals yet.</p>
               <p className="text-label text-muted-foreground mt-1">
-                Signals appear after pipeline runs or when watchlist stocks cross thresholds
+                Signals appear after pipeline runs or when watchlist stocks cross thresholds.
               </p>
+              <button
+                onClick={() => router.push("/pipeline")}
+                className="mt-2 text-label text-[var(--primary)] hover:underline"
+              >
+                Run pipeline &rarr;
+              </button>
             </div>
           ) : (
             visibleSignals.map((signal, i) => (

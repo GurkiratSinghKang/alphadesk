@@ -934,19 +934,19 @@ export default function SettingsPage() {
             <Toggle
               checked={notifications.orderFills}
               onChange={(v) => setNotificationPref("orderFills", v)}
-              label="Order Fills"
+              label="Order fills"
               description="Get notified when orders are filled"
             />
             <Toggle
               checked={notifications.alertsTriggered}
               onChange={(v) => setNotificationPref("alertsTriggered", v)}
-              label="Alerts Triggered"
+              label="Alerts triggered"
               description="Notify when price alerts hit their target"
             />
             <Toggle
               checked={notifications.pipelineCompleted}
               onChange={(v) => setNotificationPref("pipelineCompleted", v)}
-              label="Pipeline Completed"
+              label="Pipeline completed"
               description="Notify when trading pipeline finishes a run"
             />
             {/* Persona-8 #4: "Strategy Events" toggle removed — no producer
@@ -966,7 +966,7 @@ export default function SettingsPage() {
             <Toggle
               checked={display.compactStrategyView}
               onChange={(v) => setDisplayPref("compactStrategyView", v)}
-              label="Compact Strategy View"
+              label="Compact strategy view"
               description="Single-line rows in the strategy rail. Hides subtitles, packs more strategies into the same vertical space."
             />
             {/* Persona-8 #2: "Animation Speed" picker removed — there's no
@@ -1059,7 +1059,7 @@ export default function SettingsPage() {
               ) : (
                 <Download className="h-3 w-3" aria-hidden />
               )}
-              Trade History (CSV)
+              Trade history (CSV)
             </Button>
             <Button
               variant="outline"
@@ -1128,7 +1128,7 @@ export default function SettingsPage() {
       <Dialog open={liveConfirmOpen} onOpenChange={setLiveConfirmOpen}>
         <DialogContent className="bg-[var(--surface)] border-border">
           <DialogHeader>
-            <DialogTitle>Switch to Live Trading?</DialogTitle>
+            <DialogTitle>Live trading requires admin enablement</DialogTitle>
             <DialogDescription>
               Live trading requires broker API keys configured on the server.
               Contact your admin to provision credentials — this toggle does
@@ -1153,7 +1153,7 @@ export default function SettingsPage() {
               }}
               className="bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-white text-xs"
             >
-              Got it
+              Understood
             </Button>
           </DialogFooter>
         </DialogContent>

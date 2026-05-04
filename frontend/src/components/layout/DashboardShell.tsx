@@ -27,7 +27,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
         {children}
       </main>
       <footer role="contentinfo" className="border-t border-border/30 px-4 py-3 text-label text-muted-foreground text-center">
-        AlphaDesk v1.0 — Powered by Claude AI — &copy; {new Date().getFullYear()}
+        AlphaDesk v1.0 — Built on Claude — &copy; {new Date().getFullYear()}
       </footer>
       <CommandPalette />
       <AICopilot />

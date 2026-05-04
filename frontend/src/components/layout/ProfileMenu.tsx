@@ -200,7 +200,7 @@ export function ProfileMenu() {
               <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Configuration</h3>
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <Settings className="h-6 w-6 text-muted-foreground/40 mb-2" />
-                <p className="text-xs text-muted-foreground">Broker API keys, preferences, and additional configuration coming soon.</p>
+                <p className="text-xs text-muted-foreground">Broker API keys and additional preferences are configured in the full Settings page.</p>
               </div>
             </div>
           </div>
@@ -210,7 +210,7 @@ export function ProfileMenu() {
       <Dialog open={modeConfirmOpen} onOpenChange={setModeConfirmOpen}>
         <DialogContent className="bg-[var(--surface)] border-border">
           <DialogHeader>
-            <DialogTitle>Live trading not available</DialogTitle>
+            <DialogTitle>Live trading requires admin enablement</DialogTitle>
             <DialogDescription>
               Live trading requires broker API keys configured on the server.
               Contact your admin to provision credentials — this toggle
@@ -218,7 +218,7 @@ export function ProfileMenu() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button onClick={handleConfirmLive} className="text-xs">Got it</Button>
+            <Button onClick={handleConfirmLive} className="text-xs">Understood</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -359,7 +359,7 @@ export function buildEmptyStateMessage({
   }
 
   // B-107 fallback: name whichever filters are restricting the set.
-  if (!filters) return "No earnings match —";
+  if (!filters) return "No earnings match the current filters.";
   const windowKey = filters.window ?? "both";
   const windowText =
     windowKey === "current" ? "the current week"
@@ -375,5 +375,5 @@ export function buildEmptyStateMessage({
   if (filters.watchlistOnly) {
     parts.push("on your watchlist");
   }
-  return `${parts.join(" ")} \u00b7`;
+  return `${parts.join(" ")}.`;
 }

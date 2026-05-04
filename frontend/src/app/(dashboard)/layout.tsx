@@ -324,7 +324,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           showed "v1.0" while the desk StatusBar read `NEXT_PUBLIC_BUILD_VERSION`
           (e.g. "2025.10.18-a1b2c3d"). */}
       <footer role="contentinfo" className="relative z-0 border-t border-border/50 bg-ink-050/88 px-4 py-3 text-center text-label text-muted-foreground">
-        AlphaDesk {process.env.NEXT_PUBLIC_BUILD_VERSION ?? "dev"} — Powered by Claude AI — &copy; {new Date().getFullYear()}
+        AlphaDesk {process.env.NEXT_PUBLIC_BUILD_VERSION ?? "dev"} — Built on Claude — &copy; {new Date().getFullYear()}
       </footer>
       <CommandPalette />
       <AICopilot />

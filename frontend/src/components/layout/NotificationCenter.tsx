@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Bell,
   CheckCircle2,
@@ -98,6 +99,7 @@ function NotificationRow({ notification, onRead }: { notification: AppNotificati
 // ─── Notification Center ────────────────────────────────────
 
 export function NotificationCenter() {
+  const router = useRouter();
   const notifications = useNotificationsStore((s) => s.notifications);
   const markAsRead = useNotificationsStore((s) => s.markAsRead);
   const markAllRead = useNotificationsStore((s) => s.markAllRead);
@@ -206,8 +208,17 @@ export function NotificationCenter() {
             <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
               <Bell className="h-6 w-6 text-muted-foreground/30 mb-2" />
               <p className="text-xs text-muted-foreground">
-                {activeTab === "all" ? "No notifications yet" : `No ${activeTab} notifications`}
+                {activeTab === "all" ? "No notifications yet." : `No ${activeTab} notifications.`}
               </p>
+              <p className="text-label text-muted-foreground mt-1">
+                Toggle which events trigger notifications in settings.
+              </p>
+              <button
+                onClick={() => router.push("/settings")}
+                className="mt-2 text-label text-[var(--primary)] hover:underline"
+              >
+                Configure notifications &rarr;
+              </button>
             </div>
           ) : (
             <div className="py-1">

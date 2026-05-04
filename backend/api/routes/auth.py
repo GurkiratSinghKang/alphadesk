@@ -584,7 +584,7 @@ async def login(request: LoginRequest, req: Request):
         await _record_login_failure(client_ip, submitted_username or "-")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password",
+            detail="Those credentials didn't match. Try again or request access.",
         )
 
     # TOTP check (Wave 2I Fix 2 — P81-1 skeleton). If the user has enrolled
