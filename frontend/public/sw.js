@@ -80,6 +80,16 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // QA r3 BUG-05: trade route deep-links carry critical query state
+  // (?contract=, ?legs=, ?symbol=, &strategy=). The offline-shell
+  // intercept dropped that state when the SW returned the static
+  // fallback. Skip the intercept for /trade routes — let the browser
+  // surface its own offline dialog if connectivity is truly gone, but
+  // never lose trade state via SW.
+  if (url.pathname.startsWith("/trade")) {
+    return; // do not call event.respondWith — browser handles the request
+  }
+
   // Next.js immutable static assets: cache-first.
   if (url.pathname.startsWith("/_next/static/")) {
     event.respondWith(cacheFirst(request, STATIC_CACHE));
@@ -130,8 +140,30 @@ async function navigationStrategy(request) {
     return response;
   } catch (_err) {
     const cache = await caches.open(STATIC_CACHE);
-    const offline = await cache.match(OFFLINE_URL);
-    if (offline) return offline;
+    const cached = await cache.match(OFFLINE_URL);
+    if (cached) {
+      // QA r3 BUG-05: inject the original URL so the offline shell's
+      // "Try again" button restores the user to where they were going
+      // instead of always redirecting to "/".
+      try {
+        const reqUrl = new URL(request.url);
+        const target = reqUrl.pathname + reqUrl.search;
+        const text = await cached.text();
+        const injected = text.replace(
+          "<!--FROM_URL_PLACEHOLDER-->",
+          `<script>window.__originalUrl = ${JSON.stringify(target)};<\/script>`,
+        );
+        return new Response(injected, {
+          status: 200,
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      } catch (_injectErr) {
+        // If text injection fails for any reason, fall back to the raw
+        // cached response so the user at least sees the offline shell.
+        const fallback = await cache.match(OFFLINE_URL);
+        if (fallback) return fallback;
+      }
+    }
     return new Response(
       "<!doctype html><title>Offline</title><h1>AlphaDesk is offline</h1>" +
         "<p>Reconnect and refresh to continue.</p>",
