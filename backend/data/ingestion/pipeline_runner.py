@@ -102,6 +102,7 @@ MONTHLY_STRATEGIES = [
     "ts_momentum",      # Sign-of-12M ETF momentum rebalance
     "dual_momentum",    # Antonacci GEM monthly sleeve rotation
     "momentum_quality", # Cross-sectional momentum rebalance
+    "sector_rotation",  # 11-GICS-sector top-N rotation with bond fallback (Plan C.5)
 ]
 
 # Weekly (Friday 3:30 PM) — regime and cointegration refresh
