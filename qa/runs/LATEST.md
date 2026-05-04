@@ -2,10 +2,20 @@
 
 > **Pointer file for downstream analysis agents.** Update the run ID below when you produce a newer canonical sweep.
 
-**Latest canonical run:** `2026-05-03T23-07-16Z`
-**Base URL captured:** `https://tradingalpha.net`
-**Manifest:** `qa/runs/2026-05-03T23-07-16Z/manifest.json`
-**Coverage:** 388 steps · 376 pass · 4 fail · 8 skip · 146 PNG snapshots across desktop-1440 + mobile-390
+**Latest canonical run:** `2026-05-04T02-58-02Z`
+**Base URL captured:** `https://tradingalpha.net` (post PR #1, #2, #3 deploys)
+**Manifest:** `qa/runs/2026-05-04T02-58-02Z/manifest.json`
+**Coverage:** 378 steps · 372 pass · 0 fail · 6 skip · 144 PNG snapshots across desktop-1440 + mobile-390
+**Audit reports built on this run:**
+- `qa/reviews/pillars/01-copywriting.md` (Score 2/4)
+- `qa/reviews/pillars/02-visuals.md` (Score 2/4)
+- `qa/reviews/pillars/03-color.md` (Score 1/4 — POOR)
+- `qa/reviews/pillars/04-typography.md` (Score 2/4)
+- `qa/reviews/pillars/05-spacing.md` (Score 2/4)
+- `qa/reviews/pillars/06-experience.md` (Score 2/4)
+- `qa/reviews/UI-REVIEW.md` — synthesized ranked bug list
+
+Previous prod run before PR #4 (FMP `both`-window fix): `qa/runs/2026-05-03T23-07-16Z/manifest.json`
 
 ## Why this exists
 
