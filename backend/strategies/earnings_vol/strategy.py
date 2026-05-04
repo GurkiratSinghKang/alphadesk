@@ -39,16 +39,21 @@ _REQUIRED_LOOKBACK_DAYS = 900  # ~3 years for historical-moves lookback
     StrategyMeta(
         name="earnings_vol",
         category="options",
-        kind="research",  # multi-leg signal/execution bridge not yet graduated
+        kind="autonomous",
         description=(
             "Short iron butterfly before earnings; exit at post-event IV "
-            "crush. Research shell emits diagnostics (candidate symbols, "
-            "historical-move proxy, chain quality); multi-leg signal "
-            "emission is deferred pending paper validation."
+            "crush. Multi-leg signals priced via the native FillSimulator "
+            "path (Plan B.1 full port); paper_only=True until paper "
+            "validation of the live execution bridge graduates the "
+            "strategy to live mode."
         ),
         lookback_days=_REQUIRED_LOOKBACK_DAYS,
         required_bars=("daily",),
         min_universe_size=10,
+        # Plan B.1 full port: kind flipped research → autonomous; paper_only
+        # remains True so DailyPipelineRunner gates live capital until
+        # operator explicitly clears it after the 2-week paper runway.
+        paper_only=True,
     )
 )
 class EarningsVolStrategy(Strategy):
