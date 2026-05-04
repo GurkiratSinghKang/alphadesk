@@ -62,7 +62,7 @@ export function SessionExpiryBanner() {
       role="alert"
       aria-live="assertive"
       data-testid="session-expiry-banner"
-      className="w-full bg-amber/10 text-amber border-b border-amber/30 px-4 py-2 text-xs flex items-center justify-center gap-3"
+      className="w-full bg-amber/10 text-amber border-b border-amber/30 px-4 py-2 text-label flex items-center justify-center gap-3"
     >
       <span className="font-semibold uppercase tracking-wide">
         Session ending

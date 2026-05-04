@@ -284,12 +284,12 @@ const FeedItemRow = React.memo(function FeedItemRow({ item }: { item: FeedItem }
       <div className="min-w-0 flex-1">
         <p className={cn("text-body-sm leading-snug", isTradingWindow ? "text-muted-foreground" : "text-foreground")}>{item.title}</p>
         {item.detail && (
-          <span className="mt-0.5 block text-xs text-muted-foreground" title={item.detail}>
+          <span className="mt-0.5 block text-label text-muted-foreground" title={item.detail}>
             {item.detail.length > 120 ? item.detail.slice(0, 120) + '...' : item.detail}
           </span>
         )}
       </div>
-      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+      <span className="shrink-0 text-label tabular-nums text-muted-foreground">
         {formatTime(item.time)}
       </span>
     </div>
@@ -334,11 +334,11 @@ export function ActivityFeed({ feedItems, onNavigate, isLoading }: ActivityFeedP
           <h2 className="text-sm font-semibold text-foreground">
             Activity Feed
           </h2>
-          <Badge variant="outline" className="text-xs text-muted-foreground">
+          <Badge variant="outline" className="text-label text-muted-foreground">
             {badgeLabel}
           </Badge>
         </div>
-        <span className="text-xs text-muted-foreground tabular-nums">
+        <span className="text-label text-muted-foreground tabular-nums">
           {showLoading ? "\u2014" : `${feedItems.length} event${feedItems.length !== 1 ? "s" : ""}`}
         </span>
       </div>

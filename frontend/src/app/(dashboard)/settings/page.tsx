@@ -157,7 +157,7 @@ function Toggle({
   return (
     <div className="flex items-start justify-between gap-3 py-2 sm:items-center sm:gap-4">
       <div className="min-w-0 pr-1">
-        <p className="text-xs font-medium text-foreground">{label}</p>
+        <p className="text-label font-medium text-foreground">{label}</p>
         {description && (
           // Per-toggle hint — `t-meta` (13px mono fg-muted) matches the
           // dashboard's "field caption" voice used on settings rows.
@@ -221,7 +221,7 @@ function IntervalSlider({
   return (
     <div className="py-1.5">
       <div className="flex items-center justify-between mb-2">
-        <p className="text-xs font-medium text-foreground" id="interval-label">
+        <p className="text-label font-medium text-foreground" id="interval-label">
           Portfolio refresh interval
         </p>
         <span className="t-num-md text-primary">
@@ -583,7 +583,7 @@ export default function SettingsPage() {
           </div>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <p className="text-xs text-muted-foreground">
+              <p className="text-label text-muted-foreground">
                 Switch between paper and live trading environments.
               </p>
               <p className="t-meta text-amber mt-1">
@@ -667,7 +667,7 @@ export default function SettingsPage() {
               type="button"
               variant="outline"
               size="sm"
-              className="h-10 text-xs"
+              className="h-10 text-label"
               onClick={() => void loadBrokerData()}
               disabled={brokerLoading}
             >
@@ -776,7 +776,7 @@ export default function SettingsPage() {
               ))}
               <Button
                 type="submit"
-                className="h-10 text-xs"
+                className="h-10 text-label"
                 disabled={brokerSaving}
                 aria-busy={brokerSaving}
               >
@@ -802,7 +802,7 @@ export default function SettingsPage() {
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             <div className="rounded-md border border-border bg-bg-elev-2/35 p-3">
               <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="text-xs font-medium text-foreground">Saved connections</p>
+                <p className="text-label font-medium text-foreground">Saved connections</p>
                 {brokerLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden />}
               </div>
               {brokerConnections.length === 0 ? (
@@ -816,7 +816,7 @@ export default function SettingsPage() {
                     >
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-xs font-semibold uppercase text-foreground">
+                          <p className="text-eyebrow font-semibold uppercase text-foreground">
                             {brokerLabel(connection.provider)} {connection.account_env}
                           </p>
                           <Badge
@@ -859,7 +859,7 @@ export default function SettingsPage() {
             <div className="rounded-md border border-border bg-bg-elev-2/35 p-3">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-foreground">Reconciliation review</p>
+                  <p className="text-label font-medium text-foreground">Reconciliation review</p>
                   <p className="t-meta mt-0.5">
                     {reconciliationIssues.length} open {reconciliationIssues.length === 1 ? "issue" : "issues"}
                   </p>
@@ -868,7 +868,7 @@ export default function SettingsPage() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-10 text-xs"
+                  className="h-10 text-label"
                   onClick={() => void handleRunReconciliation()}
                   disabled={reconcileRunning || !hasActiveAlpaca}
                   aria-busy={reconcileRunning}
@@ -895,7 +895,7 @@ export default function SettingsPage() {
                         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber" aria-hidden />
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-xs font-semibold text-foreground">
+                            <p className="text-label font-semibold text-foreground">
                               {issueTitle(issue)}
                             </p>
                             {issue.symbol && (
@@ -915,7 +915,7 @@ export default function SettingsPage() {
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="h-9 text-xs"
+                          className="h-9 text-label"
                           onClick={() => void handleIssueDecision(issue, false)}
                           disabled={issueBusyId === issue.id}
                         >
@@ -925,7 +925,7 @@ export default function SettingsPage() {
                         <Button
                           type="button"
                           size="sm"
-                          className="h-9 text-xs"
+                          className="h-9 text-label"
                           onClick={() => void handleIssueDecision(issue, true)}
                           disabled={issueBusyId === issue.id}
                         >
@@ -997,7 +997,7 @@ export default function SettingsPage() {
                 Honest move: don't ship a setting we can't back. */}
             <div className="flex flex-col gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <p className="text-xs font-medium text-foreground">Theme</p>
+                <p className="text-label font-medium text-foreground">Theme</p>
                 <p className="t-meta mt-0.5">
                   Choose dark, light, or follow your OS preference.
                 </p>
@@ -1047,7 +1047,7 @@ export default function SettingsPage() {
             <Download className="h-4 w-4 text-muted-foreground" aria-hidden />
             <h2 className="t-section-display text-foreground">Export data</h2>
           </div>
-          <p className="text-xs text-muted-foreground mb-3">
+          <p className="text-label text-muted-foreground mb-3">
             Download your data in standard formats for backup or analysis.
           </p>
           {/* Market-standard hit-target: `h-10` (40px) aligns with the
@@ -1056,7 +1056,7 @@ export default function SettingsPage() {
             <Button
               variant="outline"
               size="sm"
-              className="text-xs gap-1.5 h-10"
+              className="text-label gap-1.5 h-10"
               onClick={handleExportWatchlist}
             >
               {exportDone === "watchlist" ? (
@@ -1069,7 +1069,7 @@ export default function SettingsPage() {
             <Button
               variant="outline"
               size="sm"
-              className="text-xs gap-1.5 h-10"
+              className="text-label gap-1.5 h-10"
               onClick={handleExportTrades}
               disabled={exportingTrades}
             >
@@ -1085,7 +1085,7 @@ export default function SettingsPage() {
             <Button
               variant="outline"
               size="sm"
-              className="text-xs gap-1.5 h-10"
+              className="text-label gap-1.5 h-10"
               onClick={handleExportSettings}
             >
               {exportDone === "settings" ? (
@@ -1104,7 +1104,7 @@ export default function SettingsPage() {
             <Shield className="h-4 w-4 text-muted-foreground" aria-hidden />
             <h2 className="t-section-display text-foreground">Security</h2>
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-label text-muted-foreground">
             Sessions expire after 8 hours. JWT tokens are stored in HttpOnly
             cookies with Secure and SameSite flags.
           </p>
@@ -1119,7 +1119,7 @@ export default function SettingsPage() {
             carefully-tuned setup. */}
         <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-bg-elev-1 p-4">
           <div>
-            <p className="text-xs font-medium text-foreground">
+            <p className="text-label font-medium text-foreground">
               Reset preferences
             </p>
             <p className="t-meta mt-0.5">
@@ -1130,7 +1130,7 @@ export default function SettingsPage() {
           <Button
             variant="outline"
             size="sm"
-            className="text-xs gap-1.5 h-10"
+            className="text-label gap-1.5 h-10"
             onClick={() => setResetConfirmOpen(true)}
           >
             {resetDone ? (
@@ -1160,7 +1160,7 @@ export default function SettingsPage() {
             <Button
               variant="outline"
               onClick={() => setLiveConfirmOpen(false)}
-              className="text-xs"
+              className="text-label"
             >
               Cancel
             </Button>
@@ -1172,7 +1172,7 @@ export default function SettingsPage() {
                   message: "Live mode is not enabled on this account. Contact support to unlock live trading.",
                 });
               }}
-              className="bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-white text-xs"
+              className="bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-white text-label"
             >
               Understood
             </Button>
@@ -1195,7 +1195,7 @@ export default function SettingsPage() {
             <Button
               variant="outline"
               onClick={() => setResetConfirmOpen(false)}
-              className="text-xs"
+              className="text-label"
             >
               Cancel
             </Button>
@@ -1210,7 +1210,7 @@ export default function SettingsPage() {
                   message: "Preferences reset to defaults.",
                 });
               }}
-              className="text-xs"
+              className="text-label"
             >
               Reset
             </Button>

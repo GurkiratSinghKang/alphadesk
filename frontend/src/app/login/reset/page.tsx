@@ -63,7 +63,7 @@ export default function LoginResetPage() {
 
       <SectionRule tag="§ 02 · How to reset" />
 
-      <section className="flex flex-col gap-4 font-sans text-body leading-[1.65] text-fg-dim">
+      <section className="flex flex-col gap-4 font-sans text-body leading-relaxed text-fg-dim">
         <p>
           Email{" "}
           <a

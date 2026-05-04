@@ -131,12 +131,12 @@ export function ProfileMenu() {
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger data-tour="profile-menu" className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary hover:bg-primary/25 transition-colors sm:h-8 sm:w-8" aria-label="User menu">
+        <DropdownMenuTrigger data-tour="profile-menu" className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/15 text-label font-bold text-primary hover:bg-primary/25 transition-colors sm:h-8 sm:w-8" aria-label="User menu">
           {avatarInitial}
         </DropdownMenuTrigger>
         <DropdownMenuContent side="bottom" align="end" className="w-56 bg-[var(--surface)] border-border">
           <div className="px-3 py-2 space-y-1">
-            <p className="text-xs font-medium text-foreground truncate" title={displayName}>{displayName}</p>
+            <p className="text-label font-medium text-foreground truncate" title={displayName}>{displayName}</p>
             <div className="flex items-center justify-between text-label">
               <span className="text-muted-foreground">Equity</span>
               <span className="text-foreground tabular-nums">{formatCurrency(summary.equity > 0 ? summary.equity : 0)}</span>
@@ -165,7 +165,7 @@ export function ProfileMenu() {
           <div className="space-y-6 px-4 py-6">
             {/* Theme section */}
             <div className="space-y-2">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Appearance</h3>
+              <h3 className="text-eyebrow font-bold uppercase tracking-wider text-foreground">Appearance</h3>
               <div className="rounded-lg border border-border bg-[var(--panel)] p-3">
                 <div
                   role="radiogroup"
@@ -197,10 +197,10 @@ export function ProfileMenu() {
             </div>
             {/* Other settings placeholder */}
             <div className="space-y-2">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Configuration</h3>
+              <h3 className="text-eyebrow font-bold uppercase tracking-wider text-foreground">Configuration</h3>
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <Settings className="h-6 w-6 text-muted-foreground/40 mb-2" />
-                <p className="text-xs text-muted-foreground">Broker API keys and additional preferences are configured in the full Settings page.</p>
+                <p className="text-label text-muted-foreground">Broker API keys and additional preferences are configured in the full Settings page.</p>
               </div>
             </div>
           </div>
@@ -218,7 +218,7 @@ export function ProfileMenu() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button onClick={handleConfirmLive} className="text-xs">Understood</Button>
+            <Button onClick={handleConfirmLive} className="text-label">Understood</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

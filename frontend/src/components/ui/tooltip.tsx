@@ -52,7 +52,7 @@ function TooltipContent({
           className={cn(
             "z-50 inline-flex w-fit max-w-[min(calc(100vw-1rem),20rem)] origin-(--transform-origin) items-center gap-1.5",
             "rounded-md border border-border bg-bg-elev-2 text-fg",
-            "px-3 py-1.5 text-xs",
+            "px-3 py-1.5 text-label",
             "shadow-lg shadow-black/40",
             // On touch-only devices (no hover), suppress tooltip popups —
             // base-ui renders them on long-press/focus which is jarring on

@@ -100,7 +100,7 @@ export function ExportButton() {
       onClick={handleExport}
       variant="outline"
       size="sm"
-      className="text-xs gap-1.5"
+      className="text-label gap-1.5"
       disabled={exporting}
     >
       {exporting ? (

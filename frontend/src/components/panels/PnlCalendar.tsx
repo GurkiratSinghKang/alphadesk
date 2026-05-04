@@ -179,7 +179,7 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
 
   const cellSize = compact ? "h-12" : "h-16";
   const textSize = compact ? "text-label" : "text-label";
-  const pnlSize = compact ? "text-label" : "text-xs";
+  const pnlSize = compact ? "text-label" : "text-label";
 
   return (
     <Card className="border-border bg-[var(--surface)]">
@@ -212,7 +212,7 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
             </div>
           </div>
         ) : !data || data.days.length === 0 ? (
-          <div className="flex items-center justify-center py-12 text-xs text-muted-foreground">
+          <div className="flex items-center justify-center py-12 text-label text-muted-foreground">
             No trading data for this month
           </div>
         ) : (
@@ -296,7 +296,7 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
                         </span>
                       </TooltipTrigger>
                       <TooltipContent side="top">
-                        <div className="text-xs space-y-0.5">
+                        <div className="text-label space-y-0.5">
                           <div className="font-semibold">
                             {new Date(cell.calDay.date + "T00:00:00").toLocaleDateString("en-US", {
                               weekday: "short",

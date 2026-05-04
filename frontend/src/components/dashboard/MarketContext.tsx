@@ -62,7 +62,7 @@ export function MarketContext({ indices, sectors, news, summary, sparkData, isDe
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 p-4">
         {/* Indices */}
         <div>
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <h3 className="mb-3 text-eyebrow font-semibold uppercase tracking-wider text-muted-foreground">
             Market Indices
           </h3>
           <div className="space-y-2.5">
@@ -78,7 +78,7 @@ export function MarketContext({ indices, sectors, news, summary, sparkData, isDe
                     <p className="text-sm font-medium text-foreground">
                       {idx.symbol}
                     </p>
-                    <p className="text-xs text-muted-foreground">{idx.name}</p>
+                    <p className="text-label text-muted-foreground">{idx.name}</p>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <Sparkline
@@ -97,7 +97,7 @@ export function MarketContext({ indices, sectors, news, summary, sparkData, isDe
                       </p>
                       <p
                         className={cn(
-                          "text-xs tabular-nums",
+                          "text-label tabular-nums",
                           positive
                             ? "text-[var(--profit)]"
                             : "text-[var(--loss)]"
@@ -126,7 +126,7 @@ export function MarketContext({ indices, sectors, news, summary, sparkData, isDe
           {/* Headlines */}
           {news.length > 0 && (
             <div>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <h3 className="mb-3 text-eyebrow font-semibold uppercase tracking-wider text-muted-foreground">
                 Headlines
               </h3>
               <div className="space-y-2.5">
@@ -146,7 +146,7 @@ export function MarketContext({ indices, sectors, news, summary, sparkData, isDe
                           <p className="text-body-sm leading-snug text-foreground group-hover:text-blue-400 transition-colors line-clamp-2">
                             {article.title}
                           </p>
-                          <p className="mt-0.5 text-xs text-muted-foreground">
+                          <p className="mt-0.5 text-label text-muted-foreground">
                             {article.source}
                             {article.published_at && ` \u2022 ${formatTimeShort(article.published_at)}`}
                           </p>
@@ -165,7 +165,7 @@ export function MarketContext({ indices, sectors, news, summary, sparkData, isDe
                         <p className="text-body-sm leading-snug text-foreground line-clamp-2">
                           {article.title}
                         </p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
+                        <p className="mt-0.5 text-label text-muted-foreground">
                           {article.source}
                           {article.published_at && ` \u2022 ${formatTimeShort(article.published_at)}`}
                         </p>

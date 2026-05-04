@@ -142,7 +142,7 @@ export function ShortcutOverlay({ onClose }: { onClose: () => void }) {
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 pt-4 sm:pt-5 pb-3 gap-3">
           <h2 className="text-base font-semibold text-foreground">Keyboard Shortcuts</h2>
-          <div className="hidden sm:flex items-center gap-1 text-xs text-muted-foreground">
+          <div className="hidden sm:flex items-center gap-1 text-label text-muted-foreground">
             Press <KBD>Esc</KBD> to close
           </div>
           <button

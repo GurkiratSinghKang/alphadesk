@@ -115,7 +115,7 @@ function FScoreDots({ score }: { score: number }) {
           )}
         />
       ))}
-      <span className="ml-2 text-xs font-medium text-foreground">{score}/9</span>
+      <span className="ml-2 text-label font-medium text-foreground">{score}/9</span>
     </div>
   );
 }
@@ -239,7 +239,7 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center gap-2 p-6 text-xs text-muted-foreground">
+      <div className="flex items-center justify-center gap-2 p-6 text-label text-muted-foreground">
         <Loader2 className="size-4 animate-spin" /> Analyzing {symbol}...
       </div>
     );
@@ -247,7 +247,7 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
 
   if (timedOut && !analysis) {
     return (
-      <div className="flex items-center justify-center gap-2 p-6 text-xs text-muted-foreground">
+      <div className="flex items-center justify-center gap-2 p-6 text-label text-muted-foreground">
         Analysis timed out. Try again later.
       </div>
     );
@@ -258,7 +258,7 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
       <div className="space-y-4 p-3">
         <div className="flex flex-col items-center justify-center py-6 text-center">
           <Activity className="h-6 w-6 text-muted-foreground/40 mb-2" />
-          <p className="text-xs text-muted-foreground">No analysis available for {symbol}</p>
+          <p className="text-label text-muted-foreground">No analysis available for {symbol}</p>
         </div>
 
         <Separator className="bg-border" />
@@ -272,7 +272,7 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
               <div
                 key={l.label}
                 className={cn(
-                  "flex items-center justify-between rounded px-2 py-1 text-xs",
+                  "flex items-center justify-between rounded px-2 py-1 text-label",
                   l.label === "Current" && "bg-primary/10"
                 )}
               >
@@ -302,7 +302,7 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
     <div className="space-y-4 p-3">
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-xs font-medium text-muted-foreground flex items-center">
+          <h3 className="text-label font-medium text-muted-foreground flex items-center">
             Technical Score
           </h3>
           <p className="text-label text-muted-foreground mt-1 line-clamp-3 overflow-hidden break-words">
@@ -323,7 +323,7 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
             <div
               key={l.label}
               className={cn(
-                "flex items-center justify-between rounded px-2 py-1 text-xs",
+                "flex items-center justify-between rounded px-2 py-1 text-label",
                 l.label === "Current" && "bg-primary/10"
               )}
             >
@@ -356,7 +356,7 @@ function TechnicalTab({ symbol, analysis, loading, timedOut }: { symbol: string;
           {indicators.map((ind) => (
             <div
               key={ind.name}
-              className="flex items-center justify-between text-xs px-2 py-1"
+              className="flex items-center justify-between text-label px-2 py-1"
             >
               <span className="text-muted-foreground">{ind.name}</span>
               <div className="flex items-center gap-1.5">
@@ -393,14 +393,14 @@ const ETF_SYMBOLS = new Set(['SPY', 'QQQ', 'IWM', 'DIA', 'XLK', 'XLV', 'XLF', 'X
 function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: string; analysis: Analysis | null; loading: boolean; timedOut?: boolean }) {
   if (loading) {
     return (
-      <div className="flex items-center justify-center gap-2 p-6 text-xs text-muted-foreground">
+      <div className="flex items-center justify-center gap-2 p-6 text-label text-muted-foreground">
         <Loader2 className="size-4 animate-spin" /> Loading fundamentals...
       </div>
     );
   }
   if (timedOut && !analysis) {
     return (
-      <div className="flex items-center justify-center gap-2 p-6 text-xs text-muted-foreground">
+      <div className="flex items-center justify-center gap-2 p-6 text-label text-muted-foreground">
         Analysis timed out. Try again later.
       </div>
     );
@@ -424,7 +424,7 @@ function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: strin
           </p>
         </div>
         <div>
-          <h3 className="text-xs font-medium text-muted-foreground mb-2">Piotroski F-Score</h3>
+          <h3 className="text-label font-medium text-muted-foreground mb-2">Piotroski F-Score</h3>
           <div className="opacity-30">
             <FScoreDots score={0} />
           </div>
@@ -437,7 +437,7 @@ function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: strin
           <h4 className="text-label font-medium text-muted-foreground mb-2">Valuation Metrics</h4>
           <div className="space-y-1">
             {["P/E Ratio", "P/S Ratio", "EV/EBITDA", "Profit Margin", "ROE", "Debt/Equity", "FCF Yield", "Revenue Growth"].map((label) => (
-              <div key={label} className="flex items-center justify-between text-xs px-2 py-1">
+              <div key={label} className="flex items-center justify-between text-label px-2 py-1">
                 <span className="text-muted-foreground">{label}</span>
                 <span className="text-muted-foreground/50 tabular-nums">&mdash;</span>
               </div>
@@ -461,7 +461,7 @@ function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: strin
         </div>
       )}
       <div>
-        <h3 className="text-xs font-medium text-muted-foreground mb-2 flex items-center">
+        <h3 className="text-label font-medium text-muted-foreground mb-2 flex items-center">
           Piotroski F-Score
         </h3>
         <FScoreDots score={fScore ?? 0} />
@@ -480,7 +480,7 @@ function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: strin
           {metricLabels.map((label) => (
             <div
               key={label}
-              className="flex items-center justify-between text-xs px-2 py-1"
+              className="flex items-center justify-between text-label px-2 py-1"
             >
               <span className="text-muted-foreground">{label}</span>
               <span className="text-muted-foreground/50 tabular-nums">&mdash;</span>
@@ -500,14 +500,14 @@ function FundamentalTab({ symbol, analysis, loading, timedOut }: { symbol: strin
 function SentimentTab({ symbol, analysis, loading, timedOut }: { symbol: string; analysis: Analysis | null; loading: boolean; timedOut?: boolean }) {
   if (loading) {
     return (
-      <div className="flex items-center justify-center gap-2 p-6 text-xs text-muted-foreground">
+      <div className="flex items-center justify-center gap-2 p-6 text-label text-muted-foreground">
         <Loader2 className="size-4 animate-spin" /> Loading sentiment...
       </div>
     );
   }
   if (timedOut && !analysis) {
     return (
-      <div className="flex items-center justify-center gap-2 p-6 text-xs text-muted-foreground">
+      <div className="flex items-center justify-center gap-2 p-6 text-label text-muted-foreground">
         Analysis timed out. Try again later.
       </div>
     );
@@ -537,7 +537,7 @@ function SentimentTab({ symbol, analysis, loading, timedOut }: { symbol: string;
     <div className="space-y-4 p-3">
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-xs font-medium text-muted-foreground flex items-center">
+          <h3 className="text-label font-medium text-muted-foreground flex items-center">
             Sentiment Score
           </h3>
           <p className="text-label text-muted-foreground mt-1">
@@ -557,7 +557,7 @@ function SentimentTab({ symbol, analysis, loading, timedOut }: { symbol: string;
           {flowItems.map((f, i) => (
             <div
               key={i}
-              className="flex items-center gap-2 rounded px-2 py-1.5 text-xs"
+              className="flex items-center gap-2 rounded px-2 py-1.5 text-label"
             >
               {f.type === "bullish" ? (
                 <TrendingUp className="h-3 w-3 shrink-0 text-[var(--profit)]" />
@@ -579,7 +579,7 @@ function SentimentTab({ symbol, analysis, loading, timedOut }: { symbol: string;
         </h4>
         <div className={cn("space-y-1.5", !analysis && "opacity-40")}>
           {newsItems.map((n, i) => (
-            <div key={i} className="rounded px-2 py-1.5 text-xs">
+            <div key={i} className="rounded px-2 py-1.5 text-label">
               <div className="flex items-start gap-1.5">
                 <span
                   className={cn(
@@ -679,7 +679,7 @@ function ChatTab({ symbol }: { symbol: string }) {
             <div
               key={msg.id}
               className={cn(
-                "rounded-lg px-3 py-2 text-xs leading-relaxed",
+                "rounded-lg px-3 py-2 text-label leading-relaxed",
                 msg.role === "user"
                   ? "bg-primary/10 text-foreground ml-6"
                   : "bg-[var(--panel)] text-foreground mr-2"
@@ -689,7 +689,7 @@ function ChatTab({ symbol }: { symbol: string }) {
             </div>
           ))}
           {loading && (
-            <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2 px-3 py-2 text-label text-muted-foreground">
               <Loader2 className="size-4 animate-spin" />
               Analyzing...
             </div>
@@ -713,7 +713,7 @@ function ChatTab({ symbol }: { symbol: string }) {
           }}
           maxLength={2000}
           placeholder={`Ask about ${symbol}...`}
-          className="h-8 text-xs bg-background/50 border-border"
+          className="h-8 text-label bg-background/50 border-border"
         />
         <Button
           aria-label="Send message"
@@ -815,13 +815,13 @@ function OrderTab({ symbol }: { symbol: string }) {
       <div className="flex gap-1">
         <button
           onClick={() => setSide("buy")}
-          className={cn("flex-1 rounded py-1.5 text-xs font-semibold transition-colors",
+          className={cn("flex-1 rounded py-1.5 text-label font-semibold transition-colors",
             side === "buy" ? "bg-[var(--profit)]/20 text-[var(--profit)] ring-1 ring-[var(--profit)]/30" : "bg-[var(--panel)] text-muted-foreground"
           )}
         >Buy</button>
         <button
           onClick={() => setSide("sell")}
-          className={cn("flex-1 rounded py-1.5 text-xs font-semibold transition-colors",
+          className={cn("flex-1 rounded py-1.5 text-label font-semibold transition-colors",
             side === "sell" ? "bg-[var(--loss)]/20 text-[var(--loss)] ring-1 ring-[var(--loss)]/30" : "bg-[var(--panel)] text-muted-foreground"
           )}
         >Sell</button>
@@ -860,7 +860,7 @@ function OrderTab({ symbol }: { symbol: string }) {
           id="order-type"
           value={orderType}
           onChange={(e) => setOrderType(e.target.value as AdvancedOrderType)}
-          className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-xs text-foreground"
+          className="mt-1 w-full h-8 rounded border border-border bg-background px-2 text-label text-foreground"
         >
           <option value="market">Market</option>
           <option value="limit">Limit</option>
@@ -940,7 +940,7 @@ function OrderTab({ symbol }: { symbol: string }) {
 
       {/* Separator + Preview */}
       <div className="border-t border-border pt-3 space-y-1.5">
-        <div className="flex justify-between text-xs">
+        <div className="flex justify-between text-label">
           <span className="text-fg-muted">Est. {side === "buy" ? "Cost" : "Proceeds"}</span>
           <span className="text-foreground tabular-nums font-medium">${(estimatedCost ?? 0).toFixed(2)}</span>
         </div>

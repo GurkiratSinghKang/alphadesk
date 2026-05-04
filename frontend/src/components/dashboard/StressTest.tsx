@@ -235,7 +235,7 @@ export function StressTest() {
         onClick={() => setOpen(true)}
         className={cn(
           "w-full flex items-center justify-center gap-2 rounded-lg border border-border",
-          "bg-[var(--surface)] px-4 py-2.5 text-xs font-medium",
+          "bg-[var(--surface)] px-4 py-2.5 text-label font-medium",
           "text-muted-foreground hover:text-foreground hover:border-[var(--chart-4)]/50",
           "transition-all duration-200"
         )}
@@ -305,7 +305,7 @@ export function StressTest() {
               type="number"
               value={customPct}
               onChange={(e) => setCustomPct(e.target.value)}
-              className="w-20 rounded border border-border bg-[var(--surface)] px-2 py-1 text-xs tabular-nums text-foreground outline-none focus:border-[var(--chart-4)]/50"
+              className="w-20 rounded border border-border bg-[var(--surface)] px-2 py-1 text-label tabular-nums text-foreground outline-none focus:border-[var(--chart-4)]/50"
               step="1"
             />
             <span className="text-label text-muted-foreground">%</span>
@@ -319,7 +319,7 @@ export function StressTest() {
 
         {/* No positions state */}
         {!positions.length && (
-          <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
+          <div className="flex items-center justify-center py-6 text-label text-muted-foreground">
             No positions to stress test
           </div>
         )}

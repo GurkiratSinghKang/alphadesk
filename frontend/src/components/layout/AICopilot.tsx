@@ -441,7 +441,7 @@ export function AICopilot() {
               <p className="mb-1 text-sm font-medium text-foreground">
                 How can I help?
               </p>
-              <p className="mb-6 text-center text-xs text-muted-foreground">
+              <p className="mb-6 text-center text-label text-muted-foreground">
                 Ask me anything about your portfolio, markets, or trading
                 strategies.
               </p>
@@ -451,7 +451,7 @@ export function AICopilot() {
                     key={prompt}
                     onClick={() => sendMessage(prompt)}
                     disabled={loading}
-                    className="flex min-h-11 w-full items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2.5 text-left text-xs text-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 disabled:opacity-50"
+                    className="flex min-h-11 w-full items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2.5 text-left text-label text-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 disabled:opacity-50"
                   >
                     <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
                     <span>{prompt}</span>
@@ -466,7 +466,7 @@ export function AICopilot() {
                 <div key={msg.id}>
                   <div
                     className={cn(
-                      "rounded-lg px-3 py-2.5 text-xs leading-relaxed",
+                      "rounded-lg px-3 py-2.5 text-label leading-relaxed",
                       msg.role === "user"
                         ? "ml-8 bg-primary/10 text-foreground"
                         : "mr-2 bg-[var(--panel)] text-foreground"
@@ -515,7 +515,7 @@ export function AICopilot() {
                     <Brain className="h-3 w-3" />
                     Copilot
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-2 text-label text-muted-foreground">
                     <Loader2 className="h-3 w-3 animate-spin" />
                     Thinking...
                   </div>
@@ -544,7 +544,7 @@ export function AICopilot() {
                  Explicit aria-label so screen readers announce the field. */
               aria-label="Ask Claude a question"
               disabled={loading}
-              className="min-w-0 flex-1 bg-transparent text-base sm:text-xs text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
+              className="min-w-0 flex-1 bg-transparent text-base sm:text-label text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
             />
             <button
               onClick={handleSend}

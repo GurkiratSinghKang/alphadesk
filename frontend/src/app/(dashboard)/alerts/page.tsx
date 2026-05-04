@@ -290,7 +290,7 @@ function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void
           <Button
             type="submit"
             disabled={submitting}
-            className="w-full h-11 md:h-9 text-xs font-semibold"
+            className="w-full h-11 md:h-9 text-label font-semibold"
           >
             {submitting ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -543,11 +543,11 @@ function AlertRow({
       {/* Status */}
       <span className="w-20 shrink-0">
         {alert.triggered ? (
-          <span className="text-[var(--profit)] text-xs font-medium">
+          <span className="text-[var(--profit)] text-label font-medium">
             Triggered
           </span>
         ) : (
-          <span className="text-primary text-xs font-medium">Active</span>
+          <span className="text-primary text-label font-medium">Active</span>
         )}
       </span>
 
@@ -659,7 +659,7 @@ function AlertMobileCard({
             </div>
             <div>
               <dt className="t-label">Status</dt>
-              <dd className={cn("mt-1 text-xs font-medium", alert.triggered ? "text-[var(--profit)]" : "text-primary")}>
+              <dd className={cn("mt-1 text-label font-medium", alert.triggered ? "text-[var(--profit)]" : "text-primary")}>
                 {alert.triggered ? "Triggered" : "Active"}
               </dd>
             </div>
@@ -826,7 +826,7 @@ export default function AlertsPage() {
           <Button
             variant="outline"
             size="sm"
-            className="text-xs h-8"
+            className="text-label h-8"
             onClick={() => setShowClearTriggeredConfirm(true)}
           >
             Clear Triggered
@@ -842,7 +842,7 @@ export default function AlertsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-xs h-7"
+                  className="text-label h-7"
                   onClick={() => setShowClearTriggeredConfirm(false)}
                 >
                   Cancel
@@ -850,7 +850,7 @@ export default function AlertsPage() {
                 <Button
                   variant="destructive"
                   size="sm"
-                  className="text-xs h-7"
+                  className="text-label h-7"
                   onClick={() => {
                     setShowClearTriggeredConfirm(false);
                     handleClearTriggered();
@@ -867,7 +867,7 @@ export default function AlertsPage() {
         <Button
           variant="outline"
           size="sm"
-          className="text-xs h-8 text-loss hover:text-loss hover:bg-loss/10"
+          className="text-label h-8 text-loss hover:text-loss hover:bg-loss/10"
           onClick={() => setShowDeleteAllConfirm(true)}
         >
           <Trash2 className="h-3 w-3 mr-1" />
@@ -883,7 +883,7 @@ export default function AlertsPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="text-xs h-7"
+                className="text-label h-7"
                 onClick={() => setShowDeleteAllConfirm(false)}
               >
                 Cancel
@@ -891,7 +891,7 @@ export default function AlertsPage() {
               <Button
                 variant="destructive"
                 size="sm"
-                className="text-xs h-7"
+                className="text-label h-7"
                 onClick={() => {
                   setShowDeleteAllConfirm(false);
                   handleDeleteAll();
@@ -987,7 +987,7 @@ export default function AlertsPage() {
               <div className="min-w-[720px]">
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-[var(--panel)]/50">
                   <Clock className="h-3.5 w-3.5 text-primary" />
-                  <span className="text-xs font-semibold text-foreground">
+                  <span className="text-label font-semibold text-foreground">
                     Active Alerts ({activeAlerts.length})
                   </span>
                 </div>
@@ -1035,7 +1035,7 @@ export default function AlertsPage() {
             className="w-full flex items-center gap-2 px-4 py-2.5 border-b border-border bg-[var(--panel)]/50 hover:bg-[var(--panel)]/70 transition-colors text-left"
           >
             <CheckCircle2 className="h-3.5 w-3.5 text-[var(--profit)]" />
-            <span className="text-xs font-semibold text-foreground flex-1">
+            <span className="text-label font-semibold text-foreground flex-1">
               Triggered History ({triggeredAlerts.length})
             </span>
             <ChevronDown

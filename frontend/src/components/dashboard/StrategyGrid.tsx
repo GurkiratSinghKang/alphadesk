@@ -68,7 +68,7 @@ const StrategyCard = React.memo(function StrategyCard({
           <Badge
             variant="outline"
             className={cn(
-              "shrink-0 text-xs",
+              "shrink-0 text-label",
               strategy.status === "active"
                 ? "border-emerald-500/30 text-emerald-400"
                 : "border-amber-500/30 text-amber-400"
@@ -87,7 +87,7 @@ const StrategyCard = React.memo(function StrategyCard({
                 next to a 7-position / $57.1K invested book. */}
             {strategy.id === "manual-discretionary" ? (
               <span
-                className="text-xs italic text-muted-foreground"
+                className="text-label italic text-muted-foreground"
                 title="Manual trades are executed at the broker. Return/Sharpe/win-rate are computed from the trade ledger, not a simulated backtest."
               >
                 No backtest &mdash; discretionary bucket
@@ -95,7 +95,7 @@ const StrategyCard = React.memo(function StrategyCard({
             ) : strategy.returnPct === 0 && strategy.positions === 0 ? (
               <>
                 <span className="text-sm text-muted-foreground">&mdash;</span>
-                <span className="text-xs text-muted-foreground">No positions</span>
+                <span className="text-label text-muted-foreground">No positions</span>
               </>
             ) : (
               <>
@@ -110,7 +110,7 @@ const StrategyCard = React.memo(function StrategyCard({
                   {(strategy.returnPct ?? 0) >= 0 ? "+" : ""}
                   {(strategy.returnPct ?? 0).toFixed(2)}%
                 </span>
-                <span className="text-xs text-muted-foreground">
+                <span className="text-label text-muted-foreground">
                   {strategy.positions} active
                   {strategy.returnPct !== 0 && strategy.positions === 0 && (
                     <span className="text-label text-muted-foreground ml-1">(historical)</span>
@@ -166,7 +166,7 @@ const CompactStrategyRow = React.memo(function CompactStrategyRow({
       <div className="shrink-0 rounded bg-[var(--panel)] p-1">
         <Icon className="h-3 w-3 text-muted-foreground" />
       </div>
-      <span className="flex-1 truncate text-xs font-medium text-foreground">{strategy.shortName}</span>
+      <span className="flex-1 truncate text-label font-medium text-foreground">{strategy.shortName}</span>
       <Badge
         variant="outline"
         className={cn(
@@ -228,7 +228,7 @@ export function StrategyGrid({ strategies, regimeLabel, onStrategyClick }: Strat
           </h2>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">
+          <span className="text-label text-muted-foreground">
             {strategies.filter((s) => s.status === "active").length} active
           </span>
           <div className="flex items-center rounded-md border border-border/50 p-0.5">

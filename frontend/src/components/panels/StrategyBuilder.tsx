@@ -159,9 +159,9 @@ export function StrategyBuilder() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") addRule(); }}
             placeholder='e.g. "Buy when RSI drops below 30"'
-            className="flex-1 h-8 rounded border border-border bg-background px-3 text-xs text-foreground placeholder:text-muted-foreground"
+            className="flex-1 h-8 rounded border border-border bg-background px-3 text-label text-foreground placeholder:text-muted-foreground"
           />
-          <Button onClick={addRule} size="sm" className="h-8 text-xs gap-1">
+          <Button onClick={addRule} size="sm" className="h-8 text-label gap-1">
             <Plus className="h-3 w-3" /> Add
           </Button>
         </div>
@@ -199,7 +199,7 @@ export function StrategyBuilder() {
                 rule.valid ? "border-[var(--profit)]/30 bg-[var(--profit)]/5" : "border-amber-500/30 bg-amber-500/5"
               )}>
                 <div className="flex-1">
-                  <p className="text-xs text-foreground">{rule.condition}</p>
+                  <p className="text-label text-foreground">{rule.condition}</p>
                   {rule.parsed && (
                     <div className="flex gap-2 mt-1 items-center">
                       {rule.parsed.action && <span className="text-label rounded bg-[var(--profit)]/20 text-[var(--profit)] px-1.5 py-0.5 font-bold">{rule.parsed.action}</span>}
@@ -222,13 +222,13 @@ export function StrategyBuilder() {
       {/* Actions */}
       {rules.length > 0 && (
         <div className="flex gap-2">
-          <Button onClick={handleAiRefine} variant="outline" size="sm" className="text-xs gap-1.5" disabled={aiThinking}>
+          <Button onClick={handleAiRefine} variant="outline" size="sm" className="text-label gap-1.5" disabled={aiThinking}>
             {aiThinking ? <Sparkles className="h-3 w-3 animate-spin" /> : <Brain className="h-3 w-3" />}
             {aiThinking ? "Analyzing with Claude..." : "Refine with AI"}
           </Button>
           <Button
             size="sm"
-            className="text-xs gap-1.5"
+            className="text-label gap-1.5"
             onClick={handleBacktest}
             disabled={!canBacktest}
           >
@@ -247,7 +247,7 @@ export function StrategyBuilder() {
         <div className="rounded-lg border border-[var(--loss)]/30 bg-[var(--loss)]/5 p-3">
           <div className="flex items-center gap-2 text-[var(--loss)]">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-            <p className="text-xs">{aiError}</p>
+            <p className="text-label">{aiError}</p>
           </div>
         </div>
       )}
@@ -262,7 +262,7 @@ export function StrategyBuilder() {
                 <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
                 <p className="text-label uppercase tracking-wider text-primary font-semibold">AI Summary</p>
               </div>
-              <p className="text-xs text-foreground leading-relaxed">{aiResult.summary}</p>
+              <p className="text-label text-foreground leading-relaxed">{aiResult.summary}</p>
             </div>
           )}
 
@@ -275,7 +275,7 @@ export function StrategyBuilder() {
               </div>
               <ul className="space-y-1.5">
                 {aiResult.improvements.map((imp, i) => (
-                  <li key={i} className="flex items-start gap-2 text-xs text-foreground">
+                  <li key={i} className="flex items-start gap-2 text-label text-foreground">
                     <span className="text-muted-foreground mt-0.5 shrink-0">-</span>
                     <span>{imp}</span>
                   </li>
@@ -293,7 +293,7 @@ export function StrategyBuilder() {
               </div>
               <ul className="space-y-1.5">
                 {aiResult.risks.map((risk, i) => (
-                  <li key={i} className="flex items-start gap-2 text-xs text-amber-400/90">
+                  <li key={i} className="flex items-start gap-2 text-label text-amber-400/90">
                     <span className="text-amber-500/50 mt-0.5 shrink-0">-</span>
                     <span>{risk}</span>
                   </li>
@@ -313,19 +313,19 @@ export function StrategyBuilder() {
                 {aiResult.backtest_params.suggested_timeframe && (
                   <div>
                     <p className="text-label text-muted-foreground uppercase">Timeframe</p>
-                    <p className="text-xs text-foreground font-medium">{aiResult.backtest_params.suggested_timeframe}</p>
+                    <p className="text-label text-foreground font-medium">{aiResult.backtest_params.suggested_timeframe}</p>
                   </div>
                 )}
                 {aiResult.backtest_params.lookback_period && (
                   <div>
                     <p className="text-label text-muted-foreground uppercase">Lookback</p>
-                    <p className="text-xs text-foreground font-medium">{aiResult.backtest_params.lookback_period}</p>
+                    <p className="text-label text-foreground font-medium">{aiResult.backtest_params.lookback_period}</p>
                   </div>
                 )}
                 {aiResult.backtest_params.position_size && (
                   <div>
                     <p className="text-label text-muted-foreground uppercase">Position Size</p>
-                    <p className="text-xs text-foreground font-medium">{aiResult.backtest_params.position_size}</p>
+                    <p className="text-label text-foreground font-medium">{aiResult.backtest_params.position_size}</p>
                   </div>
                 )}
               </div>

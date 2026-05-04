@@ -935,7 +935,7 @@ function DashboardCommandCenter({
                 </div>
                 <h2
                   id="dashboard-command-title"
-                  className="mt-3 text-h1 font-semibold leading-[1.04] tracking-tight text-ink-1000 md:text-display-sm"
+                  className="mt-3 text-h1 font-semibold leading-tight tracking-tight text-ink-1000 md:text-display-sm"
                   style={{ letterSpacing: 0 }}
                 >
                   Control room
@@ -1251,6 +1251,7 @@ function PortfolioCanvas({
             <Sparkle className="size-4 text-brand" aria-hidden />
             <p className="t-label text-fg-hint">Capital canvas</p>
           </div>
+          {/* design-intentional: leading-[0.92] on hero numeric display — extreme tight leading for capital-canvas wraparound visual cohesion */}
           <p className="mt-4 break-words font-mono text-[clamp(34px,3.4vw,52px)] font-medium leading-[0.92] tracking-tight text-ink-1000">
             {account.ready ? formatCurrency(account.equity) : "Awaiting"}
           </p>

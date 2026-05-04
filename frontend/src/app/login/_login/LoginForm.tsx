@@ -30,7 +30,7 @@ const LOCKOUT_THRESHOLD = 5; // failures that trigger the lockout
 const authInputClass =
   "h-12 rounded-[8px] border border-[#cddbd0] bg-white/80 px-4 font-sans text-body text-[#12281f] placeholder:text-[#8b9a91] focus-visible:border-[#0f7a5d] focus-visible:shadow-[0_0_0_4px_rgba(15,122,93,0.15)]";
 const authLabelClass = "font-sans text-body-sm font-medium text-[#203c31]";
-const authMutedClass = "font-sans text-body-sm leading-[1.55] text-[#5d7268]";
+const authMutedClass = "font-sans text-body-sm leading-relaxed text-[#5d7268]";
 
 function readFailures(): number[] {
   if (typeof window === "undefined") return [];
@@ -355,7 +355,7 @@ export default function LoginForm() {
           id="login-error"
           role="alert"
           aria-live="assertive"
-          className="inline-flex items-start gap-2 rounded-[8px] border border-[#c95d42]/[0.26] bg-[#fff1ec] px-3 py-2 font-sans text-body-sm leading-[1.45] text-[#8f321f]"
+          className="inline-flex items-start gap-2 rounded-[8px] border border-[#c95d42]/[0.26] bg-[#fff1ec] px-3 py-2 font-sans text-body-sm leading-snug text-[#8f321f]"
         >
           <WarningCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden weight="regular" />
           {error}

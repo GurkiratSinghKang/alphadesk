@@ -126,7 +126,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
           <h2 className="text-sm font-semibold text-foreground">Strategy Correlation Matrix</h2>
         </div>
         <div className="p-8 text-center">
-          <p className="text-xs text-muted-foreground">Need at least 2 strategies with trade history to compute correlations.</p>
+          <p className="text-label text-muted-foreground">Need at least 2 strategies with trade history to compute correlations.</p>
         </div>
       </div>
     );
@@ -146,7 +146,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
           </h2>
         </div>
         {hoveredCell && (
-          <span className="text-xs tabular-nums text-muted-foreground">
+          <span className="text-label tabular-nums text-muted-foreground">
             {activeStrategies[hoveredCell.row].shortName} / {activeStrategies[hoveredCell.col].shortName}:{" "}
             <span
               className={cn(
@@ -250,7 +250,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
                 )}>
                   {insights.divScore}
                 </span>
-                <span className="text-xs text-muted-foreground">/ 100</span>
+                <span className="text-label text-muted-foreground">/ 100</span>
               </div>
               <div className="mt-1.5 h-1.5 rounded-full bg-muted/30 overflow-hidden">
                 <div
@@ -272,7 +272,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
                     Most Correlated
                   </span>
                 </div>
-                <p className="text-xs font-medium text-foreground">
+                <p className="text-label font-medium text-foreground">
                   {insights.mostCorrelated.nameA} / {insights.mostCorrelated.nameB}
                 </p>
                 <span className="text-sm font-bold tabular-nums text-loss">
@@ -290,7 +290,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
                     Most Diversified
                   </span>
                 </div>
-                <p className="text-xs font-medium text-foreground">
+                <p className="text-label font-medium text-foreground">
                   {insights.mostInverse.nameA} / {insights.mostInverse.nameB}
                 </p>
                 <span className="text-sm font-bold tabular-nums text-ice">

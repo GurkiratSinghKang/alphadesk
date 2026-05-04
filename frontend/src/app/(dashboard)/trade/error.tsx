@@ -22,7 +22,7 @@ export default function DashboardError({
         <p className="text-sm text-muted-foreground">
           {error.message || "An unexpected error occurred in the dashboard."}
         </p>
-        <Button onClick={reset} variant="outline" className="text-xs">
+        <Button onClick={reset} variant="outline" className="text-label">
           Try Again
         </Button>
       </div>

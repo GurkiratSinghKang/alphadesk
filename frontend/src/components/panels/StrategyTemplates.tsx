@@ -172,7 +172,7 @@ function TemplateCard({
         )}
       </div>
 
-      <p className="mt-2.5 text-xs text-muted-foreground leading-relaxed">
+      <p className="mt-2.5 text-label text-muted-foreground leading-relaxed">
         {template.description}
       </p>
 
@@ -181,7 +181,7 @@ function TemplateCard({
           <p className="text-label uppercase tracking-wider text-muted-foreground">
             Sharpe
           </p>
-          <p className="text-xs font-semibold tabular-nums text-foreground">
+          <p className="text-label font-semibold tabular-nums text-foreground">
             {template.sharpeRange}
           </p>
         </div>
@@ -189,7 +189,7 @@ function TemplateCard({
           <p className="text-label uppercase tracking-wider text-muted-foreground">
             Max DD
           </p>
-          <p className="text-xs font-semibold tabular-nums text-foreground">
+          <p className="text-label font-semibold tabular-nums text-foreground">
             {template.typicalDrawdown}
           </p>
         </div>
@@ -217,7 +217,7 @@ function TemplateCard({
       <Button
         size="sm"
         variant={isActive ? "outline" : "default"}
-        className="mt-3 w-full text-xs h-7"
+        className="mt-3 w-full text-label h-7"
         onClick={() => onActivate(template.id)}
       >
         {isActive ? "Deactivate" : "Activate Template"}
@@ -320,7 +320,7 @@ export function StrategyTemplates({ open, onClose }: StrategyTemplatesProps) {
               <h2 className="text-base font-bold text-foreground">
                 Strategy Templates
               </h2>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-label text-muted-foreground">
                 One-click portfolio configurations — activate to enable included
                 strategies
               </p>
@@ -328,7 +328,7 @@ export function StrategyTemplates({ open, onClose }: StrategyTemplatesProps) {
           </div>
           <div className="flex items-center gap-2">
             {activating && (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1.5 text-label text-muted-foreground">
                 <Loader2 className="h-3 w-3 animate-spin" />
                 Applying...
               </div>

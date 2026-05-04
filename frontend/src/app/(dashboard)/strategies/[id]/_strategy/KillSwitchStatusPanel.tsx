@@ -166,7 +166,7 @@ export default function KillSwitchStatusPanel({
           {activeEvent.reason && (
             <p className="text-fg-muted">Reason: {activeEvent.reason}</p>
           )}
-          <p className="text-xs text-fg-muted">
+          <p className="text-label text-fg-muted">
             Triggered: {formatTriggeredAt(activeEvent.triggered_at)}
             {activeEvent.manual_actor ? ` by ${activeEvent.manual_actor}` : ""}
           </p>
@@ -180,7 +180,7 @@ export default function KillSwitchStatusPanel({
               {busy ? "Re-enabling…" : "Re-enable"}
             </button>
           ) : (
-            <p className="text-xs italic text-fg-muted">
+            <p className="text-label italic text-fg-muted">
               Layer {activeEvent.layer} is auto-managed; clear via SQL (see KILL_SWITCH.md).
             </p>
           )}
@@ -193,7 +193,7 @@ export default function KillSwitchStatusPanel({
               Emergency disable
             </summary>
             <div className="mt-2 space-y-2">
-              <label className="block text-xs font-medium">
+              <label className="block text-label font-medium">
                 Reason (required)
                 <input
                   type="text"
@@ -218,7 +218,7 @@ export default function KillSwitchStatusPanel({
       )}
 
       <div className="border-t border-line pt-2">
-        <label className="flex items-center gap-2 text-xs text-fg-muted">
+        <label className="flex items-center gap-2 text-label text-fg-muted">
           <input
             type="checkbox"
             checked={showHistory}
@@ -227,7 +227,7 @@ export default function KillSwitchStatusPanel({
           Include resolved events
         </label>
         {showHistory && events.length > 0 && (
-          <ul className="mt-2 space-y-1 text-xs">
+          <ul className="mt-2 space-y-1 text-label">
             {events.map((ev) => (
               <li
                 key={ev.id}

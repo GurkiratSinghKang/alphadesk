@@ -206,7 +206,7 @@ function MorningBriefContent({
               ) : (
                 <TrendingDown className="h-3.5 w-3.5 text-loss" />
               )}
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.12em]">
+              <span className="text-eyebrow font-semibold text-muted-foreground uppercase tracking-[0.12em]">
                 Overnight
               </span>
             </div>
@@ -239,7 +239,7 @@ function MorningBriefContent({
           <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
             <div className="flex items-center gap-1.5 mb-2">
               <BarChart3 className="h-3.5 w-3.5 text-ice" />
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.12em]">
+              <span className="text-eyebrow font-semibold text-muted-foreground uppercase tracking-[0.12em]">
                 Top Movers
               </span>
             </div>
@@ -285,17 +285,17 @@ function MorningBriefContent({
           <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
             <div className="flex items-center gap-1.5 mb-2">
               <Zap className="h-3.5 w-3.5 text-amber" />
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.12em]">
+              <span className="text-eyebrow font-semibold text-muted-foreground uppercase tracking-[0.12em]">
                 Market
               </span>
             </div>
             <div className="space-y-1.5">
               {/* Regime badge */}
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                <span className="text-eyebrow font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   Regime
                 </span>
-                <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold tracking-[0.12em] uppercase text-primary">
+                <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-eyebrow font-semibold tracking-[0.12em] uppercase text-primary">
                   {data.market.regime}
                 </span>
               </div>
@@ -349,7 +349,7 @@ function MorningBriefContent({
         {/* Catalysts */}
         {data.catalysts.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <span className="text-eyebrow font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               Upcoming
             </span>
             {data.catalysts.map((c) => (

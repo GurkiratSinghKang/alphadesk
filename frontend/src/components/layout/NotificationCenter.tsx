@@ -73,7 +73,7 @@ function NotificationRow({ notification, onRead }: { notification: AppNotificati
     <button
       onClick={() => onRead(notification.id)}
       className={cn(
-        "flex w-full items-start gap-2.5 rounded-md px-3 py-2.5 text-left text-xs transition-colors hover:bg-accent/50",
+        "flex w-full items-start gap-2.5 rounded-md px-3 py-2.5 text-left text-label transition-colors hover:bg-accent/50",
         !notification.read && "bg-primary/5"
       )}
     >
@@ -149,7 +149,7 @@ export function NotificationCenter() {
       <PopoverContent side="bottom" align="end" sideOffset={4} className="w-[calc(100vw-2rem)] max-w-96 sm:w-96 bg-[var(--surface)] border-border p-0">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
-          <span className="text-xs font-semibold text-foreground">Notifications</span>
+          <span className="text-label font-semibold text-foreground">Notifications</span>
           <div className="flex items-center gap-2">
             {unreadCount > 0 && (
               <button
@@ -207,7 +207,7 @@ export function NotificationCenter() {
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
               <Bell className="h-6 w-6 text-muted-foreground/30 mb-2" />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-label text-muted-foreground">
                 {activeTab === "all" ? "No notifications yet." : `No ${activeTab} notifications.`}
               </p>
               <p className="text-label text-muted-foreground mt-1">
