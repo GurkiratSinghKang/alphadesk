@@ -90,7 +90,7 @@ export default function StrategyCard({
       className={cn(
         "group/strat relative overflow-hidden flex flex-col gap-2.5",
         "bg-bg-card border border-border rounded-md p-4",
-        "before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px]",
+        "before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5",
         "transition-colors transition-transform duration-150",
         "hover:bg-bg-elev-1 hover:border-border-strong hover:-translate-y-[1px]",
         "hover:before:w-[3px]",

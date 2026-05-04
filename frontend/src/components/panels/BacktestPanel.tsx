@@ -489,7 +489,7 @@ function EquityCurveSvg({
       {ddData.length > 1 && Math.abs(ddMin) > 0.01 && (
         <div>
           <p className="text-label uppercase tracking-wider text-muted-foreground font-semibold mb-0.5 px-1">Drawdown</p>
-          <svg viewBox={`0 0 ${w} ${ddH}`} className="w-full h-[40px] rounded border border-border bg-[var(--panel)]" preserveAspectRatio="none">
+          <svg viewBox={`0 0 ${w} ${ddH}`} className="w-full h-10 rounded border border-border bg-[var(--panel)]" preserveAspectRatio="none">
             <path d={ddAreaPath} fill={ddFill} />
             <polyline
               points={ddPoints.map(p => `${p.x},${p.y}`).join(" ")}

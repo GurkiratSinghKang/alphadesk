@@ -21,7 +21,7 @@ const GROUP_ICONS: Record<string, typeof Globe> = {
 
 function KBD({ children }: { children: string }) {
   return (
-    <kbd className="inline-flex items-center justify-center min-w-[24px] rounded-md bg-[var(--panel)] border border-border/60 px-1.5 py-0.5 text-label font-mono text-foreground shadow-[0_1px_0_1px_rgba(0,0,0,0.4)]">
+    <kbd className="inline-flex items-center justify-center min-w-6 rounded-md bg-[var(--panel)] border border-border/60 px-1.5 py-0.5 text-label font-mono text-foreground shadow-[0_1px_0_1px_rgba(0,0,0,0.4)]">
       {children}
     </kbd>
   );

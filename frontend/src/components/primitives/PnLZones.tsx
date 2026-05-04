@@ -149,7 +149,7 @@ export default function PnLZones({
         {/* Underlying-price tick — bold vertical line (the "you are here"). */}
         <span
           aria-hidden="true"
-          className="absolute top-0 bottom-0 w-[2px] bg-[color:var(--fg-strong)]"
+          className="absolute top-0 bottom-0 w-0.5 bg-[color:var(--fg-strong)]"
           style={{ left: `calc(${underlyingPct}% - 1px)` }}
         />
       </div>

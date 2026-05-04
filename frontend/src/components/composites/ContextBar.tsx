@@ -44,7 +44,7 @@ export default function ContextBar({ cells, className }: ContextBarProps) {
             key={cell.label + i}
             data-emphasis={cell.emphasis || undefined}
             className={cn(
-              "flex flex-col justify-center gap-[2px] shrink-0 snap-start px-3 md:px-[22px]",
+              "flex flex-col justify-center gap-0.5 shrink-0 snap-start px-3 md:px-[22px]",
               cell.emphasis && "min-w-[220px]",
               !isLast && "border-r border-border-hair"
             )}

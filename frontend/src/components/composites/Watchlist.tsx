@@ -285,7 +285,7 @@ function WatchlistRow({
         {selected && (
           <span
             aria-hidden
-            className="absolute left-0 top-0 bottom-0 w-[2px] bg-brand"
+            className="absolute left-0 top-0 bottom-0 w-0.5 bg-brand"
           />
         )}
 
