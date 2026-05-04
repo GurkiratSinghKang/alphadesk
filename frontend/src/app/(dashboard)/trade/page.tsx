@@ -357,6 +357,16 @@ export default function TradePage() {
   // QA r1 A2: option-contract quote (single-leg). useQuote("") returns null
   // and is a no-op subscription, so this is cheap when no contract is staged.
   const optionContractRawQuote = useQuote(activeContract?.occ ?? "");
+  // R4-5 W-3 — track when the option snapshot fan-out came back missing
+  // the staged OCC. Previously the silent .catch() left the trader staring
+  // at "--" telemetry with no hint why; now we light up an inline banner in
+  // the OrderBar with a Retry handler. The retry tick re-runs this effect
+  // by changing the dep, mirroring the chartReloadKey pattern above.
+  const [optionsSnapshotRetry, setOptionsSnapshotRetry] = useState(0);
+  const [optionsUnavailable, setOptionsUnavailable] = useState<{
+    occ: string;
+    underlying: string;
+  } | null>(null);
   // QA r1 A2 follow-up: hydrate the OCC quote into the store. The data
   // pipeline bridge only fans out for the equity watchlist + selected
   // symbol — option contracts deep-linked via ?contract= / ?legs= aren't
@@ -368,7 +378,10 @@ export default function TradePage() {
     const symbols: string[] = [];
     if (activeContract) symbols.push(activeContract.occ);
     for (const leg of activeLegs) symbols.push(leg.occ);
-    if (symbols.length === 0) return;
+    if (symbols.length === 0) {
+      setOptionsUnavailable(null);
+      return;
+    }
     let cancelled = false;
     getSnapshot(symbols)
       .then((snapshot) => {
@@ -377,16 +390,34 @@ export default function TradePage() {
         if (quotes.length > 0) {
           useMarketStore.getState().updateQuotes(quotes);
         }
+        // R4-5 W-3: getSnapshot swallows per-symbol failures (see api.ts).
+        // If the staged OCC is missing from the result map, surface that to
+        // the OrderBar so the trader sees the degradation. Equity-only
+        // tickets (no activeContract) don't get this banner.
+        if (activeContract && !snapshot[activeContract.occ]) {
+          setOptionsUnavailable({
+            occ: activeContract.occ,
+            underlying: activeContract.symbol,
+          });
+        } else {
+          setOptionsUnavailable(null);
+        }
       })
       .catch(() => {
-        // Silent — option-quote endpoint can 404 for inactive contracts;
-        // OrderBar already falls back to "--" via the telemetryQuote
-        // selector below.
+        // Total network failure (rare — getSnapshot itself swallows symbol
+        // 404s). Still surface as unavailable so the UI is honest.
+        if (cancelled) return;
+        if (activeContract) {
+          setOptionsUnavailable({
+            occ: activeContract.occ,
+            underlying: activeContract.symbol,
+          });
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [activeContract, activeLegs]);
+  }, [activeContract, activeLegs, optionsSnapshotRetry]);
   const optionContractQuote = useMemo(
     () =>
       activeContract && optionContractRawQuote
@@ -1085,6 +1116,10 @@ export default function TradePage() {
                 submitDestination={executionReadiness.destination}
                 reviewCopy={executionReadiness.reviewCopy}
                 ticketLocked={activeLegs.length > 0}
+                optionsUnavailable={optionsUnavailable}
+                onRetryOptions={() =>
+                  setOptionsSnapshotRetry((tick) => tick + 1)
+                }
                 className="border-t-0 bg-transparent"
               />
               <div className="border-t border-border-hair p-4">
