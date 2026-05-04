@@ -69,6 +69,76 @@ class FMPFundamentalsProvider:
             return pd.DataFrame()
         return pd.DataFrame(data)
 
+    # ---- sp500 point-in-time membership (Plan B.2) -------------------------
+    @cached(ttl_seconds=TTL_ANNUAL)
+    def _sp500_current(self) -> pd.DataFrame:
+        """Current S&P 500 constituents (FMP stable ``/sp500-constituent``)."""
+        data = self._http.get("/sp500-constituent", {})
+        if not data:
+            return pd.DataFrame()
+        return pd.DataFrame(data)
+
+    @cached(ttl_seconds=TTL_ANNUAL)
+    def _sp500_historical_changes(self) -> pd.DataFrame:
+        """Historical add/remove events for the S&P 500.
+
+        FMP returns events newest-first; each row may represent an addition
+        (``symbol``/``addedSecurity`` populated), a removal
+        (``removedTicker``/``removedSecurity``), or a replacement (both).
+        """
+        data = self._http.get("/historical-sp500-constituent", {})
+        if not data:
+            return pd.DataFrame()
+        df = pd.DataFrame(data)
+        # Normalize the date column — FMP varies between "date" and "dateAdded"
+        if "date" not in df.columns and "dateAdded" in df.columns:
+            df["date"] = df["dateAdded"]
+        if "date" in df.columns:
+            df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
+            df = df.sort_values("date", ascending=False).reset_index(drop=True)
+        return df
+
+    def sp500_constituents(self, asof: date | datetime | str) -> list[str]:
+        """Return the S&P 500 constituent symbols as of ``asof``.
+
+        Method: start from the current membership, then walk the historical
+        change log backwards from today to ``asof``, undoing each change.
+
+        For a change with ``date > asof``:
+          - if a symbol was *added* after asof → remove it from the membership
+          - if a symbol was *removed* after asof → add it back to the membership
+
+        Returns an alphabetically-sorted list of upper-case ticker symbols.
+        Returns an empty list if FMP is unreachable or returns no data; PEAD's
+        ``load_universe()`` falls back to its static seed in that case.
+        """
+        asof_d = _to_date(asof)
+        if asof_d is None:
+            return []
+
+        current = self._sp500_current()
+        if current.empty or "symbol" not in current.columns:
+            return []
+        membership: set[str] = {
+            str(s).upper() for s in current["symbol"].tolist() if s
+        }
+
+        changes = self._sp500_historical_changes()
+        if not changes.empty and "date" in changes.columns:
+            # Filter to changes that happened AFTER asof; undo them.
+            future_changes = changes[changes["date"] > asof_d]
+            for _, row in future_changes.iterrows():
+                added_sym = row.get("symbol")
+                removed_sym = row.get("removedTicker")
+                if added_sym and isinstance(added_sym, str):
+                    # This symbol was added after asof — at asof it wasn't a member yet.
+                    membership.discard(added_sym.upper())
+                if removed_sym and isinstance(removed_sym, str):
+                    # This symbol was removed after asof — at asof it was still a member.
+                    membership.add(removed_sym.upper())
+
+        return sorted(membership)
+
     # ---- piotroski_f --------------------------------------------------------
     def piotroski_f(self, symbol: str, asof: date | datetime | str) -> int:
         """Piotroski (2000) F-score 0–9 from latest two annual statements.
