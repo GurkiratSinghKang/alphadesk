@@ -354,8 +354,9 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "dividend-capture": {
         "name": "Dividend Capture",
-        "description": "Planned dividend-capture concept. No backend implementation or live orders yet; requires ex-dividend calendar, dividend-adjusted pricing, tax-aware cost model, and point-in-time quality data.",
-        "status": StrategyStatus.PLANNED,
+        "description": "Long-only ex-dividend-day pricing-anomaly book (Elton-Gruber 1970). Enter MOC T-3 sessions before ex-date on liquid large-caps with ≥0.5% per-event yield + no earnings overlap; exit MOC T+1. Driven by the FMP /dividends-calendar feed via FMPDividendsProvider (Plan C.2). Tax caveat: short-term holding period — best in tax-deferred accounts.",
+        # Plan C.2: backend strategy package landed; status is now ACTIVE.
+        "status": StrategyStatus.ACTIVE,
         "invested_amount": 0,
         "total_return_pct": 0,
         "sharpe_ratio": 0,
