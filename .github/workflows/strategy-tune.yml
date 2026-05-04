@@ -1,0 +1,199 @@
+name: Strategy Tune Batch
+
+# Plan A.2: nightly / on-demand retune of the 9-strategy batch listed in
+# audit-reports/live-flip-readiness-completion-2026-05-02.md. Each tune
+# script writes to audit-reports/phase1-<name>-tune.json; each OOS-eval
+# script then reads that and produces audit-reports/phase1-<name>-oos.json
+# with bootstrap CIs.
+#
+# Workflow is gated on workflow_dispatch (manual trigger) by default.
+# A scheduled cron is provided but commented out — uncomment to switch
+# this to nightly cadence once cost / API-budget tradeoffs are settled.
+#
+# Each tune is a separate job so they run in parallel where possible AND
+# a single tune failure doesn't cancel the rest of the batch (continue-on-
+# error allows partial-success runs to still upload artefacts).
+
+on:
+  workflow_dispatch:
+    inputs:
+      strategy:
+        description: >-
+          Comma-separated subset to run, or "all" for the full 9-strategy batch.
+          Examples: "pead", "pead,pairs_trading", "all".
+        required: false
+        default: "all"
+      n_trials_override:
+        description: >-
+          Optional override for the per-script n_trials default. Empty = use
+          each script's default (e.g. tune_pead.py defaults to 20-30 internally).
+        required: false
+        default: ""
+
+  # Uncomment to enable a weekly Sunday-night retune. Costs FMP / Polygon /
+  # Alpaca API calls plus ~6-12 hours of CI compute per run.
+  # schedule:
+  #   - cron: "0 4 * * 0"  # Sun 04:00 UTC
+
+jobs:
+  tune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hours per strategy is the upper bound
+    strategy:
+      fail-fast: false
+      matrix:
+        strategy_name:
+          - pead
+          - pairs_trading
+          - vrp_harvest
+          - earnings_vol
+          - ts_momentum
+          - regime_adaptive
+          - kama
+          - dual_momentum
+          - orb
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # We commit refreshed audit-reports/*.json back to the branch on
+          # success, so we need a write-able token + full history.
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Skip if not in subset
+        id: subset
+        run: |
+          subset='${{ github.event.inputs.strategy }}'
+          if [[ "$subset" == "all" || -z "$subset" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [[ ",${subset}," == *",${{ matrix.strategy_name }},"* ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping ${{ matrix.strategy_name }} — not in subset '$subset'"
+          fi
+
+      - name: Setup Python
+        if: steps.subset.outputs.run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        if: steps.subset.outputs.run == 'true'
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r backend/requirements.txt
+          .venv/bin/pip install -r backend/requirements-dev.txt 2>/dev/null || true
+
+      - name: Run tune script
+        if: steps.subset.outputs.run == 'true'
+        env:
+          PYTHONPATH: backend
+          # Provider API keys — required for real data fetches during tune.
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
+          # Stub out DB-dependent imports per the tune script's own pattern.
+          SKIP_DB_INIT: "true"
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          JWT_SECRET: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        run: |
+          name="${{ matrix.strategy_name }}"
+          override='${{ github.event.inputs.n_trials_override }}'
+          script="scripts/tune_${name}.py"
+          # vrp_harvest takes --trials, others take a positional n_trials,
+          # and tune_orb.py takes no arg. Map per-strategy.
+          case "$name" in
+            vrp_harvest)
+              if [[ -n "$override" ]]; then
+                .venv/bin/python "$script" --trials "$override"
+              else
+                .venv/bin/python "$script" --trials 25
+              fi
+              ;;
+            orb)
+              .venv/bin/python "$script"
+              ;;
+            earnings_vol)
+              .venv/bin/python "$script" "${override:-25}"
+              ;;
+            ts_momentum|regime_adaptive)
+              .venv/bin/python "$script" "${override:-40}"
+              ;;
+            kama)
+              .venv/bin/python "$script" "${override:-50}"
+              ;;
+            dual_momentum)
+              .venv/bin/python "$script" "${override:-15}"
+              ;;
+            *)
+              # pead, pairs_trading default to 30 trials.
+              .venv/bin/python "$script" "${override:-30}"
+              ;;
+          esac
+
+      - name: Run OOS eval script
+        if: steps.subset.outputs.run == 'true'
+        env:
+          PYTHONPATH: backend
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
+          SKIP_DB_INIT: "true"
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          JWT_SECRET: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        run: |
+          name="${{ matrix.strategy_name }}"
+          # OOS eval scripts have a few different naming patterns.
+          case "$name" in
+            kama)              eval_script="scripts/kama_oos_eval.py" ;;
+            rsi2_reversal)     eval_script="scripts/rsi2_oos_eval.py" ;;
+            ts_momentum)       eval_script="scripts/ts_momentum_oos_eval.py" ;;
+            *)                 eval_script="scripts/${name}_oos_eval.py" ;;
+          esac
+          if [[ -f "$eval_script" ]]; then
+            .venv/bin/python "$eval_script"
+          else
+            echo "::warning::No OOS eval script for $name at $eval_script — skipping eval step (tune JSON still produced)"
+          fi
+
+      - name: Upload audit-reports artefacts
+        if: steps.subset.outputs.run == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-${{ matrix.strategy_name }}
+          path: |
+            audit-reports/phase1-${{ matrix.strategy_name }}-tune.json
+            audit-reports/phase1-${{ matrix.strategy_name }}-oos.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  # Aggregator: after the matrix completes, write a single PR that
+  # commits all the refreshed audit-report JSONs back to feature/deployment.
+  # Triggered manually after the matrix succeeds — automating the commit
+  # in the same workflow is fragile (can't push from the matrix worker
+  # cleanly without a custom token). For now operators download the
+  # artefact bundle and PR it manually; that's the same pattern the
+  # qa/r3-* workflows use.
+  summarize:
+    needs: tune
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summarize results
+        run: |
+          echo "Strategy tune batch complete."
+          echo "Each strategy's tune.json + oos.json is available as a workflow"
+          echo "artefact (named phase1-<strategy_name>) for 30 days."
+          echo ""
+          echo "To merge results back to feature/deployment:"
+          echo "  1. Download all artefacts from this workflow run"
+          echo "  2. Place them in audit-reports/ on a feature branch"
+          echo "  3. Open a PR titled 'audit: refresh phase1 OOS JSONs'"
+          echo ""
+          echo "Long-term: consider a follow-on PR that auto-commits via a"
+          echo "PAT with contents:write scope."
