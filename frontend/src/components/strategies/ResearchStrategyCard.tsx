@@ -39,7 +39,7 @@ export default function ResearchStrategyCard({
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <h3 className="t-display-section italic">{name}</h3>
+          <h3 className="t-section-cap italic">{name}</h3>
           <p className="mt-1 font-mono text-[13px] text-[color:var(--fg-muted)]">
             {subtitle}
           </p>

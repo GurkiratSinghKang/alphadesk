@@ -14,7 +14,7 @@ export default function StrikeLadder({ ladder }: StrikeLadderProps) {
   if (!ladder || ladder.rows.length === 0) {
     return (
       <section data-slot="strike-ladder">
-        <h3 className="t-display-section italic text-[13px] mt-4">Strike ladder</h3>
+        <h3 className="t-section-cap italic mt-4">Strike ladder</h3>
         <p className="mt-1 font-mono text-[12px] text-[color:var(--fg-muted)]">
           — options chain unavailable.
         </p>
@@ -29,7 +29,7 @@ export default function StrikeLadder({ ladder }: StrikeLadderProps) {
   return (
     <section data-slot="strike-ladder">
       <div className="mt-4 flex items-baseline justify-between gap-2">
-        <h3 className="t-display-section italic text-[13px] flex items-center gap-2">
+        <h3 className="t-section-cap italic flex items-center gap-2">
           <span>
             Strike ladder{" "}
             <span className="t-label">

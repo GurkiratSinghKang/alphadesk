@@ -213,7 +213,7 @@ function hasRequiredPremium(
 
 function ReplayHeader({ setup }: { setup: string }) {
   return (
-    <h3 className="t-display-section italic text-[13px]">
+    <h3 className="t-section-cap italic">
       Setup replay <span className="t-label u-muted">· {setup}</span>
     </h3>
   );

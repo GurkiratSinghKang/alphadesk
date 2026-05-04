@@ -10,7 +10,7 @@ export default function IVTermSkew({ term, skew }: IVTermSkewProps) {
   if (!term && !skew) {
     return (
       <section data-slot="iv-term-skew" className="mt-4">
-        <h3 className="t-display-section italic text-[13px]">IV term · skew</h3>
+        <h3 className="t-section-cap italic">IV term · skew</h3>
         <p className="mt-1 t-mono text-[12px] u-muted">— unavailable</p>
       </section>
     );
@@ -19,7 +19,7 @@ export default function IVTermSkew({ term, skew }: IVTermSkewProps) {
     <section data-slot="iv-term-skew" className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
       {/* Term structure */}
       <div>
-        <h3 className="t-display-section italic text-[13px]">IV term structure</h3>
+        <h3 className="t-section-cap italic">IV term structure</h3>
         {term && term.length > 0 ? (
           <TermStrip points={term} />
         ) : (
@@ -28,7 +28,7 @@ export default function IVTermSkew({ term, skew }: IVTermSkewProps) {
       </div>
       {/* Skew */}
       <div>
-        <h3 className="t-display-section italic text-[13px]">Put/call skew</h3>
+        <h3 className="t-section-cap italic">Put/call skew</h3>
         {skew ? (
           <div className="mt-1 t-mono text-[12px] space-y-0.5">
             <div>

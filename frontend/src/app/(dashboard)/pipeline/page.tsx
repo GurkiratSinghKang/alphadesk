@@ -20,6 +20,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton, SkeletonStack } from "@/components/ui/skeleton";
 import {
@@ -297,6 +298,13 @@ export default function PipelinePage() {
   const [cancelling, setCancelling] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [retryAfter, setRetryAfter] = useState<number | null>(null);
+  const [pendingDestructive, setPendingDestructive] = useState<{
+    title: string;
+    description: string;
+    consequences: string[];
+    confirmLabel: string;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
   // Tick state — the running card needs to re-render every second so the
   // "Elapsed" clock advances. The server status only refreshes every 2s,
   // so without this `setNow` the elapsed counter would jump by 2s.
@@ -550,7 +558,7 @@ export default function PipelinePage() {
     }
   };
 
-  const handleCancel = async () => {
+  const executeCancelPipeline = async () => {
     setCancelling(true);
     try {
       await cancelPipeline();
@@ -582,7 +590,23 @@ export default function PipelinePage() {
       }
     } finally {
       setCancelling(false);
+      setPendingDestructive(null);
     }
+  };
+
+  const handleCancel = () => {
+    const runName = status?.run_id ? `Run #${status.run_id.slice(0, 8)}` : "Current run";
+    setPendingDestructive({
+      title: "Cancel pipeline run",
+      description: `${runName} aborts mid-step.`,
+      consequences: [
+        "Aborts the current pass mid-step.",
+        "Costs incurred so far are not refunded.",
+        "Next scheduled run starts fresh.",
+      ],
+      confirmLabel: "Cancel run",
+      onConfirm: executeCancelPipeline,
+    });
   };
 
   const handleExpandHistory = async (date: string) => {
@@ -894,7 +918,7 @@ export default function PipelinePage() {
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <Target className="h-4 w-4" aria-hidden />
-                <h2 className="t-display-section">
+                <h2 className="t-section-cap">
                   Current positions
                 </h2>
                 {displayPositions.length > 0 && (
@@ -1010,7 +1034,7 @@ export default function PipelinePage() {
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <Zap className="h-4 w-4" aria-hidden />
-                <h2 className="t-display-section">
+                <h2 className="t-section-cap">
                   Latest pipeline run
                 </h2>
               </div>
@@ -1075,7 +1099,7 @@ export default function PipelinePage() {
               <div className="rounded-xl border border-border bg-[var(--surface)] p-5">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h2 className="t-display-section text-foreground">
+                    <h2 className="t-section-cap text-foreground">
                       Build or backtest
                     </h2>
                     <p className="t-meta u-muted mt-1">
@@ -1101,7 +1125,7 @@ export default function PipelinePage() {
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <Clock className="h-4 w-4" aria-hidden />
-                <h2 className="t-display-section">
+                <h2 className="t-section-cap">
                   History &nbsp;<span className="t-meta">· last 7 days</span>
                 </h2>
               </div>
@@ -1312,7 +1336,7 @@ export default function PipelinePage() {
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <TrendingUp className="h-4 w-4" aria-hidden />
-                <h2 className="t-display-section">
+                <h2 className="t-section-cap">
                   Performance summary
                 </h2>
               </div>
@@ -1488,6 +1512,13 @@ export default function PipelinePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {pendingDestructive && (
+        <DestructiveConfirmModal
+          open={true}
+          onOpenChange={(open) => !open && setPendingDestructive(null)}
+          {...pendingDestructive}
+        />
+      )}
     </DashboardPageLayout>
   );
 }

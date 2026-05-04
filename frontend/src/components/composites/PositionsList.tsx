@@ -121,7 +121,7 @@ export default function PositionsList({
       className={cn("flex flex-col", className)}
     >
       <header className="flex justify-between items-baseline px-[18px] pt-3.5 pb-2.5 border-b border-border-hair">
-        <span className="t-display-section text-ink-1000">
+        <span className="t-section-cap text-ink-1000">
           Book
         </span>
         <div

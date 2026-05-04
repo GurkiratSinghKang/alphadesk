@@ -46,6 +46,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
 
 // ─── Trade Builder ───────────────────────────────────────────
 
@@ -543,7 +544,7 @@ function TradeBuilderTab() {
             </>
           ) : (
             <>
-              <AlertTriangle className="mr-1.5 h-4 w-4" /> Submit LIVE Order
+              <AlertTriangle className="mr-1.5 h-4 w-4" /> Place live order
             </>
           )}
         </Button>
@@ -553,7 +554,7 @@ function TradeBuilderTab() {
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirm Order</DialogTitle>
+            <DialogTitle>Confirm order</DialogTitle>
             <DialogDescription>
               Review your order details before submitting.
             </DialogDescription>
@@ -605,7 +606,7 @@ function TradeBuilderTab() {
               )}
             >
               {submitting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-              Confirm Order
+              {tradingMode === "live" ? "Confirm live order" : "Confirm order"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -945,6 +946,15 @@ function OrdersTab() {
   // "Cancelling…" feedback and the button stays disabled until the
   // backend confirms the 204.
   const [cancelling, setCancelling] = useState<Set<string>>(new Set());
+  // Pending destructive action — set when user clicks Cancel order button;
+  // cleared on confirm or dismiss.
+  const [pendingDestructive, setPendingDestructive] = useState<{
+    title: string;
+    description: string;
+    consequences: string[];
+    confirmLabel: string;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
 
   // Fetch orders from API on mount
   useEffect(() => {
@@ -985,7 +995,7 @@ function OrdersTab() {
     rejected: "bg-[var(--loss)]/15 text-[var(--loss)] border-[var(--loss)]/30",
   };
 
-  const handleCancel = async (id: string) => {
+  const executeCancelOrder = async (id: string) => {
     // Don't re-enter while a cancel is already in flight for this order.
     if (cancelling.has(id)) return;
     setCancelling((prev) => {
@@ -1010,7 +1020,26 @@ function OrdersTab() {
         next.delete(id);
         return next;
       });
+      setPendingDestructive(null);
     }
+  };
+
+  const handleCancel = (id: string) => {
+    const o = orders.find((ord) => ord.id === id);
+    const priceStr = o?.price != null ? `$${o.price.toFixed(2)}` : "market";
+    const qty = o?.quantity ?? "";
+    const sym = o?.symbol ?? "";
+    const side = o?.side ?? "";
+    setPendingDestructive({
+      title: "Cancel order",
+      description: `Working ${side} ${qty} ${sym} at ${priceStr}.`,
+      consequences: [
+        "Removes the order from the broker's working queue.",
+        "Any partial fills already executed remain on the book.",
+      ],
+      confirmLabel: "Cancel order",
+      onConfirm: () => executeCancelOrder(id),
+    });
   };
 
   return (
@@ -1084,6 +1113,13 @@ function OrdersTab() {
           </div>
         ))}
       </div>
+      {pendingDestructive && (
+        <DestructiveConfirmModal
+          open={true}
+          onOpenChange={(open) => !open && setPendingDestructive(null)}
+          {...pendingDestructive}
+        />
+      )}
     </div>
   );
 }

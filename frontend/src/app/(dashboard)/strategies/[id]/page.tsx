@@ -5,6 +5,7 @@ import Link from "next/link";
 import { notFound, useParams, useRouter } from "next/navigation";
 import { Pause, Play, ArrowRight } from "lucide-react";
 
+import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
 import Display from "@/components/typography/Display";
 import Eyebrow from "@/components/typography/Eyebrow";
 import Mono from "@/components/typography/Mono";
@@ -342,6 +343,13 @@ export default function StrategyDetailPage() {
   const [range, setRange] = useState<EquityRange>("3M");
   const [toggling, setToggling] = useState(false);
   const [benchmark, setBenchmark] = useState<EquityPoint[]>([]);
+  const [pendingDestructive, setPendingDestructive] = useState<{
+    title: string;
+    description: string;
+    consequences: string[];
+    confirmLabel: string;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
   // Persona 71-8 — on navigation from ``/strategies → /strategies/[id]``
   // we move keyboard / AT focus to the banner (when it renders) or the
   // hero wrapper. The ``tabIndex={-1}`` makes the element
@@ -423,7 +431,7 @@ export default function StrategyDetailPage() {
     };
   }, [perf?.equity_curve]);
 
-  async function handleToggle() {
+  async function executePauseStrategy() {
     if (!perf) return;
     setToggling(true);
     try {
@@ -440,8 +448,31 @@ export default function StrategyDetailPage() {
       const msg = e instanceof Error ? e.message : "Pause/resume failed. Please retry.";
       console.error("toggleStrategy failed", e);
       toast({ type: "error", message: msg });
+    } finally {
+      setToggling(false);
+      setPendingDestructive(null);
     }
-    setToggling(false);
+  }
+
+  function handleToggle() {
+    if (!perf) return;
+    // Resume is not destructive — fire directly.
+    if (perf.status !== "active") {
+      executePauseStrategy();
+      return;
+    }
+    // Pause is destructive — confirm first.
+    setPendingDestructive({
+      title: "Pause strategy",
+      description: `${meta.name} stops generating new signals.`,
+      consequences: [
+        "Open positions stay; no new entries.",
+        "Pending signals discarded.",
+        "Resume any time from this page.",
+      ],
+      confirmLabel: "Pause strategy",
+      onConfirm: executePauseStrategy,
+    });
   }
 
   // ─── Derived metrics ─────────────────────────────────────────
@@ -878,6 +909,13 @@ export default function StrategyDetailPage() {
           at /risk.
         </p>
       </footer>
+      {pendingDestructive && (
+        <DestructiveConfirmModal
+          open={true}
+          onOpenChange={(open) => !open && setPendingDestructive(null)}
+          {...pendingDestructive}
+        />
+      )}
     </div>
   );
 }

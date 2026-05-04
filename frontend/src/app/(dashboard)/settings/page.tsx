@@ -558,7 +558,7 @@ export default function SettingsPage() {
         <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
             <Monitor className="h-4 w-4 text-muted-foreground" aria-hidden />
-            <h2 className="t-display-section text-foreground">Trading mode</h2>
+            <h2 className="t-section-cap text-foreground">Trading mode</h2>
           </div>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
@@ -634,7 +634,7 @@ export default function SettingsPage() {
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <Key className="h-4 w-4 text-muted-foreground" aria-hidden />
-              <h2 className="t-display-section text-foreground">Brokerage</h2>
+              <h2 className="t-section-cap text-foreground">Brokerage</h2>
               <Badge
                 variant={brokerConnections.some((c) => c.status === "active") ? "active" : "idle"}
                 withDot
@@ -928,7 +928,7 @@ export default function SettingsPage() {
         <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
             <Bell className="h-4 w-4 text-muted-foreground" aria-hidden />
-            <h2 className="t-display-section text-foreground">Notifications</h2>
+            <h2 className="t-section-cap text-foreground">Notifications</h2>
           </div>
           <div className="space-y-1">
             <Toggle
@@ -960,7 +960,7 @@ export default function SettingsPage() {
         <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
             <Palette className="h-4 w-4 text-muted-foreground" aria-hidden />
-            <h2 className="t-display-section text-foreground">Display</h2>
+            <h2 className="t-section-cap text-foreground">Display</h2>
           </div>
           <div className="space-y-1">
             <Toggle
@@ -1012,7 +1012,7 @@ export default function SettingsPage() {
         <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
             <RefreshCw className="h-4 w-4 text-muted-foreground" aria-hidden />
-            <h2 className="t-display-section text-foreground">Data refresh</h2>
+            <h2 className="t-section-cap text-foreground">Data refresh</h2>
           </div>
           <IntervalSlider
             value={data.refreshInterval}
@@ -1024,7 +1024,7 @@ export default function SettingsPage() {
         <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
             <Download className="h-4 w-4 text-muted-foreground" aria-hidden />
-            <h2 className="t-display-section text-foreground">Export data</h2>
+            <h2 className="t-section-cap text-foreground">Export data</h2>
           </div>
           <p className="text-xs text-muted-foreground mb-3">
             Download your data in standard formats for backup or analysis.
@@ -1081,7 +1081,7 @@ export default function SettingsPage() {
         <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
             <Shield className="h-4 w-4 text-muted-foreground" aria-hidden />
-            <h2 className="t-display-section text-foreground">Security</h2>
+            <h2 className="t-section-cap text-foreground">Security</h2>
           </div>
           <p className="text-xs text-muted-foreground">
             Sessions expire after 8 hours. JWT tokens are stored in HttpOnly

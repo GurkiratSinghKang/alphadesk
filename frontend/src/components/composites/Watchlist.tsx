@@ -158,7 +158,7 @@ export function Watchlist({ symbols, className }: WatchlistProps) {
       )}
     >
       <header className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-border-hair">
-        <span className="t-display-section">Watchlist</span>
+        <span className="t-section-cap">Watchlist</span>
         <button
           type="button"
           aria-label={isAdding ? "Cancel add symbol" : "Add symbol"}
