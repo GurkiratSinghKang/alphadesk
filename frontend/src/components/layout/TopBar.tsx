@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { ProfileMenu } from "./ProfileMenu";
 import { NotificationCenter } from "./NotificationCenter";
 import { ThemeToggle } from "./ThemeToggle";
+import StatusPills from "./StatusPills";
 // Round-11 / W-1 (P0): WorkspaceSelector was a placebo — selecting
 // "Morning Research" persisted to localStorage, dispatched
 // ``alphadesk:workspace-change`` into the void (zero subscribers
@@ -138,6 +139,7 @@ export function TopBar() {
       </button>
 
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+        <StatusPills />
         <ThemeToggle className="h-11 w-11 sm:h-8 sm:w-8" />
         <NotificationCenter />
         <ProfileMenu />

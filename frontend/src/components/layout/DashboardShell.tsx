@@ -2,7 +2,6 @@
 
 import type { ReactNode } from "react";
 import { TopBar } from "@/components/layout/TopBar";
-import { StatusStrip } from "@/components/layout/StatusStrip";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { AICopilot } from "@/components/layout/AICopilot";
 import { OnboardingTour } from "@/components/layout/OnboardingTour";
@@ -24,7 +23,6 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
       </a>
 
       <TopBar />
-      <StatusStrip />
       <main id="main-content" role="main" className="flex-1 overflow-y-auto" tabIndex={-1}>
         {children}
       </main>

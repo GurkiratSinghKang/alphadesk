@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
-import { StatusStrip } from "@/components/layout/StatusStrip";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { AICopilot } from "@/components/layout/AICopilot";
 import { OnboardingTour } from "@/components/layout/OnboardingTour";
@@ -234,7 +233,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     return (
       <div className="flex min-h-screen flex-col overflow-x-hidden bg-bg">
         <div className="h-12 border-b border-border bg-ink-050" />
-        <div className="h-7 border-b border-border bg-ink-100" />
         <main className="flex-1" />
       </div>
     );
@@ -308,7 +306,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <div className="relative z-[70] shrink-0">{dashboardBanners}</div>
       {/* Round 7 Fix 4 (P128): session-expiry warning banner. */}
       <TopBar />
-      <StatusStrip />
       {/* Non-desk routes use natural document body scroll (simplest, matches
           browser mouse-wheel defaults). The previous `overflow-y-auto` here
           combined with `overscroll-behavior: contain` in globals.css blocked

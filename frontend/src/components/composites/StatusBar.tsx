@@ -1,18 +1,28 @@
+"use client";
+
 import * as React from "react";
 import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 import StatusDot from "@/components/primitives/StatusDot";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import type { StatusPill } from "./types";
 
 /**
  * StatusBar (composite, 22px)
  * ───────────────────────────
- * Bottom footer with connection pills (Alpaca / Market / Claude / Tick)
- * and a right-side build version + ⌘K commands hint.
+ * Bottom footer — BUG-02 remediation (PR-5).
  *
- * A `<kbd>` element carries the keystroke; the outer container is the
- * status rail at 22px. Each pill is a tiny StatusDot + mono label.
+ * Previously rendered a flat mono-pill rail that read as a developer console
+ * (Alpaca paper · Dashboard · Strategies · …). Now collapsed to a single
+ * "System OK · build N.N.N" popover-pill. The per-service detail moves
+ * inside the popover so it's available on demand rather than filling the
+ * screen at all times.
+ *
+ * The health dot color signals aggregate status:
+ *   profit (green) — all pills healthy
+ *   amber          — at least one amber pill
+ *   loss (red)     — at least one loss/offline pill
  */
 export interface StatusBarProps {
   pills: StatusPill[];
@@ -23,7 +33,7 @@ export interface StatusBarProps {
 }
 
 const pillToneClass: Record<StatusPill["tone"], string> = {
-  profit: "text-up-500",
+  profit: "text-profit",
   amber: "text-amber",
   muted: "text-fg-muted",
 };
@@ -34,67 +44,108 @@ const pillDotTone: Record<StatusPill["tone"], "profit" | "amber" | "muted"> = {
   muted: "muted",
 };
 
+/** Derive aggregate system health from all pills. */
+function aggregateTone(pills: StatusPill[]): "profit" | "amber" | "muted" {
+  const tones = pills.map((p) => p.tone);
+  // If any pill is amber (non-healthy but non-critical), surface amber.
+  // Muted pills are informational; profit pills are explicitly healthy.
+  // There is no explicit "loss" tone in StatusPill — amber is the warning floor.
+  if (tones.some((t) => t === "amber")) return "amber";
+  if (tones.every((t) => t === "muted")) return "muted";
+  return "profit";
+}
+
+/**
+ * SystemDetailGrid — the per-service pills rendered inside the Popover.
+ * Extracted from the old flat rail.
+ */
+function SystemDetailGrid({ pills }: { pills: StatusPill[] }) {
+  if (pills.length === 0) return null;
+  return (
+    <ul className="flex flex-col gap-2" role="list" aria-label="Service status detail">
+      {pills.map((p, i) => {
+        const isLivePill = p.label === "Mode · LIVE";
+        return (
+          <li
+            key={p.label + i}
+            className={cn(
+              "inline-flex items-center gap-1.5",
+              pillToneClass[p.tone]
+            )}
+            title={p.title}
+          >
+            <StatusDot tone={pillDotTone[p.tone]} size={5} pulse={isLivePill} />
+            <span className={cn("font-mono text-[12px]", isLivePill && "tracking-wider")}>{p.label}</span>
+            {p.href ? (
+              <Link
+                href={p.href}
+                className="font-mono text-[12px] text-brand underline decoration-brand-dim underline-offset-2 hover:text-gold-300"
+              >
+                {p.hrefLabel ?? "Fix"}
+              </Link>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export default function StatusBar({
   pills,
   buildVersion,
-  commandsLabel = "Commands",
   className,
 }: StatusBarProps) {
+  const health = aggregateTone(pills);
+  const dotTone: "profit" | "amber" | "muted" =
+    health === "amber" ? "amber" : health === "profit" ? "profit" : "muted";
+  const healthLabel =
+    health === "amber" ? "Degraded" : health === "profit" ? "System OK" : "System";
+
   return (
     <div
       data-slot="status-bar"
       aria-label="System status"
       className={cn(
-        // Wave 29 persona-5 #2: the bar packs 4 pills + Build + ⌘K + Commands
-        // into a single 22px row. At 390px viewport the right cluster clipped
-        // under `md:overflow-hidden` on the parent. Allow horizontal scroll
-        // on mobile (shrink-0 on children so nothing squishes illegibly),
-        // then revert to the natural desk layout at md+.
-        // BUG-035: status-bar text was 10-11px which falls below a
-        // comfortable readable floor on high-DPI screens (iOS Safari
-        // anti-aliases strokes at 11px and lower so digits blur into
-        // the ink-050 rail). Floor at 12px — same height still fits the
-        // 22px row because font-mono line-height is 1.0 here.
-        "flex items-center h-[22px] px-5 gap-[18px]",
-        "overflow-x-auto md:overflow-visible whitespace-nowrap",
+        // BUG-035: floor text at 12px for high-DPI legibility.
+        // BUG-02: collapsed from flat mono-pill rail to single popover-pill.
+        "flex items-center h-[22px] px-4 gap-4",
         "border-t border-border bg-ink-050",
         "font-mono text-[12px] text-fg-muted",
         className
       )}
       style={{ letterSpacing: 0, lineHeight: 1 }}
     >
-      {pills.map((p, i) => {
-        // Phase-1 / SB-1: the LIVE-mode pill pulses to draw the eye —
-        // it's the most-consequential single surface in the chrome
-        // (user is in real-money trading mode). PAPER stays static.
-        const isLivePill = p.label === "Mode · LIVE";
-        return (
-          <span
-            key={p.label + i}
-            className={cn("inline-flex items-center gap-1.5 shrink-0", pillToneClass[p.tone])}
-            title={p.title}
-          >
-            <StatusDot tone={pillDotTone[p.tone]} size={5} pulse={isLivePill} />
-            <span className={cn(isLivePill && "tracking-wider")}>{p.label}</span>
-          {/* Wave 3N persona-94 #1: broker-offline (and any other
-              remediable) pill surfaces a tiny inline link to the
-              relevant settings page so a fresh user has somewhere to
-              go instead of staring at a dead "offline" state. */}
-          {p.href ? (
-            <Link
-              href={p.href}
-              className="font-mono text-[12px] text-brand underline decoration-brand-dim underline-offset-2 hover:text-gold-300"
+      <Popover>
+        <PopoverTrigger
+          render={
+            <button
+              type="button"
+              className="flex items-center gap-1.5 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand rounded-xs px-0.5"
+              aria-label="Open system status detail"
             >
-              {p.hrefLabel ?? "Fix"}
-            </Link>
-          ) : null}
-          </span>
-        );
-      })}
+              <StatusDot tone={dotTone} size={5} />
+              <span>{healthLabel} · build {buildVersion}</span>
+            </button>
+          }
+        />
+        <PopoverContent
+          side="top"
+          align="start"
+          sideOffset={6}
+          className="w-[280px]"
+        >
+          <div className="flex flex-col gap-3">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-fg-muted">
+              Service status
+            </p>
+            <SystemDetailGrid pills={pills} />
+          </div>
+        </PopoverContent>
+      </Popover>
 
-      <div className="ml-auto flex gap-[18px] items-center shrink-0">
-        <span className="text-fg-hint">Build {buildVersion}</span>
-        {/* ⌘K hint is keyboard-only affordance — hide on touch. */}
+      <div className="ml-auto flex gap-4 items-center shrink-0">
+        {/* ⌘K hint — keyboard-only affordance, hide on touch. */}
         <kbd
           className={cn(
             "hidden md:inline-block font-mono text-[12px] text-fg bg-bg-elev-1 border border-border",
@@ -104,7 +155,7 @@ export default function StatusBar({
         >
           ⌘K
         </kbd>
-        <span className="hidden md:inline">{commandsLabel}</span>
+        <span className="hidden md:inline text-fg-muted">Commands</span>
       </div>
     </div>
   );
