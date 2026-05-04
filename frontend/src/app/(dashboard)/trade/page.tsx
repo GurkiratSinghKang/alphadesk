@@ -526,8 +526,12 @@ export default function TradePage() {
       chartLimited: seriesError != null,
       chartLoading: seriesLoading,
       brokerDegraded,
+      // Use executionQuote.timestamp (already normalized to seconds via
+      // normalizeEpochSeconds) — see useMemo for quoteAgeSeconds above.
       quoteAgeSeconds:
-        quote.timestamp == null ? null : Math.max(0, nowEpochSubmit - quote.timestamp),
+        executionQuote.timestamp == null
+          ? null
+          : Math.max(0, nowEpochSubmit - executionQuote.timestamp),
       marketOpen: isMarketOpen(),
     });
 	    if (!submittedReadiness.canSubmit) {
@@ -753,10 +757,15 @@ export default function TradePage() {
     ],
   );
   const quoteAgeSeconds = useMemo(() => {
-    if (quote.timestamp == null) return null;
-    const nowEpoch = Date.now() / 1000;
-    return Math.max(0, nowEpoch - quote.timestamp);
-  }, [quote.timestamp]);
+    // QA r1 A1 fix: use executionQuote.timestamp (already passed through
+    // normalizeEpochSeconds), NOT raw quote.timestamp — provider payloads
+    // can hand back epoch in milliseconds, in which case the prior raw
+    // subtraction underflowed and Math.max clamped quoteAgeSeconds to 0,
+    // suppressing the entire stale-feed branch.
+    const ts = executionQuote.timestamp;
+    if (ts == null) return null;
+    return Math.max(0, Date.now() / 1000 - ts);
+  }, [executionQuote.timestamp]);
   const marketOpen = useMemo(() => isMarketOpen(), []);
   const executionReadiness = useMemo(
     () =>
