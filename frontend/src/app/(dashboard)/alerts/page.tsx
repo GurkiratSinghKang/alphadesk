@@ -9,7 +9,6 @@ import {
   ArrowDown,
   CheckCircle2,
   Clock,
-  AlertTriangle,
   ChevronDown,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -25,6 +24,7 @@ import {
 import { useToast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 import { fmtPlural } from "@/lib/intl";
+import EmptyState from "@/components/primitives/EmptyState";
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -965,20 +965,11 @@ export default function AlertsPage() {
       {!loading && (
         <div className="rounded-lg border border-border bg-[var(--surface)] overflow-hidden">
           {activeAlerts.length === 0 ? (
-            <ScrollArea className="max-h-[400px]">
-              {/* BUG-040 — empty-state voice aligned with analytics /
-                  reports: italic-serif sentence headline, sans
-                  sentence-case follow-up. Full sentences, full stops. */}
-              <div className="flex flex-col items-center justify-center py-10 text-center">
-                <AlertTriangle className="h-6 w-6 text-muted-foreground/30 mb-2" />
-                <p className="font-display italic text-[15px] text-fg">
-                  You haven&rsquo;t set up any alerts yet.
-                </p>
-                <p className="text-xs text-muted-foreground/60 mt-1">
-                  Create one above to start watching a symbol or condition.
-                </p>
-              </div>
-            </ScrollArea>
+            <EmptyState
+              title="No alerts set"
+              description="Define a price, indicator, or P&L trigger above to start watching."
+              className="rounded-none border-0 bg-transparent"
+            />
           ) : (
             <>
             <div className="divide-y divide-border/50 sm:hidden">

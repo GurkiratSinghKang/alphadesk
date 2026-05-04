@@ -28,6 +28,7 @@ import { LIVE_DISABLED, PAPER_ONLY, STRATEGY_META } from "@/lib/strategies";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
 
+import EmptyState from "@/components/primitives/EmptyState";
 import StrategyHero from "./_strategy/StrategyHero";
 import EquityPanel, {
   type EquityPoint,
@@ -266,31 +267,6 @@ function formatLastTrade(dateStr: string | undefined | null): string {
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return dateStr;
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-// ─── Empty-section helper ──────────────────────────────────────
-
-/**
- * EmptySection
- * ────────────
- * Drop-in replacement for any § section that has no data yet. Keeps the
- * editorial rhythm (italic-serif copy, warm-muted tone) so the page reads
- * intentional instead of collapsed. Used when the performance endpoint
- * returns null (common on a freshly activated strategy).
- */
-function EmptySection({ title, reason }: { title: string; reason: string }) {
-  // 2026-04-21 polish: title eyebrow was 10.5px; normalised to the shared
-  // `.t-label` (12px fs-label) used by every other eyebrow on the page so
-  // empty-state and populated sections read with the same typographic
-  // weight.
-  return (
-    <div className="flex flex-col gap-3 rounded-md border border-border-hair bg-bg-elev-1 px-5 py-6">
-      <p className="t-label">{title}</p>
-      <p className="font-display italic text-[15px] text-fg-muted leading-snug">
-        {reason}
-      </p>
-    </div>
-  );
 }
 
 // ─── Regime signal from status ────────────────────────────────
@@ -801,9 +777,9 @@ export default function StrategyDetailPage() {
             summary={returnSummary}
           />
         ) : (
-          <EmptySection
-            title="Equity curve"
-            reason="Strategy has not produced closed trades yet. The curve, drawdowns and summary will populate after the first exit."
+          <EmptyState
+            title="No equity curve yet"
+            description="The strategy needs at least one closed trade before this chart renders. Open a paper position to start tracking."
           />
         )}
       </section>

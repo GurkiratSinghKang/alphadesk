@@ -19,3 +19,6 @@ export type { NumericChipProps, NumericChipTone } from "./NumericChip";
 
 export { default as Sparkline } from "./Sparkline";
 export type { SparklineProps, SparklineTone } from "./Sparkline";
+
+export { default as EmptyState } from "./EmptyState";
+export type { EmptyStateProps } from "./EmptyState";

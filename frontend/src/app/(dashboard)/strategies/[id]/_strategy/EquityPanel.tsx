@@ -5,6 +5,7 @@ import { useId } from "react";
 
 import Eyebrow from "@/components/typography/Eyebrow";
 import Mono from "@/components/typography/Mono";
+import EmptyState from "@/components/primitives/EmptyState";
 import { cn } from "@/lib/utils";
 
 export type EquityRange = "1M" | "3M" | "YTD" | "1Y" | "ALL";
@@ -51,21 +52,12 @@ export default function EquityPanel({
   const gradId = `equity-grad-${idBase}`;
 
   if (!data || data.length < 2) {
-    // 2026-04-21 polish: empty-state copy was 14px italic serif; bumped
-    // to 15px so the editorial voice reads with the same weight as the
-    // equivalent copy block on the strategy hero empty state above.
-    // Preserves the "no data" typographic rhythm across both surfaces.
     return (
-      <div
-        className={cn(
-          "flex h-[280px] items-center justify-center rounded-lg border border-border bg-bg-elev-1",
-          className
-        )}
-      >
-        <p className="font-display italic text-[15px] text-fg-muted">
-          Not enough data for equity curve.
-        </p>
-      </div>
+      <EmptyState
+        title="No equity curve yet"
+        description="The strategy needs at least one closed trade before this chart renders. Open a paper position to start tracking."
+        className={cn("h-[280px]", className)}
+      />
     );
   }
 
