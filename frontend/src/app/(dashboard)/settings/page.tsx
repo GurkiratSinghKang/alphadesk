@@ -21,6 +21,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { DashboardPageLayout } from "@/components/layouts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
+import { useDestructiveAction } from "@/components/destructive/useDestructiveAction";
 import { useUIStore } from "@/stores/ui";
 import { usePreferencesStore } from "@/stores/preferences";
 import { useMarketStore } from "@/stores/market";
@@ -309,6 +311,12 @@ export default function SettingsPage() {
   const brokerForm = BROKER_FORMS[brokerProvider];
   const hasActiveAlpaca = brokerConnections.some((c) => c.provider === "alpaca" && c.status === "active");
 
+  // R4-5 W-6: replaced the old native browser confirm() with the same
+  // destructive-confirmation pattern used by the other six destructive sites
+  // in app/. Keeps copy/visual treatment consistent and gives screen readers
+  // a real dialog instead of a native alert box.
+  const destructive = useDestructiveAction();
+
   const loadBrokerData = useCallback(async () => {
     setBrokerLoading(true);
     try {
@@ -374,11 +382,7 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleDisableConnection(connection: BrokerConnection) {
-    const confirmed = window.confirm(
-      `Disable ${connection.provider.toUpperCase()} ${connection.account_env} connection ending ${connection.key_last4 ?? "unknown"}?`,
-    );
-    if (!confirmed) return;
+  async function executeDisableConnection(connection: BrokerConnection) {
     setConnectionBusyId(connection.id);
     try {
       await deleteBrokerConnection(connection.id);
@@ -389,6 +393,22 @@ export default function SettingsPage() {
     } finally {
       setConnectionBusyId(null);
     }
+  }
+
+  function handleDisableConnection(connection: BrokerConnection) {
+    const providerLabel = brokerLabel(connection.provider);
+    const last4 = connection.key_last4 ? `ending ${connection.key_last4}` : "(no key fingerprint)";
+    destructive.request({
+      title: "Disable broker connection",
+      description: `${providerLabel} (${connection.account_env}) ${last4}.`,
+      consequences: [
+        "Stops the periodic reconciler from reading this account.",
+        "Existing trades, fills, and history remain in the local ledger.",
+        "You can re-enable by re-entering credentials in the form above.",
+      ],
+      confirmLabel: "Disable connection",
+      onConfirm: () => executeDisableConnection(connection),
+    });
   }
 
   async function handleRunReconciliation() {
@@ -552,6 +572,7 @@ export default function SettingsPage() {
   }
 
   return (
+    <>
     <DashboardPageLayout eyebrow="§ SETTINGS" title="Settings">
       <div className="space-y-4">
         {/* Trading Mode */}
@@ -1197,5 +1218,18 @@ export default function SettingsPage() {
         </DialogContent>
       </Dialog>
     </DashboardPageLayout>
+    {destructive.pending && (
+      <DestructiveConfirmModal
+        open={true}
+        onOpenChange={(open) => !open && destructive.dismiss()}
+        loading={destructive.loading}
+        title={destructive.pending.title}
+        description={destructive.pending.description}
+        consequences={destructive.pending.consequences}
+        confirmLabel={destructive.pending.confirmLabel}
+        onConfirm={destructive.fire}
+      />
+    )}
+    </>
   );
 }
