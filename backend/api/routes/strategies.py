@@ -385,8 +385,10 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "gap-fill": {
         "name": "Gap Fill",
-        "description": "Planned intraday gap-fill concept. No backend implementation or live orders yet; requires premarket/intraday bars, catalyst filtering, and open-auction slippage modeling.",
-        "status": StrategyStatus.PLANNED,
+        "description": "Branch-Ma (2012) overnight-gap mean-reversion fade on liquid US large-caps. Enter MKT at open+5min on names with 1-4% non-catalyst gaps; exit MKT by 11:00 ET. Long-only on down-gaps by default (fade_down_only); 1-min Alpaca bars, paper-only until live intraday paper evidence graduates the strategy.",
+        # Plan C.3: backend strategy package landed; status is now ACTIVE.
+        # paper_only=True so DailyPipelineRunner still gates live mode.
+        "status": StrategyStatus.ACTIVE,
         "invested_amount": 0,
         "total_return_pct": 0,
         "sharpe_ratio": 0,

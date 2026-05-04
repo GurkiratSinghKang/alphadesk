@@ -81,7 +81,10 @@ PREMARKET_STRATEGIES = ["pead", "regime_adaptive", "dividend_capture"]
 #     news-reactive ORB-lite strategies added in future waves). Empty
 #     for now to preserve existing behaviour.
 OPEN_STRATEGIES = ["pead"]
-OPEN_PLUS_5M_STRATEGIES: list[str] = []
+# Plan C.3: gap-fill fires at 09:35 ET (open + 5min) per its spec —
+# the 5-minute settle gives the opening auction time to clear so the
+# 09:30 open used as today_open isn't an auction artefact.
+OPEN_PLUS_5M_STRATEGIES: list[str] = ["gap_fill"]
 
 # Post-opening range (10:05 AM) — intraday breakout strategies
 POST_OR_STRATEGIES = ["orb", "vwap"]
