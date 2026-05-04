@@ -194,6 +194,9 @@ export default function EarningsOptionsPlayPage() {
   // Round-5 (NEW-Y4 / G-19): respect a URL-pinned symbol even when the
   // calendar comes back empty or doesn't include it — the detail query
   // serves a stub for off-calendar curated symbols.
+  // PR-2 / BUG-04: on first paint with no URL pin, auto-select row 0 so
+  // the heatmap is a real fallback, not the default view.
+  const isFirstPaintRef = useRef(true);
   useEffect(() => {
     if (!calendar) return;
     let shouldClearSelection = false;
@@ -202,20 +205,23 @@ export default function EarningsOptionsPlayPage() {
       const isUrlPinned =
         urlSymbolRef.current && urlSymbolRef.current === selectedSymbol;
       shouldClearSelection = !isUrlPinned && selectedSymbol !== null;
+    } else if (urlSymbolRef.current) {
+      // URL-pinned symbol: rehydrate it regardless of first-paint state.
+      if (selectedSymbol !== urlSymbolRef.current) {
+        setSelectedSymbol(urlSymbolRef.current, "url");
+      }
+      isFirstPaintRef.current = false;
+      return;
+    } else if (isFirstPaintRef.current) {
+      // First paint with no URL pin — auto-select first row (BUG-04).
+      // Override userClearedRef: user hasn't had a chance to press Esc yet.
+      isFirstPaintRef.current = false;
+      setSelectedSymbol(visibleRows[0].symbol, "pointer");
+      return;
     } else if (!userClearedRef.current) {
       const stillValid =
         selectedSymbol && visibleRows.some((r) => r.symbol === selectedSymbol);
-      const isUrlPinned =
-        urlSymbolRef.current && urlSymbolRef.current === selectedSymbol;
-      // Phase-2 / EP-3 (per user directive 2026-04-26): do NOT auto-select
-      // the first calendar row on cold load. Heavy work (Claude structured
-      // analysis, options chain fetch, IV term backfill, news scoring)
-      // only fires once /detail is hit, so an auto-selection burns Opus
-      // tokens + chain bandwidth on a symbol the user never asked for.
-      // We still rehydrate URL-pinned selections (deeplink path) and
-      // preserve the current selection if it's still in the visible
-      // calendar — but we no longer pre-pick the top row.
-      shouldClearSelection = !stillValid && !isUrlPinned && selectedSymbol !== null;
+      shouldClearSelection = !stillValid && selectedSymbol !== null;
     }
     if (!shouldClearSelection) return;
     let cancelled = false;
@@ -498,6 +504,8 @@ export default function EarningsOptionsPlayPage() {
             candidateDecision={selectedCandidateDecision}
             onCandidateDecision={onCandidateDecision}
             selectionSource={selectionSource}
+            calendarRows={visibleRows}
+            onSelectSymbol={onSelectFromSidebar}
           />
         </div>
       </div>

@@ -38,10 +38,12 @@ describe("EarningsDetailPanel", () => {
   });
 
   it("renders empty state when detail is null and not loading", () => {
+    // PR-2 / BUG-04: empty state now renders CalendarWeekHeatmap (which
+    // shows the heatmap hint) instead of the plain "Select a symbol" prompt.
     const { container } = render(
       <EarningsDetailPanel detail={null} loading={false} error={null} runningFull={false} onRunFullResearch={() => {}} />,
     );
-    expect(container.textContent).toMatch(/select|choose/i);
+    expect(container.querySelector('[data-slot="calendar-week-heatmap"]')).not.toBeNull();
   });
 
   it("renders skeleton when loading", () => {

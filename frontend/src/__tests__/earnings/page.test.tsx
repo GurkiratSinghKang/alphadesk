@@ -465,7 +465,9 @@ describe("Earnings Options Play — round-4 fixes", () => {
     });
     await waitFor(() => {
       expect(container.querySelector('[data-slot="detail-header"]')).toBeNull();
-      expect(container.textContent).toMatch(/select a symbol/i);
+      // PR-2 / BUG-04: empty state now renders CalendarWeekHeatmap rather
+      // than the plain "Select a symbol from the sidebar." prompt.
+      expect(container.querySelector('[data-slot="calendar-week-heatmap"]')).not.toBeNull();
     });
   });
 
