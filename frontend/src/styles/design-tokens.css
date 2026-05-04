@@ -47,9 +47,21 @@
 
   /* Informational (used for regime, AI, system status) */
   --ice-500:  #8db3c4;          /* neutral/info — pale cyan */
-  --amber-500: #d9a441;         /* warning — mustard amber, distinct from loss */
-  --rust-500:  #d9a441;         /* alias (deprecated, use --amber-500) */
+  /* DEPRECATED: prefer --state-warning. Will be removed once all consumers migrate.
+     QA r4-2 — overloaded as warning, ws-stale, info-time, chart accent, and rust alias.
+     The semantic tokens below decompose by intent. */
+  --amber-500: #d9a441;         /* (deprecated) warning — mustard amber */
+  --rust-500:  #c47a4a;         /* ember/rust — distinct warm tone, NOT amber (corrected QA r4-2) */
   --wine-500: #8a3a4a;          /* critical / circuit-breaker */
+
+  /* Decomposed warn/state palette — each intent gets its own token so we
+     stop overloading --amber-500 (QA r4-2). Migrate consumers to these. */
+  --state-warning:        #d9a441; /* PRIMARY warning — legitimate amber */
+  --state-warning-bg:     #21190d; /* dark warning surface (banners) */
+  --state-warning-border: #6f541f; /* warning border */
+  --state-warning-fg:     #f8d590; /* warning foreground (text on warning bg) */
+  --state-warning-fg-muted: #d9b165; /* warning foreground muted (separators, secondary) */
+  --state-info-time:      #c9a17a; /* slightly more neutral mustard for stale/time indicators */
 
   /* ─── SEMANTIC TOKENS ────────────────────────────────────────── */
 
@@ -90,7 +102,10 @@
   --chart-2: var(--down-500);
   --chart-3: var(--gold-300);
   --chart-4: var(--ice-500);
-  --chart-5: var(--amber-500);
+  /* QA r4-2 — chart-5 is now its own accent (rust/ember) instead of aliasing
+     --amber-500. Differentiates the chart palette from the warning palette
+     so a warning state isn't visually confused with a chart series. */
+  --chart-5: var(--rust-500);
   --neutral: var(--fg-muted);
   --fg-base: var(--fg);
   --fg-strong: var(--ink-1000);
@@ -107,8 +122,11 @@
   --muted: var(--bg-elev-1);
   --muted-foreground: var(--fg-muted);
   --ring: var(--brand);
-  --warn: var(--amber-500);
-  --warn-tint: color-mix(in oklab, var(--amber-500) 14%, transparent);
+  /* QA r4-2 — re-aliased to --state-warning (which holds the same value)
+     so the public token name remains stable, but consumers can now reach
+     for the semantic intent token directly. */
+  --warn: var(--state-warning);
+  --warn-tint: color-mix(in oklab, var(--state-warning) 14%, transparent);
 
   /* Interaction/state system. These are intentionally semantic so shared
      primitives can expose loading/stale/error/live states without inventing
@@ -117,12 +135,15 @@
   --focus-ring-soft: color-mix(in oklab, var(--brand) 24%, transparent);
   --state-live: var(--profit);
   --state-loading: var(--ice-500);
-  --state-stale: var(--amber-500);
+  /* QA r4-2 — stale now references --state-info-time (slightly more neutral
+     mustard) rather than reusing the warning amber. Stale is "this data is
+     old" not "this is a warning" — they were getting visually confused. */
+  --state-stale: var(--state-info-time);
   --state-error: var(--loss);
   --state-disabled: var(--fg-muted);
   --state-live-tint: color-mix(in oklab, var(--profit) 14%, transparent);
   --state-loading-tint: color-mix(in oklab, var(--ice-500) 14%, transparent);
-  --state-stale-tint: color-mix(in oklab, var(--amber-500) 14%, transparent);
+  --state-stale-tint: color-mix(in oklab, var(--state-info-time) 14%, transparent);
   --state-error-tint: color-mix(in oklab, var(--loss) 14%, transparent);
 
   /* ─── Slice-18 / LCH-1 (2026 design brief, Linear UI redesign) ────────
@@ -294,9 +315,18 @@
   --down-700: #8f351f;
 
   --ice-500:  #436f86;
+  /* DEPRECATED in light mode too — see :root note. */
   --amber-500: #9a6f20;
-  --rust-500:  #9a6f20;
+  --rust-500:  #ad6234;          /* ember/rust — distinct warm tone (QA r4-2) */
   --wine-500: #8b2e45;
+
+  /* Decomposed warn/state palette — light-mode variants (QA r4-2) */
+  --state-warning:        #9a6f20;
+  --state-warning-bg:     #fff5d8;
+  --state-warning-border: #d6a957;
+  --state-warning-fg:     #5b3f0c;
+  --state-warning-fg-muted: #7a5a1c;
+  --state-info-time:      #8a6e3f;
 
   --bg:         var(--ink-050);
   --bg-elev-1:  var(--ink-100);

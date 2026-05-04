@@ -439,7 +439,10 @@ function EquityCurveSvg({
   const lossFill = tokenRgba("--down-500", 0.12, "#e07856");
   const lossStroke = getTokenVar("--down-500", "#e07856");
   const ddFill = tokenRgba("--down-500", 0.2, "#e07856");
-  const amber = getTokenVar("--amber-500", "#d9a441");
+  // QA r4-2 — Strategy-B comparison line is a chart accent, not a warning;
+  // moved off the deprecated --amber-500 to --rust-500 (the new chart-5 anchor)
+  // so the warning palette stays semantic-only.
+  const amber = getTokenVar("--rust-500", "#c47a4a");
 
   return (
     <div className="space-y-1">
@@ -543,7 +546,7 @@ function ComparisonTable({ a, b }: { a: BacktestResult; b: BacktestResult }) {
       <div className="grid grid-cols-3 gap-0 text-label uppercase tracking-wider text-muted-foreground font-semibold border-b border-border">
         <div className="px-3 py-2">Metric</div>
         <div className="px-3 py-2 text-center" style={{ color: "var(--profit)" }}>{a.label ?? "A"}</div>
-        <div className="px-3 py-2 text-center" style={{ color: "var(--amber-500)" }}>{b.label ?? "B"}</div>
+        <div className="px-3 py-2 text-center" style={{ color: "var(--rust-500)" }}>{b.label ?? "B"}</div>
       </div>
       {rows.map(({ label, valA, valB, highlight }) => {
         const better = getBetter(valA, valB, highlight);

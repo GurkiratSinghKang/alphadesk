@@ -48,7 +48,7 @@ const toneToBar: Record<NonNullable<BulletGraphProps["tone"]>, string> = {
   profit: "bg-[color:var(--profit)]",
   loss: "bg-[color:var(--loss)]",
   brand: "bg-[color:var(--brand)]",
-  warn: "bg-[color:var(--amber-500,#d97706)]",
+  warn: "bg-[color:var(--state-warning,#d97706)]",
 };
 
 export default function BulletGraph({
