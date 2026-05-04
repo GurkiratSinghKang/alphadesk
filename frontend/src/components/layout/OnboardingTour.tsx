@@ -425,12 +425,12 @@ export function OnboardingTour() {
         <h3 id="onboarding-tour-title" className="text-sm font-bold text-foreground mb-1.5">
           {step.title}
         </h3>
-        <p id="onboarding-tour-description" className="text-[12px] text-muted-foreground leading-relaxed mb-4">
+        <p id="onboarding-tour-description" className="text-label text-muted-foreground leading-relaxed mb-4">
           {step.description}
         </p>
 
         <div className="flex items-center justify-between">
-          <span className="text-[12px] text-muted-foreground tabular-nums">
+          <span className="text-label text-muted-foreground tabular-nums">
             {currentStep + 1} of {TOUR_STEPS.length}
           </span>
           <div className="flex gap-2">
@@ -438,14 +438,14 @@ export function OnboardingTour() {
               variant="ghost"
               size="sm"
               onClick={handleSkip}
-              className="h-11 text-[12px] text-muted-foreground hover:text-foreground"
+              className="h-11 text-label text-muted-foreground hover:text-foreground"
             >
               Skip
             </Button>
             <Button
               size="sm"
               onClick={handleNext}
-              className="h-11 text-[12px]"
+              className="h-11 text-label"
             >
               {isLastStep ? "Done" : "Next"}
             </Button>

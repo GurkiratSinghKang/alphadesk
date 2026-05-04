@@ -42,7 +42,7 @@ export default function ClaudeStamp({
       data-slot="claude-stamp"
       data-approved={approved || undefined}
       className={cn(
-        "inline-flex items-center gap-1.5 font-mono text-[12px] text-fg-hint uppercase",
+        "inline-flex items-center gap-1.5 font-mono text-label text-fg-hint uppercase",
         className
       )}
       style={{ letterSpacing: 0 }}

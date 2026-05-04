@@ -72,7 +72,7 @@ function MetaCell({ k, value, tone }: { k: string; value: string; tone?: "profit
     <div className="flex flex-col">
       <span className="t-label text-fg-hint mb-0.5">{k}</span>
       {isDash ? (
-        <span className="font-display italic text-[13px] text-fg-hint">{value}</span>
+        <span className="font-display italic text-body-sm text-fg-hint">{value}</span>
       ) : (
         <Mono
           size="body"
@@ -181,11 +181,11 @@ export default function PriceChartPanel({
       <header className="flex flex-wrap items-baseline gap-4 md:gap-6 px-4 md:px-6 pt-3 md:pt-3.5 pb-3 border-b border-border-hair">
         <div className="flex items-baseline gap-3">
           <span
-            className="font-display italic text-[22px] md:text-[26px] text-ink-1000"
+            className="font-display italic text-h2 md:text-[26px] text-ink-1000"
             style={{ letterSpacing: 0, lineHeight: 1 }}
           >{symbol.name}</span>
           <span
-            className="font-sans font-semibold text-[12px] text-fg-muted uppercase"
+            className="font-sans font-semibold text-label text-fg-muted uppercase"
             style={{ letterSpacing: 0 }}
           >{symbol.ticker}{symbol.venue ? ` · ${symbol.venue}` : ""}</span>
         </div>
@@ -197,7 +197,7 @@ export default function PriceChartPanel({
           >
             {last == null ? <DashSpan size={32} /> : last.toFixed(2)}
           </span>
-          <span className={cn("font-mono tabular-nums text-[15px] md:text-[15px]", change == null ? "text-fg-hint" : deltaTone)}>
+          <span className={cn("font-mono tabular-nums text-body md:text-body", change == null ? "text-fg-hint" : deltaTone)}>
             {change == null || changePct == null ? (
               <DashSpan size={14} />
             ) : (
@@ -208,7 +208,7 @@ export default function PriceChartPanel({
           </span>
         </div>
 
-        <div className="flex flex-wrap gap-x-4 gap-y-1 md:gap-x-5 ml-auto font-mono text-[13px] text-fg-muted">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 md:gap-x-5 ml-auto font-mono text-body-sm text-fg-muted">
           <MetaCell k="Vol" value={meta.volume} />
           <MetaCell k="Avg Vol" value={meta.avgVolume} />
           <MetaCell k="Range" value={meta.range} />
@@ -253,7 +253,7 @@ export default function PriceChartPanel({
               data-active={r === activeRange || undefined}
               className={cn(
                 "inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-[36px] md:min-w-[36px] md:px-3",
-                "font-mono text-[13px] px-2.5 py-1 rounded-xs transition-colors",
+                "font-mono text-body-sm px-2.5 py-1 rounded-xs transition-colors",
                 executionDensity
                   ? r === activeRange
                     ? "bg-brand text-primary-foreground"
@@ -286,7 +286,7 @@ export default function PriceChartPanel({
               {executionDensity ? "Chart data is temporarily limited." : "Failed to load chart data."}
             </span>
             {executionDensity ? (
-              <span className="max-w-sm text-center text-[13px] leading-relaxed text-fg-muted">
+              <span className="max-w-sm text-center text-body-sm leading-relaxed text-fg-muted">
                 Quote and ticket checks remain visible while historical bars recover.
               </span>
             ) : null}
@@ -295,7 +295,7 @@ export default function PriceChartPanel({
                 type="button"
                 onClick={onRetry}
                 className={cn(
-                  "rounded-xs border px-3 py-1.5 font-sans text-[12px] font-semibold uppercase tracking-normal transition-colors",
+                  "rounded-xs border px-3 py-1.5 font-sans text-label font-semibold uppercase tracking-normal transition-colors",
                   executionDensity
                     ? "border-border-hair bg-bg-elev-1 text-brand hover:bg-brand/10"
                     : "border-border bg-bg-elev-1 text-brand hover:text-gold-300",
@@ -313,12 +313,12 @@ export default function PriceChartPanel({
         ) : series.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-1 text-center h-full min-h-[200px]">
             <span
-              className={cn("font-display text-[15px]", executionDensity ? "text-fg-muted" : "italic text-fg-muted")}
+              className={cn("font-display text-body", executionDensity ? "text-fg-muted" : "italic text-fg-muted")}
               style={{ letterSpacing: 0 }}
             >
               Not enough price data.
             </span>
-            <span className="font-sans text-[13px] text-fg-hint">
+            <span className="font-sans text-body-sm text-fg-hint">
               Try a wider range or check back once bars arrive.
             </span>
           </div>

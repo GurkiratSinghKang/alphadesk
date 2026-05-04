@@ -43,9 +43,9 @@ export default function EmptyState({
       )}
     >
       {icon && <div className="text-fg-muted [&>svg]:size-6">{icon}</div>}
-      <h3 className="font-display italic text-[17px] text-fg">{title}</h3>
+      <h3 className="font-display italic text-h3 text-fg">{title}</h3>
       {description && (
-        <p className="max-w-[42ch] text-[13px] leading-relaxed text-fg-muted">
+        <p className="max-w-[42ch] text-body-sm leading-relaxed text-fg-muted">
           {description}
         </p>
       )}
@@ -53,7 +53,7 @@ export default function EmptyState({
         <button
           type="button"
           onClick={action.onClick}
-          className="mt-2 inline-flex items-center gap-1.5 rounded-sm bg-brand px-3 py-2 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-gold-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          className="mt-2 inline-flex items-center gap-1.5 rounded-sm bg-brand px-3 py-2 text-body-sm font-semibold text-primary-foreground transition-colors hover:bg-gold-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           {action.label}
         </button>

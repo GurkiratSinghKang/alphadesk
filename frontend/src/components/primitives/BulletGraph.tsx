@@ -123,7 +123,7 @@ export default function BulletGraph({
         )}
       </div>
       {caption && (
-        <span className="font-mono text-[12px] text-[color:var(--fg-muted)]">
+        <span className="font-mono text-label text-[color:var(--fg-muted)]">
           {caption}
         </span>
       )}

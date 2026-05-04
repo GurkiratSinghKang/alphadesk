@@ -106,11 +106,11 @@ export default function SavedViewsBar<T>({
         className,
       )}
     >
-      <span className="font-mono text-[12px] uppercase tracking-[0.16em] text-[color:var(--fg-muted)] mr-1">
+      <span className="font-mono text-label uppercase tracking-[0.16em] text-[color:var(--fg-muted)] mr-1">
         Views
       </span>
       {views.length === 0 ? (
-        <span className="font-mono text-[12px] text-[color:var(--fg-muted)] italic">
+        <span className="font-mono text-label text-[color:var(--fg-muted)] italic">
           — no saved views
         </span>
       ) : (
@@ -122,7 +122,7 @@ export default function SavedViewsBar<T>({
           <span
             key={v.id}
             className={cn(
-              "group inline-flex items-center rounded border t-mono text-[12px] transition-colors",
+              "group inline-flex items-center rounded border t-mono text-label transition-colors",
               activeId === v.id
                 ? "border-[color:var(--brand)] bg-[color:var(--brand)]/15"
                 : "border-[color:var(--border)] hover:border-[color:var(--brand)]/60",
@@ -154,7 +154,7 @@ export default function SavedViewsBar<T>({
       <button
         type="button"
         onClick={handleSave}
-        className="ml-auto inline-flex items-center gap-1 rounded border border-dashed border-[color:var(--border)] px-2 py-0.5 t-mono text-[12px] text-[color:var(--fg-muted)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)] transition-colors"
+        className="ml-auto inline-flex items-center gap-1 rounded border border-dashed border-[color:var(--border)] px-2 py-0.5 t-mono text-label text-[color:var(--fg-muted)] hover:border-[color:var(--brand)] hover:text-[color:var(--brand)] transition-colors"
         title="Capture the current filter + sort state as a named view"
       >
         <span aria-hidden="true">+</span>

@@ -40,7 +40,7 @@ export default function LoginResetPage() {
         className="mx-auto flex min-h-screen w-full max-w-[720px] flex-col gap-10 px-6 py-16"
       >
       <nav
-        className="flex items-center gap-2 font-sans text-[12px] text-fg-muted"
+        className="flex items-center gap-2 font-sans text-label text-fg-muted"
         aria-label="Breadcrumb"
       >
         <Link href="/login" className="transition-colors hover:text-fg">
@@ -55,7 +55,7 @@ export default function LoginResetPage() {
         <Display size="lg" as="h1" className="max-w-[14ch]">
           Password reset
         </Display>
-        <p className="max-w-[560px] font-display italic text-[16px] leading-snug text-fg-muted">
+        <p className="max-w-[560px] font-display italic text-numeric-md leading-snug text-fg-muted">
           Self-serve reset is not yet wired. Until it is, the desk rotates
           passwords by hand on request.
         </p>
@@ -63,7 +63,7 @@ export default function LoginResetPage() {
 
       <SectionRule tag="§ 02 · How to reset" />
 
-      <section className="flex flex-col gap-4 font-sans text-[15px] leading-[1.65] text-fg-dim">
+      <section className="flex flex-col gap-4 font-sans text-body leading-[1.65] text-fg-dim">
         <p>
           Email{" "}
           <a
@@ -89,7 +89,7 @@ export default function LoginResetPage() {
       <div className="pt-6">
         <Link
           href="/login"
-          className="inline-flex items-center gap-2 rounded-sm border border-border bg-bg-elev-1 px-4 py-2 font-sans text-[12px] font-semibold text-fg transition-colors hover:bg-bg-elev-2"
+          className="inline-flex items-center gap-2 rounded-sm border border-border bg-bg-elev-1 px-4 py-2 font-sans text-label font-semibold text-fg transition-colors hover:bg-bg-elev-2"
         >
           Back to sign in
         </Link>

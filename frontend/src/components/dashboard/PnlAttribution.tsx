@@ -90,7 +90,7 @@ export function PnlAttribution({ strategies }: PnlAttributionProps) {
               {totalPnl >= 0 ? "+" : ""}
               {formatCurrency(totalPnl)}
             </span>
-            <p className="text-[12px] text-muted-foreground">All-time P&L</p>
+            <p className="text-label text-muted-foreground">All-time P&L</p>
           </div>
         </div>
       </div>
@@ -116,7 +116,7 @@ export function PnlAttribution({ strategies }: PnlAttributionProps) {
                     {isPositive ? "+" : ""}
                     {formatCurrency(s.dollarPnl)}
                   </span>
-                  <span className="text-[12px] tabular-nums text-muted-foreground w-12 text-right">
+                  <span className="text-label tabular-nums text-muted-foreground w-12 text-right">
                     {s.contributionPct >= 0 ? "+" : ""}
                     {(s.contributionPct ?? 0).toFixed(1)}%
                   </span>

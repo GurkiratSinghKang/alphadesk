@@ -192,7 +192,7 @@ export function Watchlist({ symbols, className }: WatchlistProps) {
             onChange={(e) => setDraftSymbol(normalizeSymbol(e.target.value))}
             className={cn(
               "min-w-0 flex-1 rounded-sm border border-border bg-bg-card px-2 py-1.5",
-              "font-mono text-[12px] uppercase text-fg outline-none",
+              "font-mono text-label uppercase text-fg outline-none",
               "focus:border-brand focus:ring-1 focus:ring-brand"
             )}
             placeholder="SYMBOL"
@@ -291,7 +291,7 @@ function WatchlistRow({
 
         {/* Symbol — fixed width so prices line up in a column. */}
         <span
-          className="font-sans font-semibold text-[15px] text-ink-1000 shrink-0 w-[52px]"
+          className="font-sans font-semibold text-body text-ink-1000 shrink-0 w-[52px]"
           style={{ letterSpacing: 0 }}
         >
           {symbol}
@@ -314,10 +314,10 @@ function WatchlistRow({
               value={pct!}
               format="percent"
               tone={tone}
-              className="text-[15px]"
+              className="text-body"
             />
           ) : (
-            <span className="font-mono text-[15px] text-fg-muted">—</span>
+            <span className="font-mono text-body text-fg-muted">—</span>
           )}
         </span>
 

@@ -384,11 +384,11 @@ function TradeBuilderTab() {
       <div className="flex items-center justify-between mb-2">
         <Badge
           variant="outline"
-          className="text-[12px] px-2 border-primary/30 text-primary"
+          className="text-label px-2 border-primary/30 text-primary"
         >
           {strategyName}
         </Badge>
-        <span className="text-[12px] text-muted-foreground">
+        <span className="text-label text-muted-foreground">
           {selectedSymbol}
         </span>
       </div>
@@ -398,7 +398,7 @@ function TradeBuilderTab() {
         {legs.length === 0 && (
           <div className="flex flex-col items-center justify-center py-4 text-center">
             <p className="text-xs text-muted-foreground mb-0.5">No legs added</p>
-            <p className="text-[12px] text-muted-foreground/60">Click calls/puts in the options chain, or press &quot;Add Leg&quot; below</p>
+            <p className="text-label text-muted-foreground/60">Click calls/puts in the options chain, or press &quot;Add Leg&quot; below</p>
           </div>
         )}
         {legs.map((leg) => (
@@ -409,7 +409,7 @@ function TradeBuilderTab() {
             <Badge
               variant="outline"
               className={cn(
-                "text-[12px] px-1.5 py-0",
+                "text-label px-1.5 py-0",
                 leg.side === "buy"
                   ? "border-[var(--profit)]/40 text-[var(--profit)]"
                   : "border-[var(--loss)]/40 text-[var(--loss)]"
@@ -455,7 +455,7 @@ function TradeBuilderTab() {
 
       <button
         onClick={addLeg}
-        className="flex items-center justify-center gap-1 rounded-md border border-dashed border-border px-2 py-1 text-[12px] text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors mb-3"
+        className="flex items-center justify-center gap-1 rounded-md border border-dashed border-border px-2 py-1 text-label text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors mb-3"
       >
         <Plus className="h-3 w-3" /> Add Leg
       </button>
@@ -470,7 +470,7 @@ function TradeBuilderTab() {
           <div className="grid grid-cols-4 gap-2 mb-3">
             {Object.entries(aggregateGreeks).map(([key, val]) => (
               <div key={key} className="text-center">
-                <div className="text-[12px] text-muted-foreground capitalize">
+                <div className="text-label text-muted-foreground capitalize">
                   {key}
                 </div>
                 <div
@@ -765,7 +765,7 @@ function PositionsTab() {
       {/* Portfolio total P&L bar */}
       {positions.length > 0 && (
         <div className="flex items-center justify-between rounded-md bg-background/50 px-2.5 py-1.5 mb-2">
-          <span className="text-[12px] uppercase tracking-wider text-muted-foreground">Total P&L</span>
+          <span className="text-label uppercase tracking-wider text-muted-foreground">Total P&L</span>
           <AnimatedNumber
             value={totalLivePnl}
             format={(n) => `${n >= 0 ? "+" : ""}${formatCurrency(n)}`}
@@ -779,7 +779,7 @@ function PositionsTab() {
       )}
 
       <div className="space-y-1">
-        <div className="flex items-center text-[12px] uppercase tracking-wider text-muted-foreground px-2 py-1">
+        <div className="flex items-center text-label uppercase tracking-wider text-muted-foreground px-2 py-1">
           <span className="flex-1 min-w-[60px]">SYM</span>
           <span className="w-10 text-right">QTY</span>
           <span className="w-14 text-right">AVG</span>
@@ -972,7 +972,7 @@ function OrdersTab() {
   return (
     <div className="p-2">
       <div className="space-y-1">
-        <div className="flex items-center text-[12px] uppercase tracking-wider text-muted-foreground px-2 py-1">
+        <div className="flex items-center text-label uppercase tracking-wider text-muted-foreground px-2 py-1">
           <span className="flex-1 min-w-[60px]">SYM</span>
           <span className="w-10 text-right">SIDE</span>
           <span className="w-10 text-right">QTY</span>
@@ -997,7 +997,7 @@ function OrdersTab() {
             </span>
             <span
               className={cn(
-                "w-10 text-right text-[12px] font-medium",
+                "w-10 text-right text-label font-medium",
                 o.side === "buy" ? "text-[var(--profit)]" : "text-[var(--loss)]"
               )}
             >
@@ -1012,7 +1012,7 @@ function OrdersTab() {
             <span className="w-14 flex justify-end">
               <Badge
                 variant="outline"
-                className={cn("text-[12px] px-1.5 py-0", statusColors[o.status] ?? "")}
+                className={cn("text-label px-1.5 py-0", statusColors[o.status] ?? "")}
               >
                 {o.status}
               </Badge>
@@ -1154,25 +1154,25 @@ function JournalStats({ entries, tagMap }: { entries: JournalEntry[]; tagMap: Re
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-md bg-background/50 p-2 text-center">
           <div className="text-sm font-bold tabular-nums text-foreground">{stats.total}</div>
-          <div className="text-[12px] uppercase tracking-wider text-muted-foreground">Total</div>
+          <div className="text-label uppercase tracking-wider text-muted-foreground">Total</div>
         </div>
         <div className="rounded-md bg-background/50 p-2 text-center">
           <div className="text-sm font-bold tabular-nums text-foreground">{stats.thisWeek}</div>
-          <div className="text-[12px] uppercase tracking-wider text-muted-foreground">This Week</div>
+          <div className="text-label uppercase tracking-wider text-muted-foreground">This Week</div>
         </div>
         <div className="rounded-md bg-background/50 p-2 text-center">
           <div className="text-sm font-bold tabular-nums text-foreground">{stats.thisMonth}</div>
-          <div className="text-[12px] uppercase tracking-wider text-muted-foreground">This Month</div>
+          <div className="text-label uppercase tracking-wider text-muted-foreground">This Month</div>
         </div>
       </div>
 
       {/* Top tags */}
       {stats.topTags.length > 0 && (
         <div>
-          <div className="text-[12px] uppercase tracking-wider text-muted-foreground mb-1">Top Tags</div>
+          <div className="text-label uppercase tracking-wider text-muted-foreground mb-1">Top Tags</div>
           <div className="flex flex-wrap gap-1">
             {stats.topTags.map(([tag, count]) => (
-              <span key={tag} className="text-[12px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+              <span key={tag} className="text-label px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
                 {tag} ({count})
               </span>
             ))}
@@ -1182,7 +1182,7 @@ function JournalStats({ entries, tagMap }: { entries: JournalEntry[]; tagMap: Re
 
       {/* Frequency chart */}
       <div>
-        <div className="text-[12px] uppercase tracking-wider text-muted-foreground mb-1">7-Day Frequency</div>
+        <div className="text-label uppercase tracking-wider text-muted-foreground mb-1">7-Day Frequency</div>
         <div className="flex items-end gap-1 h-10">
           {stats.freqData.map(([day, count]) => (
             <div key={day} className="flex-1 flex flex-col items-center gap-0.5">
@@ -1190,7 +1190,7 @@ function JournalStats({ entries, tagMap }: { entries: JournalEntry[]; tagMap: Re
                 className="w-full rounded-t bg-primary/40 transition-all"
                 style={{ height: `${Math.max(2, (count / stats.maxFreq) * 28)}px` }}
               />
-              <span className="text-[12px] text-muted-foreground">{day}</span>
+              <span className="text-label text-muted-foreground">{day}</span>
             </div>
           ))}
         </div>
@@ -1336,7 +1336,7 @@ function JournalTab() {
           <button
             onClick={() => setShowStats(!showStats)}
             className={cn(
-              "text-[12px] px-2 py-1 rounded font-medium transition-colors",
+              "text-label px-2 py-1 rounded font-medium transition-colors",
               showStats ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
             )}
           >
@@ -1348,7 +1348,7 @@ function JournalTab() {
               key={tag}
               onClick={() => setFilterTag(filterTag === tag ? null : tag)}
               className={cn(
-                "text-[12px] px-1.5 py-0.5 rounded border transition-colors",
+                "text-label px-1.5 py-0.5 rounded border transition-colors",
                 filterTag === tag
                   ? "bg-primary/15 text-primary border-primary/30"
                   : "text-muted-foreground border-transparent hover:text-foreground hover:border-border"
@@ -1360,7 +1360,7 @@ function JournalTab() {
           <div className="flex-1" />
           <button
             onClick={handleExport}
-            className="text-[12px] px-2 py-1 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors"
+            className="text-label px-2 py-1 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors"
           >
             Export JSON
           </button>
@@ -1372,8 +1372,8 @@ function JournalTab() {
         {/* Entries */}
         {filteredEntries.length === 0 && filterTag ? (
           <div className="flex flex-col items-center justify-center py-6">
-            <p className="text-[12px] text-muted-foreground">No entries tagged {filterTag}</p>
-            <button onClick={() => setFilterTag(null)} className="text-[12px] text-primary hover:underline mt-1">Clear filter</button>
+            <p className="text-label text-muted-foreground">No entries tagged {filterTag}</p>
+            <button onClick={() => setFilterTag(null)} className="text-label text-primary hover:underline mt-1">Clear filter</button>
           </div>
         ) : (
           <div className="space-y-1">
@@ -1383,7 +1383,7 @@ function JournalTab() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className={cn(
-                      "text-[12px] font-bold uppercase px-1.5 py-0.5 rounded",
+                      "text-label font-bold uppercase px-1.5 py-0.5 rounded",
                       entry.type === "BUY" ? "bg-[var(--profit)]/15 text-[var(--profit)]" :
                       entry.type === "SELL" ? "bg-[var(--loss)]/15 text-[var(--loss)]" :
                       "bg-primary/15 text-primary"
@@ -1392,25 +1392,25 @@ function JournalTab() {
                     </span>
                     <span className="text-xs font-semibold text-foreground">{entry.symbol}</span>
                     {entry.strategy && (
-                      <span className="text-[12px] text-muted-foreground bg-accent/30 px-1 py-0.5 rounded">
+                      <span className="text-label text-muted-foreground bg-accent/30 px-1 py-0.5 rounded">
                         {entry.strategy}
                       </span>
                     )}
                   </div>
-                  <span className="text-[12px] text-muted-foreground">{entry.date}</span>
+                  <span className="text-label text-muted-foreground">{entry.date}</span>
                 </div>
 
                 {/* Detail */}
-                <p className="text-[12px] text-muted-foreground mt-1">{entry.detail}</p>
+                <p className="text-label text-muted-foreground mt-1">{entry.detail}</p>
 
                 {/* Rationale */}
                 {entry.rationale && (
-                  <p className="text-[12px] text-muted-foreground/70 mt-0.5 italic">{entry.rationale}</p>
+                  <p className="text-label text-muted-foreground/70 mt-0.5 italic">{entry.rationale}</p>
                 )}
 
                 {/* P&L */}
                 {entry.pnl !== undefined && (
-                  <p className={cn("text-[12px] font-semibold tabular-nums mt-0.5", entry.pnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+                  <p className={cn("text-label font-semibold tabular-nums mt-0.5", entry.pnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
                     P&L: {entry.pnl >= 0 ? "+" : ""}${(entry.pnl ?? 0).toFixed(2)}
                   </p>
                 )}
@@ -1424,7 +1424,7 @@ function JournalTab() {
                         key={tag}
                         onClick={() => toggleTag(entry.id, tag)}
                         className={cn(
-                          "text-[12px] px-1 py-0.5 rounded border transition-colors",
+                          "text-label px-1 py-0.5 rounded border transition-colors",
                           active
                             ? tag === "#winning" ? "bg-[var(--profit)]/15 text-[var(--profit)] border-[var(--profit)]/30"
                             : tag === "#losing" ? "bg-[var(--loss)]/15 text-[var(--loss)] border-[var(--loss)]/30"
@@ -1441,7 +1441,7 @@ function JournalTab() {
 
                 {/* Notes */}
                 {notes[entry.id] && editingId !== entry.id && (
-                  <p className="text-[12px] text-muted-foreground mt-1.5 italic border-t border-border pt-1.5">
+                  <p className="text-label text-muted-foreground mt-1.5 italic border-t border-border pt-1.5">
                     {notes[entry.id]}
                   </p>
                 )}
@@ -1452,17 +1452,17 @@ function JournalTab() {
                       onChange={(e) => setNoteText(e.target.value)}
                       placeholder="Add a note..."
                       aria-label="Trade notes"
-                      className="flex-1 h-6 rounded border border-border bg-background px-2 text-[12px] text-foreground"
+                      className="flex-1 h-6 rounded border border-border bg-background px-2 text-label text-foreground"
                       autoFocus
                       onKeyDown={(e) => { if (e.key === "Enter") handleSaveNote(entry.id); }}
                     />
-                    <button onClick={() => handleSaveNote(entry.id)} className="h-6 px-2 rounded bg-primary text-[12px] font-medium text-primary-foreground">Save</button>
-                    <button onClick={() => { setEditingId(null); setNoteText(""); }} className="h-6 px-2 rounded border border-border text-[12px] text-muted-foreground">Cancel</button>
+                    <button onClick={() => handleSaveNote(entry.id)} className="h-6 px-2 rounded bg-primary text-label font-medium text-primary-foreground">Save</button>
+                    <button onClick={() => { setEditingId(null); setNoteText(""); }} className="h-6 px-2 rounded border border-border text-label text-muted-foreground">Cancel</button>
                   </div>
                 ) : (
                   <button
                     onClick={() => { setEditingId(entry.id); setNoteText(notes[entry.id] ?? ""); }}
-                    className="text-[12px] text-primary hover:underline mt-1"
+                    className="text-label text-primary hover:underline mt-1"
                   >
                     {notes[entry.id] ? "Edit note" : "Add note"}
                   </button>
@@ -1490,19 +1490,19 @@ export function TradePanel() {
       >
         <div className="flex items-center justify-between mx-2 mt-2 shrink-0">
           <TabsList className="h-7 bg-[#12121a] p-0.5 flex-1 min-w-0 border border-[#2a2a3e]">
-            <TabsTrigger value="trade" className="text-[12px] h-6 px-1.5" title="Trade Builder">
+            <TabsTrigger value="trade" className="text-label h-6 px-1.5" title="Trade Builder">
               Trade
             </TabsTrigger>
-            <TabsTrigger value="positions" className="text-[12px] h-6 px-1.5" title="Positions">
+            <TabsTrigger value="positions" className="text-label h-6 px-1.5" title="Positions">
               Pos
             </TabsTrigger>
-            <TabsTrigger value="orders" className="text-[12px] h-6 px-1.5" title="Orders">
+            <TabsTrigger value="orders" className="text-label h-6 px-1.5" title="Orders">
               Ords
             </TabsTrigger>
-            <TabsTrigger value="journal" className="text-[12px] h-6 px-1.5" title="Journal">
+            <TabsTrigger value="journal" className="text-label h-6 px-1.5" title="Journal">
               Jrnl
             </TabsTrigger>
-            <TabsTrigger value="calendar" className="text-[12px] h-6 px-1.5" title="P&L Calendar">
+            <TabsTrigger value="calendar" className="text-label h-6 px-1.5" title="P&L Calendar">
               Cal
             </TabsTrigger>
           </TabsList>

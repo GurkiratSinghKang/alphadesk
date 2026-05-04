@@ -154,15 +154,15 @@ export default function PnLZones({
         />
       </div>
       {/* Scale labels */}
-      <div className="flex items-center justify-between font-mono text-[12px] text-[color:var(--fg-muted)]">
+      <div className="flex items-center justify-between font-mono text-label text-[color:var(--fg-muted)]">
         <span>${priceMin.toFixed(2)}</span>
-        <span className="font-display italic text-[12px] text-[color:var(--fg-strong)]">
+        <span className="font-display italic text-label text-[color:var(--fg-strong)]">
           ${underlying.toFixed(2)}
         </span>
         <span>${priceMax.toFixed(2)}</span>
       </div>
       {caption && (
-        <p className="font-display italic text-[12px] text-[color:var(--fg-muted)]">
+        <p className="font-display italic text-label text-[color:var(--fg-muted)]">
           {caption}
         </p>
       )}

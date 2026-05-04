@@ -940,7 +940,7 @@ function DashboardCommandCenter({
                 >
                   Control room
                 </h2>
-                <p className="mt-2 max-w-[44ch] text-[13px] leading-relaxed text-fg-muted">
+                <p className="mt-2 max-w-[44ch] text-body-sm leading-relaxed text-fg-muted">
                   Exceptions, exposure, and broker state in the first scan.
                 </p>
                 <div className="mt-4 rounded-md border border-border-hair bg-bg px-3 py-3">
@@ -948,7 +948,7 @@ function DashboardCommandCenter({
                   <p className="mt-1 text-[14px] font-semibold leading-snug text-ink-1000">
                     {dashboardReadiness.title}
                   </p>
-                  <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
+                  <p className="mt-1 text-body-sm leading-relaxed text-fg-muted">
                     {dashboardReadiness.detail}
                   </p>
                 </div>
@@ -1109,7 +1109,7 @@ function MobilePriorityBrief({
           <p className="text-[14px] font-semibold leading-snug text-ink-1000">
             {readiness.title}
           </p>
-          <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-fg-muted">
+          <p className="mt-1 line-clamp-2 text-body-sm leading-snug text-fg-muted">
             {readiness.detail}
           </p>
         </div>
@@ -1132,13 +1132,13 @@ function MobilePriorityBrief({
             <ActionIcon className="size-5" aria-hidden />
           </span>
           <span className="min-w-0">
-            <span className="block text-[15px] font-semibold leading-tight text-ink-1000">
+            <span className="block text-body font-semibold leading-tight text-ink-1000">
               {actionTitle}
             </span>
-            <span className="mt-2 block line-clamp-2 text-[13px] leading-snug text-fg-muted">
+            <span className="mt-2 block line-clamp-2 text-body-sm leading-snug text-fg-muted">
               {actionDetail}
             </span>
-            <span className="mt-3 inline-flex min-h-8 items-center rounded-sm bg-brand px-3 text-[12px] font-semibold text-primary-foreground">
+            <span className="mt-3 inline-flex min-h-8 items-center rounded-sm bg-brand px-3 text-label font-semibold text-primary-foreground">
               {actionLabel}
             </span>
           </span>
@@ -1190,10 +1190,10 @@ function MobilePriorityDatum({
   return (
     <div className="min-w-0 rounded-md border border-border-hair bg-bg px-3 py-2.5">
       <p className="t-label text-fg-hint">{label}</p>
-      <p className={cn("mt-1 truncate font-mono text-[15px] leading-tight text-ink-1000", valueClassName)}>
+      <p className={cn("mt-1 truncate font-mono text-body leading-tight text-ink-1000", valueClassName)}>
         {value}
       </p>
-      {detail ? <p className="mt-1 truncate text-[12px] text-fg-muted">{detail}</p> : null}
+      {detail ? <p className="mt-1 truncate text-label text-fg-muted">{detail}</p> : null}
     </div>
   );
 }
@@ -1215,7 +1215,7 @@ function CommandMetric({
       <p className={cn("mt-2 font-mono text-[clamp(14px,1.2vw,18px)] leading-tight text-ink-1000", valueClassName)}>
         {value}
       </p>
-      <p className="mt-2 text-[13px] leading-snug text-fg-muted">{detail}</p>
+      <p className="mt-2 text-body-sm leading-snug text-fg-muted">{detail}</p>
     </div>
   );
 }
@@ -1255,11 +1255,11 @@ function PortfolioCanvas({
             {account.ready ? formatCurrency(account.equity) : "Awaiting"}
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <span className={cn("font-mono text-[15px]", account.dayPnl > 0 ? "text-profit" : account.dayPnl < 0 ? "text-loss" : "text-fg-muted")}>
+            <span className={cn("font-mono text-body", account.dayPnl > 0 ? "text-profit" : account.dayPnl < 0 ? "text-loss" : "text-fg-muted")}>
               {account.ready ? `${account.dayPnl > 0 ? "+" : ""}${formatCurrency(account.dayPnl)} today` : "Waiting for account state"}
             </span>
             <span className="h-1 w-1 rounded-full bg-border-strong" aria-hidden />
-            <span className="font-mono text-[15px] text-fg-muted">
+            <span className="font-mono text-body text-fg-muted">
               {account.positionsCount} position{account.positionsCount === 1 ? "" : "s"}
             </span>
           </div>
@@ -1287,14 +1287,14 @@ function PortfolioCanvas({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="t-label text-fg-hint">Exposure runway</p>
-              <p className="mt-1 text-[13px] text-fg-muted">
+              <p className="mt-1 text-body-sm text-fg-muted">
                 {selectedSymbol} handoff · <span className={cn("font-mono", quoteTone)}>{quoteValue}</span>
               </p>
             </div>
             <button
               type="button"
               onClick={onTrade}
-              className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-sm bg-brand px-3 text-[13px] font-semibold text-primary-foreground transition-transform hover:-translate-y-0.5"
+              className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-sm bg-brand px-3 text-body-sm font-semibold text-primary-foreground transition-transform hover:-translate-y-0.5"
             >
               Open execution
               <ArrowRight className="size-4" aria-hidden />
@@ -1337,7 +1337,7 @@ function SmallDatum({
       <p className={cn("mt-2 whitespace-nowrap font-mono text-[clamp(14px,1.08vw,17px)] leading-tight text-ink-1000", valueClassName)}>
         {value}
       </p>
-      {detail ? <p className="mt-2 line-clamp-2 text-[13px] leading-snug text-fg-muted">{detail}</p> : null}
+      {detail ? <p className="mt-2 line-clamp-2 text-body-sm leading-snug text-fg-muted">{detail}</p> : null}
     </div>
   );
 }
@@ -1391,7 +1391,7 @@ function DashboardInsightRail({
         >
           <div className="border-b border-border-hair px-4 py-3">
             <p className="t-label text-fg-hint">Live book</p>
-            <p className="mt-1 text-[13px] text-fg-muted">
+            <p className="mt-1 text-body-sm text-fg-muted">
               Positions and order state stay here so the dashboard can stay decision-led.
             </p>
           </div>
@@ -1446,7 +1446,7 @@ function FocusTickerPanel({
         <div className="mt-2 flex items-end justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate font-mono text-[42px] font-medium leading-none tracking-tight text-fg">{symbol}</p>
-            <p className={cn("mt-2 font-mono text-[15px]", tone)}>
+            <p className={cn("mt-2 font-mono text-body", tone)}>
               {hasQuote
                 ? `${formatCurrency(quote.last)} · ${quote.changePct >= 0 ? "+" : ""}${quote.changePct.toFixed(2)}%`
                 : "Waiting for quote"}
@@ -1458,7 +1458,7 @@ function FocusTickerPanel({
         <button
           type="button"
           onClick={onTrade}
-          className="flex min-h-12 items-center justify-center gap-2 bg-bg px-3 py-3 text-[13px] font-semibold text-fg transition-transform hover:-translate-y-0.5 hover:bg-brand/10"
+          className="flex min-h-12 items-center justify-center gap-2 bg-bg px-3 py-3 text-body-sm font-semibold text-fg transition-transform hover:-translate-y-0.5 hover:bg-brand/10"
         >
           <ChartLineUp className="size-4" aria-hidden />
           Trade
@@ -1466,7 +1466,7 @@ function FocusTickerPanel({
         <button
           type="button"
           onClick={onAlert}
-          className="flex min-h-12 items-center justify-center gap-2 bg-bg px-3 py-3 text-[13px] font-semibold text-fg transition-transform hover:-translate-y-0.5 hover:bg-brand/10"
+          className="flex min-h-12 items-center justify-center gap-2 bg-bg px-3 py-3 text-body-sm font-semibold text-fg transition-transform hover:-translate-y-0.5 hover:bg-brand/10"
         >
           <ClipboardText className="size-4" aria-hidden />
           Alert
@@ -1494,7 +1494,7 @@ function DecisionQueue({
           <ListChecks className="size-5 shrink-0 text-brand" aria-hidden />
           <div className="min-w-0">
             <p className="t-label text-fg-hint">Action stack</p>
-            <p className="mt-1 text-[13px] leading-snug text-fg-muted">
+            <p className="mt-1 text-body-sm leading-snug text-fg-muted">
               One visible queue, one next screen, no scavenger hunt.
             </p>
           </div>
@@ -1523,8 +1523,8 @@ function DecisionQueue({
                 <Icon className="size-4" aria-hidden />
               </span>
               <div className="min-w-0">
-                <p className="text-[15px] font-semibold leading-tight text-ink-1000">{item.title}</p>
-                <p className="mt-2 line-clamp-2 text-[13px] leading-snug text-fg-muted">{item.detail}</p>
+                <p className="text-body font-semibold leading-tight text-ink-1000">{item.title}</p>
+                <p className="mt-2 line-clamp-2 text-body-sm leading-snug text-fg-muted">{item.detail}</p>
               </div>
               <ArrowRight className="mt-1 size-4 shrink-0 text-fg-muted transition-transform group-hover:translate-x-0.5" aria-hidden />
             </button>
@@ -1534,8 +1534,8 @@ function DecisionQueue({
             <div className="flex size-10 items-center justify-center rounded-sm bg-profit/10 text-profit">
               <ShieldCheck className="size-5" aria-hidden />
             </div>
-            <p className="mt-4 text-[15px] font-semibold text-ink-1000">No interventions pending</p>
-            <p className="mt-2 max-w-xl text-[13px] leading-snug text-fg-muted">
+            <p className="mt-4 text-body font-semibold text-ink-1000">No interventions pending</p>
+            <p className="mt-2 max-w-xl text-body-sm leading-snug text-fg-muted">
               Orders, exposure, and pipeline state are inside normal bounds. Open Trade when you want to act.
             </p>
             <Button variant="ghost" size="sm" className="mt-4" onClick={onTrade}>
@@ -1567,12 +1567,12 @@ function RiskEscalationPanel({
           </span>
           <div className="min-w-0">
             <p className="t-label text-fg-hint">Risk gates</p>
-            <p className="mt-1 text-[13px] leading-snug text-fg-muted">
+            <p className="mt-1 text-body-sm leading-snug text-fg-muted">
               Thresholds, ownership, and action before more exposure.
             </p>
           </div>
         </div>
-        <span className={cn("rounded-sm px-2 py-1 font-mono text-[12px]", hotCount > 0 ? "bg-amber/10 text-amber" : "bg-profit/10 text-profit")}>
+        <span className={cn("rounded-sm px-2 py-1 font-mono text-label", hotCount > 0 ? "bg-amber/10 text-amber" : "bg-profit/10 text-profit")}>
           {hotCount > 0 ? `${hotCount} active` : "Clear"}
         </span>
       </div>
@@ -1597,11 +1597,11 @@ function RiskEscalationPanel({
               </span>
               <div className="min-w-0">
                 <div className="flex items-start justify-between gap-3">
-                  <p className="text-[15px] font-semibold leading-tight text-ink-1000">{item.title}</p>
-                  <span className="shrink-0 font-mono text-[12px] uppercase text-fg-hint">{item.owner}</span>
+                  <p className="text-body font-semibold leading-tight text-ink-1000">{item.title}</p>
+                  <span className="shrink-0 font-mono text-label uppercase text-fg-hint">{item.owner}</span>
                 </div>
-                <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-fg-muted">{item.detail}</p>
-                <p className="mt-2 font-mono text-[12px] text-fg">{item.metric}</p>
+                <p className="mt-1 line-clamp-2 text-body-sm leading-snug text-fg-muted">{item.detail}</p>
+                <p className="mt-2 font-mono text-label text-fg">{item.metric}</p>
               </div>
             </div>
           );
@@ -1647,10 +1647,10 @@ function AuditTrailPanel({ items }: { items: readonly AuditItem[] }) {
               <div className="min-w-0">
                 <div className="flex items-center justify-between gap-3">
                   <span className="t-label text-fg-hint">{item.label}</span>
-                  <span className={cn("shrink-0 font-mono text-[12px]", item.toneClass)}>{item.status}</span>
+                  <span className={cn("shrink-0 font-mono text-label", item.toneClass)}>{item.status}</span>
                 </div>
-                <p className="mt-1 truncate text-[15px] font-medium text-ink-1000">{item.title}</p>
-                <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-fg-muted">{item.detail}</p>
+                <p className="mt-1 truncate text-body font-medium text-ink-1000">{item.title}</p>
+                <p className="mt-1 line-clamp-2 text-body-sm leading-snug text-fg-muted">{item.detail}</p>
               </div>
             </div>
           );
@@ -1687,11 +1687,11 @@ function SessionSnapshot({
         <div className="flex min-w-0 items-start gap-2">
           <Pulse className="size-4 shrink-0 text-brand" aria-hidden />
           <div className="min-w-0">
-            <h3 className="truncate text-[15px] font-semibold text-ink-1000">Session telemetry</h3>
-            <p className="mt-0.5 text-[12px] leading-snug text-fg-muted">Ticker, strategy, and pipeline context</p>
+            <h3 className="truncate text-body font-semibold text-ink-1000">Session telemetry</h3>
+            <p className="mt-0.5 text-label leading-snug text-fg-muted">Ticker, strategy, and pipeline context</p>
           </div>
         </div>
-        <span className={cn("shrink-0 rounded-sm px-2 py-1 font-mono text-[12px]", pipelineStatus?.running ? "bg-profit/10 text-profit" : "bg-bg-elev-2 text-fg-muted")}>
+        <span className={cn("shrink-0 rounded-sm px-2 py-1 font-mono text-label", pipelineStatus?.running ? "bg-profit/10 text-profit" : "bg-bg-elev-2 text-fg-muted")}>
           {pipelineStatus?.running ? "Pipeline running" : "Pipeline idle"}
         </span>
       </header>
@@ -1719,7 +1719,7 @@ function SessionSnapshot({
         <button
           type="button"
           onClick={onPipeline}
-          className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-sm border border-border-hair bg-bg px-3 text-[13px] font-semibold text-fg transition-transform hover:-translate-y-0.5 hover:border-brand/40"
+          className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-sm border border-border-hair bg-bg px-3 text-body-sm font-semibold text-fg transition-transform hover:-translate-y-0.5 hover:border-brand/40"
         >
           Open pipeline
           <ArrowRight className="size-4" aria-hidden />
@@ -1812,8 +1812,8 @@ function PanelHeader({
           <Icon className="size-4" aria-hidden />
         </span>
         <div className="min-w-0">
-          <h3 id={id} className="truncate text-[15px] font-semibold text-ink-1000">{title}</h3>
-          <p className="mt-0.5 text-[12px] leading-snug text-fg-muted">{detail}</p>
+          <h3 id={id} className="truncate text-body font-semibold text-ink-1000">{title}</h3>
+          <p className="mt-0.5 text-label leading-snug text-fg-muted">{detail}</p>
         </div>
       </div>
       {actionLabel && onAction ? (
@@ -1841,10 +1841,10 @@ function SessionRow({
     <div className="bg-bg-elev-1 px-4 py-3">
       <div className="flex items-center justify-between gap-3">
         <span className="t-label text-fg-hint">{label}</span>
-        <p className={cn("shrink-0 truncate font-mono text-[12px]", toneClass)}>{value}</p>
+        <p className={cn("shrink-0 truncate font-mono text-label", toneClass)}>{value}</p>
       </div>
       <div className="mt-1 flex items-baseline justify-between gap-3">
-        <p className="min-w-0 truncate text-[15px] font-medium text-ink-1000">{title}</p>
+        <p className="min-w-0 truncate text-body font-medium text-ink-1000">{title}</p>
       </div>
     </div>
   );
@@ -1856,7 +1856,7 @@ function RiskMeter({ label, value, detail }: { label: string; value: number; det
     <div className="bg-bg-elev-1 p-4">
       <div className="flex items-center justify-between gap-3">
         <span className="t-label text-fg-hint">{label}</span>
-        <span className="font-mono text-[13px] text-ink-1000">{formatPercent(value)}</span>
+        <span className="font-mono text-body-sm text-ink-1000">{formatPercent(value)}</span>
       </div>
       <div className="mt-4 h-2 overflow-hidden rounded-sm bg-bg-elev-2">
         <div
@@ -1867,7 +1867,7 @@ function RiskMeter({ label, value, detail }: { label: string; value: number; det
           style={{ width: `${clamped}%` }}
         />
       </div>
-      <p className="mt-2 truncate text-[13px] text-fg-muted">{detail}</p>
+      <p className="mt-2 truncate text-body-sm text-fg-muted">{detail}</p>
     </div>
   );
 }
@@ -1886,10 +1886,10 @@ function RiskStat({
   return (
     <div className="bg-bg-elev-1 p-4">
       <span className="t-label text-fg-hint">{label}</span>
-      <p className={cn("mt-3 truncate font-mono text-[20px]", tone === "loss" ? "text-loss" : tone === "muted" ? "text-fg-muted" : "text-ink-1000")}>
+      <p className={cn("mt-3 truncate font-mono text-numeric-lg", tone === "loss" ? "text-loss" : tone === "muted" ? "text-fg-muted" : "text-ink-1000")}>
         {value}
       </p>
-      <p className="mt-2 truncate text-[13px] text-fg-muted">{detail}</p>
+      <p className="mt-2 truncate text-body-sm text-fg-muted">{detail}</p>
     </div>
   );
 }
@@ -1900,7 +1900,7 @@ function StatusChip({ label, tone }: { label: string; tone: StatusTone }) {
   return (
     <span
       className={cn(
-        "inline-flex min-h-7 items-center gap-1.5 rounded-sm border px-2.5 py-1 font-mono text-[12px]",
+        "inline-flex min-h-7 items-center gap-1.5 rounded-sm border px-2.5 py-1 font-mono text-label",
         tone === "profit" && "border-profit/30 bg-profit/10 text-profit",
         tone === "loss" && "border-loss/30 bg-loss/10 text-loss",
         tone === "amber" && "border-amber/30 bg-amber/10 text-amber",

@@ -78,7 +78,7 @@ export function TopBar() {
           } />
           <SheetContent side="left" className="w-64 bg-[var(--surface)] border-border p-0">
             <SheetHeader className="border-b border-border px-4 py-3">
-              <SheetTitle className="flex items-baseline gap-1.5 text-[20px]">
+              <SheetTitle className="flex items-baseline gap-1.5 text-numeric-lg">
                 <span className="font-display italic text-brand">α</span>
                 <span>AlphaDesk</span>
               </SheetTitle>
@@ -106,7 +106,7 @@ export function TopBar() {
         <button
           type="button"
           aria-label="AlphaDesk home"
-          className="inline-flex min-h-11 min-w-0 items-center gap-1.5 rounded-md px-1 font-display italic text-[20px] text-ink-1000 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-8"
+          className="inline-flex min-h-11 min-w-0 items-center gap-1.5 rounded-md px-1 font-display italic text-numeric-lg text-ink-1000 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-8"
           onClick={() => router.push("/")}
         >
           <span className="text-brand">α</span>
@@ -119,7 +119,7 @@ export function TopBar() {
               key={path}
               onClick={() => router.push(path)}
               className={cn(
-                "flex min-h-9 items-center gap-1.5 rounded-sm border px-3 py-2 text-[12px] font-medium transition-colors",
+                "flex min-h-9 items-center gap-1.5 rounded-sm border px-3 py-2 text-label font-medium transition-colors",
                 active
                   ? "border-brand/30 bg-brand/15 text-brand"
                   : "border-transparent text-muted-foreground hover:border-border-hair hover:bg-bg-elev-1 hover:text-foreground"
@@ -135,7 +135,7 @@ export function TopBar() {
       <button data-tour="search-bar" onClick={() => setCommandPaletteOpen(true)} aria-label="Open command palette to search symbols and commands" className="hidden h-9 min-w-[180px] max-w-[520px] flex-1 items-center gap-2 rounded-sm border border-border-hair bg-bg-elev-1/80 px-3 text-sm text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:border-brand/40 hover:text-foreground md:flex">
         <Search className="h-3.5 w-3.5" aria-hidden="true" />
         <span className="flex-1 text-left">Search symbols, commands...</span>
-        <kbd className="rounded-sm border border-border-hair bg-bg px-2 py-0.5 text-[12px] font-mono text-muted-foreground">{isMac ? "\u2318K" : "Ctrl+K"}</kbd>
+        <kbd className="rounded-sm border border-border-hair bg-bg px-2 py-0.5 text-label font-mono text-muted-foreground">{isMac ? "\u2318K" : "Ctrl+K"}</kbd>
       </button>
 
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">

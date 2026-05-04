@@ -102,7 +102,7 @@ export default function DetailHeader({
               title={quoteTimestamp}
               aria-label={freshness.kind === "live" ? "Live price" : `Delayed price, ${freshness.age}`}
               className={
-                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 t-mono text-[12px] uppercase tracking-wide " +
+                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 t-mono text-label uppercase tracking-wide " +
                 (freshness.kind === "live"
                   ? "border-[color:var(--profit)] text-[color:var(--profit)]"
                   : "border-[color:var(--border)] u-muted")
@@ -120,11 +120,11 @@ export default function DetailHeader({
               {freshness.kind === "live" ? "LIVE" : `DELAYED ${freshness.age}`}
             </span>
           )}
-          <div className="t-num-hero min-w-0 max-w-full text-[40px] tracking-[0] sm:text-[48px]">
+          <div className="t-num-hero min-w-0 max-w-full text-[40px] tracking-[0] sm:text-numeric-hero">
             {quote ? fmtCurrency(quote.last, "USD") : "—"}
           </div>
         </div>
-        <div className={"t-mono text-[13px] " + (isNeg ? "u-loss" : "u-profit")}>
+        <div className={"t-mono text-body-sm " + (isNeg ? "u-loss" : "u-profit")}>
           {change == null
             ? "—"
             : /* Round-8 visual-bug DH1: ``changePct`` is a percentage

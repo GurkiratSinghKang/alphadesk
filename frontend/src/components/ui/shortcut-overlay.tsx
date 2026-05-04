@@ -21,7 +21,7 @@ const GROUP_ICONS: Record<string, typeof Globe> = {
 
 function KBD({ children }: { children: string }) {
   return (
-    <kbd className="inline-flex items-center justify-center min-w-[24px] rounded-md bg-[var(--panel)] border border-border/60 px-1.5 py-0.5 text-[12px] font-mono text-foreground shadow-[0_1px_0_1px_rgba(0,0,0,0.4)]">
+    <kbd className="inline-flex items-center justify-center min-w-[24px] rounded-md bg-[var(--panel)] border border-border/60 px-1.5 py-0.5 text-label font-mono text-foreground shadow-[0_1px_0_1px_rgba(0,0,0,0.4)]">
       {children}
     </kbd>
   );
@@ -29,7 +29,7 @@ function KBD({ children }: { children: string }) {
 
 function NewBadge() {
   return (
-    <span className="ml-1.5 inline-flex items-center rounded-full bg-primary/15 px-1.5 py-0 text-[12px] font-bold uppercase tracking-wider text-primary border border-primary/20">
+    <span className="ml-1.5 inline-flex items-center rounded-full bg-primary/15 px-1.5 py-0 text-label font-bold uppercase tracking-wider text-primary border border-primary/20">
       New
     </span>
   );
@@ -56,7 +56,7 @@ function GroupSection({ group, filter }: { group: ShortcutGroup; filter: string 
         <div className="flex h-5 w-5 items-center justify-center rounded bg-primary/10">
           <Icon className="h-3 w-3 text-primary" />
         </div>
-        <h3 className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <h3 className="text-label font-semibold uppercase tracking-wider text-muted-foreground">
           {group.name}
         </h3>
       </div>
@@ -66,7 +66,7 @@ function GroupSection({ group, filter }: { group: ShortcutGroup; filter: string 
             key={item.key}
             className="flex items-center justify-between gap-3 rounded-md px-2 py-2 sm:py-1.5 hover:bg-accent/20 transition-colors"
           >
-            <span className="text-sm sm:text-[13px] text-muted-foreground">
+            <span className="text-sm sm:text-body-sm text-muted-foreground">
               {item.description}
               {item.isNew && <NewBadge />}
             </span>
@@ -74,7 +74,7 @@ function GroupSection({ group, filter }: { group: ShortcutGroup; filter: string 
               {item.key.split(/(\+|\s)/).filter(k => k !== "+" && k.trim()).map((k, i, arr) => (
                 <span key={i} className="flex items-center gap-0.5">
                   {i > 0 && (
-                    <span className="text-[12px] text-muted-foreground/50 mx-0.5">
+                    <span className="text-label text-muted-foreground/50 mx-0.5">
                       {item.key.includes("+") ? "+" : "then"}
                     </span>
                   )}
@@ -198,7 +198,7 @@ export function ShortcutOverlay({ onClose }: { onClose: () => void }) {
 
         {/* Footer */}
         <div className="border-t border-border px-4 sm:px-6 py-3">
-          <p className="text-[12px] text-muted-foreground/60">
+          <p className="text-label text-muted-foreground/60">
             Customize bindings in localStorage key &quot;alphadesk:keybindings&quot;
           </p>
         </div>

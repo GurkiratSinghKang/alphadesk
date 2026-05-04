@@ -141,7 +141,7 @@ export function StrategyBuilder() {
     <div className="space-y-3">
       {/* Strategy Name */}
       <div>
-        <label htmlFor="strategy-name" className="text-[12px] uppercase tracking-wider text-muted-foreground font-semibold">Strategy Name</label>
+        <label htmlFor="strategy-name" className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Strategy Name</label>
         <input
           id="strategy-name"
           value={strategyName}
@@ -152,7 +152,7 @@ export function StrategyBuilder() {
 
       {/* Rule Input */}
       <div>
-        <label htmlFor="strategy-rule-input" className="text-[12px] uppercase tracking-wider text-muted-foreground font-semibold">Add Rule (Natural Language)</label>
+        <label htmlFor="strategy-rule-input" className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Add Rule (Natural Language)</label>
         <div className="flex gap-2 mt-1">
           <input
             id="strategy-rule-input"
@@ -173,14 +173,14 @@ export function StrategyBuilder() {
         <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-4">
           <div className="flex items-center gap-2 mb-2">
             <Lightbulb className="h-3.5 w-3.5 text-primary shrink-0" />
-            <p className="text-[12px] uppercase tracking-wider text-primary font-semibold">Quick Start &mdash; click a rule to begin</p>
+            <p className="text-label uppercase tracking-wider text-primary font-semibold">Quick Start &mdash; click a rule to begin</p>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {EXAMPLE_RULES.map((ex, i) => (
               <button
                 key={i}
                 onClick={() => { setInput(ex); }}
-                className="rounded-full border border-primary/20 bg-[var(--panel)] px-2.5 py-1 text-[12px] text-muted-foreground hover:text-foreground hover:border-primary/50 hover:bg-primary/10 transition-colors"
+                className="rounded-full border border-primary/20 bg-[var(--panel)] px-2.5 py-1 text-label text-muted-foreground hover:text-foreground hover:border-primary/50 hover:bg-primary/10 transition-colors"
               >
                 {ex}
               </button>
@@ -192,7 +192,7 @@ export function StrategyBuilder() {
       {/* Active Rules */}
       {rules.length > 0 && (
         <div>
-          <p className="text-[12px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Rules ({rules.length})</p>
+          <p className="text-label uppercase tracking-wider text-muted-foreground font-semibold mb-2">Rules ({rules.length})</p>
           <div className="space-y-1.5">
             {rules.map((rule) => (
               <div key={rule.id} className={cn(
@@ -203,11 +203,11 @@ export function StrategyBuilder() {
                   <p className="text-xs text-foreground">{rule.condition}</p>
                   {rule.parsed && (
                     <div className="flex gap-2 mt-1 items-center">
-                      {rule.parsed.action && <span className="text-[12px] rounded bg-[var(--profit)]/20 text-[var(--profit)] px-1.5 py-0.5 font-bold">{rule.parsed.action}</span>}
-                      {rule.parsed.indicator && <span className="text-[12px] rounded bg-primary/20 text-primary px-1.5 py-0.5">{rule.parsed.indicator}</span>}
-                      {rule.parsed.operator && <span className="text-[12px] rounded bg-[var(--panel)] text-muted-foreground px-1.5 py-0.5">{rule.parsed.operator}</span>}
-                      {rule.parsed.value && <span className="text-[12px] rounded bg-[var(--panel)] text-foreground px-1.5 py-0.5 tabular-nums">{rule.parsed.value}</span>}
-                      <span className="text-[12px] text-muted-foreground italic ml-1">NLP parsing</span>
+                      {rule.parsed.action && <span className="text-label rounded bg-[var(--profit)]/20 text-[var(--profit)] px-1.5 py-0.5 font-bold">{rule.parsed.action}</span>}
+                      {rule.parsed.indicator && <span className="text-label rounded bg-primary/20 text-primary px-1.5 py-0.5">{rule.parsed.indicator}</span>}
+                      {rule.parsed.operator && <span className="text-label rounded bg-[var(--panel)] text-muted-foreground px-1.5 py-0.5">{rule.parsed.operator}</span>}
+                      {rule.parsed.value && <span className="text-label rounded bg-[var(--panel)] text-foreground px-1.5 py-0.5 tabular-nums">{rule.parsed.value}</span>}
+                      <span className="text-label text-muted-foreground italic ml-1">NLP parsing</span>
                     </div>
                   )}
                 </div>
@@ -261,7 +261,7 @@ export function StrategyBuilder() {
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
               <div className="flex items-center gap-2 mb-1.5">
                 <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                <p className="text-[12px] uppercase tracking-wider text-primary font-semibold">AI Summary</p>
+                <p className="text-label uppercase tracking-wider text-primary font-semibold">AI Summary</p>
               </div>
               <p className="text-xs text-foreground leading-relaxed">{aiResult.summary}</p>
             </div>
@@ -272,7 +272,7 @@ export function StrategyBuilder() {
             <div className="rounded-lg border border-border bg-[var(--surface)] p-3">
               <div className="flex items-center gap-2 mb-2">
                 <Lightbulb className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                <p className="text-[12px] uppercase tracking-wider text-muted-foreground font-semibold">Suggested Improvements</p>
+                <p className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Suggested Improvements</p>
               </div>
               <ul className="space-y-1.5">
                 {aiResult.improvements.map((imp, i) => (
@@ -290,7 +290,7 @@ export function StrategyBuilder() {
             <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
               <div className="flex items-center gap-2 mb-2">
                 <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                <p className="text-[12px] uppercase tracking-wider text-amber-500 font-semibold">Risk Warnings</p>
+                <p className="text-label uppercase tracking-wider text-amber-500 font-semibold">Risk Warnings</p>
               </div>
               <ul className="space-y-1.5">
                 {aiResult.risks.map((risk, i) => (
@@ -308,24 +308,24 @@ export function StrategyBuilder() {
             <div className="rounded-lg border border-border bg-[var(--surface)] p-3">
               <div className="flex items-center gap-2 mb-2">
                 <BarChart3 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <p className="text-[12px] uppercase tracking-wider text-muted-foreground font-semibold">Recommended Backtest Parameters</p>
+                <p className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Recommended Backtest Parameters</p>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 {aiResult.backtest_params.suggested_timeframe && (
                   <div>
-                    <p className="text-[12px] text-muted-foreground uppercase">Timeframe</p>
+                    <p className="text-label text-muted-foreground uppercase">Timeframe</p>
                     <p className="text-xs text-foreground font-medium">{aiResult.backtest_params.suggested_timeframe}</p>
                   </div>
                 )}
                 {aiResult.backtest_params.lookback_period && (
                   <div>
-                    <p className="text-[12px] text-muted-foreground uppercase">Lookback</p>
+                    <p className="text-label text-muted-foreground uppercase">Lookback</p>
                     <p className="text-xs text-foreground font-medium">{aiResult.backtest_params.lookback_period}</p>
                   </div>
                 )}
                 {aiResult.backtest_params.position_size && (
                   <div>
-                    <p className="text-[12px] text-muted-foreground uppercase">Position Size</p>
+                    <p className="text-label text-muted-foreground uppercase">Position Size</p>
                     <p className="text-xs text-foreground font-medium">{aiResult.backtest_params.position_size}</p>
                   </div>
                 )}

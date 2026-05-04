@@ -110,13 +110,13 @@ export function PositionsSummary() {
               <div className="flex items-center gap-4 shrink-0">
                 <div className="text-right">
                   <p className="text-sm tabular-nums text-foreground">{formatCurrency(pos.currentPrice)}</p>
-                  <p className="text-[12px] tabular-nums text-muted-foreground">avg {formatCurrency(pos.avgCost)}</p>
+                  <p className="text-label tabular-nums text-muted-foreground">avg {formatCurrency(pos.avgCost)}</p>
                 </div>
                 <div className="text-right min-w-[80px]">
                   <p className={cn("text-sm font-semibold tabular-nums", positive ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
                     {positive ? "+" : ""}{formatCurrency(pos.unrealizedPnl)}
                   </p>
-                  <p className={cn("text-[12px] tabular-nums", positive ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+                  <p className={cn("text-label tabular-nums", positive ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
                     {positive ? "+" : ""}{(pnlPct ?? 0).toFixed(2)}%
                   </p>
                 </div>

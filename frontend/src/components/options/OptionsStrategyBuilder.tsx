@@ -201,7 +201,7 @@ export default function OptionsStrategyBuilder({
                     type="button"
                     onClick={() => setOutlook(item)}
                     className={cn(
-                      "rounded-sm border px-2.5 py-1.5 text-[12px] capitalize transition",
+                      "rounded-sm border px-2.5 py-1.5 text-label capitalize transition",
                       outlook === item
                         ? "border-brand bg-brand/10 text-brand"
                         : "border-border-hair text-fg-muted hover:border-border hover:text-fg",
@@ -228,8 +228,8 @@ export default function OptionsStrategyBuilder({
                         : "border-border-hair bg-bg-elev-1 hover:border-border",
                     )}
                   >
-                    <span className="block text-[13px] font-semibold text-fg">{preset.label}</span>
-                    <span className="mt-1 block text-[12px] leading-snug text-fg-muted">{preset.description}</span>
+                    <span className="block text-body-sm font-semibold text-fg">{preset.label}</span>
+                    <span className="mt-1 block text-label leading-snug text-fg-muted">{preset.description}</span>
                   </button>
                 ))}
               </div>
@@ -240,7 +240,7 @@ export default function OptionsStrategyBuilder({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="t-label text-fg-hint">Option chain</p>
-                <p className="mt-1 text-[13px] text-fg-muted">
+                <p className="mt-1 text-body-sm text-fg-muted">
                   {spot ? `${symbol} spot ${formatCurrency(spot)}` : `${symbol} option contracts`}
                 </p>
               </div>
@@ -250,7 +250,7 @@ export default function OptionsStrategyBuilder({
                   setSelectedExpiry(event.target.value);
                   setLegs([]);
                 }}
-                className="h-10 rounded-sm border border-border bg-bg-elev-1 px-3 font-mono text-[13px] text-fg outline-none focus-visible:border-brand"
+                className="h-10 rounded-sm border border-border bg-bg-elev-1 px-3 font-mono text-body-sm text-fg outline-none focus-visible:border-brand"
               >
                 {chain?.expirations.length ? (
                   chain.expirations.map((expiry) => (
@@ -269,14 +269,14 @@ export default function OptionsStrategyBuilder({
                 ))}
               </div>
             ) : error ? (
-              <div className="mt-4 rounded-md border border-loss/30 bg-loss/10 px-3 py-3 text-[13px] text-fg-muted">{error}</div>
+              <div className="mt-4 rounded-md border border-loss/30 bg-loss/10 px-3 py-3 text-body-sm text-fg-muted">{error}</div>
             ) : rows.length === 0 ? (
-              <div className="mt-4 rounded-md border border-dashed border-border-hair bg-bg px-4 py-8 text-center text-[13px] text-fg-muted">
+              <div className="mt-4 rounded-md border border-dashed border-border-hair bg-bg px-4 py-8 text-center text-body-sm text-fg-muted">
                 No option rows loaded for this expiry.
               </div>
             ) : (
               <div className="mt-4 overflow-x-auto rounded-md border border-border-hair">
-                <table className="w-full min-w-[720px] border-separate border-spacing-0 font-mono text-[12px] tabular-nums">
+                <table className="w-full min-w-[720px] border-separate border-spacing-0 font-mono text-label tabular-nums">
                   <thead className="bg-bg-elev-1 text-fg-hint">
                     <tr>
                       <th className="px-2 py-2 text-left font-normal">CALL</th>
@@ -319,7 +319,7 @@ export default function OptionsStrategyBuilder({
                   <button
                     type="button"
                     onClick={() => setLegs([])}
-                    className="text-[12px] text-fg-muted hover:text-fg"
+                    className="text-label text-fg-muted hover:text-fg"
                   >
                     Clear
                   </button>
@@ -327,12 +327,12 @@ export default function OptionsStrategyBuilder({
               </div>
               <div className="mt-3 grid gap-2">
                 {legs.length === 0 ? (
-                  <p className="rounded border border-dashed border-border-hair bg-bg px-3 py-4 text-center text-[13px] text-fg-muted">
+                  <p className="rounded border border-dashed border-border-hair bg-bg px-3 py-4 text-center text-body-sm text-fg-muted">
                     Pick a preset or add legs from the chain.
                   </p>
                 ) : (
                   legs.map((leg, index) => (
-                    <div key={`${leg.id}-${index}`} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded border border-border-hair bg-bg px-2 py-2 font-mono text-[12px]">
+                    <div key={`${leg.id}-${index}`} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded border border-border-hair bg-bg px-2 py-2 font-mono text-label">
                       <span className={cn("rounded px-2 py-1 uppercase", leg.side === "buy" ? "bg-profit/10 text-profit" : "bg-loss/10 text-loss")}>{leg.side}</span>
                       <span className="min-w-0 truncate text-fg">{leg.strike} {leg.kind} x {leg.qty}</span>
                       <button
@@ -347,12 +347,12 @@ export default function OptionsStrategyBuilder({
                   ))
                 )}
               </div>
-              {selectionError ? <p className="mt-3 text-[12px] text-amber">{selectionError}</p> : null}
+              {selectionError ? <p className="mt-3 text-label text-amber">{selectionError}</p> : null}
               <button
                 type="button"
                 disabled={summary.status !== "ready"}
                 onClick={() => onStage(draft)}
-                className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-sm border border-brand bg-brand px-4 text-[13px] font-semibold text-primary-foreground transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:border-border-hair disabled:bg-bg-elev-1 disabled:text-fg-muted disabled:hover:translate-y-0"
+                className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-sm border border-brand bg-brand px-4 text-body-sm font-semibold text-primary-foreground transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:border-border-hair disabled:bg-bg-elev-1 disabled:text-fg-muted disabled:hover:translate-y-0"
               >
                 Stage ticket
                 <ArrowRight className="size-4" aria-hidden />

@@ -602,7 +602,7 @@ function MonthlyHeatmap({ monthlyReturns }: { monthlyReturns: Map<string, number
               }, 1) - 1) * 100;
             return (
               <tr key={year}>
-                <td className="px-2 py-1.5 font-mono tabular-nums text-[13px] text-ink-900">
+                <td className="px-2 py-1.5 font-mono tabular-nums text-body-sm text-ink-900">
                   {year}
                 </td>
                 {months.map((_, mi) => {
@@ -612,7 +612,7 @@ function MonthlyHeatmap({ monthlyReturns }: { monthlyReturns: Map<string, number
                     <td key={mi} className="px-1 py-1 text-center">
                       {val !== undefined ? (
                         <span
-                          className="inline-block w-full rounded-[3px] px-1 py-1 font-mono tabular-nums text-[12px]"
+                          className="inline-block w-full rounded-[3px] px-1 py-1 font-mono tabular-nums text-label"
                           title={val === 0 ? "Break-even month" : undefined}
                           style={{
                             backgroundColor: cellColor(val),
@@ -657,7 +657,7 @@ function EmptyState({ label }: { label: string }) {
   // read consistently.
   return (
     <div className="flex h-32 items-center justify-center px-4 text-center">
-      <p className="font-display italic text-[13px] text-fg-muted leading-snug">
+      <p className="font-display italic text-body-sm text-fg-muted leading-snug">
         {label}
       </p>
     </div>
@@ -835,7 +835,7 @@ function RangeSelector({
             data-testid={`analytics-range-${r}`}
             onClick={() => onChange(r)}
             className={cn(
-              "font-mono text-[12px] px-2.5 py-1 rounded transition-colors",
+              "font-mono text-label px-2.5 py-1 rounded transition-colors",
               active
                 ? "bg-bg-elev-2 text-fg"
                 : "text-fg-muted hover:text-fg"
@@ -986,7 +986,7 @@ export default function AnalyticsPage() {
               <p className="t-section-display">
                 Analytics become available after your first closed trades.
               </p>
-              <p className="font-sans text-[13px] leading-relaxed text-fg-muted">
+              <p className="font-sans text-body-sm leading-relaxed text-fg-muted">
                 Today: {closedTradesCount} closed trades. The drawdown, returns,
                 monthly heatmap and trade stats will appear here as trades
                 accumulate.
@@ -1002,7 +1002,7 @@ export default function AnalyticsPage() {
                 ].map(([label, detail]) => (
                   <div key={label} className="rounded-md border border-border-hair bg-bg px-3 py-3">
                     <p className="t-label text-fg-hint">{label}</p>
-                    <p className="mt-1 text-[12px] leading-snug text-fg-muted">{detail}</p>
+                    <p className="mt-1 text-label leading-snug text-fg-muted">{detail}</p>
                   </div>
                 ))}
               </div>
@@ -1015,7 +1015,7 @@ export default function AnalyticsPage() {
                   href="/trade"
                   className={cn(
                     "inline-flex items-center gap-1.5 rounded-sm border border-border-strong",
-                    "bg-transparent px-4 py-2 font-sans text-[13px] font-medium",
+                    "bg-transparent px-4 py-2 font-sans text-body-sm font-medium",
                     "text-fg hover:bg-bg-elev-1 hover:border-brand transition-colors",
                     "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
                   )}
@@ -1027,7 +1027,7 @@ export default function AnalyticsPage() {
                   href="/strategies"
                   className={cn(
                     "inline-flex min-h-10 items-center gap-1.5 rounded-sm border border-border-hair",
-                    "bg-bg px-4 font-sans text-[13px] font-medium text-fg-muted",
+                    "bg-bg px-4 font-sans text-body-sm font-medium text-fg-muted",
                     "transition-colors hover:border-brand hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
                   )}
                 >
@@ -1037,7 +1037,7 @@ export default function AnalyticsPage() {
                   href="/reports"
                   className={cn(
                     "inline-flex min-h-10 items-center gap-1.5 rounded-sm border border-border-hair",
-                    "bg-bg px-4 font-sans text-[13px] font-medium text-fg-muted",
+                    "bg-bg px-4 font-sans text-body-sm font-medium text-fg-muted",
                     "transition-colors hover:border-brand hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
                   )}
                 >
@@ -1392,21 +1392,21 @@ function BetaWeightedDeltaCard() {
                       : "text-ink-1000";
                 return (
                   <tr key={p.symbol} className="border-b border-border-hair">
-                    <td className="px-2 py-1.5 font-mono text-[12px] text-ink-1000">
+                    <td className="px-2 py-1.5 font-mono text-label text-ink-1000">
                       {p.symbol}
                     </td>
-                    <td className="px-2 py-1.5 text-right font-mono text-[12px] tabular-nums">
+                    <td className="px-2 py-1.5 text-right font-mono text-label tabular-nums">
                       {p.quantity}
                     </td>
-                    <td className="px-2 py-1.5 text-right font-mono text-[12px] tabular-nums">
+                    <td className="px-2 py-1.5 text-right font-mono text-label tabular-nums">
                       {p.delta?.toFixed(2)}
                     </td>
-                    <td className="px-2 py-1.5 text-right font-mono text-[12px] tabular-nums u-muted">
+                    <td className="px-2 py-1.5 text-right font-mono text-label tabular-nums u-muted">
                       {(p.beta ?? 1).toFixed(2)}
                     </td>
                     <td
                       className={cn(
-                        "px-2 py-1.5 text-right font-mono text-[12px] tabular-nums",
+                        "px-2 py-1.5 text-right font-mono text-label tabular-nums",
                         cTone,
                       )}
                     >

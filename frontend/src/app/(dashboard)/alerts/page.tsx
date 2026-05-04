@@ -217,7 +217,7 @@ function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div>
-          <label htmlFor="alert-symbol" className="text-[12px] uppercase tracking-wider text-muted-foreground">
+          <label htmlFor="alert-symbol" className="text-label uppercase tracking-wider text-muted-foreground">
             Symbol
           </label>
           <input
@@ -243,7 +243,7 @@ function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void
           />
         </div>
         <div>
-          <label htmlFor="alert-condition-select" className="text-[12px] uppercase tracking-wider text-muted-foreground">
+          <label htmlFor="alert-condition-select" className="text-label uppercase tracking-wider text-muted-foreground">
             Condition
           </label>
           {/* Round-5 F-7: replaced the binary radio with a 4-option
@@ -266,7 +266,7 @@ function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void
           </select>
         </div>
         <div>
-          <label htmlFor="alert-price" className="text-[12px] uppercase tracking-wider text-muted-foreground">
+          <label htmlFor="alert-price" className="text-label uppercase tracking-wider text-muted-foreground">
             {isPercentMove ? "Threshold (%)" : "Target Price"}
           </label>
           <input
@@ -306,7 +306,7 @@ function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void
       {isPercentMove && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
           <div>
-            <label htmlFor="alert-reference" className="text-[12px] uppercase tracking-wider text-muted-foreground">
+            <label htmlFor="alert-reference" className="text-label uppercase tracking-wider text-muted-foreground">
               Reference
             </label>
             <select
@@ -322,7 +322,7 @@ function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void
           </div>
           {reference === "static" && (
             <div>
-              <label htmlFor="alert-reference-price" className="text-[12px] uppercase tracking-wider text-muted-foreground">
+              <label htmlFor="alert-reference-price" className="text-label uppercase tracking-wider text-muted-foreground">
                 Reference Price ($)
               </label>
               <input
@@ -343,7 +343,7 @@ function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void
       <div className="mt-3 grid gap-3 rounded-md border border-border-hair bg-bg px-3 py-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <div className="grid gap-3">
           <label className="grid gap-1.5">
-            <span className="text-[12px] uppercase tracking-wider text-muted-foreground">Alert scope</span>
+            <span className="text-label uppercase tracking-wider text-muted-foreground">Alert scope</span>
             <select
               value={scope}
               onChange={(e) => setScope(e.target.value as AlertScopeUI)}
@@ -362,8 +362,8 @@ function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void
               className="mt-1 size-4 accent-brand"
             />
             <span>
-              <span className="block text-[13px] font-semibold text-fg">Add second condition</span>
-              <span className="block text-[12px] leading-snug text-fg-muted">Use this for price plus percent-move, watchlist, or strategy confirmation rules.</span>
+              <span className="block text-body-sm font-semibold text-fg">Add second condition</span>
+              <span className="block text-label leading-snug text-fg-muted">Use this for price plus percent-move, watchlist, or strategy confirmation rules.</span>
             </span>
           </label>
           {secondaryEnabled ? (
@@ -391,16 +391,16 @@ function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void
           ) : null}
         </div>
         <div className="rounded-md border border-border-hair bg-bg-elev-1 px-3 py-3">
-          <p className="text-[12px] uppercase tracking-wider text-muted-foreground">Trigger preview</p>
-          <p className="mt-2 text-[13px] leading-relaxed text-fg">
+          <p className="text-label uppercase tracking-wider text-muted-foreground">Trigger preview</p>
+          <p className="mt-2 text-body-sm leading-relaxed text-fg">
             This triggers when {primaryPreview}{secondaryPreview}{scopePreview}.
           </p>
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            <label className="flex min-h-10 items-center gap-2 rounded-sm border border-profit/25 bg-profit/10 px-3 text-[12px] font-semibold text-profit">
+            <label className="flex min-h-10 items-center gap-2 rounded-sm border border-profit/25 bg-profit/10 px-3 text-label font-semibold text-profit">
               <input type="checkbox" checked readOnly className="size-4 accent-brand" />
               In-app
             </label>
-            <label className="flex min-h-10 items-center gap-2 rounded-sm border border-border-hair bg-bg px-3 text-[12px] font-semibold text-fg-muted">
+            <label className="flex min-h-10 items-center gap-2 rounded-sm border border-border-hair bg-bg px-3 text-label font-semibold text-fg-muted">
               <input
                 type="checkbox"
                 checked={emailEnabled}
@@ -409,7 +409,7 @@ function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void
               />
               Email
             </label>
-            <label className="flex min-h-10 items-center gap-2 rounded-sm border border-border-hair bg-bg px-3 text-[12px] font-semibold text-fg-muted">
+            <label className="flex min-h-10 items-center gap-2 rounded-sm border border-border-hair bg-bg px-3 text-label font-semibold text-fg-muted">
               <input
                 type="checkbox"
                 checked={webhookEnabled}
@@ -419,7 +419,7 @@ function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void
               Webhook
             </label>
           </div>
-          <p className="mt-2 text-[12px] leading-snug text-fg-muted">
+          <p className="mt-2 text-label leading-snug text-fg-muted">
             Delivery: {channelPreview}. Email and webhook routing are staged as explicit preferences until backend delivery channels are enabled.
           </p>
         </div>
@@ -430,7 +430,7 @@ function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void
         <p
           role="alert"
           data-testid="alert-form-error"
-          className="mt-2 text-[12px] text-[var(--loss)]"
+          className="mt-2 text-label text-[var(--loss)]"
         >
           {fieldError}
         </p>
@@ -505,7 +505,7 @@ function AlertRow({
       <span
         className={cn(
           "shrink-0 font-mono font-semibold text-foreground",
-          alert.symbol.length > 8 ? "w-44 text-[12px]" : "w-16",
+          alert.symbol.length > 8 ? "w-44 text-label" : "w-16",
         )}
       >
         {alert.symbol}
@@ -519,7 +519,7 @@ function AlertRow({
               ? "default"
               : "destructive"
           }
-          className="text-[12px] px-1.5"
+          className="text-label px-1.5"
         >
           {alert.condition === "above" || alert.condition === "percent_move_above" ? (
             <ArrowUp className="h-2.5 w-2.5 mr-0.5" />
@@ -570,7 +570,7 @@ function AlertRow({
           "shrink-0 rounded transition-colors disabled:opacity-50 inline-flex items-center justify-center",
           "h-9 px-2 gap-1",
           confirmArmed
-            ? "bg-[var(--loss)]/15 text-[var(--loss)] ring-1 ring-[var(--loss)]/40 text-[12px] font-semibold"
+            ? "bg-[var(--loss)]/15 text-[var(--loss)] ring-1 ring-[var(--loss)]/40 text-label font-semibold"
             : "text-muted-foreground hover:text-[var(--loss)] hover:bg-[var(--loss)]/10 w-9"
         )}
         aria-label={
@@ -638,17 +638,17 @@ function AlertMobileCard({
             ) : (
               <Clock className="h-4 w-4 text-primary" />
             )}
-            <span className="break-all font-mono text-[15px] font-semibold text-foreground">{alert.symbol}</span>
+            <span className="break-all font-mono text-body font-semibold text-foreground">{alert.symbol}</span>
             <Badge
               variant={rising ? "default" : "destructive"}
-              className="px-1.5 text-[12px]"
+              className="px-1.5 text-label"
             >
               {rising ? <ArrowUp className="mr-0.5 h-2.5 w-2.5" /> : <ArrowDown className="mr-0.5 h-2.5 w-2.5" />}
               {alert.condition.replace("percent_move_", "")}
               {alert.condition.startsWith("percent_move") && " %"}
             </Badge>
           </div>
-          <dl className="mt-3 grid grid-cols-2 gap-3 text-[12px]">
+          <dl className="mt-3 grid grid-cols-2 gap-3 text-label">
             <div>
               <dt className="t-label">Target</dt>
               <dd className="mt-1 t-num-md text-foreground">
@@ -679,7 +679,7 @@ function AlertMobileCard({
           className={cn(
             "inline-flex min-h-11 shrink-0 items-center justify-center rounded px-2 transition-colors disabled:opacity-50",
             confirmArmed
-              ? "gap-1 bg-[var(--loss)]/15 text-[var(--loss)] ring-1 ring-[var(--loss)]/40 text-[12px] font-semibold"
+              ? "gap-1 bg-[var(--loss)]/15 text-[var(--loss)] ring-1 ring-[var(--loss)]/40 text-label font-semibold"
               : "w-11 text-muted-foreground hover:bg-[var(--loss)]/10 hover:text-[var(--loss)]",
           )}
           aria-label={
@@ -813,7 +813,7 @@ export default function AlertsPage() {
 
   const headerActions = alerts.length > 0 ? (
     <>
-      <span className="font-sans text-[12px] text-fg-muted">
+      <span className="font-sans text-label text-fg-muted">
         {activeAlerts.length} active
         {triggeredAlerts.length > 0 ? ` / ${triggeredAlerts.length} triggered` : ""}
       </span>
@@ -833,8 +833,8 @@ export default function AlertsPage() {
           </Button>
           {showClearTriggeredConfirm && (
             <div className="absolute right-0 top-full mt-2 z-50 rounded-md border border-border bg-bg-elev-1 p-4 shadow-lg min-w-[240px]">
-              <p className="font-sans text-[13px] font-medium text-fg mb-1">Clear triggered alerts?</p>
-              <p className="font-sans text-[12px] text-fg-muted mb-3">
+              <p className="font-sans text-body-sm font-medium text-fg mb-1">Clear triggered alerts?</p>
+              <p className="font-sans text-label text-fg-muted mb-3">
                 This will permanently delete {triggeredAlerts.length} triggered alert
                 {triggeredAlerts.length !== 1 ? "s" : ""}. This action cannot be undone.
               </p>
@@ -875,8 +875,8 @@ export default function AlertsPage() {
         </Button>
         {showDeleteAllConfirm && (
           <div className="absolute right-0 top-full mt-2 z-50 rounded-md border border-border bg-bg-elev-1 p-4 shadow-lg min-w-[240px]">
-            <p className="font-sans text-[13px] font-medium text-fg mb-1">Delete all alerts?</p>
-            <p className="font-sans text-[12px] text-fg-muted mb-3">
+            <p className="font-sans text-body-sm font-medium text-fg mb-1">Delete all alerts?</p>
+            <p className="font-sans text-label text-fg-muted mb-3">
               This will permanently delete {alerts.length} alert{alerts.length !== 1 ? "s" : ""}. This action cannot be undone.
             </p>
             <div className="flex gap-2 justify-end">

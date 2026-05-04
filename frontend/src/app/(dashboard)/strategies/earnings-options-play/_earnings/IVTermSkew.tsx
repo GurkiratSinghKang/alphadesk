@@ -11,7 +11,7 @@ export default function IVTermSkew({ term, skew }: IVTermSkewProps) {
     return (
       <section data-slot="iv-term-skew" className="mt-4">
         <h3 className="t-section-cap italic">IV term · skew</h3>
-        <p className="mt-1 t-mono text-[12px] u-muted">— unavailable</p>
+        <p className="mt-1 t-mono text-label u-muted">— unavailable</p>
       </section>
     );
   }
@@ -23,14 +23,14 @@ export default function IVTermSkew({ term, skew }: IVTermSkewProps) {
         {term && term.length > 0 ? (
           <TermStrip points={term} />
         ) : (
-          <p className="mt-1 t-mono text-[12px] u-muted">— unavailable</p>
+          <p className="mt-1 t-mono text-label u-muted">— unavailable</p>
         )}
       </div>
       {/* Skew */}
       <div>
         <h3 className="t-section-cap italic">Put/call skew</h3>
         {skew ? (
-          <div className="mt-1 t-mono text-[12px] space-y-0.5">
+          <div className="mt-1 t-mono text-label space-y-0.5">
             <div>
               25Δ put IV:{" "}
               <span className="tabular-nums">
@@ -52,7 +52,7 @@ export default function IVTermSkew({ term, skew }: IVTermSkewProps) {
             <div className="u-muted">{skew.interpretation ?? ""}</div>
           </div>
         ) : (
-          <p className="mt-1 t-mono text-[12px] u-muted">— unavailable</p>
+          <p className="mt-1 t-mono text-label u-muted">— unavailable</p>
         )}
       </div>
     </section>
@@ -69,7 +69,7 @@ function TermStrip({ points }: { points: IVTermPoint[] }) {
   const finite = points.filter((p) => Number.isFinite(p.atmIv));
   if (finite.length === 0) {
     return (
-      <p className="mt-1 t-mono text-[12px] u-muted">— term unavailable</p>
+      <p className="mt-1 t-mono text-label u-muted">— term unavailable</p>
     );
   }
   const max = Math.max(...finite.map((p) => p.atmIv));
@@ -102,12 +102,12 @@ function TermStrip({ points }: { points: IVTermPoint[] }) {
                 className="w-5 bg-[color:var(--brand)] rounded-sm"
                 style={{ height: `${h}px`, opacity: 0.7 }}
               />
-              <span className="t-mono text-[12px] u-muted">{p.dte}d</span>
+              <span className="t-mono text-label u-muted">{p.dte}d</span>
             </div>
           );
         })}
       </div>
-      <p className="mt-1 t-mono text-[12px] u-muted">
+      <p className="mt-1 t-mono text-label u-muted">
         <span className="tabular-nums">{fmtPct(min, 0)}</span>
         <span aria-hidden="true"> – </span>
         <span className="tabular-nums">{fmtPct(max, 0)}</span>

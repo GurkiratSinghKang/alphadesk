@@ -974,11 +974,11 @@ export default function ChartPane({
                   placeholder="SPY, QQQ, …"
                   aria-label="Compare symbol ticker"
                   maxLength={10}
-                  className="bg-transparent border border-[color:var(--border)] rounded-xs px-2 py-1 t-mono text-[12px] text-[color:var(--fg)] uppercase outline-none focus:border-[color:var(--brand)] w-24"
+                  className="bg-transparent border border-[color:var(--border)] rounded-xs px-2 py-1 t-mono text-label text-[color:var(--fg)] uppercase outline-none focus:border-[color:var(--brand)] w-24"
                 />
                 <button
                   type="submit"
-                  className="t-mono text-[12px] text-[color:var(--brand)] hover:underline"
+                  className="t-mono text-label text-[color:var(--brand)] hover:underline"
                   disabled={compareSymbols.length >= 4}
                 >
                   Add
@@ -1262,7 +1262,7 @@ export default function ChartPane({
               role="alert"
               className="absolute inset-0 flex flex-col items-center justify-center gap-2.5"
             >
-              <span className="font-display italic text-[15px] text-fg-muted">
+              <span className="font-display italic text-body text-fg-muted">
                 Failed to load chart data.
               </span>
               {onRetry ? (
@@ -1270,7 +1270,7 @@ export default function ChartPane({
                   type="button"
                   onClick={onRetry}
                   className={cn(
-                    "font-sans font-semibold uppercase text-[12px] tracking-[0.12em]",
+                    "font-sans font-semibold uppercase text-label tracking-[0.12em]",
                     "text-brand hover:text-gold-300 border border-border bg-bg-elev-1",
                     "rounded-xs px-3 h-9 transition-colors",
                   )}
@@ -1286,10 +1286,10 @@ export default function ChartPane({
             />
           ) : data.length === 0 ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-center px-6">
-              <span className="font-display italic text-[16px] text-fg-muted">
+              <span className="font-display italic text-numeric-md text-fg-muted">
                 Not enough price data.
               </span>
-              <span className="font-sans text-[13px] text-fg-hint">
+              <span className="font-sans text-body-sm text-fg-hint">
                 Try a wider range or check back once bars arrive.
               </span>
             </div>
@@ -1321,7 +1321,7 @@ export default function ChartPane({
                           setCompareSymbols((prev) => prev.filter((s) => s !== sym))
                         }
                         title={`Remove ${sym} from compare`}
-                        className="inline-flex items-center gap-1.5 rounded border border-[color:var(--border)]/60 bg-[color:var(--bg-card)]/80 backdrop-blur-md px-1.5 py-0.5 t-mono text-[12px] text-[color:var(--fg)] hover:border-[color:var(--loss)]/60 hover:text-[color:var(--loss)] transition-colors"
+                        className="inline-flex items-center gap-1.5 rounded border border-[color:var(--border)]/60 bg-[color:var(--bg-card)]/80 backdrop-blur-md px-1.5 py-0.5 t-mono text-label text-[color:var(--fg)] hover:border-[color:var(--loss)]/60 hover:text-[color:var(--loss)] transition-colors"
                       >
                         <span
                           aria-hidden="true"
@@ -1329,7 +1329,7 @@ export default function ChartPane({
                           style={{ backgroundColor: color }}
                         />
                         <span>{sym}</span>
-                        <span className="opacity-60 text-[12px]">×</span>
+                        <span className="opacity-60 text-label">×</span>
                       </button>
                     );
                   })}
@@ -1338,7 +1338,7 @@ export default function ChartPane({
               {topOfBookOn && topBook && (
                 <div
                   data-slot="chart-top-book-overlay"
-                  className="pointer-events-none absolute right-3 top-3 z-10 hidden w-[min(260px,calc(100%-1.5rem))] rounded border border-[color:var(--border)]/45 bg-[color:var(--bg-card)]/62 px-2.5 py-2 t-mono text-[12px] text-[color:var(--fg-muted)] backdrop-blur-md sm:block"
+                  className="pointer-events-none absolute right-3 top-3 z-10 hidden w-[min(260px,calc(100%-1.5rem))] rounded border border-[color:var(--border)]/45 bg-[color:var(--bg-card)]/62 px-2.5 py-2 t-mono text-label text-[color:var(--fg-muted)] backdrop-blur-md sm:block"
                 >
                   <TopOfBookReadout book={topBook} />
                 </div>
@@ -1400,7 +1400,7 @@ export default function ChartPane({
               <div
                 data-slot="chart-ohlc-overlay"
                 aria-hidden="true"
-                className="pointer-events-none absolute left-2 top-2 z-10 max-w-[calc(100%-1rem)] overflow-hidden rounded border border-[color:var(--border)]/40 bg-[color:var(--bg-card)]/40 px-2 py-1 t-mono text-[12px] backdrop-blur-md sm:left-3 sm:top-3 sm:px-2.5 sm:py-1.5 sm:text-[12px]"
+                className="pointer-events-none absolute left-2 top-2 z-10 max-w-[calc(100%-1rem)] overflow-hidden rounded border border-[color:var(--border)]/40 bg-[color:var(--bg-card)]/40 px-2 py-1 t-mono text-label backdrop-blur-md sm:left-3 sm:top-3 sm:px-2.5 sm:py-1.5 sm:text-label"
               >
                 <OHLCReadout
                   hover={ohlcHover}
@@ -1411,7 +1411,7 @@ export default function ChartPane({
               {((topOfBookOn && topBook) || liquidityProfileOn || structureZonesOn || orderBlocksOn) && (
                 <div
                   data-slot="market-structure-summary"
-                  className="pointer-events-none absolute left-3 bottom-3 z-10 hidden max-w-[min(520px,calc(100%-7rem))] rounded border border-[color:var(--border)]/45 bg-[color:var(--bg-card)]/55 px-2.5 py-1.5 t-mono text-[12px] text-[color:var(--fg-muted)] backdrop-blur-md sm:block"
+                  className="pointer-events-none absolute left-3 bottom-3 z-10 hidden max-w-[min(520px,calc(100%-7rem))] rounded border border-[color:var(--border)]/45 bg-[color:var(--bg-card)]/55 px-2.5 py-1.5 t-mono text-label text-[color:var(--fg-muted)] backdrop-blur-md sm:block"
                 >
                   <span className="text-[color:var(--fg)]">Structure map</span>
                   {topOfBookOn && topBook && (
@@ -1449,7 +1449,7 @@ export default function ChartPane({
               {replayEnabled && (
                 <div
                   data-slot="chart-replay-controls"
-                  className="absolute bottom-3 right-3 z-20 flex items-center gap-1 rounded border border-[color:var(--border)]/60 bg-[color:var(--bg-card)]/90 px-2 py-1 t-mono text-[12px] backdrop-blur-md shadow-sm"
+                  className="absolute bottom-3 right-3 z-20 flex items-center gap-1 rounded border border-[color:var(--border)]/60 bg-[color:var(--bg-card)]/90 px-2 py-1 t-mono text-label backdrop-blur-md shadow-sm"
                 >
                   <button
                     type="button"
@@ -1587,7 +1587,7 @@ export default function ChartPane({
                       }
                     }}
                     className={cn(
-                      "absolute z-20 -translate-y-1/2 right-1 inline-flex items-center justify-center h-11 w-11 md:h-8 md:w-8 rounded-full bg-[color:var(--bg-card)] text-[12px] leading-none shadow-sm transition-colors",
+                      "absolute z-20 -translate-y-1/2 right-1 inline-flex items-center justify-center h-11 w-11 md:h-8 md:w-8 rounded-full bg-[color:var(--bg-card)] text-label leading-none shadow-sm transition-colors",
                       tone,
                     )}
                     style={{ top: alertHover.y }}
@@ -1778,7 +1778,7 @@ function TradeOverlay({
       {overlay.status === "draft" ? (
         <div className="pointer-events-auto absolute bottom-3 left-1/2 flex max-w-[min(560px,calc(100%-6rem))] -translate-x-1/2 items-center gap-2 rounded border border-border-hair bg-bg-card/90 px-3 py-2 shadow-lg backdrop-blur-md">
           <div className="min-w-0">
-            <p className="truncate font-mono text-[12px] font-semibold text-fg">
+            <p className="truncate font-mono text-label font-semibold text-fg">
               {overlay.label} · {formatBookPrice(entry)}
             </p>
             <p className="truncate text-[11px] text-fg-muted">
@@ -1876,7 +1876,7 @@ function TopOfBookReadout({ book }: { book: NormalizedTopOfBook }) {
   return (
     <div className="flex flex-col gap-1 leading-tight">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-sans text-[12px] font-semibold uppercase tracking-[0.08em] text-[color:var(--fg)]">
+        <span className="font-sans text-label font-semibold uppercase tracking-[0.08em] text-[color:var(--fg)]">
           {book.isL2 ? `Depth ${book.depthLevels}` : "Top book"}
         </span>
         <span className="text-[color:var(--fg-hint)]">
@@ -2001,7 +2001,7 @@ function OHLCReadout({
         <span className="u-muted">— no bar</span>
       )}
       {indicatorLegend.length > 0 && (
-        <div className="flex items-baseline gap-2 u-muted text-[12px] mt-0.5">
+        <div className="flex items-baseline gap-2 u-muted text-label mt-0.5">
           {indicatorLegend.map((label) => (
             <span key={label} className="rounded border border-[color:var(--border)] px-1 py-px">
               {label}

@@ -53,7 +53,7 @@ export default function DecisionStrip({ structured, metrics }: DecisionStripProp
       <div className="flex flex-col">
         <span className="t-label u-muted">Verdict</span>
         <span
-          className="font-serif italic text-[28px] leading-tight u-brand"
+          className="font-serif italic text-h1 leading-tight u-brand"
           style={{ letterSpacing: 0 }}
         >
           {verdict}

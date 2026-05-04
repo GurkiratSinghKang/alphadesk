@@ -47,7 +47,7 @@ export default function NumericChip({
       className={cn(
         "inline-flex items-center gap-1.5 h-[26px] px-3",
         "rounded-pill border border-border bg-bg-elev-1",
-        "font-mono text-[12px]",
+        "font-mono text-label",
         wrapTone,
         className
       )}

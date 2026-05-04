@@ -117,18 +117,18 @@ export default function AuthProductFrame({
             className="group inline-flex min-w-0 items-center gap-3 rounded-[8px] text-[#12281f] outline-none transition-transform active:scale-[0.98]"
             aria-label="AlphaDesk sign in"
           >
-            <span className="grid size-11 shrink-0 place-items-center rounded-[8px] bg-[#12281f] font-mono text-[13px] font-semibold text-[#f8f7ef] shadow-[0_14px_34px_-20px_rgba(18,40,31,0.85)]">
+            <span className="grid size-11 shrink-0 place-items-center rounded-[8px] bg-[#12281f] font-mono text-body-sm font-semibold text-[#f8f7ef] shadow-[0_14px_34px_-20px_rgba(18,40,31,0.85)]">
               AD
             </span>
             <span className="min-w-0">
-              <span className="block truncate font-sans text-[15px] font-semibold tracking-tight">AlphaDesk</span>
+              <span className="block truncate font-sans text-body font-semibold tracking-tight">AlphaDesk</span>
               <span className="hidden truncate font-mono text-[11px] uppercase tracking-[0.16em] text-[#5d7268] sm:block">
                 AI trading terminal
               </span>
             </span>
           </Link>
 
-          <nav className="flex shrink-0 items-center rounded-[8px] border border-[#d6e2d8] bg-white/75 p-1 text-[13px] shadow-[0_18px_48px_-38px_rgba(18,40,31,0.45)] backdrop-blur-xl">
+          <nav className="flex shrink-0 items-center rounded-[8px] border border-[#d6e2d8] bg-white/75 p-1 text-body-sm shadow-[0_18px_48px_-38px_rgba(18,40,31,0.45)] backdrop-blur-xl">
             <Link
               href="/login"
               className={
@@ -170,7 +170,7 @@ export default function AuthProductFrame({
                 <h1 className="mt-5 max-w-[12ch] font-sans text-4xl font-semibold leading-[0.95] tracking-tight text-[#12281f] sm:text-5xl lg:text-6xl">
                   {title}
                 </h1>
-                <p className="mt-5 max-w-[650px] font-sans text-[16px] leading-[1.75] text-[#40574c]">
+                <p className="mt-5 max-w-[650px] font-sans text-numeric-md leading-[1.75] text-[#40574c]">
                   {lead}
                 </p>
 
@@ -196,7 +196,7 @@ export default function AuthProductFrame({
                   {proofRail.map((item) => (
                     <span
                       key={item}
-                      className="rounded-[8px] border border-[#d7e4d9] bg-[#f7fbf4] px-3 py-2 font-sans text-[12px] font-medium text-[#40574c]"
+                      className="rounded-[8px] border border-[#d7e4d9] bg-[#f7fbf4] px-3 py-2 font-sans text-label font-medium text-[#40574c]"
                     >
                       {item}
                     </span>
@@ -217,10 +217,10 @@ export default function AuthProductFrame({
               <section className="rounded-[8px] border border-[#d7e4d9] bg-[#f7fbf4]/[0.72] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)] backdrop-blur-xl">
                 <div className="flex items-start justify-between gap-4 border-b border-[#d7e4d9] pb-3">
                   <div>
-                    <p className="font-sans text-[15px] font-semibold tracking-tight text-[#12281f]">
+                    <p className="font-sans text-body font-semibold tracking-tight text-[#12281f]">
                       {panelTitle}
                     </p>
-                    <p className="mt-1 font-sans text-[12px] leading-[1.55] text-[#5d7268]">
+                    <p className="mt-1 font-sans text-label leading-[1.55] text-[#5d7268]">
                       {panelSubtitle}
                     </p>
                   </div>
@@ -233,10 +233,10 @@ export default function AuthProductFrame({
                   {proofPoints.map((point) => (
                     <div key={point.label} className="grid gap-1 py-3 first:pt-0 last:pb-0">
                       <div className="flex items-baseline justify-between gap-3">
-                        <span className="font-sans text-[13px] font-semibold text-[#12281f]">{point.label}</span>
-                        <span className="font-mono text-[12px] text-[#0f7a5d]">{point.value}</span>
+                        <span className="font-sans text-body-sm font-semibold text-[#12281f]">{point.label}</span>
+                        <span className="font-mono text-label text-[#0f7a5d]">{point.value}</span>
                       </div>
-                      <p className="font-sans text-[12px] leading-[1.55] text-[#5d7268]">{point.detail}</p>
+                      <p className="font-sans text-label leading-[1.55] text-[#5d7268]">{point.detail}</p>
                     </div>
                   ))}
                 </div>
@@ -254,7 +254,7 @@ export default function AuthProductFrame({
             <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-[#0f7a5d]">
               Product rhythm
             </p>
-            <h2 className="mt-3 max-w-[14ch] font-sans text-[28px] font-semibold leading-[1] tracking-tight text-[#12281f]">
+            <h2 className="mt-3 max-w-[14ch] font-sans text-h1 font-semibold leading-[1] tracking-tight text-[#12281f]">
               From hunch to habit, without losing the thread.
             </h2>
             <p className="mt-4 font-sans text-[14px] leading-[1.65] text-[#40574c]">
@@ -283,7 +283,7 @@ export default function AuthProductFrame({
                     {item.label}
                   </p>
                   <h3 className="mt-2 font-sans text-[18px] font-semibold tracking-tight text-[#12281f]">{item.title}</h3>
-                  <p className="mt-2 font-sans text-[13px] leading-[1.6] text-[#5d7268]">{item.detail}</p>
+                  <p className="mt-2 font-sans text-body-sm leading-[1.6] text-[#5d7268]">{item.detail}</p>
                 </article>
               );
             })}
@@ -298,15 +298,15 @@ export default function AuthProductFrame({
             <h2 className="mt-3 max-w-[18ch] font-sans text-[26px] font-semibold leading-[1.05] tracking-tight">
               The numbers support the story; they do not replace judgment.
             </h2>
-            <p className="mt-3 max-w-[66ch] font-sans text-[13px] leading-[1.65] text-[#c7d6ce]">
+            <p className="mt-3 max-w-[66ch] font-sans text-body-sm leading-[1.65] text-[#c7d6ce]">
               Performance examples stay below the fold and remain framed as research artifacts. The first promise is workflow quality: clearer thinking, deliberate controls, and a usable record.
             </p>
           </div>
           <div className="grid gap-2">
             {credibilityNotes.map((item) => (
               <div key={item.label} className="flex items-baseline justify-between gap-4 border-t border-white/12 pt-2 first:border-t-0 first:pt-0">
-                <span className="font-mono text-[20px] text-white">{item.value}</span>
-                <span className="text-right font-sans text-[12px] text-[#c7d6ce]">{item.label}</span>
+                <span className="font-mono text-numeric-lg text-white">{item.value}</span>
+                <span className="text-right font-sans text-label text-[#c7d6ce]">{item.label}</span>
               </div>
             ))}
           </div>

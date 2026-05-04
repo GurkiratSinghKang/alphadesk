@@ -18,7 +18,7 @@ export default function DocsPage() {
         <Display size="lg" as="h1">
           Documentation
         </Display>
-        <p className="mt-4 font-sans text-[16px] text-fg-dim">
+        <p className="mt-4 font-sans text-numeric-md text-fg-dim">
           A working guide to the AlphaDesk terminal &mdash; operation, not
           marketing.
         </p>
@@ -28,7 +28,7 @@ export default function DocsPage() {
           className="mt-10 border-t border-border pt-6"
         >
           <div
-            className="mb-4 font-sans text-[12px] font-semibold uppercase text-fg-muted"
+            className="mb-4 font-sans text-label font-semibold uppercase text-fg-muted"
             style={{ letterSpacing: "0.18em" }}
           >
             Contents
@@ -37,14 +37,14 @@ export default function DocsPage() {
             {DOC_SECTIONS.map((s) => (
               <li key={s.id} className="flex items-baseline gap-3">
                 <span
-                  className="font-mono text-[12px] text-fg-hint"
+                  className="font-mono text-label text-fg-hint"
                   style={{ letterSpacing: "0.08em" }}
                 >
                   {s.index}
                 </span>
                 <a
                   href={`#${s.id}`}
-                  className="font-sans text-[15px] text-fg-dim transition-colors hover:text-fg"
+                  className="font-sans text-body text-fg-dim transition-colors hover:text-fg"
                 >
                   {s.title}
                 </a>
@@ -61,7 +61,7 @@ export default function DocsPage() {
                 {s.content.map((paragraph, i) => (
                   <p
                     key={i}
-                    className="font-sans text-[15px] leading-[1.65] text-fg-dim"
+                    className="font-sans text-body leading-[1.65] text-fg-dim"
                   >
                     {paragraph}
                   </p>
@@ -72,7 +72,7 @@ export default function DocsPage() {
         </div>
 
         <div className="mt-16 border-t border-border pt-6">
-          <p className="font-display italic text-[15px] text-fg-muted">
+          <p className="font-display italic text-body text-fg-muted">
             Need help? Reach the desk at{" "}
             <a
               href="mailto:support@tradingalpha.net"

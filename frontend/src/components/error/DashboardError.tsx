@@ -77,7 +77,7 @@ export default function DashboardErrorPage({
           <Display size="md" as="h1" className="max-w-[18ch]">
             {resolvedHeadline}
           </Display>
-          <p className="font-display italic text-[15px] leading-snug text-fg-muted">
+          <p className="font-display italic text-body leading-snug text-fg-muted">
             {message}
           </p>
           {error.digest ? (
@@ -97,7 +97,7 @@ export default function DashboardErrorPage({
           </Button>
           <Link
             href="/"
-            className="inline-flex items-center gap-2 rounded-sm border border-border-strong bg-transparent px-4 py-2 font-sans text-[13px] font-medium text-fg transition-colors hover:bg-bg-elev-1 hover:border-brand"
+            className="inline-flex items-center gap-2 rounded-sm border border-border-strong bg-transparent px-4 py-2 font-sans text-body-sm font-medium text-fg transition-colors hover:bg-bg-elev-1 hover:border-brand"
           >
             Back to dashboard
           </Link>

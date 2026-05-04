@@ -124,7 +124,7 @@ export function MarketMovers({ onSelectSymbol }: MarketMoversProps) {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "flex items-center gap-1 rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
+                "flex items-center gap-1 rounded-md px-2.5 py-1 text-label font-medium transition-colors",
                 activeTab === tab.id
                   ? "bg-primary/15 text-primary"
                   : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
@@ -141,14 +141,14 @@ export function MarketMovers({ onSelectSymbol }: MarketMoversProps) {
       {sorted.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-6 px-4">
           <BarChart3 className="h-5 w-5 mb-2 text-muted-foreground opacity-30" />
-          <p className="text-[12px] text-muted-foreground">
+          <p className="text-label text-muted-foreground">
             Market data loading...
           </p>
         </div>
       ) : (
         <div className="space-y-0.5 px-4 pb-3">
           {/* Column headers */}
-          <div className="flex items-center text-[12px] uppercase tracking-wider text-muted-foreground px-2 py-1">
+          <div className="flex items-center text-label uppercase tracking-wider text-muted-foreground px-2 py-1">
             <span className="flex-1">Symbol</span>
             <span className="w-20 text-right">Price</span>
             <span className="w-16 text-right">Change</span>
@@ -173,7 +173,7 @@ export function MarketMovers({ onSelectSymbol }: MarketMoversProps) {
                   <span className="font-semibold text-foreground group-hover:text-primary transition-colors">
                     {row.symbol}
                   </span>
-                  <span className="ml-1.5 text-[12px] text-muted-foreground truncate">
+                  <span className="ml-1.5 text-label text-muted-foreground truncate">
                     {row.name}
                   </span>
                 </div>
@@ -186,7 +186,7 @@ export function MarketMovers({ onSelectSymbol }: MarketMoversProps) {
                 {/* Change % */}
                 <span
                   className={cn(
-                    "w-16 text-right tabular-nums font-medium text-[12px]",
+                    "w-16 text-right tabular-nums font-medium text-label",
                     positive ? "text-[var(--profit)]" : "text-[var(--loss)]"
                   )}
                 >
@@ -195,7 +195,7 @@ export function MarketMovers({ onSelectSymbol }: MarketMoversProps) {
                 </span>
 
                 {/* Volume */}
-                <span className="w-16 text-right tabular-nums text-muted-foreground text-[12px]">
+                <span className="w-16 text-right tabular-nums text-muted-foreground text-label">
                   {formatNumber(row.volume, true)}
                 </span>
               </div>

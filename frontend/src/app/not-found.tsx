@@ -19,7 +19,7 @@ export default function NotFound() {
 
         <div className="flex flex-col gap-5">
           <span
-            className="font-mono text-[13px] uppercase text-fg-hint"
+            className="font-mono text-body-sm uppercase text-fg-hint"
             style={{ letterSpacing: 0 }}
           >
             404
@@ -27,7 +27,7 @@ export default function NotFound() {
           <Display size="lg" as="h1" className="max-w-[14ch]">
             Not on the tape.
           </Display>
-          <p className="max-w-[520px] font-display italic text-[16px] leading-snug text-fg-muted">
+          <p className="max-w-[520px] font-display italic text-numeric-md leading-snug text-fg-muted">
             The page you requested is not in the desk&rsquo;s registry. It may
             have moved, been retired, or never existed in the first place.
           </p>
@@ -36,14 +36,14 @@ export default function NotFound() {
         <div className="flex flex-wrap items-center gap-3 pt-2">
           <Link
             href="/"
-            className="inline-flex min-h-11 items-center gap-2 rounded-sm bg-brand px-4 py-2 font-sans text-[13px] font-semibold text-ink-1000 transition-colors hover:bg-gold-300"
+            className="inline-flex min-h-11 items-center gap-2 rounded-sm bg-brand px-4 py-2 font-sans text-body-sm font-semibold text-ink-1000 transition-colors hover:bg-gold-300"
             style={{ letterSpacing: 0 }}
           >
             Back to AlphaDesk
           </Link>
           <Link
             href="/docs"
-            className="inline-flex min-h-11 items-center gap-2 rounded-sm border border-border bg-bg-elev-1 px-4 py-2 font-sans text-[13px] font-semibold text-fg transition-colors hover:bg-bg-elev-2"
+            className="inline-flex min-h-11 items-center gap-2 rounded-sm border border-border bg-bg-elev-1 px-4 py-2 font-sans text-body-sm font-semibold text-fg transition-colors hover:bg-bg-elev-2"
           >
             Read the docs
           </Link>

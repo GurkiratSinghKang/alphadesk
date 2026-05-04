@@ -460,7 +460,7 @@ export default function OrderBar({
             // effective font-size < 16px. text-base (16px) on mobile keeps
             // the viewport stable; md+ keeps the dense 13px we use at desk
             // resolutions where tap-zoom isn't a concern.
-            "font-mono text-base md:text-[13px] text-ink-1000 outline-none",
+            "font-mono text-base md:text-body-sm text-ink-1000 outline-none",
             // a11y audit r3 — WCAG 2.4.7: outline-none + 1px brand border
             // change was not a visible focus cue. Add a ring so keyboard
             // users can see which select is focused.
@@ -500,7 +500,7 @@ export default function OrderBar({
             disabled={ticketLocked}
             onClick={() => handleSideClick("buy")}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:pointer-events-none disabled:opacity-55 transition-colors",
+              "flex items-center gap-2 px-4 py-2 text-body-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:pointer-events-none disabled:opacity-55 transition-colors",
               side === "buy"
                 ? "bg-bg-elev-2 border-r border-up-500/40 text-fg"
                 : "bg-transparent border-r border-border-hair text-fg-muted hover:text-fg"
@@ -523,7 +523,7 @@ export default function OrderBar({
             disabled={ticketLocked}
             onClick={() => handleSideClick("sell")}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:pointer-events-none disabled:opacity-55 transition-colors",
+              "flex items-center gap-2 px-4 py-2 text-body-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:pointer-events-none disabled:opacity-55 transition-colors",
               side === "sell"
                 ? "bg-bg-elev-2 border-l border-down-500/40 text-fg"
                 : "bg-transparent border-l border-border-hair text-fg-muted hover:text-fg"
@@ -590,7 +590,7 @@ export default function OrderBar({
           className={cn(
             "h-11 md:h-10 min-w-[90px] w-full px-3 rounded-sm border border-border bg-bg-elev-1",
             // iOS autozoom guard — see Strategy select above.
-            "font-mono text-base md:text-[13px] text-ink-1000 outline-none",
+            "font-mono text-base md:text-body-sm text-ink-1000 outline-none",
             // a11y audit r3 — WCAG 2.4.7: matching visible focus ring on the
             // Type select (same treatment as the Strategy select above).
             "focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0"
@@ -643,11 +643,11 @@ export default function OrderBar({
         >
           <span>
             <span className="block t-label text-fg-hint">Advanced order</span>
-            <span className="mt-1 block text-[12px] leading-snug text-fg-muted">
+            <span className="mt-1 block text-label leading-snug text-fg-muted">
               TIF, bracket/OCO planning, route, slippage, and risk sizing.
             </span>
           </span>
-          <span className="shrink-0 font-mono text-[12px] text-brand">
+          <span className="shrink-0 font-mono text-label text-brand">
             {advancedOpen ? "Hide" : "Show"}
           </span>
         </button>
@@ -658,7 +658,7 @@ export default function OrderBar({
               <select
                 value={timeInForce}
                 onChange={(e) => setTimeInForce(e.target.value as TimeInForceOption)}
-                className="h-11 rounded-sm border border-border bg-bg px-3 font-mono text-base text-fg outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-ring md:h-10 md:text-[13px]"
+                className="h-11 rounded-sm border border-border bg-bg px-3 font-mono text-base text-fg outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-ring md:h-10 md:text-body-sm"
               >
                 <option value="day">DAY</option>
                 <option value="gtc">GTC</option>
@@ -673,7 +673,7 @@ export default function OrderBar({
               <select
                 value={routeVenue}
                 onChange={(e) => setRouteVenue(e.target.value)}
-                className="h-11 rounded-sm border border-border bg-bg px-3 font-mono text-base text-fg outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-ring md:h-10 md:text-[13px]"
+                className="h-11 rounded-sm border border-border bg-bg px-3 font-mono text-base text-fg outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-ring md:h-10 md:text-body-sm"
               >
                 <option value="smart">SMART paper route</option>
                 <option value="manual" disabled>Manual venue soon</option>
@@ -692,8 +692,8 @@ export default function OrderBar({
             </label>
             <div className="rounded-sm border border-border-hair bg-bg px-3 py-2">
               <p className="t-label text-fg-hint">Slippage estimate</p>
-              <p className="mt-1 font-mono text-[13px] text-ink-1000">{slippageEstimate}</p>
-              <p className="mt-1 text-[12px] leading-snug text-fg-muted">Planning estimate only; broker execution decides the fill.</p>
+              <p className="mt-1 font-mono text-body-sm text-ink-1000">{slippageEstimate}</p>
+              <p className="mt-1 text-label leading-snug text-fg-muted">Planning estimate only; broker execution decides the fill.</p>
             </div>
             <label className="flex min-h-11 items-center gap-2 rounded-sm border border-border-hair bg-bg px-3">
               <input
@@ -703,8 +703,8 @@ export default function OrderBar({
                 className="size-4 accent-brand"
               />
               <span>
-                <span className="block text-[13px] font-semibold text-fg">Bracket / OCO</span>
-                <span className="block text-[12px] text-fg-muted">Plan attached target and stop before send.</span>
+                <span className="block text-body-sm font-semibold text-fg">Bracket / OCO</span>
+                <span className="block text-label text-fg-muted">Plan attached target and stop before send.</span>
               </span>
             </label>
             <label className="flex min-h-11 items-center gap-2 rounded-sm border border-border-hair bg-bg px-3">
@@ -716,8 +716,8 @@ export default function OrderBar({
                 className="size-4 accent-brand"
               />
               <span>
-                <span className="block text-[13px] font-semibold text-fg">Extended hours</span>
-                <span className="block text-[12px] text-fg-muted">
+                <span className="block text-body-sm font-semibold text-fg">Extended hours</span>
+                <span className="block text-label text-fg-muted">
                   {extendedHoursSupported ? "Allow supported limit orders outside RTH." : "Requires a DAY equity limit order without brackets."}
                 </span>
               </span>
@@ -756,7 +756,7 @@ export default function OrderBar({
                 </label>
               </>
             ) : null}
-            <p className="md:col-span-2 text-[12px] leading-relaxed text-fg-muted">
+            <p className="md:col-span-2 text-label leading-relaxed text-fg-muted">
               TIF, extended-hours intent, and complete brackets are sent with the ticket. Route, risk size, and trailing stop remain planning notes.
             </p>
           </div>
@@ -765,7 +765,7 @@ export default function OrderBar({
 
       <span
         data-slot="order-review"
-        className="col-span-2 font-display italic text-[12px] text-fg-muted self-center md:ml-0"
+        className="col-span-2 font-display italic text-label text-fg-muted self-center md:ml-0"
       >
         {reviewCopy}
       </span>
@@ -793,14 +793,14 @@ export default function OrderBar({
         {submitDisabledReason ? (
           <span
             data-slot="order-submit-blocker"
-            className="max-w-[320px] text-center font-sans text-[13px] leading-snug text-amber md:text-right"
+            className="max-w-[320px] text-center font-sans text-body-sm leading-snug text-amber md:text-right"
           >
             {submitDisabledReason}
           </span>
         ) : null}
         <span
           data-slot="order-destination"
-          className="font-mono text-[13px] text-fg-hint text-center md:text-right"
+          className="font-mono text-body-sm text-fg-hint text-center md:text-right"
           style={{ letterSpacing: 0 }}
         >
           {submitDestination}
@@ -814,7 +814,7 @@ export default function OrderBar({
             id={qtyLocalError ? "order-bar-qty-error" : undefined}
             role="alert"
             data-testid="order-bar-error"
-            className="font-sans text-[13px] text-[var(--loss)] text-center md:text-right mt-1 max-w-[280px]"
+            className="font-sans text-body-sm text-[var(--loss)] text-center md:text-right mt-1 max-w-[280px]"
           >
             {qtyLocalError ?? priceLocalError ?? stopLocalError ?? bracketLocalError ?? errorMessage}
           </p>

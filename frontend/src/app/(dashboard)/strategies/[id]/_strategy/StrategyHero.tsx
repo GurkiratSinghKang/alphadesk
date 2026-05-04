@@ -72,7 +72,7 @@ export default function StrategyHero({
           {name}
         </Display>
         {description ? (
-          <p className="font-display italic text-[16px] leading-snug text-fg-muted">
+          <p className="font-display italic text-numeric-md leading-snug text-fg-muted">
             {description}
           </p>
         ) : null}
@@ -83,7 +83,7 @@ export default function StrategyHero({
           data-slot="strategy-hero-empty"
           className="flex max-w-[520px] items-start border-l border-border-hair pl-5"
         >
-          <p className="font-display italic text-[15px] leading-relaxed text-fg-muted">
+          <p className="font-display italic text-body leading-relaxed text-fg-muted">
             This strategy has not traded yet. Metrics will appear after the first closed trade.
           </p>
         </div>
@@ -102,7 +102,7 @@ export default function StrategyHero({
                 </dt>
                 <dd>
                   {empty ? (
-                    <span className="font-display italic text-[15px] text-fg-hint">
+                    <span className="font-display italic text-body text-fg-hint">
                       &mdash;
                     </span>
                   ) : (

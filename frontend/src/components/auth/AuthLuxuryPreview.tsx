@@ -85,13 +85,13 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
                 <ChartLineUp className="size-5" aria-hidden weight="regular" />
               </span>
               <div className="min-w-0">
-                <p className="truncate font-sans text-[13px] font-semibold tracking-tight">AlphaDesk workspace</p>
+                <p className="truncate font-sans text-body-sm font-semibold tracking-tight">AlphaDesk workspace</p>
                 <p className="truncate font-mono text-[10px] uppercase tracking-[0.14em] text-[#819188]">
                   Idea to order
                 </p>
               </div>
             </div>
-            <div className="hidden items-center gap-2 rounded-[8px] bg-[#e8f5ea] px-2.5 py-2 text-[12px] font-medium text-[#0f7a5d] sm:flex">
+            <div className="hidden items-center gap-2 rounded-[8px] bg-[#e8f5ea] px-2.5 py-2 text-label font-medium text-[#0f7a5d] sm:flex">
               <span className="size-1.5 rounded-full bg-[#0f7a5d]" />
               Live review
             </div>
@@ -101,8 +101,8 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
             <div className="flex min-h-0 flex-col rounded-[8px] border border-[#d7e4d9] bg-white p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-sans text-[13px] font-semibold">Market idea canvas</p>
-                  <p className="mt-1 max-w-[34ch] font-sans text-[12px] leading-[1.5] text-[#5d7268]">
+                  <p className="font-sans text-body-sm font-semibold">Market idea canvas</p>
+                  <p className="mt-1 max-w-[34ch] font-sans text-label leading-[1.5] text-[#5d7268]">
                     Ask, test, adjust size, and keep the decision record in one flow.
                   </p>
                 </div>
@@ -149,14 +149,14 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
                     AI challenge
                   </p>
                 </div>
-                <p className="mt-3 font-sans text-[13px] leading-[1.45] text-[#e9f2ea]">
+                <p className="mt-3 font-sans text-body-sm leading-[1.45] text-[#e9f2ea]">
                   “Your event window is thin. Cut size or wait for confirmation.”
                 </p>
               </div>
 
               <div className="rounded-[8px] border border-[#d7e4d9] bg-white p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="font-sans text-[13px] font-semibold">Risk route</p>
+                  <p className="font-sans text-body-sm font-semibold">Risk route</p>
                   <Gauge className="size-4 text-[#0f7a5d]" aria-hidden weight="regular" />
                 </div>
                 <div className="mt-3 space-y-2">
@@ -166,7 +166,7 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
                       className="flex items-center gap-2 rounded-[8px] bg-[#ecf4ed] px-2.5 py-2"
                     >
                       <Checks className="size-4 text-[#0f7a5d]" aria-hidden weight="regular" />
-                      <span className="font-sans text-[12px] text-[#40574c]">{item}</span>
+                      <span className="font-sans text-label text-[#40574c]">{item}</span>
                     </div>
                   ))}
                 </div>
@@ -182,10 +182,10 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
                   className="rounded-[8px] border border-[#d7e4d9] bg-white px-3 py-2"
                 >
                   <div className="flex items-baseline justify-between gap-2">
-                    <span className="font-mono text-[12px] font-semibold text-[#12281f]">{item.ticker}</span>
-                    <span className="font-mono text-[12px] text-[#0f7a5d]">{item.value}</span>
+                    <span className="font-mono text-label font-semibold text-[#12281f]">{item.ticker}</span>
+                    <span className="font-mono text-label text-[#0f7a5d]">{item.value}</span>
                   </div>
-                  <p className="mt-1 truncate font-sans text-[12px] text-[#5d7268]">{item.label}</p>
+                  <p className="mt-1 truncate font-sans text-label text-[#5d7268]">{item.label}</p>
                 </div>
               ))}
             </div>
@@ -207,16 +207,16 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
                   className="rounded-[8px] border border-white/10 bg-white/[0.08] p-3"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <span className="font-sans text-[13px] font-semibold">{label}</span>
+                    <span className="font-sans text-body-sm font-semibold">{label}</span>
                     <span className="size-2 rounded-full bg-[#75d9af] [animation:auth-scene-float_2.8s_ease-in-out_infinite]" />
                   </div>
-                  <p className="mt-1 font-sans text-[12px] text-[#c7d6ce]">{detail}</p>
+                  <p className="mt-1 font-sans text-label text-[#c7d6ce]">{detail}</p>
                 </div>
               ))}
             </div>
             <div className="mt-3 rounded-[8px] border border-white/10 bg-[#0b2119]/60 p-3">
-              <p className="font-sans text-[12px] font-semibold text-white">Decision trail</p>
-              <p className="mt-1 font-sans text-[12px] leading-[1.45] text-[#c7d6ce]">
+              <p className="font-sans text-label font-semibold text-white">Decision trail</p>
+              <p className="mt-1 font-sans text-label leading-[1.45] text-[#c7d6ce]">
                 Every edit, review, and route keeps the context attached.
               </p>
             </div>
@@ -225,7 +225,7 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
           <div className="relative overflow-hidden rounded-[8px] border border-white/12 bg-[#f7fbf4] p-3 text-[#12281f]">
             <ShieldCheck className="size-5 text-[#0f7a5d]" aria-hidden weight="regular" />
             <p className="mt-3 font-sans text-[14px] font-semibold">Controls before speed.</p>
-            <p className="mt-2 font-sans text-[12px] leading-[1.5] text-[#5d7268]">
+            <p className="mt-2 font-sans text-label leading-[1.5] text-[#5d7268]">
               Paper mode, review history, and notes stay visible before any live workflow.
             </p>
           </div>

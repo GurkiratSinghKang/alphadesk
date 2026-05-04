@@ -75,11 +75,11 @@ function SystemDetailGrid({ pills }: { pills: StatusPill[] }) {
             title={p.title}
           >
             <StatusDot tone={pillDotTone[p.tone]} size={5} pulse={isLivePill} />
-            <span className={cn("font-mono text-[12px]", isLivePill && "tracking-wider")}>{p.label}</span>
+            <span className={cn("font-mono text-label", isLivePill && "tracking-wider")}>{p.label}</span>
             {p.href ? (
               <Link
                 href={p.href}
-                className="font-mono text-[12px] text-brand underline decoration-brand-dim underline-offset-2 hover:text-gold-300"
+                className="font-mono text-label text-brand underline decoration-brand-dim underline-offset-2 hover:text-gold-300"
               >
                 {p.hrefLabel ?? "Fix"}
               </Link>
@@ -111,7 +111,7 @@ export default function StatusBar({
         // BUG-02: collapsed from flat mono-pill rail to single popover-pill.
         "flex items-center h-[22px] px-4 gap-4",
         "border-t border-border bg-ink-050",
-        "font-mono text-[12px] text-fg-muted",
+        "font-mono text-label text-fg-muted",
         className
       )}
       style={{ letterSpacing: 0, lineHeight: 1 }}
@@ -148,7 +148,7 @@ export default function StatusBar({
         {/* ⌘K hint — keyboard-only affordance, hide on touch. */}
         <kbd
           className={cn(
-            "hidden md:inline-block font-mono text-[12px] text-fg bg-bg-elev-1 border border-border",
+            "hidden md:inline-block font-mono text-label text-fg bg-bg-elev-1 border border-border",
             "px-1.5 py-[1px] rounded-xs"
           )}
           style={{ letterSpacing: 0 }}

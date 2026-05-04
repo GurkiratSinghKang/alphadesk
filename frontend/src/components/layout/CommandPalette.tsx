@@ -79,7 +79,7 @@ function CommandItem({ icon, label, shortcut, onSelect }: CommandItemProps) {
       <span className="text-muted-foreground">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {shortcut && (
-        <kbd className="rounded bg-[var(--panel)] px-1.5 py-0.5 text-[12px] font-mono text-muted-foreground">
+        <kbd className="rounded bg-[var(--panel)] px-1.5 py-0.5 text-label font-mono text-muted-foreground">
           {shortcut}
         </kbd>
       )}
@@ -680,7 +680,7 @@ export function CommandPalette() {
             })()}
           </Command.List>
 
-          <div className="flex items-center justify-between border-t border-border px-3 py-2 text-[12px] text-muted-foreground">
+          <div className="flex items-center justify-between border-t border-border px-3 py-2 text-label text-muted-foreground">
             <div className="flex gap-3">
               <span>
                 <kbd className="rounded bg-[var(--panel)] px-1 py-0.5 font-mono">
@@ -724,7 +724,7 @@ export function CommandPalette() {
             leave the paper broker.
           </DialogDescription>
         </DialogHeader>
-        <ul className="list-disc space-y-1 pl-5 text-[12px] text-muted-foreground">
+        <ul className="list-disc space-y-1 pl-5 text-label text-muted-foreground">
           <li>The command palette cannot enable live trading by itself.</li>
           <li>Paper-mode orders remain routed to the paper account.</li>
           <li>Contact your admin when the account is ready for live credentials.</li>
@@ -769,14 +769,14 @@ export function CommandPalette() {
               {destructiveCopy.description}
             </DialogDescription>
           </DialogHeader>
-          <ul className="list-disc space-y-1 pl-5 text-[12px] text-muted-foreground">
+          <ul className="list-disc space-y-1 pl-5 text-label text-muted-foreground">
             {destructiveCopy.bullets.map((bullet) => (
               <li key={bullet}>{bullet}</li>
             ))}
           </ul>
           {pendingDestructiveAction?.blockedReason && (
             <p
-              className="rounded-sm border border-border bg-[var(--panel)] px-3 py-2 text-[12px] text-muted-foreground"
+              className="rounded-sm border border-border bg-[var(--panel)] px-3 py-2 text-label text-muted-foreground"
               data-testid={`${destructiveCopy.testId}-blocked-reason`}
             >
               {pendingDestructiveAction.blockedReason}

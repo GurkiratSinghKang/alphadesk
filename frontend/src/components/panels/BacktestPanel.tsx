@@ -469,18 +469,18 @@ function EquityCurveSvg({
       <div className="flex items-center gap-4 px-1">
         <div className="flex items-center gap-1.5">
           <div className="h-0.5 w-4 rounded" style={{ background: isUp ? "var(--profit)" : "var(--loss)" }} />
-          <span className="text-[12px] text-muted-foreground">{result.label ?? "Strategy"}</span>
+          <span className="text-label text-muted-foreground">{result.label ?? "Strategy"}</span>
         </div>
         {benchPolyline && (
           <div className="flex items-center gap-1.5">
             <div className="h-0.5 w-4 rounded border-t border-dashed border-muted-foreground" />
-            <span className="text-[12px] text-muted-foreground">SPY Buy & Hold</span>
+            <span className="text-label text-muted-foreground">SPY Buy & Hold</span>
           </div>
         )}
         {curveBPolyline && resultB && (
           <div className="flex items-center gap-1.5">
             <div className="h-0.5 w-4 rounded" style={{ background: amber }} />
-            <span className="text-[12px] text-muted-foreground">{resultB.label ?? "Strategy B"}</span>
+            <span className="text-label text-muted-foreground">{resultB.label ?? "Strategy B"}</span>
           </div>
         )}
       </div>
@@ -488,7 +488,7 @@ function EquityCurveSvg({
       {/* Drawdown sub-chart */}
       {ddData.length > 1 && Math.abs(ddMin) > 0.01 && (
         <div>
-          <p className="text-[12px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5 px-1">Drawdown</p>
+          <p className="text-label uppercase tracking-wider text-muted-foreground font-semibold mb-0.5 px-1">Drawdown</p>
           <svg viewBox={`0 0 ${w} ${ddH}`} className="w-full h-[40px] rounded border border-border bg-[var(--panel)]" preserveAspectRatio="none">
             <path d={ddAreaPath} fill={ddFill} />
             <polyline
@@ -507,9 +507,9 @@ function EquityCurveSvg({
 function MetricCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
     <div className="rounded-lg border border-border bg-[var(--panel)] p-3 text-center">
-      <p className="text-[12px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="text-label uppercase tracking-wider text-muted-foreground">{label}</p>
       <p className={cn("text-lg font-bold tabular-nums", color ?? "text-foreground")}>{value}</p>
-      {sub && <p className="text-[12px] text-muted-foreground tabular-nums">{sub}</p>}
+      {sub && <p className="text-label text-muted-foreground tabular-nums">{sub}</p>}
     </div>
   );
 }
@@ -543,7 +543,7 @@ function ComparisonTable({ a, b }: { a: BacktestResult; b: BacktestResult }) {
 
   return (
     <div className="rounded-lg border border-border bg-[var(--panel)] overflow-hidden">
-      <div className="grid grid-cols-3 gap-0 text-[12px] uppercase tracking-wider text-muted-foreground font-semibold border-b border-border">
+      <div className="grid grid-cols-3 gap-0 text-label uppercase tracking-wider text-muted-foreground font-semibold border-b border-border">
         <div className="px-3 py-2">Metric</div>
         <div className="px-3 py-2 text-center" style={{ color: "var(--profit)" }}>{a.label ?? "A"}</div>
         <div className="px-3 py-2 text-center" style={{ color: "var(--amber-500)" }}>{b.label ?? "B"}</div>
@@ -658,7 +658,7 @@ export function BacktestPanel() {
           <button
             onClick={() => { setCompareMode(!compareMode); resetCompare(); }}
             className={cn(
-              "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors border",
+              "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-label font-medium transition-colors border",
               compareMode
                 ? "bg-primary/15 text-primary border-primary/30"
                 : "bg-[var(--panel)] text-muted-foreground border-border hover:text-foreground"
@@ -668,11 +668,11 @@ export function BacktestPanel() {
             Compare Mode
           </button>
           {compareMode && compareStep === "a-done" && (
-            <span className="text-[12px] text-primary animate-pulse">Strategy A saved. Configure B and run again.</span>
+            <span className="text-label text-primary animate-pulse">Strategy A saved. Configure B and run again.</span>
           )}
         </div>
         {compareMode && (resultA || resultB) && (
-          <button onClick={resetCompare} className="flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground">
+          <button onClick={resetCompare} className="flex items-center gap-1 text-label text-muted-foreground hover:text-foreground">
             <RotateCcw className="h-3 w-3" /> Reset
           </button>
         )}
@@ -681,11 +681,11 @@ export function BacktestPanel() {
       {/* Parameters */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div>
-          <label htmlFor="backtest-symbol" className="text-[12px] uppercase tracking-wider text-muted-foreground font-semibold">Symbol</label>
+          <label htmlFor="backtest-symbol" className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Symbol</label>
           <input id="backtest-symbol" value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs text-foreground" />
         </div>
         <div>
-          <label htmlFor="backtest-strategy" className="text-[12px] uppercase tracking-wider text-muted-foreground font-semibold">Strategy</label>
+          <label htmlFor="backtest-strategy" className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Strategy</label>
           <select id="backtest-strategy" value={strategy} onChange={(e) => setStrategy(e.target.value as any)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs text-foreground">
             <option value="sma-cross">SMA Crossover</option>
             <option value="rsi">RSI Mean Reversion</option>
@@ -695,38 +695,38 @@ export function BacktestPanel() {
         {strategy === "sma-cross" && (
           <>
             <div>
-              <label htmlFor="backtest-fast-sma" className="text-[12px] uppercase tracking-wider text-muted-foreground font-semibold">Fast SMA</label>
+              <label htmlFor="backtest-fast-sma" className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Fast SMA</label>
               <input id="backtest-fast-sma" type="number" value={fastPeriod} onChange={(e) => setFastPeriod(Math.max(1, Math.floor(safeNum(e.target.value, 10))))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
             </div>
             <div>
-              <label htmlFor="backtest-slow-sma" className="text-[12px] uppercase tracking-wider text-muted-foreground font-semibold">Slow SMA</label>
+              <label htmlFor="backtest-slow-sma" className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Slow SMA</label>
               <input id="backtest-slow-sma" type="number" value={slowPeriod} onChange={(e) => setSlowPeriod(Math.max(1, Math.floor(safeNum(e.target.value, 50))))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
             </div>
           </>
         )}
         {strategy === "rsi" && (
           <div>
-            <label htmlFor="backtest-rsi-period" className="text-[12px] uppercase tracking-wider text-muted-foreground font-semibold">RSI Period</label>
+            <label htmlFor="backtest-rsi-period" className="text-label uppercase tracking-wider text-muted-foreground font-semibold">RSI Period</label>
             <input id="backtest-rsi-period" type="number" value={14} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground opacity-50" disabled />
-            <p className="text-[12px] text-muted-foreground mt-0.5">Buy RSI&lt;30, Sell RSI&gt;70</p>
+            <p className="text-label text-muted-foreground mt-0.5">Buy RSI&lt;30, Sell RSI&gt;70</p>
           </div>
         )}
         {strategy === "macd" && (
           <div>
-            <label className="text-[12px] uppercase tracking-wider text-muted-foreground font-semibold">MACD</label>
-            <p className="text-[12px] text-muted-foreground mt-2">12/26 EMA crossover</p>
+            <label className="text-label uppercase tracking-wider text-muted-foreground font-semibold">MACD</label>
+            <p className="text-label text-muted-foreground mt-2">12/26 EMA crossover</p>
           </div>
         )}
         <div>
-          <label htmlFor="backtest-capital" className="text-[12px] uppercase tracking-wider text-muted-foreground font-semibold">Capital ($)</label>
+          <label htmlFor="backtest-capital" className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Capital ($)</label>
           <input id="backtest-capital" type="number" value={capital} onChange={(e) => setCapital(Math.max(1, Math.floor(safeNum(e.target.value, 100000))))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
         </div>
         <div>
-          <label htmlFor="backtest-commission" className="text-[12px] uppercase tracking-wider text-muted-foreground font-semibold">Commission ($)</label>
+          <label htmlFor="backtest-commission" className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Commission ($)</label>
           <input id="backtest-commission" type="number" value={commission} onChange={(e) => setCommission(safeNum(e.target.value, 0))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
         </div>
         <div>
-          <label htmlFor="backtest-slippage" className="text-[12px] uppercase tracking-wider text-muted-foreground font-semibold">Slippage (%)</label>
+          <label htmlFor="backtest-slippage" className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Slippage (%)</label>
           <input id="backtest-slippage" type="number" step="0.01" value={slippagePct} onChange={(e) => setSlippagePct(safeNum(e.target.value, 0))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
         </div>
       </div>
@@ -810,14 +810,14 @@ export function BacktestPanel() {
 
           {/* Equity Curve */}
           <div>
-            <p className="text-[12px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">Equity Curve</p>
+            <p className="text-label uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">Equity Curve</p>
             <EquityCurveSvg result={activeResult} resultB={compareMode ? resultB : null} />
           </div>
 
           {/* Comparison table */}
           {compareMode && resultA && resultB && (
             <div>
-              <p className="text-[12px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">Side-by-Side Comparison</p>
+              <p className="text-label uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">Side-by-Side Comparison</p>
               <ComparisonTable a={resultA} b={resultB} />
             </div>
           )}

@@ -170,7 +170,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
                 {activeStrategies.map((s) => (
                   <div
                     key={s.id}
-                    className="flex items-center justify-end pr-2 text-[12px] text-muted-foreground truncate"
+                    className="flex items-center justify-end pr-2 text-label text-muted-foreground truncate"
                     style={{ height: cellSize, maxWidth: 100 }}
                     title={s.name}
                   >
@@ -185,7 +185,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
                   {activeStrategies.map((s) => (
                     <div
                       key={s.id}
-                      className="text-[12px] text-muted-foreground overflow-hidden"
+                      className="text-label text-muted-foreground overflow-hidden"
                       style={{ width: cellSize, transform: "rotate(-45deg) translateX(4px)", transformOrigin: "bottom left", whiteSpace: "nowrap" }}
                       title={s.name}
                     >
@@ -211,7 +211,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
                         onMouseLeave={() => setHoveredCell(null)}
                         title={`${activeStrategies[i].shortName} / ${activeStrategies[j].shortName}: ${(val ?? 0).toFixed(3)}`}
                       >
-                        <span className="text-[12px] text-white/80 tabular-nums font-medium">
+                        <span className="text-label text-white/80 tabular-nums font-medium">
                           {(val ?? 0).toFixed(2)}
                         </span>
                       </div>
@@ -222,7 +222,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
             </div>
 
             {/* Legend */}
-            <div className="flex items-center justify-center gap-2 mt-3 text-[12px] text-muted-foreground">
+            <div className="flex items-center justify-center gap-2 mt-3 text-label text-muted-foreground">
               <span>-1 (inverse)</span>
               <div className="flex h-2.5 w-28 rounded-sm overflow-hidden">
                 {Array.from({ length: 20 }, (_, i) => (
@@ -239,7 +239,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
             <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
               <div className="flex items-center gap-1.5 mb-2">
                 <Shield className="h-3.5 w-3.5 text-primary" />
-                <span className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wider">
+                <span className="text-label font-semibold text-muted-foreground uppercase tracking-wider">
                   Diversification
                 </span>
               </div>
@@ -258,7 +258,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
                   style={{ width: `${insights.divScore}%` }}
                 />
               </div>
-              <p className="text-[12px] text-muted-foreground mt-1.5">
+              <p className="text-label text-muted-foreground mt-1.5">
                 Avg |corr|: {insights.avgAbsCorr.toFixed(2)}
               </p>
             </div>
@@ -268,7 +268,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
               <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <TrendingUp className="h-3 w-3 text-loss" />
-                  <span className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  <span className="text-label font-semibold text-muted-foreground uppercase tracking-wider">
                     Most Correlated
                   </span>
                 </div>
@@ -286,7 +286,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
               <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <TrendingDown className="h-3 w-3 text-ice" />
-                  <span className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  <span className="text-label font-semibold text-muted-foreground uppercase tracking-wider">
                     Most Diversified
                   </span>
                 </div>
@@ -302,17 +302,17 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
             {/* Top pairs list */}
             {insights.pairs.length > 2 && (
               <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
-                <span className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wider">
+                <span className="text-label font-semibold text-muted-foreground uppercase tracking-wider">
                   All Pairs
                 </span>
                 <div className="mt-1.5 space-y-1">
                   {insights.pairs.map((p, i) => (
                     <div key={i} className="flex items-center justify-between">
-                      <span className="text-[12px] text-muted-foreground truncate mr-2">
+                      <span className="text-label text-muted-foreground truncate mr-2">
                         {p.nameA}/{p.nameB}
                       </span>
                       <span className={cn(
-                        "text-[12px] font-medium tabular-nums shrink-0",
+                        "text-label font-medium tabular-nums shrink-0",
                         p.value > 0.3 ? "text-loss" : p.value < -0.3 ? "text-ice" : "text-muted-foreground"
                       )}>
                         {p.value >= 0 ? "+" : ""}{p.value.toFixed(2)}

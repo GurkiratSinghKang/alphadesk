@@ -279,7 +279,7 @@ const FeedItemRow = React.memo(function FeedItemRow({ item }: { item: FeedItem }
         <Icon className="h-4 w-4" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className={cn("text-[13px] leading-snug", isTradingWindow ? "text-muted-foreground" : "text-foreground")}>{item.title}</p>
+        <p className={cn("text-body-sm leading-snug", isTradingWindow ? "text-muted-foreground" : "text-foreground")}>{item.title}</p>
         {item.detail && (
           <span className="mt-0.5 block text-xs text-muted-foreground" title={item.detail}>
             {item.detail.length > 120 ? item.detail.slice(0, 120) + '...' : item.detail}
@@ -360,7 +360,7 @@ export function ActivityFeed({ feedItems, onNavigate, isLoading }: ActivityFeedP
               <p className="text-hint mt-1">Events appear when the pipeline runs</p>
               <button
                 onClick={() => onNavigate("/pipeline")}
-                className="mt-2 text-[12px] text-[var(--primary)] hover:underline"
+                className="mt-2 text-label text-[var(--primary)] hover:underline"
               >
                 Run Pipeline &rarr;
               </button>

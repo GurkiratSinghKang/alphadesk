@@ -942,7 +942,7 @@ export default function TradePage() {
               {urlStrategy && (
                 <span
                   data-slot="trade-strategy-tag"
-                  className="inline-flex items-center gap-1 rounded-sm border border-border-hair bg-bg px-2 py-1 font-mono text-[12px] text-fg-muted"
+                  className="inline-flex items-center gap-1 rounded-sm border border-border-hair bg-bg px-2 py-1 font-mono text-label text-fg-muted"
                 >
                   strategy: <span className="text-fg">{urlStrategy}</span>
                   {comboType && (
@@ -956,12 +956,12 @@ export default function TradePage() {
             </div>
             <h1
               data-slot="trade-symbol"
-              className="mt-3 text-[28px] font-semibold leading-[1.04] tracking-tight text-ink-1000 md:text-[34px]"
+              className="mt-3 text-h1 font-semibold leading-[1.04] tracking-tight text-ink-1000 md:text-[34px]"
               style={{ letterSpacing: 0 }}
             >
               Trade · {symbol.ticker}
             </h1>
-            <p className="mt-2 truncate text-[13px] text-fg-muted">{symbol.venue} · {intentLabel}</p>
+            <p className="mt-2 truncate text-body-sm text-fg-muted">{symbol.venue} · {intentLabel}</p>
           </div>
 
           <div className="grid grid-cols-2 gap-px bg-border-hair xl:grid-cols-4">
@@ -984,12 +984,12 @@ export default function TradePage() {
                   inputMode="text"
                   autoCapitalize="characters"
                   spellCheck={false}
-                  className="col-span-2 h-11 rounded-sm border border-border bg-bg-elev-1 px-3 font-mono text-base text-fg outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-ring sm:col-span-1 md:text-[15px]"
+                  className="col-span-2 h-11 rounded-sm border border-border bg-bg-elev-1 px-3 font-mono text-base text-fg outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-ring sm:col-span-1 md:text-body"
                 />
                 <button
                   type="button"
                   onClick={commitSymbolDraft}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-sm border border-border bg-brand px-4 text-[13px] font-semibold text-primary-foreground transition-transform hover:-translate-y-0.5"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-sm border border-border bg-brand px-4 text-body-sm font-semibold text-primary-foreground transition-transform hover:-translate-y-0.5"
                 >
                   Load
                   <ArrowRight className="size-4" aria-hidden />
@@ -997,7 +997,7 @@ export default function TradePage() {
                 <button
                   type="button"
                   onClick={() => router.push("/")}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-sm border border-border-hair bg-bg-elev-1 px-4 text-[13px] font-semibold text-fg-muted transition-transform hover:-translate-y-0.5 hover:text-fg"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-sm border border-border-hair bg-bg-elev-1 px-4 text-body-sm font-semibold text-fg-muted transition-transform hover:-translate-y-0.5 hover:text-fg"
                 >
                   Desk
                 </button>
@@ -1020,8 +1020,8 @@ export default function TradePage() {
               <div className="flex min-w-0 items-center gap-2">
                 <ArrowsOut className="size-4 shrink-0 text-brand" aria-hidden />
                 <div className="min-w-0">
-                  <p className="truncate text-[15px] font-semibold text-fg">Full canvas chart</p>
-                  <p className="mt-0.5 line-clamp-2 font-mono text-[12px] text-fg-muted">Structure overlays start off; add only what you need.</p>
+                  <p className="truncate text-body font-semibold text-fg">Full canvas chart</p>
+                  <p className="mt-0.5 line-clamp-2 font-mono text-label text-fg-muted">Structure overlays start off; add only what you need.</p>
                 </div>
               </div>
               <TradeStatusPill label={range} tone="muted" />
@@ -1055,8 +1055,8 @@ export default function TradePage() {
                     <ListChecks className="size-4" aria-hidden />
                   </span>
                   <div className="min-w-0">
-                    <h2 className="truncate text-[15px] font-semibold text-ink-1000">Execution ticket</h2>
-                    <p className="truncate text-[12px] text-fg-muted">{intentLabel}</p>
+                    <h2 className="truncate text-body font-semibold text-ink-1000">Execution ticket</h2>
+                    <p className="truncate text-label text-fg-muted">{intentLabel}</p>
                   </div>
                 </div>
                 <TradeStatusPill label="Paper" tone="muted" />
@@ -1417,16 +1417,16 @@ function ExecutionReadinessPanel({ readiness }: { readiness: ExecutionReadiness 
           <p className="t-label text-fg-hint">Execution readiness</p>
           <TradeStatusPill label={readiness.label} tone={readiness.tone} />
         </div>
-        <h2 className="mt-1 text-[17px] font-semibold leading-snug text-ink-1000">
+        <h2 className="mt-1 text-h3 font-semibold leading-snug text-ink-1000">
           {readiness.headline}
         </h2>
-        <p className="mt-1 max-w-[78ch] text-[13px] leading-relaxed text-fg-muted">
+        <p className="mt-1 max-w-[78ch] text-body-sm leading-relaxed text-fg-muted">
           {readiness.detail}
         </p>
       </div>
       <div className="min-w-0 rounded-md border border-border-hair bg-bg px-3 py-2 md:min-w-[220px]">
         <p className="t-label text-fg-hint">{readiness.canSubmit ? "Submit path" : "Submit blocker"}</p>
-        <p className={cn("mt-1 text-[13px] leading-snug", readiness.canSubmit ? "text-profit" : "text-amber")}>
+        <p className={cn("mt-1 text-body-sm leading-snug", readiness.canSubmit ? "text-profit" : "text-amber")}>
           {readiness.blocker ?? "Ticket can submit after final review."}
         </p>
       </div>
@@ -1601,7 +1601,7 @@ function MobileTradeNav() {
           <a
             key={item.href}
             href={item.href}
-            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md border border-transparent px-2 font-mono text-[12px] font-medium text-fg-muted transition-[border-color,background-color,color,transform] hover:border-brand/30 hover:bg-brand/10 hover:text-brand focus-visible:border-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:translate-y-px"
+            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md border border-transparent px-2 font-mono text-label font-medium text-fg-muted transition-[border-color,background-color,color,transform] hover:border-brand/30 hover:bg-brand/10 hover:text-brand focus-visible:border-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:translate-y-px"
           >
             <Icon className="size-3.5 shrink-0" aria-hidden />
             <span className="truncate">{item.label}</span>
@@ -1632,13 +1632,13 @@ function ExecutionQuotePanel({
         <div className="flex min-w-0 items-center gap-2">
           <Clock className="size-4 shrink-0 text-brand" aria-hidden />
           <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-ink-1000">Fast price loader</p>
-            <p className="truncate text-[12px] text-fg-muted">
+            <p className="text-body-sm font-semibold text-ink-1000">Fast price loader</p>
+            <p className="truncate text-label text-fg-muted">
               Two-sided quote {quote.hasTwoSided ? "live" : "incomplete"} · spread {quote.spreadLabel}
             </p>
           </div>
         </div>
-        <span className={cn("shrink-0 font-mono text-[12px]", quote.spreadTone)}>{quote.midLabel}</span>
+        <span className={cn("shrink-0 font-mono text-label", quote.spreadTone)}>{quote.midLabel}</span>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {presets.map((preset) => {
@@ -1651,8 +1651,8 @@ function ExecutionQuotePanel({
               onClick={() => onStageLimit(preset.side, preset.price)}
               className="min-h-10 rounded-sm border border-border-hair bg-bg-elev-1 px-2 text-left transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-brand/40 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
             >
-              <span className="block truncate text-[12px] font-medium text-fg-muted">{preset.label}</span>
-              <span className={cn("block truncate font-mono text-[13px]", preset.tone)}>
+              <span className="block truncate text-label font-medium text-fg-muted">{preset.label}</span>
+              <span className={cn("block truncate font-mono text-body-sm", preset.tone)}>
                 {disabled ? "--" : formatCurrency(preset.price)}
               </span>
             </button>
@@ -1678,8 +1678,8 @@ function PreTradeImpactPanel({ preview }: { preview: PreTradePreview }) {
             <Scales className="size-4" aria-hidden />
           </span>
           <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-ink-1000">Pre-submit confidence</p>
-            <p className="truncate text-[12px] text-fg-muted">{preview.subtitle}</p>
+            <p className="text-body-sm font-semibold text-ink-1000">Pre-submit confidence</p>
+            <p className="truncate text-label text-fg-muted">{preview.subtitle}</p>
           </div>
         </div>
         <TradeStatusPill label={preview.policyLabel} tone={preview.policyTone} />
@@ -1691,7 +1691,7 @@ function PreTradeImpactPanel({ preview }: { preview: PreTradePreview }) {
         ))}
         {collapsedChecks.length > 0 ? (
           <details className="rounded-md border border-border-hair bg-bg px-3 py-2">
-            <summary className="cursor-pointer list-none font-mono text-[12px] font-semibold text-profit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <summary className="cursor-pointer list-none font-mono text-label font-semibold text-profit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               {collapsedChecks.length} passed check{collapsedChecks.length === 1 ? "" : "s"} collapsed
             </summary>
             <div className="mt-2 grid gap-2">
@@ -1707,8 +1707,8 @@ function PreTradeImpactPanel({ preview }: { preview: PreTradePreview }) {
         {preview.rows.map((row) => (
           <div key={row.label} className="bg-bg px-3 py-3">
             <p className="t-label text-fg-hint">{row.label}</p>
-            <p className={cn("mt-2 truncate font-mono text-[15px] text-ink-1000", row.toneClass)}>{row.value}</p>
-            <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-fg-muted">{row.detail}</p>
+            <p className={cn("mt-2 truncate font-mono text-body text-ink-1000", row.toneClass)}>{row.value}</p>
+            <p className="mt-1 line-clamp-2 text-label leading-snug text-fg-muted">{row.detail}</p>
           </div>
         ))}
       </div>
@@ -1743,13 +1743,13 @@ function ConfidenceCheckRow({
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <p className="t-label text-fg-hint">{check.label}</p>
-          <span className={cn("font-mono text-[12px] font-semibold", confidenceTextClass(check.tone))}>
+          <span className={cn("font-mono text-label font-semibold", confidenceTextClass(check.tone))}>
             {confidenceStatusLabel(check.tone)}
           </span>
         </div>
-        <p className={cn("mt-1 truncate font-mono text-[13px]", confidenceTextClass(check.tone))}>{check.value}</p>
+        <p className={cn("mt-1 truncate font-mono text-body-sm", confidenceTextClass(check.tone))}>{check.value}</p>
         {!compact ? (
-          <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-fg-muted">{check.detail}</p>
+          <p className="mt-1 line-clamp-2 text-label leading-snug text-fg-muted">{check.detail}</p>
         ) : null}
       </div>
       <span className={cn("mt-1 size-2 rounded-full", confidenceDotClass(check.tone))} aria-hidden />
@@ -1774,7 +1774,7 @@ function TradeTelemetryCard({
         <Icon className="size-4 shrink-0 text-brand" aria-hidden />
         <p className="t-label text-fg-hint">{label}</p>
       </div>
-      <p className={cn("mt-3 truncate font-mono text-[15px] text-ink-1000", valueClassName)}>
+      <p className={cn("mt-3 truncate font-mono text-body text-ink-1000", valueClassName)}>
         {value}
       </p>
     </div>
@@ -1793,7 +1793,7 @@ function TradeStatusPill({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 font-mono text-[12px]",
+        "inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 font-mono text-label",
         tone === "profit" && "border-profit/30 bg-profit/10 text-profit",
         tone === "loss" && "border-loss/30 bg-loss/10 text-loss",
         tone === "amber" && "border-amber/30 bg-amber/10 text-amber",
@@ -2437,12 +2437,12 @@ function TradeIntentPanel({
           <span className="flex size-8 items-center justify-center rounded-sm bg-brand/10 text-brand">
             <SlidersHorizontal className="size-4" aria-hidden />
           </span>
-          <h2 className="text-[15px] font-semibold text-ink-1000">Intent rail</h2>
+          <h2 className="text-body font-semibold text-ink-1000">Intent rail</h2>
         </div>
-        <p className="mt-3 text-[13px] leading-snug text-fg-muted">
+        <p className="mt-3 text-body-sm leading-snug text-fg-muted">
           No pre-staged legs. The ticket owns the executable order and the chart stays dedicated to price.
         </p>
-        <div className="mt-4 flex items-center gap-2 rounded-md border border-border-hair bg-bg px-3 py-2 text-[12px] text-fg-muted">
+        <div className="mt-4 flex items-center gap-2 rounded-md border border-border-hair bg-bg px-3 py-2 text-label text-fg-muted">
           <ShieldWarning className="size-4 shrink-0 text-amber" aria-hidden />
           Broker and risk policy still run on submit.
         </div>
@@ -2459,14 +2459,14 @@ function TradeIntentPanel({
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <TrendUp className="size-4 text-brand" aria-hidden />
-            <h2 className="text-[15px] font-semibold text-ink-1000">Staged contract</h2>
+            <h2 className="text-body font-semibold text-ink-1000">Staged contract</h2>
           </div>
           <TradeStatusPill label="1 leg" tone="amber" />
         </div>
         <div
           data-order-side={activeContract.orderSide}
           data-slot="active-contract"
-          className="flex flex-col gap-2 rounded-md border border-border-hair bg-bg px-3 py-3 font-mono text-[13px]"
+          className="flex flex-col gap-2 rounded-md border border-border-hair bg-bg px-3 py-3 font-mono text-body-sm"
         >
           <span className="break-all font-semibold text-fg">{activeContract.occ}</span>
           <span className="text-fg-muted">
@@ -2493,7 +2493,7 @@ function TradeIntentPanel({
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Gauge className="size-4 text-brand" aria-hidden />
-          <h2 className="text-[15px] font-semibold text-ink-1000">Staged combo</h2>
+          <h2 className="text-body font-semibold text-ink-1000">Staged combo</h2>
         </div>
         <TradeStatusPill label={comboType ?? `${activeLegs.length} legs`} tone="amber" />
       </div>
@@ -2503,10 +2503,10 @@ function TradeIntentPanel({
             key={leg.occ}
             data-slot="active-leg"
             data-order-side={leg.orderSide}
-            className="flex flex-col gap-1 rounded-md border border-border-hair bg-bg px-3 py-3 font-mono text-[13px]"
+            className="flex flex-col gap-1 rounded-md border border-border-hair bg-bg px-3 py-3 font-mono text-body-sm"
           >
             <div className="flex items-center justify-between gap-3">
-              <span className="text-[12px] text-fg-muted">Leg {i + 1}</span>
+              <span className="text-label text-fg-muted">Leg {i + 1}</span>
               <span className={cn("uppercase font-medium", leg.orderSide === "sell" ? "text-loss" : "text-profit")}>
                 {leg.orderSide} x {leg.qty}
               </span>
@@ -2556,8 +2556,8 @@ function RecentOrdersPanel({
             <Lightning className="size-4" aria-hidden />
           </span>
           <div className="min-w-0">
-            <h2 className="text-[15px] font-semibold text-ink-1000">Execution activity</h2>
-            <p className="mt-0.5 text-[12px] text-fg-muted">{totalOrders} recent broker event{totalOrders === 1 ? "" : "s"}</p>
+            <h2 className="text-body font-semibold text-ink-1000">Execution activity</h2>
+            <p className="mt-0.5 text-label text-fg-muted">{totalOrders} recent broker event{totalOrders === 1 ? "" : "s"}</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-1 px-4 pb-4 md:py-4">
@@ -2569,7 +2569,7 @@ function RecentOrdersPanel({
               onClick={() => onFilterChange(filter.id)}
               data-active={activeFilter === filter.id || undefined}
               className={cn(
-                "rounded-sm border px-2.5 py-1.5 font-mono text-[12px] transition-colors",
+                "rounded-sm border px-2.5 py-1.5 font-mono text-label transition-colors",
                 activeFilter === filter.id
                   ? "border-brand/40 bg-brand/15 text-brand"
                   : "border-border-hair bg-bg-elev-2 text-fg-muted hover:text-fg",
@@ -2583,10 +2583,10 @@ function RecentOrdersPanel({
 
       {orders.length === 0 ? (
         <div className="border-t border-border-hair bg-bg px-4 py-8 text-center">
-          <p className="text-[15px] font-medium text-fg">
+          <p className="text-body font-medium text-fg">
             {totalOrders === 0 ? "No orders yet today." : "No orders match this view."}
           </p>
-          <p className="mt-1 text-[13px] text-fg-muted">
+          <p className="mt-1 text-body-sm text-fg-muted">
             {totalOrders === 0 ? "Submitted orders will appear here after broker acknowledgement." : "Switch filters to review other broker states."}
           </p>
         </div>
@@ -2627,11 +2627,11 @@ function RecentOrdersPanel({
                   </td>
                   <td className="px-2 py-2 t-num-md text-fg">{o.quantity}</td>
                   <td className="px-2 py-2 capitalize text-fg-muted">{o.type.replace("_", " ")}</td>
-                  <td className="px-2 py-2 font-mono text-[12px] text-fg">{o.strategy ?? "—"}</td>
+                  <td className="px-2 py-2 font-mono text-label text-fg">{o.strategy ?? "—"}</td>
                   <td className="px-2 py-2">
                     <span
                       className={cn(
-                        "inline-block rounded-sm px-1.5 py-0.5 text-[12px] font-medium uppercase tracking-wider",
+                        "inline-block rounded-sm px-1.5 py-0.5 text-label font-medium uppercase tracking-wider",
                         o.status === "filled" && "bg-profit/15 text-profit",
                         o.status === "rejected" && "bg-loss/15 text-loss",
                         o.status === "cancelled" && "bg-fg-muted/15 text-fg-muted",

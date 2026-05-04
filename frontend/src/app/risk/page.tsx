@@ -15,7 +15,7 @@ function WarningBanner() {
       role="note"
       className="rounded-md border border-down-500/30 bg-loss-tint p-5"
     >
-      <p className="font-display italic text-[17px] leading-[1.5] text-down-500">
+      <p className="font-display italic text-h3 leading-[1.5] text-down-500">
         Trading securities and options involves substantial risk of loss and is
         not suitable for all investors. Consider carefully whether trading is
         appropriate for you in light of your financial condition.

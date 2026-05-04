@@ -112,13 +112,13 @@ const StrategyCard = React.memo(function StrategyCard({
                 <span className="text-xs text-muted-foreground">
                   {strategy.positions} active
                   {strategy.returnPct !== 0 && strategy.positions === 0 && (
-                    <span className="text-[12px] text-muted-foreground ml-1">(historical)</span>
+                    <span className="text-label text-muted-foreground ml-1">(historical)</span>
                   )}
                 </span>
               </>
             )}
           </div>
-          <p className="text-[12px] text-muted-foreground italic">
+          <p className="text-label text-muted-foreground italic">
             {regimeNote}
           </p>
         </div>
@@ -133,7 +133,7 @@ const StrategyCard = React.memo(function StrategyCard({
             />
           ) : (
             <div className="flex items-center justify-center h-[28px] w-full">
-              <span className="text-[12px] text-muted-foreground/50">No data</span>
+              <span className="text-label text-muted-foreground/50">No data</span>
             </div>
           )}
         </div>
@@ -169,7 +169,7 @@ const CompactStrategyRow = React.memo(function CompactStrategyRow({
       <Badge
         variant="outline"
         className={cn(
-          "shrink-0 text-[12px] px-1.5 py-0",
+          "shrink-0 text-label px-1.5 py-0",
           strategy.status === "active"
             ? "border-emerald-500/30 text-emerald-400"
             : "border-amber-500/30 text-amber-400"
@@ -178,13 +178,13 @@ const CompactStrategyRow = React.memo(function CompactStrategyRow({
         {strategy.status === "active" ? "On" : "Off"}
       </Badge>
       {strategy.returnPct === 0 && strategy.positions === 0 ? (
-        <span className="w-14 text-right text-[12px] tabular-nums text-muted-foreground">&mdash;</span>
+        <span className="w-14 text-right text-label tabular-nums text-muted-foreground">&mdash;</span>
       ) : (
-        <span className={cn("w-14 text-right text-[12px] font-semibold tabular-nums", strategy.returnPct >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+        <span className={cn("w-14 text-right text-label font-semibold tabular-nums", strategy.returnPct >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
           {(strategy.returnPct ?? 0) >= 0 ? "+" : ""}{(strategy.returnPct ?? 0).toFixed(2)}%
         </span>
       )}
-      <span className="w-8 text-right text-[12px] tabular-nums text-muted-foreground">{strategy.positions}p</span>
+      <span className="w-8 text-right text-label tabular-nums text-muted-foreground">{strategy.positions}p</span>
     </button>
   );
 });
@@ -266,10 +266,10 @@ export function StrategyGrid({ strategies, regimeLabel, onStrategyClick }: Strat
             return (
               <div key={group}>
                 <div className="flex items-center gap-2 mb-2 px-1">
-                  <span className="text-[12px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <span className="text-label font-bold uppercase tracking-wider text-muted-foreground">
                     {label}
                   </span>
-                  <span className="text-[12px] text-muted-foreground/60">
+                  <span className="text-label text-muted-foreground/60">
                     {grouped.length}
                   </span>
                   <div className="flex-1 border-t border-border/30" />
@@ -300,7 +300,7 @@ export function StrategyGrid({ strategies, regimeLabel, onStrategyClick }: Strat
             return (
               <div key={group}>
                 <div className="flex items-center gap-2 px-3 pt-2 pb-1">
-                  <span className="text-[12px] font-bold uppercase tracking-widest text-muted-foreground/70">
+                  <span className="text-label font-bold uppercase tracking-widest text-muted-foreground/70">
                     {label}
                   </span>
                   <div className="flex-1 border-t border-border/20" />

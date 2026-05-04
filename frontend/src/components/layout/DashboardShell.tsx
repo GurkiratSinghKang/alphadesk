@@ -26,7 +26,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
       <main id="main-content" role="main" className="flex-1 overflow-y-auto" tabIndex={-1}>
         {children}
       </main>
-      <footer role="contentinfo" className="border-t border-border/30 px-4 py-3 text-[12px] text-muted-foreground text-center">
+      <footer role="contentinfo" className="border-t border-border/30 px-4 py-3 text-label text-muted-foreground text-center">
         AlphaDesk v1.0 — Powered by Claude AI — &copy; {new Date().getFullYear()}
       </footer>
       <CommandPalette />

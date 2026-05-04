@@ -56,7 +56,7 @@ export default function EarningsDataHelpPage() {
         <Display size="lg" as="h1">
           Earnings Data Guide
         </Display>
-        <p className="mt-4 font-sans text-[16px] leading-[1.65] text-fg-dim">
+        <p className="mt-4 font-sans text-numeric-md leading-[1.65] text-fg-dim">
           A practical map of the data behind the earnings options play: where
           the fields come from, which values are estimates, and what to verify
           before using the trade ticket.
@@ -73,7 +73,7 @@ export default function EarningsDataHelpPage() {
                 {section.body.map((paragraph) => (
                   <p
                     key={paragraph}
-                    className="font-sans text-[15px] leading-[1.65] text-fg-dim"
+                    className="font-sans text-body leading-[1.65] text-fg-dim"
                   >
                     {paragraph}
                   </p>
