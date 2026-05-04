@@ -367,10 +367,14 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "sector-rotation": {
         "name": "Sector Rotation",
-        "description": "Planned sector-rotation concept. No backend implementation or live orders yet; needs ETF universe wiring, monthly rebalance state, and a replayed OOS artifact before activation.",
-        "status": StrategyStatus.PLANNED,
+        "description": "Long-only monthly rotation across 11 GICS sector ETFs (XLK/XLV/XLF/XLY/XLP/XLE/XLI/XLB/XLRE/XLU/XLC), ranked by 6m+12m composite total return; SPY-based risk-off triggers a bond fallback (AGG). Stangl-Jacobsen-Visaltanachoti (2009) + Faber (2013) bond-fallback overlay.",
+        # Plan C.5: backend strategy package landed; status is now ACTIVE.
+        "status": StrategyStatus.ACTIVE,
         "invested_amount": 0,
         "total_return_pct": 0,
+        # Sharpe / win_rate / max_drawdown are now read from the registry meta
+        # + the OOS JSON in the post-processing step at the bottom of this map;
+        # leave zeros here as placeholders that the post-processing overrides.
         "sharpe_ratio": 0,
         "win_rate": 0,
         "max_drawdown": 0,
