@@ -41,12 +41,12 @@ describe("Earnings Options Play page", () => {
     ).toEqual({ saved: 1, discarded: 0, order: 1, total: 2 });
   });
 
-  it("fetches calendar on mount but does NOT auto-select first symbol (Phase-2 EP-3)", async () => {
-    // Phase-2 / EP-3: heavy work (Claude structured analysis, options
-    // chain fetch, IV term backfill) only runs when /detail is hit, so
-    // an auto-selection burns Opus tokens on a symbol the user never
-    // asked for. The page still fetches the calendar — just doesn't
-    // auto-pick the top row.
+  it("fetches calendar on mount and auto-selects first row when rows are present (BUG-04)", async () => {
+    // BUG-04 (qa/reviews/UI-REVIEW.md): first-paint auto-selects the top
+    // row so the CalendarWeekHeatmap is a meaningful fallback rather than
+    // a blank prompt. The detail endpoint MUST be called automatically for
+    // the first visible row when the calendar resolves with data.
+    vi.mocked(api.getEarningsDetail).mockClear();
     vi.mocked(api.getEarningsCalendar).mockResolvedValueOnce({
       earnings: [
         { symbol: "NVDA", company: "Nvidia", sector: "Semis",
@@ -72,8 +72,33 @@ describe("Earnings Options Play page", () => {
       expect(container.textContent).toContain("NVDA");
       expect(container.textContent).toContain("TSLA");
     });
-    // The detail endpoint must NOT be called automatically — only on
-    // explicit user click. Tests of the click path live below.
+    // Auto-select fires on first paint — detail must be fetched for row 0
+    // (NVDA) without any user interaction.
+    await waitFor(() => {
+      expect(api.getEarningsDetail).toHaveBeenCalledWith("NVDA", expect.anything());
+    });
+    // Must NOT have jumped to TSLA (row 1) on its own.
+    expect(api.getEarningsDetail).not.toHaveBeenCalledWith("TSLA", expect.anything());
+  });
+
+  it("fetches calendar on mount but does NOT auto-select when calendar is empty (BUG-04)", async () => {
+    // BUG-04 companion: when the calendar resolves with zero rows there is
+    // nothing to auto-select. The detail endpoint must stay silent.
+    vi.mocked(api.getEarningsCalendar).mockResolvedValueOnce({
+      earnings: [],
+      generatedAt: new Date().toISOString(), partial: false,
+    });
+
+    render(withQueryClient(<EarningsOptionsPlayPage />));
+    await waitFor(() => {
+      expect(api.getEarningsCalendar).toHaveBeenCalled();
+    });
+    // Clear call history accumulated by prior tests, then assert no new
+    // detail call fires in the next tick (empty calendar = nothing to select).
+    vi.mocked(api.getEarningsDetail).mockClear();
+    // Yield to React's microtask queue so any pending effects run before
+    // we assert absence of the call.
+    await act(async () => {});
     expect(api.getEarningsDetail).not.toHaveBeenCalled();
   });
 
@@ -232,8 +257,9 @@ describe("Earnings Options Play page", () => {
     await waitFor(() => {
       expect(api.getEarningsCalendar).toHaveBeenCalled();
     });
-    // Phase-2 / EP-3: no auto-select. First Next event picks the first
-    // visible row; Prev from row 2 wraps back through row 1.
+    // BUG-04 (qa/reviews/UI-REVIEW.md): first-paint auto-selects when rows present.
+    // After Esc-clear, the first Next event re-picks the first visible row;
+    // Prev from row 2 wraps back through row 1.
     act(() => {
       window.dispatchEvent(new CustomEvent("alphadesk:earnings-select-next"));
     });
@@ -446,7 +472,9 @@ describe("Earnings Options Play — round-4 fixes", () => {
       generatedAt: new Date().toISOString(), partial: false,
     });
     const { container } = render(withQueryClient(<EarningsOptionsPlayPage />));
-    // Phase-2 / EP-3: must click the calendar row first (no auto-select).
+    // BUG-04 (qa/reviews/UI-REVIEW.md): first-paint auto-selects when rows present.
+    // Wait for the auto-selected detail panel to appear, then click the row
+    // explicitly to ensure the detail-header slot is present before testing Esc.
     await waitFor(() => {
       expect(container.textContent).toContain("NVDA");
     });
@@ -543,7 +571,9 @@ describe("Earnings Options Play — full flow", () => {
     vi.mocked(api.getEarningsDetail).mockResolvedValue(fullNvdaDetail);
 
     const { container } = render(withQueryClient(<EarningsOptionsPlayPage />));
-    // Phase-2 / EP-3: click the calendar row to opt in to detail load.
+    // BUG-04 (qa/reviews/UI-REVIEW.md): first-paint auto-selects when rows present.
+    // The detail load begins automatically; clicking the row again re-asserts
+    // the selection and ensures the detail panel is fully rendered for assertions.
     await waitFor(() => {
       expect(container.textContent).toContain("NVDA");
     });
