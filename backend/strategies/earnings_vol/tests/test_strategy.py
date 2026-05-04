@@ -66,13 +66,17 @@ def _build_input(
 
 
 class TestRegistration:
-    def test_strategy_registered_as_research(self):
+    def test_strategy_registered_as_autonomous_paper_only(self):
+        # Plan B.1 full port: kind was flipped from "research" to
+        # "autonomous"; paper_only=True remains as the live-capital gate
+        # until paper-runway evidence graduates the strategy.
         cls = get_strategy("earnings_vol")
         assert cls is EarningsVolStrategy
         meta = get_meta("earnings_vol")
         assert meta.name == "earnings_vol"
         assert meta.category == "options"
-        assert meta.kind == "research"
+        assert meta.kind == "autonomous"
+        assert meta.paper_only is True
 
 
 class TestParams:

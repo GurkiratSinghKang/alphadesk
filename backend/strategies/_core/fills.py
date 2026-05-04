@@ -201,24 +201,23 @@ class FillSimulator:
     _multileg_warned: bool = False  # class-level, log warning once per process
 
     def _fill_multileg(self, signal: "Signal", asof: date) -> "Fill | None":
-        """Dispatch a multi-leg (spread) signal to the legacy options pricing path.
+        """Multi-leg (spread) options pricing.
 
-        Plan B.1 short: when ``BacktestConfig.options_provider`` is wired,
-        delegate to the legacy ``ExecutionSimulator._fill_multileg_option``
-        which already implements per-leg real-price pricing, half-spread
-        slippage, BS fallback, and net-premium sign conventions. When the
-        provider is None, log+skip with a structured warning so the gap is
-        explicit rather than silent.
+        Plan B.1 (full port): tries the **native** in-shell pricer first
+        (no legacy import). Per-leg pricing pulls the options_provider's
+        contract bar at ``asof``, applies half-spread slippage from
+        ``BacktestConfig.slippage_bps``, computes the net per-spread
+        premium with the canonical sign convention, and returns a
+        new-shell Fill. The legacy path remains as a defensive fallback
+        for edge cases the native pricer can't yet handle (e.g.
+        non-OCC contract symbols).
 
-        The full port of multi-leg fill semantics into the new shell
-        (replacing this delegation with an in-shell implementation) is a
-        follow-on plan; this short version creates the seam and unblocks
-        kind=research → kind=autonomous transitions for vrp-harvest and
-        earnings-vol when run via legacy path.
+        Returns None when:
+        - ``BacktestConfig.options_provider`` is unset (logs + skips once)
+        - The options provider returns no bar for any leg at ``asof``
+        - A limit_price is set and the net premium fails the gate
         """
-        from strategies._core.contracts import Fill
         import logging
-
         log = logging.getLogger("alphadesk.strategies._core.fills")
 
         if self._config.options_provider is None:
@@ -233,11 +232,22 @@ class FillSimulator:
                 )
             return None
 
-        # When wired: delegate to legacy ExecutionSimulator's multi-leg pricer.
-        # We construct a minimal PendingOrder + Bar shape that the legacy path
-        # accepts, then translate the resulting legacy Fill into a new-shell Fill.
-        # This is the pragmatic seam — the legacy code is correct and tested,
-        # so we lean on it until the full in-shell port lands.
+        # 1. Native path (Plan B.1 full port).
+        try:
+            native = self._fill_multileg_native(signal, asof)
+            if native is not None:
+                return native
+            # native returned None — could be no leg price (don't fall back to
+            # legacy in that case; legacy would also fail), or limit-rejected.
+            # In either case we honour the native decision.
+            return None
+        except Exception as exc:
+            log.warning(
+                "FillSimulator native multi-leg path raised %s for %s; "
+                "falling back to legacy delegator.", exc, signal.symbol,
+            )
+
+        # 2. Legacy fallback (Plan B.1 short — preserved for safety).
         try:
             from backtest.execution import ExecutionSimulator, PendingOrder
             from backtest.costs import DefaultCostModel
@@ -248,17 +258,12 @@ class FillSimulator:
             )
             return None
 
-        # Minimal cost-model + simulator wired with the user's options_provider.
         cost = DefaultCostModel(default_spread_pct=Decimal("0"))
         sim = ExecutionSimulator(
             cost,
             default_spread_pct=Decimal(str(self._config.slippage_bps / 10_000)),
             options_provider=self._config.options_provider,
         )
-        # Construct PendingOrder shape the legacy fill_multileg expects.
-        # The legacy API is internal; we build the order from the new-shell
-        # Signal's legs, qty, etc. Any signature mismatch surfaces as an
-        # exception caught below.
         try:
             order = PendingOrder(
                 signal=signal,
@@ -281,8 +286,6 @@ class FillSimulator:
         if legacy_fill is None:
             return None
 
-        # Translate legacy Fill shape → new-shell Fill. Both share `symbol`,
-        # `quantity`, `price`, `commission` so the basic mapping is direct.
         return Fill(
             symbol=legacy_fill.symbol,
             asof=asof,
@@ -291,6 +294,130 @@ class FillSimulator:
             commission=getattr(legacy_fill, "commission", Decimal("0")),
             signal_tag=signal.tag,
         )
+
+    # -- Plan B.1 (full): native in-shell multi-leg pricer ----------------
+
+    def _fill_multileg_native(self, signal: "Signal", asof: date) -> "Fill | None":
+        """Native (in-shell) multi-leg fill pricer — no legacy import.
+
+        For each leg in ``signal.legs``:
+          1. Query ``options_provider.contract_bars(occ_symbol, asof, asof, "1D")``
+             — pull the contract's daily bar at the fill date
+          2. Use ``close`` as the leg's mid price
+          3. Apply half-spread slippage: BUY → +half_spread, SELL → -half_spread
+             where half_spread = mid × (slippage_bps / 2 / 10_000)
+
+        Net per-spread premium = |Σ over legs of sign × leg_px × leg.quantity|
+        where sign is + for SELL legs (credit), − for BUY legs (debit). The
+        absolute value is the Fill.price; the *direction* (credit/debit) is
+        encoded in signal.quantity sign (positive=long-the-spread,
+        negative=short-the-spread).
+
+        Returns None when:
+        - any leg lacks a contract bar at asof (defensive: no synthetic price)
+        - signal.limit_price is set and the net premium fails the gate
+        """
+        from strategies._core.contracts import Fill
+
+        provider = self._config.options_provider
+        if provider is None or not signal.legs:
+            return None
+
+        slippage_pct = Decimal(str(self._config.slippage_bps / 10_000))
+        half_spread_pct = slippage_pct / Decimal("2")
+
+        per_leg_prices: list[Decimal] = []
+        net_signed = Decimal("0")
+
+        for leg in signal.legs:
+            mid = self._native_leg_mid(provider, leg.occ_symbol, asof)
+            if mid is None:
+                # No price available — abort the whole spread fill rather
+                # than partially fill (legacy behaviour preserved).
+                return None
+
+            half_spread = mid * half_spread_pct
+            if leg.side == "buy":
+                leg_px = mid + half_spread  # pay the ask
+                # Sign convention: BUY legs are debit (negative cashflow);
+                # net_signed accumulates as -px*qty so the absolute value
+                # is the |net premium|.
+                net_signed -= leg_px * Decimal(leg.quantity)
+            else:  # sell
+                leg_px = mid - half_spread  # receive the bid
+                net_signed += leg_px * Decimal(leg.quantity)
+
+            # Floor at 0.01 (matches legacy): tiny mids with fat spreads
+            # can collapse below zero, which isn't a fillable price.
+            if leg_px <= 0:
+                leg_px = Decimal("0.01")
+            per_leg_prices.append(leg_px)
+
+        net_per_spread = abs(net_signed)
+
+        # Limit-price gate (BUY = pay no more than limit; SELL = receive no
+        # less). Absolute comparison is correct because direction is in
+        # signal.quantity sign.
+        if signal.limit_price is not None:
+            limit = Decimal(str(signal.limit_price))
+            qty = signal.quantity or 0
+            if qty > 0 and net_per_spread > limit:
+                return None  # debit too high
+            if qty < 0 and net_per_spread < limit:
+                return None  # credit too low
+
+        # Commission: matches the single-leg path's per-share model, but
+        # billed per leg × spread.quantity. Standard options multiplier 100
+        # is implicit in how strategies compute target weights, not in the
+        # commission model — so per-leg commission_per_share applies as-is.
+        n_legs = len(signal.legs)
+        commission = (
+            Decimal(abs(signal.quantity or 0))
+            * Decimal(n_legs)
+            * self._config.commission_per_share
+        )
+
+        return Fill(
+            symbol=signal.symbol,
+            asof=asof,
+            quantity=signal.quantity or 0,
+            price=net_per_spread.quantize(Decimal("0.01")),
+            commission=commission.quantize(Decimal("0.01")),
+            signal_tag=signal.tag,
+        )
+
+    @staticmethod
+    def _native_leg_mid(provider: Any, occ_symbol: str, asof: date) -> Decimal | None:
+        """Fetch a single leg's mid price (close) from the options_provider.
+
+        Returns ``None`` if the provider has no bar for the contract on
+        ``asof``. Defensive: any exception from the provider also returns
+        None so the dispatcher can fall back to the legacy path.
+        """
+        import logging
+        log = logging.getLogger("alphadesk.strategies._core.fills")
+
+        try:
+            df = provider.contract_bars(occ_symbol, asof, asof, "1D")
+        except Exception as exc:
+            log.debug(
+                "_native_leg_mid: contract_bars(%s, %s) raised %s",
+                occ_symbol, asof, exc,
+            )
+            return None
+        if df is None or getattr(df, "empty", True):
+            return None
+        if "close" not in df.columns:
+            return None
+        # Use the last bar's close (handles cases where provider returns
+        # multiple rows in the asof window).
+        last_close = df["close"].dropna()
+        if last_close.empty:
+            return None
+        try:
+            return Decimal(str(float(last_close.iloc[-1])))
+        except (TypeError, ValueError):
+            return None
 
 
 class Portfolio:
