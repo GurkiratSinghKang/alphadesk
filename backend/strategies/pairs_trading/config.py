@@ -112,7 +112,23 @@ class PairsTradingParams(StrategyParams):
         le=1.0,
         json_schema_extra={"tune": {"low": 0.01, "high": 0.10, "type": "float"}},
     )
-    hurst_max: float = Field(default=0.45, ge=0.0, le=1.0)
+    # P1-K (consolidation §3): KPSS counter-test. KPSS null hypothesis is
+    # stationarity (the opposite of ADF). Requiring ADF-reject AND KPSS-fail-to-
+    # reject is a stronger filter than ADF alone — it reduces low-power false
+    # positives on short windows. Defaults to 0.0 (disabled) so the pre-KPSS
+    # production parameter set continues to admit the same pairs; operators can
+    # enable by setting kpss_pvalue_min=0.05 (or tune over [0.0, 0.10]) once
+    # the pair shortlist is validated under both tests.
+    kpss_pvalue_min: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        json_schema_extra={"tune": {"low": 0.0, "high": 0.10, "type": "float"}},
+    )
+    # P1-L: tightened from 0.45 to 0.40 per consolidation §3 — stronger
+    # mean-reversion selection. h=0.45 was lenient; h<0.40 is the canonical
+    # antipersistent threshold and reduces false-positive cointegration.
+    hurst_max: float = Field(default=0.40, ge=0.0, le=1.0)
     formation_days: int = Field(default=252, ge=60)
     watchdog_days: int = Field(default=21, ge=0)
     watchdog_pvalue: float = Field(default=0.10, gt=0.0, le=1.0)

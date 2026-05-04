@@ -489,6 +489,23 @@ def _rescreen(
             continue
         if not np.isfinite(beta) or abs(beta) < 1e-9 or abs(beta) > 10.0:
             continue
+        # P1-K (consolidation §3): KPSS counter-test. KPSS H0 is stationarity,
+        # opposite of ADF. Requiring ADF-reject AND KPSS-fail-to-reject is the
+        # canonical confirmatory cointegration test — it eliminates a class of
+        # ADF false-positives on short windows. Set kpss_pvalue_min=0 to skip.
+        if params.kpss_pvalue_min > 0.0:
+            try:
+                from statsmodels.tsa.stattools import kpss as _kpss_test
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")  # suppress p-value clip warnings
+                    _kpss_stat, kpss_p, *_ = _kpss_test(
+                        residuals, regression="c", nlags="auto",
+                    )
+            except Exception:
+                kpss_p = float("nan")
+            if not np.isfinite(kpss_p) or kpss_p < params.kpss_pvalue_min:
+                continue
         hl = ou_half_life(residuals)
         if not np.isfinite(hl) or hl <= 0 or hl > params.ou_halflife_max_days:
             continue
