@@ -149,7 +149,7 @@ export default function RequestAccessForm() {
             <CheckCircle className="h-5 w-5" aria-hidden weight="regular" />
           </div>
           <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-[#0f7a5d]">
-            Request received
+            § 02 · CONFIRMATION
           </p>
           <h2 className="mt-3 font-sans text-[24px] font-semibold leading-tight tracking-tight text-[#12281f]">
             Request received

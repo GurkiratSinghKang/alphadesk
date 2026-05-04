@@ -10,6 +10,7 @@ import type {
 } from "@/types";
 import { cn } from "@/lib/utils";
 import { fmtDate, fmtPlural } from "@/lib/intl";
+import EmptyState from "@/components/primitives/EmptyState";
 
 export interface EarningsCalendarSidebarProps {
   rows: CalendarRow[];
@@ -38,6 +39,9 @@ export interface EarningsCalendarSidebarProps {
   // B-107: parent hands in a reset callback so the empty-state "Loosen a
   // filter" button can restore defaults.
   onResetFilters?: () => void;
+  /** Pillar-6: callback so the error state can surface a Retry CTA instead
+   *  of a dead-end message when the calendar fetch times out. */
+  onRetry?: () => void;
 }
 
 // B-40: build a same-route deeplink that carries the currently-active
@@ -63,6 +67,7 @@ export default function EarningsCalendarSidebar({
   metaReason,
   filters,
   onResetFilters,
+  onRetry,
 }: EarningsCalendarSidebarProps) {
   const grouped = useMemo(() => groupByDate(rows), [rows]);
   // B-56: first row across all day groups gets the shared ref so the
@@ -71,8 +76,12 @@ export default function EarningsCalendarSidebar({
 
   if (error) {
     return (
-      <aside data-slot="earnings-calendar-sidebar" className="rounded border border-[#5d7268]/40 bg-white/60 p-3">
-        <p className="t-label text-[color:var(--fg-neg)]">Error · {error}</p>
+      <aside data-slot="earnings-calendar-sidebar" className="rounded border border-border-hair bg-bg-elev-1/60 p-3">
+        <EmptyState
+          title="Earnings calendar unavailable"
+          description="The desk's data feed timed out. Retry, or pick a different window above."
+          action={onRetry ? { label: "Retry", onClick: onRetry } : undefined}
+        />
       </aside>
     );
   }
@@ -82,9 +91,9 @@ export default function EarningsCalendarSidebar({
       <aside
         data-slot="earnings-calendar-sidebar"
         aria-busy="true"
-        className="rounded border border-[#5d7268]/40 bg-white/60 p-3"
+        className="rounded border border-border-hair bg-bg-elev-1/60 p-3"
       >
-        <p className="font-mono text-body-sm text-[#5d7268]">Loading earnings…</p>
+        <p className="font-mono text-body-sm text-fg-muted">Loading earnings…</p>
       </aside>
     );
   }
@@ -100,8 +109,8 @@ export default function EarningsCalendarSidebar({
       filters,
     });
     return (
-      <aside data-slot="earnings-calendar-sidebar" className="rounded border border-[#5d7268]/40 bg-white/60 p-3">
-        <p className="font-mono text-body-sm text-[#5d7268]">
+      <aside data-slot="earnings-calendar-sidebar" className="rounded border border-border-hair bg-bg-elev-1/60 p-3">
+        <p className="font-mono text-body-sm text-fg-muted">
           {emptyMessage}
           {onResetFilters && (
             <>

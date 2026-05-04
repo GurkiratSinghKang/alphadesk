@@ -50,10 +50,10 @@ export default function DestructiveConfirmModal({
         )}
         <DialogFooter className="mt-5 flex gap-2">
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={loading}>
-            Keep
+            Cancel
           </Button>
           <Button variant="destructive" onClick={onConfirm} disabled={loading}>
-            {loading ? "Working…" : confirmLabel}
+            {loading ? "Confirming…" : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -257,7 +257,7 @@ function formatDuration(ms: number): string {
 // ─── SVG Chart Components ───────────────────────────────────
 
 function DrawdownChart({ data }: { data: { date: string; dd: number }[] }) {
-  if (data.length === 0) return <EmptyState label="No drawdown data" />;
+  if (data.length === 0) return <AnalyticsEmptyPanel label="No drawdown data" />;
   // 2026-04-21 polish — match distribution dims (220×48×24×18) so rows
   // of charts line up on the same baseline. Axis tick font 8→10 px.
   const w = 600, h = 220, px = 48, py = 24, axisPy = 18;
@@ -329,7 +329,7 @@ function DrawdownChart({ data }: { data: { date: string; dd: number }[] }) {
 }
 
 function RollingSharpeChart({ data }: { data: { date: string; sharpe: number }[] }) {
-  if (data.length === 0) return <EmptyState label="Not enough data for rolling Sharpe (need 30+ days)" />;
+  if (data.length === 0) return <AnalyticsEmptyPanel label="Not enough data for rolling Sharpe (need 30+ days)" />;
   // 2026-04-21 polish — harmonised dims + axis fontSize to match the
   // other charts on the page. Y-axis label gutter lifted (48 → leaves
   // room for 3-digit sharpe prints like `-3.2`).
@@ -405,7 +405,7 @@ function RollingSharpeChart({ data }: { data: { date: string; sharpe: number }[]
 }
 
 function ReturnDistribution({ bins, dailyReturns }: { bins: { min: number; max: number; count: number }[]; dailyReturns: { ret: number }[] }) {
-  if (bins.length === 0) return <EmptyState label="No return data" />;
+  if (bins.length === 0) return <AnalyticsEmptyPanel label="No return data" />;
   // 2026-04-21 polish — taller viewport (220) + wider padding (px 48)
   // so the tick labels never collide with the first/last bar. Axis font
   // bumped from 8 → 10 (SVG px) so labels are legible on retina displays.
@@ -528,7 +528,7 @@ function ReturnDistribution({ bins, dailyReturns }: { bins: { min: number; max: 
 }
 
 function MonthlyHeatmap({ monthlyReturns }: { monthlyReturns: Map<string, number> }) {
-  if (monthlyReturns.size === 0) return <EmptyState label="No monthly data" />;
+  if (monthlyReturns.size === 0) return <AnalyticsEmptyPanel label="No monthly data" />;
 
   // Build year-month grid
   const allKeys = Array.from(monthlyReturns.keys()).sort();
@@ -651,7 +651,7 @@ function MonthlyHeatmap({ monthlyReturns }: { monthlyReturns: Map<string, number
   );
 }
 
-function EmptyState({ label }: { label: string }) {
+function AnalyticsEmptyPanel({ label }: { label: string }) {
   // Italic serif + warm muted matches the editorial voice used across the
   // app so partial-empty states (some charts populated, some not) still
   // read consistently.

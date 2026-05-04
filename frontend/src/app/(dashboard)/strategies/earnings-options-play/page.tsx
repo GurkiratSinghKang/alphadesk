@@ -488,6 +488,8 @@ export default function EarningsOptionsPlayPage() {
           // B-107: restore defaults from the empty-state "Loosen a filter"
           // CTA. Matches the initial state in readFiltersFromURL.
           onResetFilters={() => setFilters({ window: "both", minIvRank: 0, sort: "date" })}
+          // Pillar-6: surface a Retry CTA when the calendar fetch errors.
+          onRetry={() => calendarQuery.refetch()}
         />
         {/* Round-8 / AX-05: id target for the skip-to-detail link. */}
         <div id="earnings-detail-panel">

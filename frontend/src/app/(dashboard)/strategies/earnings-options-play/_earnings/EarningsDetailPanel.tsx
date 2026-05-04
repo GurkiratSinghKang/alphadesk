@@ -181,10 +181,10 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         ref={ref}
         data-slot="earnings-detail-panel"
         aria-busy="true"
-        className="rounded border border-[#5d7268]/40 bg-white/60 p-4"
+        className="rounded border border-border-hair bg-bg-elev-1/60 p-4"
       >
         <div role="status" aria-live="polite" aria-atomic="true">
-          <p className="font-mono text-body-sm text-[#5d7268]">Loading detail…</p>
+          <p className="font-mono text-body-sm text-fg-muted">Loading detail…</p>
         </div>
       </section>
     );
@@ -196,7 +196,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
       <section
         ref={ref}
         data-slot="earnings-detail-panel"
-        className="rounded border border-[#5d7268]/40 bg-white/60"
+        className="rounded border border-border-hair bg-bg-elev-1/60"
       >
         <CalendarWeekHeatmap
           rows={calendarRows}
