@@ -311,6 +311,7 @@ export default function PipelinePage() {
   const [positions, setPositions] = useState<PipelinePosition[]>([]);
   const [brokerPositions, setBrokerPositions] = useState<PipelinePosition[]>([]);
   const [perfData, setPerfData] = useState<{ totalTrades: number; totalPnl: number; winRate: number; bestTrade: { symbol: string; pnl: number } | null; worstTrade: { symbol: string; pnl: number } | null } | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO(typed-api): pipeline history row shape is dynamic; type via FastAPI codegen
   const [history, setHistory] = useState<Record<string, any>[]>([]);
   const [historyRuns, setHistoryRuns] = useState<Record<string, PipelineRun>>(
     {}
@@ -360,7 +361,7 @@ export default function PipelinePage() {
         const val = p.value;
         if (val && typeof val === "object" && "positions" in val) {
           setPositions(Array.isArray(val.positions) ? val.positions : []);
-          if (val.performance) setPerfData(val.performance as any);
+          if (val.performance) setPerfData(val.performance as Parameters<typeof setPerfData>[0]);
         } else {
           setPositions(Array.isArray(val) ? val : []);
         }
@@ -1265,11 +1266,14 @@ export default function PipelinePage() {
                                     strategiesRun = sRun;
                                   } else if (sRun && typeof sRun === "object") {
                                     strategiesRun = Object.values(sRun).reduce(
-                                      (sum: number, v: any) =>
-                                        sum +
-                                        (typeof v === "number"
-                                          ? v
-                                          : v?.screened ?? v?.count ?? 0),
+                                      (sum: number, v: unknown) => {
+                                        if (typeof v === "number") return sum + v;
+                                        if (v && typeof v === "object") {
+                                          const o = v as { screened?: number; count?: number };
+                                          return sum + (o.screened ?? o.count ?? 0);
+                                        }
+                                        return sum;
+                                      },
                                       0
                                     ) as number;
                                   }

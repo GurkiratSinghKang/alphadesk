@@ -88,7 +88,7 @@ function CommandItem({ icon, label, shortcut, onSelect }: CommandItemProps) {
 }
 
 export function CommandPalette() {
-  const { commandPaletteOpen, setCommandPaletteOpen, toggleCommandPalette, tradingMode, setTradingMode } = useUIStore();
+  const { commandPaletteOpen, setCommandPaletteOpen, tradingMode, setTradingMode } = useUIStore();
   const { selectedSymbol, setSelectedSymbol, addToWatchlist } = useMarketStore();
   const router = useRouter();
   const { toast } = useToast();

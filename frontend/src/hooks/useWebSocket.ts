@@ -293,6 +293,7 @@ export function useWebSocket(): UseWebSocketReturn {
           retriesRef.current++;
           prevStatusRef.current = "reconnecting";
           setWsStatus("reconnecting");
+          // eslint-disable-next-line react-hooks/immutability -- self-recursive: schedule retries via this same useCallback. The closure captures the stable identity.
           reconnectTimerRef.current = setTimeout(connect, delay);
         } else {
           prevStatusRef.current = "failed";

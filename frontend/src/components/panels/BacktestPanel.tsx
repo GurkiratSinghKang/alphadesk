@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { Play, BarChart3, TrendingUp, TrendingDown, GitCompareArrows, RotateCcw } from "lucide-react";
+import { useState } from "react";
+import { Play, GitCompareArrows, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, formatCurrency, safeNum } from "@/lib/utils";
 import { getBars } from "@/lib/api";
@@ -152,14 +152,14 @@ function runSmaBacktest(bars: OHLCVBar[], fastPeriod: number, slowPeriod: number
     const prevSlow = sma(closes, slowPeriod, i - 1);
 
     if (prevFast <= prevSlow && fastSma > slowSma && position === 0) {
-      const { effectivePrice, totalCost } = applyBuyCosts(closes[i], Math.floor(capital / (closes[i] * (1 + slippagePct / 100) + commission / Math.max(Math.floor(capital / closes[i]), 1))), commission, slippagePct);
+      const { effectivePrice } = applyBuyCosts(closes[i], Math.floor(capital / (closes[i] * (1 + slippagePct / 100) + commission / Math.max(Math.floor(capital / closes[i]), 1))), commission, slippagePct);
       position = Math.floor((capital - commission) / (closes[i] * (1 + slippagePct / 100)));
       if (position <= 0) { position = 0; continue; }
       entryPrice = effectivePrice;
       entryBar = i;
       capital -= position * effectivePrice + commission;
     } else if (prevFast >= prevSlow && fastSma < slowSma && position > 0) {
-      const { effectivePrice, totalProceeds } = applySellProceeds(closes[i], position, commission, slippagePct);
+      const { totalProceeds } = applySellProceeds(closes[i], position, commission, slippagePct);
       const pnl = totalProceeds - (position * entryPrice);
       capital += totalProceeds;
       trades++;
@@ -405,9 +405,6 @@ function EquityCurveSvg({
   // Create clipping path split at start value
   const areaPathAbove = `M${points[0].x},${points[0].y} ${points.map(p => `L${p.x},${Math.min(p.y, startY)}`).join(" ")} L${points[points.length - 1].x},${startY} L${points[0].x},${startY} Z`;
   const areaPathBelow = `M${points[0].x},${startY} ${points.map(p => `L${p.x},${Math.max(p.y, startY)}`).join(" ")} L${points[points.length - 1].x},${startY} Z`;
-
-  // Full area for gradient
-  const fullAreaPath = `M${points[0].x},${points[0].y} ${points.map(p => `L${p.x},${p.y}`).join(" ")} L${points[points.length - 1].x},${h} L${points[0].x},${h} Z`;
 
   const isUp = data[data.length - 1] >= startVal;
 
@@ -686,7 +683,7 @@ export function BacktestPanel() {
         </div>
         <div>
           <label htmlFor="backtest-strategy" className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Strategy</label>
-          <select id="backtest-strategy" value={strategy} onChange={(e) => setStrategy(e.target.value as any)} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs text-foreground">
+          <select id="backtest-strategy" value={strategy} onChange={(e) => setStrategy(e.target.value as "sma-cross" | "rsi" | "macd")} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs text-foreground">
             <option value="sma-cross">SMA Crossover</option>
             <option value="rsi">RSI Mean Reversion</option>
             <option value="macd">MACD Signal</option>

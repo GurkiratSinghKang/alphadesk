@@ -34,7 +34,13 @@ export function PnlCalendarMini() {
   const year = et.year;
 
   const { data: calendarData, isLoading } = usePnlCalendar(month, year);
-  const days: CalendarDay[] = calendarData?.days ?? [];
+  // Wrap the `?? []` fallback in useMemo so the array identity stays
+  // stable across renders when calendarData is undefined — otherwise the
+  // scaleMax memo invalidates every render.
+  const days: CalendarDay[] = useMemo(
+    () => calendarData?.days ?? [],
+    [calendarData?.days],
+  );
   const monthTotal = calendarData?.monthTotal ?? 0;
 
   const [hovered, setHovered] = useState<{ date: string; pnl: number; trades: number; winRate: number; x: number; y: number } | null>(null);

@@ -11,7 +11,6 @@ export default function TradingAgentsResearchError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // eslint-disable-next-line no-console
     console.error("[trading-agents-research] route error", error);
   }, [error]);
   return (

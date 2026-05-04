@@ -51,7 +51,6 @@ export default function DashboardErrorPage({
   useEffect(() => {
     // Surface to browser console with route context; production telemetry
     // hooks can subscribe to this same shape.
-    // eslint-disable-next-line no-console
     console.error(`[AlphaDesk error · ${resolvedRoute}]`, {
       message: error.message,
       digest: error.digest,

@@ -96,6 +96,7 @@ function extractPipelineSignals(run: PipelineRun): Signal[] {
   // From master agent rejections
   const master = run.master_agent ?? {};
   const rejections = Array.isArray(master.rejections) ? master.rejections : [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO(typed-api): rejection shape; type via FastAPI codegen
   for (const r of rejections as any[]) {
     signals.push({
       id: `pipeline-rejection-${r.symbol}-${r.strategy}-${run.date}`,
@@ -110,6 +111,7 @@ function extractPipelineSignals(run: PipelineRun): Signal[] {
 
   // From per-strategy breakdown — look for strategies that generated candidates
   const strats = run.strategies ?? {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO(typed-api): strategy result shape; type via FastAPI codegen
   for (const [stratId, data] of Object.entries(strats) as [string, any][]) {
     const requested = data.trades_requested ?? 0;
     const approved = data.trades_approved ?? 0;
@@ -291,6 +293,7 @@ const SignalCard = React.memo(function SignalCard({
 
 interface LiveSignalFeedProps {
   /** Pre-loaded pipeline log data from the dashboard (avoids duplicate fetch) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO(typed-api): pipeline log shape; type via FastAPI codegen
   pipelineLog?: Record<string, any> | null;
 }
 
@@ -318,6 +321,7 @@ export function LiveSignalFeed({ pipelineLog }: LiveSignalFeedProps) {
           screened: [],
           analyzed: pipelineLog.analyzed ?? [],
           signals: [],
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO(typed-api): order shape; type via FastAPI codegen
           ordersPlaced: (pipelineLog.orders_placed ?? []).map((o: any) => ({
             symbol: o.symbol, side: o.side, qty: o.qty,
             price: o.price, orderId: o.order_id ?? "", status: "", timestamp: o.timestamp ?? "",

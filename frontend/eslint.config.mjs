@@ -14,6 +14,22 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  // QA r3-3 — allow underscore-prefixed unused vars (intentional ignore convention).
+  // This is the standard TS/ESLint pattern: `_unused` opts out of the warning.
+  {
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          args: "after-used",
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          destructuredArrayIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
   // QA r2-3 + r3-2 — ban TOKEN-EQUIVALENT arbitrary-px escapes. Codemods
   // (PR #14, #15) migrated existing escapes to wired tokens, and PR R3-2
   // migrated the deferred long tail (10/11/14/18/24/26/30/32/34/40/42 px).

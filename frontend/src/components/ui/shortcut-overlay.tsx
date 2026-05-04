@@ -71,7 +71,7 @@ function GroupSection({ group, filter }: { group: ShortcutGroup; filter: string 
               {item.isNew && <NewBadge />}
             </span>
             <div className="flex items-center gap-1 shrink-0">
-              {item.key.split(/(\+|\s)/).filter(k => k !== "+" && k.trim()).map((k, i, arr) => (
+              {item.key.split(/(\+|\s)/).filter(k => k !== "+" && k.trim()).map((k, i) => (
                 <span key={i} className="flex items-center gap-0.5">
                   {i > 0 && (
                     <span className="text-label text-muted-foreground/50 mx-0.5">

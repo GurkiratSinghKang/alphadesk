@@ -30,7 +30,7 @@ export interface StrategyData {
 
 const StrategyCard = React.memo(function StrategyCard({
   strategy,
-  regimeLabel,
+  regimeLabel: _regimeLabel,
   onClick,
   index = 0,
 }: {

@@ -11,7 +11,6 @@ export default function StrategiesError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // eslint-disable-next-line no-console
     console.error("[strategies] route error", error);
   }, [error]);
   return (

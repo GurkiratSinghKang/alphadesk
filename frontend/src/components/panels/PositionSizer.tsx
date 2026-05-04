@@ -10,7 +10,7 @@ interface PositionSizerProps {
   currentPrice: number;
 }
 
-export function PositionSizer({ symbol, currentPrice }: PositionSizerProps) {
+export function PositionSizer({ symbol: _symbol, currentPrice }: PositionSizerProps) {
   const [expanded, setExpanded] = useState(true);
   const [mode, setMode] = useState<"pct" | "price">("pct");
   const [riskPct, setRiskPct] = useState(2);

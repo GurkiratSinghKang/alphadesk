@@ -155,7 +155,7 @@ export default function RequestAccessForm() {
             Request received
           </h2>
           <p className="mt-2 font-sans text-body-sm leading-[1.55] text-[#5d7268]">
-            The desk reviews requests in batches — typically within one trading session. You'll get an email at the address above when access is provisioned.
+            The desk reviews requests in batches — typically within one trading session. You&apos;ll get an email at the address above when access is provisioned.
           </p>
           {requestId && (
             <p className="mt-1 font-mono text-eyebrow text-[#8fad99]">

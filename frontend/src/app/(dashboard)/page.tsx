@@ -465,7 +465,7 @@ export default function DeskPage() {
         onConfirm: () => executeCancelOrder(id),
       });
     },
-    [ordersFromStore, executeCancelOrder]
+    [destructive, ordersFromStore, executeCancelOrder]
   );
 
   // Phase-2 / KP-1: listen for the Cmd+K palette's "Cancel all working

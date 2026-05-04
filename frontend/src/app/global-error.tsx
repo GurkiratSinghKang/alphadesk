@@ -23,7 +23,6 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // eslint-disable-next-line no-console
     console.error("[AlphaDesk global error]", {
       message: error.message,
       digest: error.digest,
@@ -152,6 +151,7 @@ export default function GlobalError({
               >
                 Try again
               </button>
+              {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- root-layout error boundary renders plain HTML before next/link is available */}
               <a
                 href="/"
                 style={{

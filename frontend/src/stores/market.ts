@@ -308,7 +308,12 @@ export function useQuote(symbol: string): Quote | null {
  * `symbols` should be stable-identity across renders (e.g. a memoised list).
  */
 export function useQuotes(symbols: readonly string[]): Record<string, Quote> {
-  const stableSymbols = useMemo(() => [...symbols], [symbols.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Key on a primitive signature — `symbols` array identity is unstable
+  // across renders even when its values are unchanged. Extracted to a
+  // variable so the lint rule can statically verify the dependency.
+  const symbolsKey = symbols.join("|");
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed on symbolsKey, not the unstable symbols array
+  const stableSymbols = useMemo(() => [...symbols], [symbolsKey]);
   return useMarketStore(
     useShallow((s) => {
       const out: Record<string, Quote> = {};
