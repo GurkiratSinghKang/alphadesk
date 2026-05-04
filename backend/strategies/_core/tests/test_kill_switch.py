@@ -187,3 +187,66 @@ class TestLayer1Drawdown:
         ctx = KillSwitchContext(peak_nav=100.0, current_nav=94.0, alloc_capital=10000.0, realized_today=0.0)
         d = ks.check_layer1_drawdown("pead", ctx)
         assert d.enabled is False
+
+
+class TestLayer2DailyPnL:
+    def test_no_loss_returns_enabled(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=100.0, alloc_capital=10000.0, realized_today=50.0)
+        d = ks.check_layer2_daily_pnl("pead", ctx)
+        assert d.enabled is True
+
+    def test_above_threshold_returns_enabled(self) -> None:
+        # -1% of alloc is above -2% default threshold
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=100.0, alloc_capital=10000.0, realized_today=-100.0)
+        d = ks.check_layer2_daily_pnl("pead", ctx)
+        assert d.enabled is True
+
+    def test_at_threshold_returns_disabled(self) -> None:
+        # exactly -2% (-200 / 10000) is inclusive trigger
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=100.0, alloc_capital=10000.0, realized_today=-200.0)
+        d = ks.check_layer2_daily_pnl("pead", ctx)
+        assert d.enabled is False
+        assert d.layer == 2
+
+    def test_below_threshold_returns_disabled(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=100.0, alloc_capital=10000.0, realized_today=-500.0)
+        d = ks.check_layer2_daily_pnl("pead", ctx)
+        assert d.enabled is False
+        assert d.metrics["realized_today"] == -500.0
+        assert d.metrics["alloc_capital"] == 10000.0
+
+    def test_zero_alloc_returns_enabled(self) -> None:
+        # avoid div-by-zero
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=100.0, alloc_capital=0.0, realized_today=-100.0)
+        d = ks.check_layer2_daily_pnl("pead", ctx)
+        assert d.enabled is True
+
+    def test_writes_event_on_disable(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=100.0, alloc_capital=10000.0, realized_today=-300.0)
+        ks.check_layer2_daily_pnl("pead", ctx)
+        ev = repo.latest_unresolved_for_strategy("pead", layer=2)
+        assert ev is not None
+        assert ev.realized_pnl == -300.0
+        assert ev.alloc_capital == 10000.0
+        assert ev.threshold == -0.02
+
+    def test_idempotent_on_repeated_call(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=100.0, alloc_capital=10000.0, realized_today=-300.0)
+        ks.check_layer2_daily_pnl("pead", ctx)
+        ks.check_layer2_daily_pnl("pead", ctx)
+        events = [ev for ev in repo._events.values() if ev.strategy == "pead" and ev.layer == 2]
+        assert len(events) == 1

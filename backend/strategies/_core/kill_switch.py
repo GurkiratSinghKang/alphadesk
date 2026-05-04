@@ -178,3 +178,42 @@ class KillSwitch:
             reason=f"layer1: dd {dd:.2%} <= threshold {self.layer1_threshold:.2%}",
             metrics={"peak_nav": ctx.peak_nav, "current_nav": ctx.current_nav, "dd": dd},
         )
+
+    # -- Layer 2: daily realized PnL as fraction of allocated capital -----
+
+    def check_layer2_daily_pnl(self, strategy: str, ctx: KillSwitchContext) -> Decision:
+        if ctx.alloc_capital <= 0.0:
+            return Decision(
+                enabled=True,
+                layer=0,
+                reason="layer2: alloc_capital <= 0, no ratio definable",
+                metrics={"alloc_capital": ctx.alloc_capital, "realized_today": ctx.realized_today},
+            )
+        ratio = ctx.realized_today / ctx.alloc_capital
+        if ratio > self.layer2_threshold:
+            return Decision(
+                enabled=True,
+                layer=0,
+                reason=f"layer2: ratio {ratio:.2%} > threshold {self.layer2_threshold:.2%}",
+                metrics={"alloc_capital": ctx.alloc_capital, "realized_today": ctx.realized_today, "ratio": ratio},
+            )
+        existing = self.repo.latest_unresolved_for_strategy(strategy, layer=2)
+        if existing is None:
+            self.repo.insert(
+                DisabledEvent(
+                    id=None,
+                    strategy=strategy,
+                    layer=2,
+                    triggered_at=datetime.now(timezone.utc),
+                    realized_pnl=ctx.realized_today,
+                    alloc_capital=ctx.alloc_capital,
+                    threshold=self.layer2_threshold,
+                    reason=f"daily PnL {ratio:.2%} <= threshold {self.layer2_threshold:.2%}",
+                )
+            )
+        return Decision(
+            enabled=False,
+            layer=2,
+            reason=f"layer2: ratio {ratio:.2%} <= threshold {self.layer2_threshold:.2%}",
+            metrics={"alloc_capital": ctx.alloc_capital, "realized_today": ctx.realized_today, "ratio": ratio},
+        )
