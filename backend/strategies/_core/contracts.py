@@ -399,6 +399,16 @@ class BacktestConfig(BaseModel):
     )
     seed: int = Field(default=0, ge=0)
 
+    # Plan B.1: multi-leg options pricing. When set, FillSimulator dispatches
+    # multi-leg signals (Signal.legs is non-empty) to the legacy
+    # ExecutionSimulator's per-leg pricing path so option spreads price at
+    # real per-contract premiums (sum of |per-leg half-spread| * qty * 100).
+    # When None, multi-leg signals are skipped with a logged warning and a
+    # structured diagnostic — preserving the prior default behaviour while
+    # making the gap explicit. The full port of multi-leg fill semantics
+    # into the new shell is a follow-on plan.
+    options_provider: Any | None = None
+
 
 class BacktestResult(BaseModel):
     """Aggregated result of a BacktestRunner.run().
