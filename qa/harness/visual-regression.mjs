@@ -873,7 +873,18 @@ async function main() {
       const baseline = path.join(BASELINE_DIR, `${item.name}.png`);
       const diff = path.join(DIFF_DIR, `${item.name}.diff.png`);
 
-      await page.goto(`${args.base}${item.path}`, { waitUntil: "networkidle", timeout: 30_000 });
+      // QA r2-5: many app routes have long-poll / SSE / WS that prevent
+      // true networkidle (e.g. /strategies/* polls strategy state). Use
+      // domcontentloaded + a fixed grace period instead — same approach
+      // as qa/harness/helpers.mjs waitForReady (matches run-all.mjs).
+      await page.goto(`${args.base}${item.path}`, { waitUntil: "domcontentloaded", timeout: 30_000 });
+      try {
+        await page.waitForLoadState("networkidle", { timeout: 5_000 });
+      } catch {
+        // Tolerate networkidle timeout — long-poll routes settle visually
+        // long before the network does.
+      }
+      await page.waitForTimeout(1_500);
       await hardenPageForVisualDiff(page);
       await page.screenshot({
         path: current,
