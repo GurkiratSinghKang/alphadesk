@@ -48,6 +48,22 @@ class VRPHarvestParams(StrategyParams):
         default=0.003, gt=0.0,
         json_schema_extra={"tune": {"low": 0.001, "high": 0.01, "type": "float"}},
     )
+    # P1-R (consolidation §3): explicit per-1-vol vega cap. theta_target alone
+    # doesn't bound the gamma/vega blow-up vector — a high-theta entry can
+    # still carry a vega exposure that produces an outsized P&L swing on a
+    # 1-vol IV move. ``vega_cap_per_alloc_pct`` caps the absolute portfolio
+    # vega (sum of per-spread vega × notional weight) at this fraction of
+    # allocated capital per 1-percentage-point IV move. Default 0.02 = 2% of
+    # allocated capital per 1-vol IV move — conservative; tuner range is the
+    # 0.5%-5% band typical for retail-grade short-vol books.
+    #
+    # Set to 0.0 to disable (preserves pre-cap behaviour for legacy backtests).
+    vega_cap_per_alloc_pct: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=0.10,
+        json_schema_extra={"tune": {"low": 0.0, "high": 0.05, "type": "float"}},
+    )
     max_spreads_per_entry: int = Field(default=20, ge=1)
     tp_pct: float = Field(
         default=0.50, gt=0.0, le=1.0,
