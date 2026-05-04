@@ -306,3 +306,89 @@ class TestLayer3Manual:
         ks = KillSwitch(repo=repo)
         d = ks.check_layer3_manual("pead")
         assert d.enabled is True
+
+
+class TestIsEnabledComposite:
+    def test_all_layers_pass_returns_enabled(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=98.0, alloc_capital=10000.0, realized_today=-50.0)
+        d = ks.is_enabled("pead", ctx)
+        assert d.enabled is True
+        assert d.layer == 0
+
+    def test_layer1_fail_short_circuits(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=85.0, alloc_capital=10000.0, realized_today=0.0)
+        d = ks.is_enabled("pead", ctx)
+        assert d.enabled is False
+        assert d.layer == 1
+
+    def test_layer2_fail_when_layer1_passes(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=98.0, alloc_capital=10000.0, realized_today=-300.0)
+        d = ks.is_enabled("pead", ctx)
+        assert d.enabled is False
+        assert d.layer == 2
+
+    def test_layer3_fail_when_1_and_2_pass(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        repo.insert(DisabledEvent(id=None, strategy="pead", layer=3,
+                                  triggered_at=datetime.now(timezone.utc),
+                                  manual_actor="alice", reason="testing"))
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=98.0, alloc_capital=10000.0, realized_today=-50.0)
+        d = ks.is_enabled("pead", ctx)
+        assert d.enabled is False
+        assert d.layer == 3
+
+    def test_layer1_fails_does_not_log_layer2(self) -> None:
+        # Short-circuit: when layer 1 fails, layer 2 should not even run
+        # (and so should not log a layer-2 event even if layer 2 would also trigger).
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=85.0, alloc_capital=10000.0, realized_today=-300.0)
+        ks.is_enabled("pead", ctx)
+        layer2_events = [ev for ev in repo._events.values() if ev.strategy == "pead" and ev.layer == 2]
+        assert len(layer2_events) == 0
+
+
+class TestManualDisableReEnable:
+    def test_disable_manual_writes_layer3_event(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ks.disable_manual("pead", actor="alice", reason="data feed degraded")
+        ev = repo.latest_unresolved_for_strategy("pead", layer=3)
+        assert ev is not None
+        assert ev.manual_actor == "alice"
+        assert ev.reason == "data feed degraded"
+
+    def test_disable_manual_idempotent(self) -> None:
+        # Calling twice while already disabled should be a no-op
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ks.disable_manual("pead", actor="alice", reason="first")
+        ks.disable_manual("pead", actor="bob", reason="second")
+        events = [ev for ev in repo._events.values() if ev.strategy == "pead" and ev.layer == 3]
+        assert len(events) == 1
+        # First reason wins (the existing event is preserved)
+        assert events[0].reason == "first"
+
+    def test_re_enable_resolves_event(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ks.disable_manual("pead", actor="alice", reason="data feed degraded")
+        ks.re_enable("pead", actor="alice")
+        assert repo.latest_unresolved_for_strategy("pead", layer=3) is None
+        # is_enabled should reflect the re-enable
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=98.0, alloc_capital=10000.0, realized_today=0.0)
+        assert ks.is_enabled("pead", ctx).enabled is True
+
+    def test_re_enable_with_no_active_event_is_noop(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        # Calling re_enable on a strategy that isn't disabled shouldn't raise
+        ks.re_enable("pead", actor="alice")
+        assert repo.latest_unresolved_for_strategy("pead", layer=3) is None

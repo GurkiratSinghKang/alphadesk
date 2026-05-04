@@ -239,3 +239,63 @@ class KillSwitch:
                 "triggered_at": ev.triggered_at.isoformat() if ev.triggered_at else None,
             },
         )
+
+    # -- Composite + manual operations ------------------------------------
+
+    def is_enabled(self, strategy: str, ctx: KillSwitchContext) -> Decision:
+        """Run all three layers; return the FIRST disabled, else enabled.
+
+        Short-circuits on first failure: subsequent layers are not checked,
+        which keeps logging idempotent and matches "if the strategy is
+        already disabled by Layer 1, don't bother checking Layer 2".
+        """
+        d1 = self.check_layer1_drawdown(strategy, ctx)
+        if not d1.enabled:
+            return d1
+        d2 = self.check_layer2_daily_pnl(strategy, ctx)
+        if not d2.enabled:
+            return d2
+        d3 = self.check_layer3_manual(strategy)
+        if not d3.enabled:
+            return d3
+        return Decision(
+            enabled=True,
+            layer=0,
+            reason="all layers passed",
+            metrics={
+                "peak_nav": ctx.peak_nav,
+                "current_nav": ctx.current_nav,
+                "alloc_capital": ctx.alloc_capital,
+                "realized_today": ctx.realized_today,
+            },
+        )
+
+    def disable_manual(self, strategy: str, actor: str, reason: str) -> DisabledEvent | None:
+        """Insert a layer-3 event. No-op if already disabled.
+
+        Returns the new event, or ``None`` if the strategy already had an
+        unresolved layer-3 event (idempotent).
+        """
+        existing = self.repo.latest_unresolved_for_strategy(strategy, layer=3)
+        if existing is not None:
+            return None
+        return self.repo.insert(
+            DisabledEvent(
+                id=None,
+                strategy=strategy,
+                layer=3,
+                triggered_at=datetime.now(timezone.utc),
+                manual_actor=actor,
+                reason=reason,
+            )
+        )
+
+    def re_enable(self, strategy: str, actor: str) -> None:
+        """Resolve the strategy's most recent unresolved layer-3 event.
+
+        No-op if the strategy has no active layer-3 disable.
+        """
+        existing = self.repo.latest_unresolved_for_strategy(strategy, layer=3)
+        if existing is None or existing.id is None:
+            return
+        self.repo.resolve(existing.id, resolved_by=actor)
