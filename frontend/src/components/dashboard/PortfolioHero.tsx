@@ -236,7 +236,7 @@ export function PortfolioHero({
         )}
       </div>
       {isDemo && hasLoaded && (
-        <div className="text-xs text-ice/80 mt-1 px-5 pb-2">Connect Alpaca API for live data</div>
+        <div className="text-label text-ice/80 mt-1 px-5 pb-2">Connect Alpaca API for live data</div>
       )}
     </div>
     </>

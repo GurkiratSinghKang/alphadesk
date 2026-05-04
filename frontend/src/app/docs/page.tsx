@@ -61,7 +61,7 @@ export default function DocsPage() {
                 {s.content.map((paragraph, i) => (
                   <p
                     key={i}
-                    className="font-sans text-body leading-[1.65] text-fg-dim"
+                    className="font-sans text-body leading-relaxed text-fg-dim"
                   >
                     {paragraph}
                   </p>

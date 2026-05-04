@@ -260,7 +260,7 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
   }, []);
 
   if (rects.length === 0) {
-    return <p className="text-xs text-muted-foreground">No sector data</p>;
+    return <p className="text-label text-muted-foreground">No sector data</p>;
   }
 
   const hoveredRect = hoveredSector ? rects.find((r) => r.sector === hoveredSector) : null;
@@ -269,7 +269,7 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
     <div>
       {/* Title row */}
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <h3 className="text-eyebrow font-semibold uppercase tracking-wider text-muted-foreground">
           Sector Performance
         </h3>
         {hasYtd && (
@@ -409,7 +409,7 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
         )}
       </div>
       {isDemo && (
-        <div className="text-xs text-blue-400/70 mt-1">Connect Alpaca API for live data</div>
+        <div className="text-label text-blue-400/70 mt-1">Connect Alpaca API for live data</div>
       )}
     </div>
   );

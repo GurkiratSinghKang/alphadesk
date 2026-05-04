@@ -259,7 +259,7 @@ const WatchlistRow = React.memo(function WatchlistRow({
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") onSelect();
       }}
-      className={`group flex w-full items-center gap-2 px-3 py-2.5 sm:py-1.5 text-body-sm sm:text-xs min-h-[44px] sm:min-h-0 transition-colors hover:bg-accent/50 active:bg-accent/60 cursor-pointer ${flashClass} ${
+      className={`group flex w-full items-center gap-2 px-3 py-2.5 sm:py-1.5 text-body-sm sm:text-label min-h-[44px] sm:min-h-0 transition-colors hover:bg-accent/50 active:bg-accent/60 cursor-pointer ${flashClass} ${
         isSelected ? "bg-primary/10 border-l-2 border-l-primary" : "border-l-2 border-l-transparent"
       }`}
     >
@@ -289,13 +289,13 @@ const WatchlistRow = React.memo(function WatchlistRow({
             >
               <button
                 onClick={(e) => { e.stopPropagation(); emitQuickOrder("buy"); }}
-                className="rounded px-3.5 py-2 sm:px-2.5 sm:py-1 text-xs sm:text-label font-bold bg-[var(--profit)] text-black hover:bg-[var(--profit)]/80 transition-colors min-h-[36px] sm:min-h-0"
+                className="rounded px-3.5 py-2 sm:px-2.5 sm:py-1 text-label sm:text-label font-bold bg-[var(--profit)] text-black hover:bg-[var(--profit)]/80 transition-colors min-h-[36px] sm:min-h-0"
               >
                 BUY
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); emitQuickOrder("sell"); }}
-                className="rounded px-3.5 py-2 sm:px-2.5 sm:py-1 text-xs sm:text-label font-bold bg-[var(--loss)] text-black hover:bg-[var(--loss)]/80 transition-colors min-h-[36px] sm:min-h-0"
+                className="rounded px-3.5 py-2 sm:px-2.5 sm:py-1 text-label sm:text-label font-bold bg-[var(--loss)] text-black hover:bg-[var(--loss)]/80 transition-colors min-h-[36px] sm:min-h-0"
               >
                 SELL
               </button>
@@ -717,11 +717,11 @@ function ScreenerTab() {
       <ScrollArea className="flex-1">
         {loading ? (
           <div className="flex items-center justify-center py-8">
-            <div className="text-xs text-muted-foreground">Screening...</div>
+            <div className="text-label text-muted-foreground">Screening...</div>
           </div>
         ) : sorted.length === 0 ? (
           <div className="flex items-center justify-center py-8">
-            <div className="text-xs text-muted-foreground">No results match filters</div>
+            <div className="text-label text-muted-foreground">No results match filters</div>
           </div>
         ) : (
           <div className="py-1">
@@ -729,7 +729,7 @@ function ScreenerTab() {
               <button
                 key={r.symbol}
                 onClick={() => addToWatchlist(r.symbol)}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent/50 transition-colors"
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-label hover:bg-accent/50 transition-colors"
               >
                 <div className="flex-1 text-left">
                   <div className="flex items-center gap-2">
@@ -894,13 +894,13 @@ export function WatchlistPanel() {
       >
         <div className="flex items-center justify-between gap-2 mx-2 mt-2 shrink-0">
           <TabsList className="h-10 sm:h-7 bg-[var(--background)] p-0.5 flex-1 border border-border">
-          <TabsTrigger value="watchlist" className="text-xs sm:text-label h-9 sm:h-6 px-3 sm:px-2.5">
+          <TabsTrigger value="watchlist" className="text-label sm:text-label h-9 sm:h-6 px-3 sm:px-2.5">
             Watchlist
           </TabsTrigger>
-          <TabsTrigger value="screener" className="text-xs sm:text-label h-9 sm:h-6 px-3 sm:px-2.5">
+          <TabsTrigger value="screener" className="text-label sm:text-label h-9 sm:h-6 px-3 sm:px-2.5">
             Screener
           </TabsTrigger>
-          <TabsTrigger value="signals" className="text-xs sm:text-label h-9 sm:h-6 px-3 sm:px-2.5">
+          <TabsTrigger value="signals" className="text-label sm:text-label h-9 sm:h-6 px-3 sm:px-2.5">
             Signals
           </TabsTrigger>
           </TabsList>
@@ -914,7 +914,7 @@ export function WatchlistPanel() {
               aria-label="Add symbol to watchlist"
               value={addInput}
               onChange={(e) => setAddInput(e.target.value.toUpperCase())}
-              className="h-11 sm:h-7 bg-[var(--background)] text-base sm:text-xs border-border placeholder:text-muted-foreground/60"
+              className="h-11 sm:h-7 bg-[var(--background)] text-base sm:text-label border-border placeholder:text-muted-foreground/60"
             />
             <button
               type="submit"
@@ -973,7 +973,7 @@ export function WatchlistPanel() {
               {watchlist.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
                   <TrendingUp className="h-6 w-6 text-muted-foreground/40 mb-2" />
-                  <p className="text-xs text-muted-foreground mb-1">No symbols in watchlist</p>
+                  <p className="text-label text-muted-foreground mb-1">No symbols in watchlist</p>
                   <p className="text-label text-muted-foreground/60">Type a ticker above and press + to add one</p>
                 </div>
               ) : (

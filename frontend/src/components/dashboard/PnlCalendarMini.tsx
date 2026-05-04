@@ -66,7 +66,7 @@ export function PnlCalendarMini() {
         <h2 className="text-sm font-semibold text-foreground">P&L Calendar</h2>
       </div>
       <div className="flex items-center justify-center gap-2 h-24 px-4">
-        <p className="text-xs text-muted-foreground">No trading data this month</p>
+        <p className="text-label text-muted-foreground">No trading data this month</p>
       </div>
     </div>
   );
@@ -162,7 +162,7 @@ export function PnlCalendarMini() {
               width: 160,
             }}
           >
-            <p className="text-xs text-foreground font-medium">
+            <p className="text-label text-foreground font-medium">
               {new Date(hovered.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
             </p>
             <p className={cn("text-sm font-semibold tabular-nums mt-0.5", hovered.pnl >= 0 ? "text-[var(--profit)] glow-profit" : "text-[var(--loss)] glow-loss")}>

@@ -75,7 +75,7 @@ export default function DashboardPageLayout({
           <div className="min-w-0">
             <div className="t-label text-brand/85">{eyebrow.replace("§ ", "")}</div>
             <h1
-              className="mt-2 max-w-[18ch] break-words text-h1 font-semibold leading-[1.04] tracking-tight text-ink-1000 md:max-w-none md:text-display-sm"
+              className="mt-2 max-w-[18ch] break-words text-h1 font-semibold leading-tight tracking-tight text-ink-1000 md:max-w-none md:text-display-sm"
               style={{ letterSpacing: 0 }}
             >
               {title}

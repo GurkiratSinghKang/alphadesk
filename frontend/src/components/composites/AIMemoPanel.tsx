@@ -66,7 +66,7 @@ export default function AIMemoPanel({ memo, className }: AIMemoPanelProps) {
 
       <p
         data-slot="ai-memo-body"
-        className="t-section-display text-ink-900 leading-[1.4]"
+        className="t-section-display text-ink-900 leading-snug"
       >
         {memo?.text}
       </p>

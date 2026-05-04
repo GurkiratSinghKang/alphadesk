@@ -249,7 +249,7 @@ export function OptionsPanel() {
       {/* Header bar */}
       <div className="flex items-center justify-between border-b border-border px-3 py-1.5 shrink-0 bg-bg-elev-2">
         <div className="flex items-center gap-3">
-          <span className="text-xs font-bold text-foreground">
+          <span className="text-label font-bold text-foreground">
             {selectedSymbol} Options
           </span>
           {chainData?.isDemo && (
@@ -295,7 +295,7 @@ export function OptionsPanel() {
               key={exp}
               onClick={() => setSelectedExpiry(exp)}
               className={cn(
-                "rounded px-3 py-1 text-xs whitespace-nowrap transition-colors",
+                "rounded px-3 py-1 text-label whitespace-nowrap transition-colors",
                 exp === selectedExpiry
                   ? "bg-primary/20 text-primary font-semibold border border-primary/30"
                   : "text-muted-foreground hover:text-foreground hover:bg-accent/50 border border-transparent"
@@ -310,7 +310,7 @@ export function OptionsPanel() {
 
       {/* Chain table */}
       {chainLoading && (
-        <div className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground shrink-0">
+        <div className="flex items-center justify-center gap-2 py-2 text-label text-muted-foreground shrink-0">
           <Loader2 className="size-4 animate-spin" /> Fetching options chain...
         </div>
       )}

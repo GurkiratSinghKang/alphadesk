@@ -14,7 +14,7 @@ import * as React from "react";
  */
 export function EditorialBullet({ children }: { children: React.ReactNode }) {
   return (
-    <li className="relative pl-5 font-sans text-body leading-[1.65] text-fg-dim before:absolute before:left-0 before:top-[1px] before:font-display before:text-body before:italic before:text-brand before:content-['+']">
+    <li className="relative pl-5 font-sans text-body leading-relaxed text-fg-dim before:absolute before:left-0 before:top-[1px] before:font-display before:text-body before:italic before:text-brand before:content-['+']">
       {children}
     </li>
   );
@@ -57,12 +57,12 @@ export function ExternalA({
 }
 
 /**
- * Body paragraph at the editorial 15px / 1.65 rhythm used across every
- * static marketing surface.
+ * Body paragraph at the editorial 15px / 1.625 (leading-relaxed) rhythm used
+ * across every static marketing surface.
  */
 export function EditorialP({ children }: { children: React.ReactNode }) {
   return (
-    <p className="font-sans text-body leading-[1.65] text-fg-dim">
+    <p className="font-sans text-body leading-relaxed text-fg-dim">
       {children}
     </p>
   );

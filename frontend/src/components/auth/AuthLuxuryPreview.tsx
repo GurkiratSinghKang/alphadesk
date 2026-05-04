@@ -102,7 +102,7 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-sans text-body-sm font-semibold">Market idea canvas</p>
-                  <p className="mt-1 max-w-[34ch] font-sans text-label leading-[1.5] text-[#5d7268]">
+                  <p className="mt-1 max-w-[34ch] font-sans text-label leading-normal text-[#5d7268]">
                     Ask, test, adjust size, and keep the decision record in one flow.
                   </p>
                 </div>
@@ -149,7 +149,7 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
                     AI challenge
                   </p>
                 </div>
-                <p className="mt-3 font-sans text-body-sm leading-[1.45] text-[#e9f2ea]">
+                <p className="mt-3 font-sans text-body-sm leading-snug text-[#e9f2ea]">
                   “Your event window is thin. Cut size or wait for confirmation.”
                 </p>
               </div>
@@ -216,7 +216,7 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
             </div>
             <div className="mt-3 rounded-[8px] border border-white/10 bg-[#0b2119]/60 p-3">
               <p className="font-sans text-label font-semibold text-white">Decision trail</p>
-              <p className="mt-1 font-sans text-label leading-[1.45] text-[#c7d6ce]">
+              <p className="mt-1 font-sans text-label leading-snug text-[#c7d6ce]">
                 Every edit, review, and route keeps the context attached.
               </p>
             </div>
@@ -225,7 +225,7 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
           <div className="relative overflow-hidden rounded-[8px] border border-white/12 bg-[#f7fbf4] p-3 text-[#12281f]">
             <ShieldCheck className="size-5 text-[#0f7a5d]" aria-hidden weight="regular" />
             <p className="mt-3 font-sans text-body-sm font-semibold">Controls before speed.</p>
-            <p className="mt-2 font-sans text-label leading-[1.5] text-[#5d7268]">
+            <p className="mt-2 font-sans text-label leading-normal text-[#5d7268]">
               Paper mode, review history, and notes stay visible before any live workflow.
             </p>
           </div>

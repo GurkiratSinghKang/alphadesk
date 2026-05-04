@@ -549,9 +549,9 @@ function ComparisonTable({ a, b }: { a: BacktestResult; b: BacktestResult }) {
         const better = getBetter(valA, valB, highlight);
         return (
           <div key={label} className="grid grid-cols-3 gap-0 border-b border-border/50 last:border-0">
-            <div className="px-3 py-1.5 text-xs text-muted-foreground">{label}</div>
-            <div className={cn("px-3 py-1.5 text-xs font-medium tabular-nums text-center", better === "a" ? "text-[var(--profit)]" : "text-foreground")}>{valA}</div>
-            <div className={cn("px-3 py-1.5 text-xs font-medium tabular-nums text-center", better === "b" ? "text-[var(--profit)]" : "text-foreground")}>{valB}</div>
+            <div className="px-3 py-1.5 text-label text-muted-foreground">{label}</div>
+            <div className={cn("px-3 py-1.5 text-label font-medium tabular-nums text-center", better === "a" ? "text-[var(--profit)]" : "text-foreground")}>{valA}</div>
+            <div className={cn("px-3 py-1.5 text-label font-medium tabular-nums text-center", better === "b" ? "text-[var(--profit)]" : "text-foreground")}>{valB}</div>
           </div>
         );
       })}
@@ -679,11 +679,11 @@ export function BacktestPanel() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div>
           <label htmlFor="backtest-symbol" className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Symbol</label>
-          <input id="backtest-symbol" value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs text-foreground" />
+          <input id="backtest-symbol" value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-label text-foreground" />
         </div>
         <div>
           <label htmlFor="backtest-strategy" className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Strategy</label>
-          <select id="backtest-strategy" value={strategy} onChange={(e) => setStrategy(e.target.value as "sma-cross" | "rsi" | "macd")} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs text-foreground">
+          <select id="backtest-strategy" value={strategy} onChange={(e) => setStrategy(e.target.value as "sma-cross" | "rsi" | "macd")} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-label text-foreground">
             <option value="sma-cross">SMA Crossover</option>
             <option value="rsi">RSI Mean Reversion</option>
             <option value="macd">MACD Signal</option>
@@ -693,18 +693,18 @@ export function BacktestPanel() {
           <>
             <div>
               <label htmlFor="backtest-fast-sma" className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Fast SMA</label>
-              <input id="backtest-fast-sma" type="number" value={fastPeriod} onChange={(e) => setFastPeriod(Math.max(1, Math.floor(safeNum(e.target.value, 10))))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
+              <input id="backtest-fast-sma" type="number" value={fastPeriod} onChange={(e) => setFastPeriod(Math.max(1, Math.floor(safeNum(e.target.value, 10))))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-label tabular-nums text-foreground" />
             </div>
             <div>
               <label htmlFor="backtest-slow-sma" className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Slow SMA</label>
-              <input id="backtest-slow-sma" type="number" value={slowPeriod} onChange={(e) => setSlowPeriod(Math.max(1, Math.floor(safeNum(e.target.value, 50))))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
+              <input id="backtest-slow-sma" type="number" value={slowPeriod} onChange={(e) => setSlowPeriod(Math.max(1, Math.floor(safeNum(e.target.value, 50))))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-label tabular-nums text-foreground" />
             </div>
           </>
         )}
         {strategy === "rsi" && (
           <div>
             <label htmlFor="backtest-rsi-period" className="text-label uppercase tracking-wider text-muted-foreground font-semibold">RSI Period</label>
-            <input id="backtest-rsi-period" type="number" value={14} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground opacity-50" disabled />
+            <input id="backtest-rsi-period" type="number" value={14} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-label tabular-nums text-foreground opacity-50" disabled />
             <p className="text-label text-muted-foreground mt-0.5">Buy RSI&lt;30, Sell RSI&gt;70</p>
           </div>
         )}
@@ -716,15 +716,15 @@ export function BacktestPanel() {
         )}
         <div>
           <label htmlFor="backtest-capital" className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Capital ($)</label>
-          <input id="backtest-capital" type="number" value={capital} onChange={(e) => setCapital(Math.max(1, Math.floor(safeNum(e.target.value, 100000))))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
+          <input id="backtest-capital" type="number" value={capital} onChange={(e) => setCapital(Math.max(1, Math.floor(safeNum(e.target.value, 100000))))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-label tabular-nums text-foreground" />
         </div>
         <div>
           <label htmlFor="backtest-commission" className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Commission ($)</label>
-          <input id="backtest-commission" type="number" value={commission} onChange={(e) => setCommission(safeNum(e.target.value, 0))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
+          <input id="backtest-commission" type="number" value={commission} onChange={(e) => setCommission(safeNum(e.target.value, 0))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-label tabular-nums text-foreground" />
         </div>
         <div>
           <label htmlFor="backtest-slippage" className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Slippage (%)</label>
-          <input id="backtest-slippage" type="number" step="0.01" value={slippagePct} onChange={(e) => setSlippagePct(safeNum(e.target.value, 0))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground" />
+          <input id="backtest-slippage" type="number" step="0.01" value={slippagePct} onChange={(e) => setSlippagePct(safeNum(e.target.value, 0))} className="w-full h-8 mt-1 rounded border border-border bg-background px-2 text-label tabular-nums text-foreground" />
         </div>
       </div>
 

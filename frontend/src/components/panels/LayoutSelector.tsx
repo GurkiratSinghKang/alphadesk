@@ -78,7 +78,7 @@ export function LayoutSelector({ layout, onLayoutChange }: LayoutSelectorProps) 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="inline-flex items-center justify-center rounded-md h-7 gap-1 px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+        className="inline-flex items-center justify-center rounded-md h-7 gap-1 px-2 text-label text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
         aria-label="Chart layout selector"
       >
         {currentOption.icon}

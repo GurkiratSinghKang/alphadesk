@@ -101,7 +101,7 @@ export default function StrategyCard({
       <div className="flex justify-between items-start gap-2.5">
         <div>
           <div
-            className="font-display italic text-h3 text-ink-1000 leading-[1.1]"
+            className="font-display italic text-h3 text-ink-1000 leading-tight"
             style={{ letterSpacing: 0 }}
           >
             {name}

@@ -476,7 +476,7 @@ export function CommandPalette() {
 
             <Command.Group
               heading={showApiResults ? "Search Results" : "Popular Symbols"}
-              className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground"
+              className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-label [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground"
             >
               {showApiResults && hasSearched && searchResults.length === 0 && !isSearching && (
                 <div className="px-3 py-4 text-center text-sm text-muted-foreground">
@@ -501,7 +501,7 @@ export function CommandPalette() {
 
             <Command.Group
               heading="Commands"
-              className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground"
+              className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-label [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground"
             >
               {/* Wave 32 persona-6 #8: "Analyze current symbol" removed —
                   it toasted "coming soon" with no real analysis surface, and
@@ -557,7 +557,7 @@ export function CommandPalette() {
 
             <Command.Group
               heading="Navigation"
-              className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground"
+              className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-label [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground"
             >
               <CommandItem
                 icon={<LineChart className="h-4 w-4" />}
@@ -588,7 +588,7 @@ export function CommandPalette() {
                   <Command.Separator className="my-1 h-px bg-border" />
                   <Command.Group
                     heading="Strategies"
-                    className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground"
+                    className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-label [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground"
                   >
                     {filteredStrategies.slice(0, 6).map((s) => (
                       <CommandItem
@@ -621,7 +621,7 @@ export function CommandPalette() {
                   <Command.Separator className="my-1 h-px bg-border" />
                   <Command.Group
                     heading="Pages"
-                    className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground"
+                    className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-label [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground"
                   >
                     {filteredPages.map((p) => {
                       const Icon = p.icon;
@@ -656,7 +656,7 @@ export function CommandPalette() {
                   <Command.Separator className="my-1 h-px bg-border" />
                   <Command.Group
                     heading="Recent Actions"
-                    className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground"
+                    className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-label [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground"
                   >
                     {matchedActions.map((a) => (
                       <CommandItem

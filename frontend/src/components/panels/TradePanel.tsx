@@ -397,14 +397,14 @@ function TradeBuilderTab() {
       <div className="space-y-1 mb-2">
         {legs.length === 0 && (
           <div className="flex flex-col items-center justify-center py-4 text-center">
-            <p className="text-xs text-muted-foreground mb-0.5">No legs added</p>
+            <p className="text-label text-muted-foreground mb-0.5">No legs added</p>
             <p className="text-label text-muted-foreground/60">Click calls/puts in the options chain, or press &quot;Add Leg&quot; below</p>
           </div>
         )}
         {legs.map((leg) => (
           <div
             key={leg.id}
-            className="flex items-center gap-2 rounded-md bg-background/50 px-2 py-1.5 text-xs"
+            className="flex items-center gap-2 rounded-md bg-background/50 px-2 py-1.5 text-label"
           >
             <Badge
               variant="outline"
@@ -463,7 +463,7 @@ function TradeBuilderTab() {
       <Separator className="bg-border mb-3" />
 
       {legs.length === 0 ? (
-        <p className="text-xs text-muted-foreground text-center py-3">Add a leg to begin building your trade</p>
+        <p className="text-label text-muted-foreground text-center py-3">Add a leg to begin building your trade</p>
       ) : (
         <>
           {/* Greeks — null values render as em-dash (audit P0-5). */}
@@ -475,7 +475,7 @@ function TradeBuilderTab() {
                 </div>
                 <div
                   className={cn(
-                    "text-xs font-medium tabular-nums text-foreground",
+                    "text-label font-medium tabular-nums text-foreground",
                     val == null && "text-muted-foreground/50"
                   )}
                 >
@@ -486,7 +486,7 @@ function TradeBuilderTab() {
           </div>
 
           {/* Risk summary */}
-          <div className="space-y-1 mb-3 text-xs">
+          <div className="space-y-1 mb-3 text-label">
             <div className="flex justify-between">
               <span className="text-muted-foreground">{netDebit >= 0 ? "Net Credit" : "Net Debit"}</span>
               <span className={cn("tabular-nums", getChangeTextClass(netDebit))}>
@@ -640,7 +640,7 @@ function PositionRow({ p, onSelect }: { p: Position; onSelect: (sym: string) => 
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") onSelect(p.symbol.split(" ")[0]);
       }}
-      className="flex items-center text-xs px-2 py-1.5 rounded hover:bg-accent/30 transition-colors cursor-pointer"
+      className="flex items-center text-label px-2 py-1.5 rounded hover:bg-accent/30 transition-colors cursor-pointer"
     >
       <span className="flex-1 min-w-[60px] font-medium text-foreground truncate" title={p.symbol}>
         {p.symbol}
@@ -744,7 +744,7 @@ function PositionsTab() {
 
   if (loading && positions.length === 0) {
     return (
-      <div className="flex items-center justify-center gap-2 p-6 text-xs text-muted-foreground">
+      <div className="flex items-center justify-center gap-2 p-6 text-label text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading positions...
       </div>
     );
@@ -770,7 +770,7 @@ function PositionsTab() {
             value={totalLivePnl}
             format={(n) => `${n >= 0 ? "+" : ""}${formatCurrency(n)}`}
             className={cn(
-              "text-xs font-semibold tabular-nums",
+              "text-label font-semibold tabular-nums",
               getChangeTextClass(totalLivePnl)
             )}
             duration={200}
@@ -803,9 +803,9 @@ function PositionsTab() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Stop Price</label>
+              <label className="text-label text-muted-foreground mb-1 block">Stop Price</label>
               <div className="relative">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-label text-muted-foreground">$</span>
                 <input
                   type="number"
                   step="0.01"
@@ -899,7 +899,7 @@ function OrdersTab() {
 
   if (loading && orders.length === 0) {
     return (
-      <div className="flex items-center justify-center gap-2 p-6 text-xs text-muted-foreground">
+      <div className="flex items-center justify-center gap-2 p-6 text-label text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading orders...
       </div>
     );
@@ -991,7 +991,7 @@ function OrdersTab() {
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") setSelectedSymbol(o.symbol.split(" ")[0]);
             }}
-            className="flex items-center text-xs px-2 py-1.5 rounded hover:bg-accent/30 transition-colors cursor-pointer"
+            className="flex items-center text-label px-2 py-1.5 rounded hover:bg-accent/30 transition-colors cursor-pointer"
           >
             <span className="flex-1 min-w-[60px] font-medium text-foreground truncate" title={o.symbol}>
               {o.symbol}
@@ -1391,7 +1391,7 @@ function JournalTab() {
                     )}>
                       {entry.type}
                     </span>
-                    <span className="text-xs font-semibold text-foreground">{entry.symbol}</span>
+                    <span className="text-label font-semibold text-foreground">{entry.symbol}</span>
                     {entry.strategy && (
                       <span className="text-label text-muted-foreground bg-accent/30 px-1 py-0.5 rounded">
                         {entry.strategy}

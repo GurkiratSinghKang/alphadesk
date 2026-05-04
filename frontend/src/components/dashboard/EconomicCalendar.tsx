@@ -48,7 +48,7 @@ export function EconomicCalendar() {
         <ul className="divide-y divide-border/60">
           {RECURRING_EVENTS.map((evt) => (
             <li key={evt.name} className="flex items-center justify-between py-2">
-              <span className="text-xs font-medium text-foreground">{evt.name}</span>
+              <span className="text-label font-medium text-foreground">{evt.name}</span>
               <span className="font-sans text-label uppercase tracking-[0.14em] text-muted-foreground">
                 {evt.cadence}
               </span>

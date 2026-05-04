@@ -82,16 +82,16 @@ export function AllocationDonut({ cash, invested, equity, buyingPower, unrealize
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 shrink-0">
                 <span className="h-2.5 w-2.5 rounded-full bg-[var(--primary)]" />
-                <span className="text-xs text-muted-foreground">Cash</span>
+                <span className="text-label text-muted-foreground">Cash</span>
               </div>
-              <span className="text-xs tabular-nums text-foreground">{formatCurrency(cash)}</span>
+              <span className="text-label tabular-nums text-foreground">{formatCurrency(cash)}</span>
             </div>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 shrink-0">
                 <span className="h-2.5 w-2.5 rounded-full bg-[var(--profit)]" />
-                <span className="text-xs text-muted-foreground">Invested</span>
+                <span className="text-label text-muted-foreground">Invested</span>
               </div>
-              <span className="text-xs tabular-nums text-foreground">{formatCurrency(invested)}</span>
+              <span className="text-label tabular-nums text-foreground">{formatCurrency(invested)}</span>
             </div>
           </div>
 
@@ -99,17 +99,17 @@ export function AllocationDonut({ cash, invested, equity, buyingPower, unrealize
           <div className="border-t border-border pt-2 space-y-1">
             <div className="flex items-center justify-between gap-3">
               <span className="text-hint shrink-0">Buying Power</span>
-              <span className="text-xs tabular-nums text-foreground">{formatCurrency(buyingPower)}</span>
+              <span className="text-label tabular-nums text-foreground">{formatCurrency(buyingPower)}</span>
             </div>
             <div className="flex items-center justify-between gap-3">
               <span className="text-hint shrink-0">Unrealized</span>
-              <span className={cn("text-xs tabular-nums font-medium", unrealizedPnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+              <span className={cn("text-label tabular-nums font-medium", unrealizedPnl >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
                 {unrealizedPnl >= 0 ? "+" : ""}{formatCurrency(unrealizedPnl)}
               </span>
             </div>
             <div className="flex items-center justify-between gap-3">
               <span className="text-hint shrink-0">Realized Today</span>
-              <span className={cn("text-xs tabular-nums font-medium", realizedPnlToday >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
+              <span className={cn("text-label tabular-nums font-medium", realizedPnlToday >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]")}>
                 {realizedPnlToday >= 0 ? "+" : ""}{formatCurrency(realizedPnlToday)}
               </span>
             </div>
@@ -117,7 +117,7 @@ export function AllocationDonut({ cash, invested, equity, buyingPower, unrealize
         </div>
       </div>
       {isDemo && (
-        <div className="text-xs text-blue-400/70 mt-1">Connect Alpaca API for live data</div>
+        <div className="text-label text-blue-400/70 mt-1">Connect Alpaca API for live data</div>
       )}
     </div>
   );

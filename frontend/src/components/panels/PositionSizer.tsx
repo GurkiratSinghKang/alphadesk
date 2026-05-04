@@ -105,7 +105,7 @@ export function PositionSizer({ symbol: _symbol, currentPrice }: PositionSizerPr
                 min={0.5}
                 max={10}
                 step={0.5}
-                className="w-full h-7 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground mt-0.5"
+                className="w-full h-7 rounded border border-border bg-background px-2 text-label tabular-nums text-foreground mt-0.5"
               />
             </div>
 
@@ -125,7 +125,7 @@ export function PositionSizer({ symbol: _symbol, currentPrice }: PositionSizerPr
                   min={0.5}
                   max={20}
                   step={0.5}
-                  className="w-full h-7 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground mt-0.5"
+                  className="w-full h-7 rounded border border-border bg-background px-2 text-label tabular-nums text-foreground mt-0.5"
                 />
               </div>
             ) : (
@@ -143,7 +143,7 @@ export function PositionSizer({ symbol: _symbol, currentPrice }: PositionSizerPr
                     value={entryPrice}
                     onChange={(e) => setEntryPrice(safeNum(e.target.value, 0))}
                     step={0.01}
-                    className="w-full h-7 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground mt-0.5"
+                    className="w-full h-7 rounded border border-border bg-background px-2 text-label tabular-nums text-foreground mt-0.5"
                   />
                 </div>
                 <div className="col-span-2">
@@ -159,7 +159,7 @@ export function PositionSizer({ symbol: _symbol, currentPrice }: PositionSizerPr
                     value={stopLossPrice}
                     onChange={(e) => setStopLossPrice(safeNum(e.target.value, 0))}
                     step={0.01}
-                    className="w-full h-7 rounded border border-border bg-background px-2 text-xs tabular-nums text-foreground mt-0.5"
+                    className="w-full h-7 rounded border border-border bg-background px-2 text-label tabular-nums text-foreground mt-0.5"
                   />
                 </div>
               </>

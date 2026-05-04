@@ -927,7 +927,7 @@ export default function PipelinePage() {
                   <CardContent className="p-0">
                     <div className="flex items-center justify-center gap-3 py-4 text-muted-foreground">
                       <Target className="h-5 w-5 opacity-30" />
-                      <p className="text-xs">No active positions — pipeline will open trades during market hours</p>
+                      <p className="text-label">No active positions — pipeline will open trades during market hours</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -1128,7 +1128,7 @@ export default function PipelinePage() {
                 <Card className="border-border bg-[var(--surface)]">
                   <CardContent className="py-8 text-center">
                     <Clock className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-label text-muted-foreground">
                       No pipeline history available yet
                     </p>
                   </CardContent>
@@ -1342,7 +1342,7 @@ export default function PipelinePage() {
                 <Card className="border-border bg-[var(--surface)]">
                   <CardContent className="py-8 text-center">
                     <TrendingUp className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-label text-muted-foreground">
                       No closed trades yet &mdash; performance stats will appear after the pipeline completes trades
                     </p>
                   </CardContent>

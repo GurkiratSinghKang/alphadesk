@@ -956,7 +956,7 @@ export default function TradePage() {
             </div>
             <h1
               data-slot="trade-symbol"
-              className="mt-3 text-h1 font-semibold leading-[1.04] tracking-tight text-ink-1000 md:text-display-md"
+              className="mt-3 text-h1 font-semibold leading-tight tracking-tight text-ink-1000 md:text-display-md"
               style={{ letterSpacing: 0 }}
             >
               Trade · {symbol.ticker}
@@ -2592,7 +2592,7 @@ function RecentOrdersPanel({
         </div>
       ) : (
         <div className="max-w-full overflow-x-auto border-t border-border-hair scrollbar-thin">
-          <table className="w-full min-w-[520px] text-xs">
+          <table className="w-full min-w-[520px] text-label">
             <caption className="sr-only">Recent orders</caption>
             <thead>
               <tr className="border-b border-border text-left">

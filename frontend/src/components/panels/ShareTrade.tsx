@@ -134,7 +134,7 @@ function ShareCard({ data }: { data: ShareCardData }) {
             {formatCurrency(data.price)}
           </div>
           <div className={cn(
-            "text-xs font-medium tabular-nums",
+            "text-label font-medium tabular-nums",
             isPositive ? "text-[var(--profit)]" : "text-[var(--loss)]"
           )}>
             {changeSign}{(data.change ?? 0).toFixed(2)} ({changeSign}{formatPercent(data.changePct)})
@@ -180,7 +180,7 @@ function ShareCard({ data }: { data: ShareCardData }) {
          We no longer fabricate spot ± 3% bands that look authoritative
          but are just an arbitrary % cushion around the last price. */}
       {(data.support != null || data.resistance != null) && (
-        <div className="flex items-center gap-4 mb-4 text-xs">
+        <div className="flex items-center gap-4 mb-4 text-label">
           {data.support != null && (
             <div className="flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--profit)]" />
@@ -603,7 +603,7 @@ export function ShareTradeButton({ symbol: symbolProp, analysis, pnl, pnlPct }: 
             <Button
               onClick={handleCopyText}
               variant="outline"
-              className="flex-1 h-8 text-xs gap-1.5"
+              className="flex-1 h-8 text-label gap-1.5"
             >
               {copied ? (
                 <>
@@ -620,7 +620,7 @@ export function ShareTradeButton({ symbol: symbolProp, analysis, pnl, pnlPct }: 
             <Button
               onClick={handleDownloadPng}
               variant="outline"
-              className="flex-1 h-8 text-xs gap-1.5"
+              className="flex-1 h-8 text-label gap-1.5"
               disabled={downloading}
             >
               <Download className="h-3.5 w-3.5" />

@@ -246,12 +246,12 @@ function StrategyCatalogCard({
       <header className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <div
-            className="font-display italic text-h3 leading-[1.1] text-fg"
+            className="font-display italic text-h3 leading-tight text-fg"
             style={{ letterSpacing: 0 }}
           >
             {s.displayName}
           </div>
-          <div className="font-sans text-label leading-[1.45] text-fg-muted">
+          <div className="font-sans text-label leading-snug text-fg-muted">
             {s.subtitle}
           </div>
           {pillLabel ? (
@@ -452,7 +452,7 @@ function StrategyReadinessWorkbench({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="t-label text-fg-hint">Strategy readiness workbench</p>
-          <h2 className="mt-2 text-h3 font-semibold leading-tight text-ink-1000">Scan what can trade, what needs data, and why live is blocked.</h2>
+          <h2 className="mt-2 t-h2 text-ink-1000">Scan what can trade, what needs data, and why live is blocked.</h2>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           <ReadinessDatum label="Ready" value={counts.ready} tone="profit" />

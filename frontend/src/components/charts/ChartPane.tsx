@@ -926,7 +926,7 @@ export default function ChartPane({
                   title={t.label}
                   className={cn(
                     "inline-flex min-h-10 items-center gap-1.5 px-2.5 rounded-xs transition-colors",
-                    "font-sans text-xs font-medium uppercase tracking-[0.08em]",
+                    "font-sans text-eyebrow font-medium uppercase tracking-[0.08em]",
                     active
                       ? "text-ink-1000 bg-bg-elev-2"
                       : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
@@ -955,7 +955,7 @@ export default function ChartPane({
               title="Compare symbol — overlay a second symbol on the chart, % change basis"
               className={cn(
                 "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xs transition-colors",
-                "font-sans text-xs font-medium uppercase tracking-[0.08em]",
+                "font-sans text-eyebrow font-medium uppercase tracking-[0.08em]",
                 compareSymbols.length > 0 || compareInputOpen
                   ? "text-[color:var(--brand)] bg-[color:var(--brand)]/15 hover:bg-[color:var(--brand)]/25"
                   : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
@@ -1030,7 +1030,7 @@ export default function ChartPane({
             }
             className={cn(
               "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xs transition-colors mr-1",
-              "font-sans text-xs font-medium uppercase tracking-[0.08em]",
+              "font-sans text-eyebrow font-medium uppercase tracking-[0.08em]",
               topOfBookOn && topBook
                 ? "text-[color:var(--brand)] bg-[color:var(--brand)]/15 hover:bg-[color:var(--brand)]/25"
                 : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
@@ -1052,7 +1052,7 @@ export default function ChartPane({
             title={liquidityProfileOn ? "Hide volume-at-price estimate" : "Show volume-at-price estimate (POC + Value Area, not live depth)"}
             className={cn(
               "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xs transition-colors mr-1",
-              "font-sans text-xs font-medium uppercase tracking-[0.08em]",
+              "font-sans text-eyebrow font-medium uppercase tracking-[0.08em]",
               liquidityProfileOn
                 ? "text-[color:var(--brand)] bg-[color:var(--brand)]/15 hover:bg-[color:var(--brand)]/25"
                 : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
@@ -1073,7 +1073,7 @@ export default function ChartPane({
             title={structureZonesOn ? "Hide support/resistance ranges" : "Show support/resistance ranges"}
             className={cn(
               "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xs transition-colors mr-1",
-              "font-sans text-xs font-medium uppercase tracking-[0.08em]",
+              "font-sans text-eyebrow font-medium uppercase tracking-[0.08em]",
               structureZonesOn
                 ? "text-[color:var(--brand)] bg-[color:var(--brand)]/15 hover:bg-[color:var(--brand)]/25"
                 : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
@@ -1096,7 +1096,7 @@ export default function ChartPane({
             title={orderBlocksOn ? "Hide inferred high-volume supply/demand zones" : "Show inferred high-volume supply/demand zones"}
             className={cn(
               "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xs transition-colors mr-1",
-              "font-sans text-xs font-medium uppercase tracking-[0.08em]",
+              "font-sans text-eyebrow font-medium uppercase tracking-[0.08em]",
               orderBlocksOn
                 ? "text-[color:var(--brand)] bg-[color:var(--brand)]/15 hover:bg-[color:var(--brand)]/25"
                 : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
@@ -1138,7 +1138,7 @@ export default function ChartPane({
             }
             className={cn(
               "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xs transition-colors mr-1",
-              "font-sans text-xs font-medium uppercase tracking-[0.08em]",
+              "font-sans text-eyebrow font-medium uppercase tracking-[0.08em]",
               avwapAnchor != null
                 ? "text-[color:var(--brand)] bg-[color:var(--brand)]/15 hover:bg-[color:var(--brand)]/25"
                 : avwapArmed
@@ -1166,7 +1166,7 @@ export default function ChartPane({
             }
             className={cn(
               "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xs transition-colors mr-1",
-              "font-sans text-xs font-medium uppercase tracking-[0.08em]",
+              "font-sans text-eyebrow font-medium uppercase tracking-[0.08em]",
               replayEnabled
                 ? "text-[color:var(--brand)] bg-[color:var(--brand)]/15 hover:bg-[color:var(--brand)]/25"
                 : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
@@ -1185,7 +1185,7 @@ export default function ChartPane({
               aria-expanded={menuOpen}
               className={cn(
                 "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xs transition-colors",
-                "font-sans text-xs font-medium uppercase tracking-[0.08em]",
+                "font-sans text-eyebrow font-medium uppercase tracking-[0.08em]",
                 indicators.length > 0
                   ? "text-gold-300 hover:bg-bg-elev-1"
                   : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",

@@ -57,7 +57,7 @@ export function PnlAttribution({ strategies }: PnlAttributionProps) {
           <h2 className="text-sm font-semibold text-foreground">P&L Attribution</h2>
         </div>
         <div className="flex items-center justify-center py-8">
-          <p className="text-xs text-muted-foreground">No strategy P&L data yet</p>
+          <p className="text-label text-muted-foreground">No strategy P&L data yet</p>
         </div>
       </div>
     );
@@ -76,7 +76,7 @@ export function PnlAttribution({ strategies }: PnlAttributionProps) {
         </div>
         <div className="flex items-center gap-2">
           <div className="text-right">
-            <span className="text-xs text-muted-foreground">Total: </span>
+            <span className="text-label text-muted-foreground">Total: </span>
             <span
               className={cn(
                 "text-sm font-semibold tabular-nums",
@@ -103,13 +103,13 @@ export function PnlAttribution({ strategies }: PnlAttributionProps) {
           return (
             <div key={s.id} className="group">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-foreground truncate max-w-[140px]" title={s.shortName}>
+                <span className="text-label text-foreground truncate max-w-[140px]" title={s.shortName}>
                   {s.shortName}
                 </span>
                 <div className="flex items-center gap-2">
                   <span
                     className={cn(
-                      "text-xs tabular-nums font-medium",
+                      "text-label tabular-nums font-medium",
                       isPositive ? "text-[var(--profit)]" : "text-[var(--loss)]"
                     )}
                   >

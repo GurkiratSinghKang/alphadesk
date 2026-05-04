@@ -250,7 +250,7 @@ const SignalCard = React.memo(function SignalCard({
           <span className="font-medium text-sm text-foreground">{signal.symbol}</span>
           <span className="text-label text-muted-foreground truncate">{signal.strategy}</span>
         </div>
-        <p className="text-xs text-muted-foreground mt-0.5 truncate" title={signal.reasoning}>
+        <p className="text-label text-muted-foreground mt-0.5 truncate" title={signal.reasoning}>
           {signal.reasoning}
         </p>
         {signal.confidence > 0 && (
@@ -463,7 +463,7 @@ export function LiveSignalFeed({ pipelineLog }: LiveSignalFeedProps) {
           ) : visibleSignals.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8">
               <Radio className="h-6 w-6 mb-2 opacity-30 text-muted-foreground" />
-              <p className="text-xs text-muted-foreground">No signals yet</p>
+              <p className="text-label text-muted-foreground">No signals yet</p>
               <p className="text-label text-muted-foreground mt-1">
                 Signals appear after pipeline runs or when watchlist stocks cross thresholds
               </p>
@@ -481,7 +481,7 @@ export function LiveSignalFeed({ pipelineLog }: LiveSignalFeedProps) {
         <div className="border-t border-border px-4 py-2">
           <button
             onClick={() => setExpanded(!expanded)}
-            className="flex w-full items-center justify-center gap-1 text-xs text-primary hover:underline"
+            className="flex w-full items-center justify-center gap-1 text-label text-primary hover:underline"
           >
             {expanded ? (
               <>

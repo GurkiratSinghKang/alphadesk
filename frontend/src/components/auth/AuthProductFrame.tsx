@@ -167,10 +167,11 @@ export default function AuthProductFrame({
                 <p className="font-mono text-eyebrow font-semibold uppercase tracking-[0.22em] text-[#0f7a5d]">
                   {eyebrow}
                 </p>
+                {/* design-intentional: leading-[0.95] on marketing hero — extreme tight leading for visual impact at large display size */}
                 <h1 className="mt-5 max-w-[12ch] font-sans text-4xl font-semibold leading-[0.95] tracking-tight text-[#12281f] sm:text-5xl lg:text-6xl">
                   {title}
                 </h1>
-                <p className="mt-5 max-w-[650px] font-sans text-numeric-md leading-[1.75] text-[#40574c]">
+                <p className="mt-5 max-w-[650px] font-sans text-numeric-md leading-loose text-[#40574c]">
                   {lead}
                 </p>
 
@@ -220,7 +221,7 @@ export default function AuthProductFrame({
                     <p className="font-sans text-body font-semibold tracking-tight text-[#12281f]">
                       {panelTitle}
                     </p>
-                    <p className="mt-1 font-sans text-label leading-[1.55] text-[#5d7268]">
+                    <p className="mt-1 font-sans text-label leading-relaxed text-[#5d7268]">
                       {panelSubtitle}
                     </p>
                   </div>
@@ -236,7 +237,7 @@ export default function AuthProductFrame({
                         <span className="font-sans text-body-sm font-semibold text-[#12281f]">{point.label}</span>
                         <span className="font-mono text-label text-[#0f7a5d]">{point.value}</span>
                       </div>
-                      <p className="font-sans text-label leading-[1.55] text-[#5d7268]">{point.detail}</p>
+                      <p className="font-sans text-label leading-relaxed text-[#5d7268]">{point.detail}</p>
                     </div>
                   ))}
                 </div>
@@ -254,10 +255,10 @@ export default function AuthProductFrame({
             <p className="font-mono text-eyebrow font-semibold uppercase tracking-[0.18em] text-[#0f7a5d]">
               Product rhythm
             </p>
-            <h2 className="mt-3 max-w-[14ch] font-sans text-h1 font-semibold leading-[1] tracking-tight text-[#12281f]">
+            <h2 className="mt-3 max-w-[14ch] font-sans text-h1 font-semibold leading-none tracking-tight text-[#12281f]">
               From hunch to habit, without losing the thread.
             </h2>
-            <p className="mt-4 font-sans text-body-sm leading-[1.65] text-[#40574c]">
+            <p className="mt-4 font-sans text-body-sm leading-relaxed text-[#40574c]">
               The marketing promise is simple: AlphaDesk gives serious traders a calmer loop for deciding, challenging, routing, and learning.
             </p>
           </div>
@@ -283,7 +284,7 @@ export default function AuthProductFrame({
                     {item.label}
                   </p>
                   <h3 className="mt-2 font-sans text-h3 font-semibold tracking-tight text-[#12281f]">{item.title}</h3>
-                  <p className="mt-2 font-sans text-body-sm leading-[1.6] text-[#5d7268]">{item.detail}</p>
+                  <p className="mt-2 font-sans text-body-sm leading-relaxed text-[#5d7268]">{item.detail}</p>
                 </article>
               );
             })}
@@ -295,10 +296,10 @@ export default function AuthProductFrame({
             <p className="font-mono text-eyebrow uppercase tracking-[0.18em] text-[#75d9af]">
               Evidence, with the caveats in view
             </p>
-            <h2 className="mt-3 max-w-[18ch] font-sans text-h1 font-semibold leading-[1.05] tracking-tight">
+            <h2 className="mt-3 max-w-[18ch] font-sans text-h1 font-semibold leading-tight tracking-tight">
               The numbers support the story; they do not replace judgment.
             </h2>
-            <p className="mt-3 max-w-[66ch] font-sans text-body-sm leading-[1.65] text-[#c7d6ce]">
+            <p className="mt-3 max-w-[66ch] font-sans text-body-sm leading-relaxed text-[#c7d6ce]">
               Performance examples stay below the fold and remain framed as research artifacts. The first promise is workflow quality: clearer thinking, deliberate controls, and a usable record.
             </p>
           </div>

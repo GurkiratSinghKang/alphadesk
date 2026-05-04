@@ -76,7 +76,7 @@ export function PositionsSummary() {
             Open Positions
           </h2>
         </div>
-        <span className="text-xs text-muted-foreground">{positions.length} position{positions.length !== 1 ? "s" : ""}</span>
+        <span className="text-label text-muted-foreground">{positions.length} position{positions.length !== 1 ? "s" : ""}</span>
       </div>
       <div className="divide-y divide-border">
         {positions.map((pos) => {
@@ -96,7 +96,7 @@ export function PositionsSummary() {
             >
               <div className="flex items-center gap-3 min-w-0">
                 <span className="text-sm font-semibold text-foreground">{pos.symbol}</span>
-                <span className="text-xs text-muted-foreground tabular-nums">{pos.quantity} shares</span>
+                <span className="text-label text-muted-foreground tabular-nums">{pos.quantity} shares</span>
                 {sparkData[pos.symbol] && sparkData[pos.symbol].length >= 2 && (
                   <Sparkline
                     data={sparkData[pos.symbol]}

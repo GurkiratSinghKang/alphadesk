@@ -156,7 +156,7 @@ export default function PositionsList({
                   // kept the tighter `md:h-auto md:px-2.5 md:py-1` on
                   // desktop where a pointer is available.
                   "font-sans font-semibold uppercase rounded-xs transition-colors",
-                  "h-8 px-3 text-label md:h-9 md:px-2.5 md:py-1 md:text-xs",
+                  "h-8 px-3 text-label md:h-9 md:px-2.5 md:py-1 md:text-label",
                   "flex items-center gap-1.5",
                   active
                     ? "text-ink-1000 bg-bg-elev-1"

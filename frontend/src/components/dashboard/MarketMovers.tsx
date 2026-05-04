@@ -166,7 +166,7 @@ export function MarketMovers({ onSelectSymbol }: MarketMoversProps) {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") onSelectSymbol?.(row.symbol);
                 }}
-                className="flex items-center text-xs px-2 py-1.5 rounded-md hover:bg-accent/30 transition-colors cursor-pointer group"
+                className="flex items-center text-label px-2 py-1.5 rounded-md hover:bg-accent/30 transition-colors cursor-pointer group"
               >
                 {/* Symbol + name */}
                 <div className="flex-1 min-w-0">
