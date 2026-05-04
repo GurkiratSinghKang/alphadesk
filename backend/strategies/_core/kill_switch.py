@@ -61,3 +61,54 @@ class DisabledEvent:
     reason: str | None = None
     resolved_at: datetime | None = None
     resolved_by: str | None = None
+
+
+class DisabledEventsRepo(Protocol):
+    """Repository for ``strategy_disabled_events`` rows."""
+
+    def insert(self, event: DisabledEvent) -> DisabledEvent:
+        """Persist ``event`` and return it with ``id`` populated."""
+        ...
+
+    def latest_unresolved_for_strategy(
+        self, strategy: str, layer: int | None = None
+    ) -> DisabledEvent | None:
+        """Latest event with ``resolved_at IS NULL`` for ``strategy``, optionally filtered by layer."""
+        ...
+
+    def resolve(self, event_id: int, resolved_by: str) -> None:
+        """Mark a single event resolved with ``resolved_at = now()`` and ``resolved_by``."""
+        ...
+
+
+class InMemoryDisabledEventsRepo:
+    """In-memory implementation for unit tests. NOT thread-safe; one repo per test."""
+
+    def __init__(self) -> None:
+        self._events: dict[int, DisabledEvent] = {}
+        self._next_id: int = 1
+
+    def insert(self, event: DisabledEvent) -> DisabledEvent:
+        event.id = self._next_id
+        self._next_id += 1
+        self._events[event.id] = event
+        return event
+
+    def latest_unresolved_for_strategy(
+        self, strategy: str, layer: int | None = None
+    ) -> DisabledEvent | None:
+        candidates = [
+            ev for ev in self._events.values()
+            if ev.strategy == strategy
+            and ev.resolved_at is None
+            and (layer is None or ev.layer == layer)
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda ev: ev.triggered_at)
+
+    def resolve(self, event_id: int, resolved_by: str) -> None:
+        if event_id not in self._events:
+            return
+        self._events[event_id].resolved_at = datetime.now(timezone.utc)
+        self._events[event_id].resolved_by = resolved_by
