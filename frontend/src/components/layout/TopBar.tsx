@@ -70,7 +70,7 @@ export function TopBar() {
             <Button
               variant="ghost"
               size="icon"
-              className="min-h-[44px] min-w-[44px] md:hidden"
+              className="min-h-touch min-w-touch md:hidden"
               aria-label="Open menu"
             >
               <Menu className="h-4 w-4 text-muted-foreground" />

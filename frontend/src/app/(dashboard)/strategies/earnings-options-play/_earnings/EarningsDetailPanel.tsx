@@ -586,7 +586,7 @@ function CandidateDecisionButton({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "inline-flex min-h-[44px] items-center gap-1.5 rounded border px-3 py-2 t-mono text-label transition-colors",
+        "inline-flex min-h-touch items-center gap-1.5 rounded border px-3 py-2 t-mono text-label transition-colors",
         active
           ? "border-[color:var(--brand)] bg-[color:var(--brand-tint)] u-brand"
           : "border-[color:var(--border)] bg-transparent u-muted hover:border-[color:var(--brand)] hover:u-brand",

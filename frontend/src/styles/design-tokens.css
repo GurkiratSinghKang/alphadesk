@@ -235,6 +235,23 @@
   --space-16: 64px;
   --space-24: 96px;
 
+  /* QA r4-4 — Touch / tap-target floor.
+     Fragmented before: 26 sites hand-applied `min-h-[44px]` for WCAG 2.5.5
+     (Target Size, Level AAA recommendation) and Apple HIG. Token-ize so the
+     tap floor stays a single source of truth; consume via Tailwind utility
+     `min-h-touch` / `h-touch` / `min-w-touch` (wired in globals.css). */
+  --touch-target-floor: 44px;     /* WCAG 2.5.5 + Apple HIG minimum */
+
+  /* QA r4-4 — Marketing / long-form rhythm.
+     R3 audit found `space-y-{6,10,12}` only 3 uses out of 122 total
+     `space-y-*`. Long-form pages (about, contact, docs, request-access,
+     terms, privacy) were under-cadenced. These tokens define the editorial
+     rhythm for hero/sub-section/prose breaks. Consume via Tailwind utility
+     `space-y-section` / `space-y-section-sm` / `space-y-prose`. */
+  --space-section: 4rem;          /* 64px — hero/section breaks on long-form pages */
+  --space-section-sm: 2.5rem;     /* 40px — sub-section breaks */
+  --space-prose: 1.5rem;          /* 24px — between paragraphs */
+
   /* Radii — restrained. Big everywhere is a trope. */
   --radius-0: 0;
   --radius-xs: 2px;      /* pills, tiny chips */

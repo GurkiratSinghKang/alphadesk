@@ -252,7 +252,7 @@ export default function PriceChartPanel({
               onClick={() => onRangeChange(r)}
               data-active={r === activeRange || undefined}
               className={cn(
-                "inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-[36px] md:min-w-[36px] md:px-3",
+                "inline-flex items-center justify-center min-h-touch min-w-touch md:min-h-[36px] md:min-w-[36px] md:px-3",
                 "font-mono text-body-sm px-2.5 py-1 rounded-xs transition-colors",
                 executionDensity
                   ? r === activeRange
