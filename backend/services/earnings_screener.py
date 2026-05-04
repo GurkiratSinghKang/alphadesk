@@ -812,6 +812,26 @@ async def _fmp_upcoming(window: str) -> list[dict]:
     from core.config import settings
     from data.providers.fmp_earnings import FMPEarningsProvider
 
+    # QA r2 fix: FMP's `/earnings-calendar?from=…&to=…` endpoint silently
+    # truncates wide-range responses around the ~3200-row mark — see the
+    # captured bug where window=both (15 days) returned 3233 rows missing
+    # AMD/PLTR/etc that the narrower window=current (8 days) had returned
+    # cleanly. Union the two narrower queries when "both" is requested so
+    # we never lose curated names to upstream truncation.
+    if window == "both":
+        current_rows = await _fmp_upcoming("current")
+        next_rows = await _fmp_upcoming("next")
+        merged = _merge_calendar_rows(current_rows, next_rows)
+        # Cache the merged result under the "both" key so subsequent
+        # requests skip the merge work. Cache TTL matches the upstream
+        # (5 min) so a refresh of "current" or "next" propagates here.
+        cache = get_cache()
+        merged_start, merged_end = _resolve_window_dates("both")
+        merged_key = _fmp_upcoming_cache_key("both", merged_start, merged_end)
+        if not settings.SKIP_EARNINGS_FMP_CACHE:
+            await cache.set(merged_key, merged, ttl_seconds=_FMP_UPCOMING_TTL_S)
+        return merged
+
     start, end = _resolve_window_dates(window)
     cache = get_cache()
     cache_key = _fmp_upcoming_cache_key(window, start, end)
