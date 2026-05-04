@@ -112,3 +112,69 @@ class InMemoryDisabledEventsRepo:
             return
         self._events[event_id].resolved_at = datetime.now(timezone.utc)
         self._events[event_id].resolved_by = resolved_by
+
+
+class KillSwitch:
+    """The three-layer kill-switch.
+
+    Default thresholds are conservative and safe for the initial live flip.
+    Per-strategy overrides can be set via ``StrategyMeta.kill_switch_overrides``
+    (a follow-on plan); for now, all strategies share the defaults.
+    """
+
+    DEFAULT_LAYER1_THRESHOLD: float = -0.08  # -8% drawdown
+    DEFAULT_LAYER2_THRESHOLD: float = -0.02  # -2% of allocated capital realized
+
+    def __init__(
+        self,
+        repo: DisabledEventsRepo,
+        layer1_threshold: float | None = None,
+        layer2_threshold: float | None = None,
+    ) -> None:
+        self.repo = repo
+        self.layer1_threshold = (
+            layer1_threshold if layer1_threshold is not None else self.DEFAULT_LAYER1_THRESHOLD
+        )
+        self.layer2_threshold = (
+            layer2_threshold if layer2_threshold is not None else self.DEFAULT_LAYER2_THRESHOLD
+        )
+
+    # -- Layer 1: drawdown from peak NAV ----------------------------------
+
+    def check_layer1_drawdown(self, strategy: str, ctx: KillSwitchContext) -> Decision:
+        if ctx.peak_nav <= 0.0:
+            return Decision(
+                enabled=True,
+                layer=0,
+                reason="layer1: peak_nav <= 0, no DD definable",
+                metrics={"peak_nav": ctx.peak_nav, "current_nav": ctx.current_nav},
+            )
+        dd = (ctx.current_nav - ctx.peak_nav) / ctx.peak_nav
+        if dd > self.layer1_threshold:
+            return Decision(
+                enabled=True,
+                layer=0,
+                reason=f"layer1: dd {dd:.2%} > threshold {self.layer1_threshold:.2%}",
+                metrics={"peak_nav": ctx.peak_nav, "current_nav": ctx.current_nav, "dd": dd},
+            )
+        # Triggered: log idempotently, return disabled
+        existing = self.repo.latest_unresolved_for_strategy(strategy, layer=1)
+        if existing is None:
+            self.repo.insert(
+                DisabledEvent(
+                    id=None,
+                    strategy=strategy,
+                    layer=1,
+                    triggered_at=datetime.now(timezone.utc),
+                    peak_nav=ctx.peak_nav,
+                    current_nav=ctx.current_nav,
+                    threshold=self.layer1_threshold,
+                    reason=f"dd {dd:.2%} <= threshold {self.layer1_threshold:.2%}",
+                )
+            )
+        return Decision(
+            enabled=False,
+            layer=1,
+            reason=f"layer1: dd {dd:.2%} <= threshold {self.layer1_threshold:.2%}",
+            metrics={"peak_nav": ctx.peak_nav, "current_nav": ctx.current_nav, "dd": dd},
+        )

@@ -9,10 +9,9 @@ from strategies._core.kill_switch import (
     Decision,
     DisabledEvent,
     InMemoryDisabledEventsRepo,
+    KillSwitch,
     KillSwitchContext,
 )
-# These will be imported by later test classes:
-# from strategies._core.kill_switch import KillSwitch
 
 
 class TestDecision:
@@ -111,3 +110,80 @@ class TestInMemoryDisabledEventsRepo:
         assert repo.latest_unresolved_for_strategy("pead", layer=3) is None
         # but should exist in repo._events with resolved_by populated
         assert any(ev.resolved_by == "bob" for ev in repo._events.values())
+
+
+class TestLayer1Drawdown:
+    def test_no_drawdown_returns_enabled(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=98.0, alloc_capital=10000.0, realized_today=0.0)
+        d = ks.check_layer1_drawdown("pead", ctx)
+        assert d.enabled is True
+        assert d.layer == 0
+
+    def test_above_threshold_returns_enabled(self) -> None:
+        # -3% drawdown is well above -8% default threshold
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=97.0, alloc_capital=10000.0, realized_today=0.0)
+        d = ks.check_layer1_drawdown("pead", ctx)
+        assert d.enabled is True
+
+    def test_at_threshold_returns_disabled(self) -> None:
+        # exact -8% drawdown is the trigger boundary (inclusive)
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=92.0, alloc_capital=10000.0, realized_today=0.0)
+        d = ks.check_layer1_drawdown("pead", ctx)
+        assert d.enabled is False
+        assert d.layer == 1
+        assert "dd" in d.reason.lower()
+
+    def test_below_threshold_returns_disabled(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=85.0, alloc_capital=10000.0, realized_today=0.0)
+        d = ks.check_layer1_drawdown("pead", ctx)
+        assert d.enabled is False
+        assert d.layer == 1
+        assert d.metrics["peak_nav"] == 100.0
+        assert d.metrics["current_nav"] == 85.0
+
+    def test_zero_peak_nav_returns_enabled(self) -> None:
+        # Avoid div-by-zero edge: a strategy that has never been deployed
+        # has peak_nav=0 and should be enabled (no DD definable).
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=0.0, current_nav=0.0, alloc_capital=10000.0, realized_today=0.0)
+        d = ks.check_layer1_drawdown("pead", ctx)
+        assert d.enabled is True
+
+    def test_writes_event_on_disable(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=85.0, alloc_capital=10000.0, realized_today=0.0)
+        ks.check_layer1_drawdown("pead", ctx)
+        ev = repo.latest_unresolved_for_strategy("pead", layer=1)
+        assert ev is not None
+        assert ev.peak_nav == 100.0
+        assert ev.current_nav == 85.0
+        assert ev.threshold == -0.08
+
+    def test_does_not_double_log_on_repeated_call(self) -> None:
+        # Idempotency: if the strategy is already in a disabled state, calling again
+        # should not insert a second event.
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=85.0, alloc_capital=10000.0, realized_today=0.0)
+        ks.check_layer1_drawdown("pead", ctx)
+        ks.check_layer1_drawdown("pead", ctx)
+        events = [ev for ev in repo._events.values() if ev.strategy == "pead" and ev.layer == 1]
+        assert len(events) == 1
+
+    def test_custom_threshold(self) -> None:
+        # A stricter -5% threshold means -6% DD triggers it.
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo, layer1_threshold=-0.05)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=94.0, alloc_capital=10000.0, realized_today=0.0)
+        d = ks.check_layer1_drawdown("pead", ctx)
+        assert d.enabled is False
