@@ -62,7 +62,7 @@ import {
 import type { ChartOrderPlacement, ChartTradeOverlay } from "@/components/charts/ChartPane";
 import OptionsPayoffPanel from "@/components/options/OptionsPayoffPanel";
 import OptionsStrategyBuilder from "@/components/options/OptionsStrategyBuilder";
-import { getBars, getOrders, placeOrder } from "@/lib/api";
+import { getBars, getOrders, getSnapshot, placeOrder } from "@/lib/api";
 import { barsRequestForRange } from "@/lib/chartRange";
 import { parseOccSymbol } from "@/lib/occ";
 import { ORDER_BAR_DEFAULTS, isValidOrderQty } from "@/lib/orderDefaults";
@@ -357,6 +357,36 @@ export default function TradePage() {
   // QA r1 A2: option-contract quote (single-leg). useQuote("") returns null
   // and is a no-op subscription, so this is cheap when no contract is staged.
   const optionContractRawQuote = useQuote(activeContract?.occ ?? "");
+  // QA r1 A2 follow-up: hydrate the OCC quote into the store. The data
+  // pipeline bridge only fans out for the equity watchlist + selected
+  // symbol — option contracts deep-linked via ?contract= / ?legs= aren't
+  // part of either, so the store would otherwise stay empty for them and
+  // OrderBar telemetry would render "--" indefinitely. Fetch on
+  // activeContract / activeLegs change; updateQuotes merges into the
+  // store, after which useQuote starts returning the contract's market.
+  useEffect(() => {
+    const symbols: string[] = [];
+    if (activeContract) symbols.push(activeContract.occ);
+    for (const leg of activeLegs) symbols.push(leg.occ);
+    if (symbols.length === 0) return;
+    let cancelled = false;
+    getSnapshot(symbols)
+      .then((snapshot) => {
+        if (cancelled) return;
+        const quotes = Object.values(snapshot);
+        if (quotes.length > 0) {
+          useMarketStore.getState().updateQuotes(quotes);
+        }
+      })
+      .catch(() => {
+        // Silent — option-quote endpoint can 404 for inactive contracts;
+        // OrderBar already falls back to "--" via the telemetryQuote
+        // selector below.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeContract, activeLegs]);
   const optionContractQuote = useMemo(
     () =>
       activeContract && optionContractRawQuote
@@ -1437,8 +1467,18 @@ function buildExecutionReadiness({
     // nothing, so we mirror brokerDegraded copy. Outside regular hours, a
     // weekend/overnight gap is expected — say so plainly instead of asking
     // the user to "resolve" it.
+    //
+    // QA r1 A1 follow-up: weekend / pre-open hits this branch with no
+    // two-sided quote AND no timestamp at all (provider returns an empty
+    // quote payload), so quoteAgeSeconds is null. Treat that as
+    // severely stale when the market is closed — the "Awaiting market
+    // open" copy is appropriate either way. During regular hours, an
+    // unknown-age block stays in the user-actionable copy because it
+    // could still be a transient gap the user can refresh past.
     const feedSeverelyStale =
-      quoteBlocked && quoteAgeSeconds != null && quoteAgeSeconds > 3600;
+      quoteBlocked &&
+      ((quoteAgeSeconds != null && quoteAgeSeconds > 3600) ||
+        (quoteAgeSeconds == null && !marketOpen));
     if (feedSeverelyStale && marketOpen) {
       return {
         label: "Limited",
@@ -1446,7 +1486,10 @@ function buildExecutionReadiness({
         headline: "Market data feed delayed",
         detail: "We have not received a fresh quote for this symbol in over an hour. The desk has been alerted; submission resumes when the feed catches up.",
         canSubmit: false,
-        blocker: `Feed delayed · last quote ${formatAgeDuration(quoteAgeSeconds)} old.`,
+        blocker:
+          quoteAgeSeconds != null
+            ? `Feed delayed · last quote ${formatAgeDuration(quoteAgeSeconds)} old.`
+            : "Feed delayed · no fresh quote received.",
         submitLabel: "Feed delayed — try again shortly",
         destination: "Submit locked while market data feed is delayed",
         reviewCopy: "Live send locked · market data feed delayed",
@@ -1460,7 +1503,10 @@ function buildExecutionReadiness({
         headline: "Market is closed — no live quote",
         detail: "Live two-sided quotes resume at the next regular session. You can still review and stage the ticket; submission unlocks at the open.",
         canSubmit: false,
-        blocker: `Market closed · last quote ${formatAgeDuration(quoteAgeSeconds)} old.`,
+        blocker:
+          quoteAgeSeconds != null
+            ? `Market closed · last quote ${formatAgeDuration(quoteAgeSeconds)} old.`
+            : "Market closed · awaiting next session open.",
         submitLabel: "Awaiting market open",
         destination: "Submit unlocks at next regular session open",
         reviewCopy: "Submit locked · market closed",
