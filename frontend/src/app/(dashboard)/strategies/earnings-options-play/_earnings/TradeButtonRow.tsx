@@ -389,7 +389,7 @@ function DefinedRiskTradeLink({
       onFocus={onHoverEnter}
       onBlur={onHoverLeave}
       className={cn(
-        "group min-h-[44px] rounded border bg-[color:var(--bg-elev-1)] px-3 py-2 t-mono text-label flex flex-col items-center justify-center gap-0.5 hover:border-[color:var(--brand)]",
+        "group min-h-touch rounded border bg-[color:var(--bg-elev-1)] px-3 py-2 t-mono text-label flex flex-col items-center justify-center gap-0.5 hover:border-[color:var(--brand)]",
         recommended
           ? "border-[color:var(--brand)] shadow-[0_0_0_1px_var(--brand)]"
           : "border-[color:var(--border)]",

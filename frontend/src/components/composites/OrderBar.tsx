@@ -63,6 +63,15 @@ export interface OrderBarProps {
   onStrategyChange?: (strategyId: string) => void;
   /** Fires whenever the editable ticket draft changes so parent gates stay live. */
   onDraftChange?: (order: StagedOrder) => void;
+  /**
+   * R4-5 W-3 — when an OCC option contract was staged but the snapshot
+   * endpoint 404'd, the ticket silently degrades to the underlying. Set
+   * this to the affected OCC (or `true`) so the UI surfaces the
+   * degradation with a retry affordance instead of disappearing.
+   */
+  optionsUnavailable?: { occ: string; underlying: string } | null;
+  /** Retry handler invoked from the banner action button. */
+  onRetryOptions?: () => void;
   className?: string;
 }
 
@@ -89,6 +98,8 @@ export default function OrderBar({
   strategyId: controlledStrategyId,
   onStrategyChange,
   onDraftChange,
+  optionsUnavailable = null,
+  onRetryOptions,
   className,
 }: OrderBarProps) {
   const noStrategies = strategies.length === 0;
@@ -448,6 +459,37 @@ export default function OrderBar({
         className
       )}
     >
+      {/* R4-5 W-3 — OCC option contracts that 404 on the snapshot
+          endpoint previously degraded silently to the underlying with
+          no UI surface. The parent now passes `optionsUnavailable` when
+          the snapshot fan-out came back missing the staged OCC, and we
+          surface a banner with a retry handler so the trader sees the
+          downgrade instead of trusting blank telemetry. */}
+      {optionsUnavailable ? (
+        <div
+          role="status"
+          aria-live="polite"
+          data-slot="order-bar-options-unavailable"
+          className="col-span-2 flex flex-wrap items-center justify-between gap-2 rounded-sm border border-amber/40 bg-amber/10 px-3 py-2 text-body-sm text-amber @[720px]:basis-full"
+        >
+          <span className="min-w-0">
+            Options data unavailable for{" "}
+            <span className="font-mono">{optionsUnavailable.occ}</span> —
+            trading underlying{" "}
+            <span className="font-mono">{optionsUnavailable.underlying}</span>{" "}
+            instead.
+          </span>
+          {onRetryOptions ? (
+            <button
+              type="button"
+              onClick={onRetryOptions}
+              className="inline-flex items-center gap-1 rounded-sm border border-amber/40 bg-bg-elev-1 px-2 py-1 text-label font-semibold text-amber transition-colors hover:bg-amber/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber"
+            >
+              Retry
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <Field label="Strategy">
         <select
           aria-label="Strategy"
@@ -648,7 +690,7 @@ export default function OrderBar({
             </span>
           </span>
           <span className="shrink-0 font-mono text-label text-brand">
-            {advancedOpen ? "Hide" : "Show"}
+            {advancedOpen ? "Hide details" : "Show details"}
           </span>
         </button>
         {advancedOpen ? (

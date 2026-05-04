@@ -139,15 +139,19 @@ function squarify(
 }
 
 // ─── Color Scale (7-step gradient) ─────────────────────────
-
+// QA r4-2 — migrated from generic Tailwind emerald/red defaults to
+// AlphaDesk's semantic --up-* / --down-* (chartreuse/coral) tokens so
+// the treemap reads in-system. The four gradient stops are produced by
+// composing the up-700 / up-500 / down-500 / down-700 ladder + opacity
+// modifiers, and the neutral floor still uses --neutral.
 function getTileColor(changePct: number): string {
-  if (changePct > 2) return "bg-emerald-600";
-  if (changePct > 1) return "bg-emerald-500/70";
-  if (changePct > 0.3) return "bg-emerald-400/50";
+  if (changePct > 2) return "bg-up-700";
+  if (changePct > 1) return "bg-up-500/70";
+  if (changePct > 0.3) return "bg-up-500/50";
   if (changePct >= -0.3) return "bg-[var(--neutral)]";
-  if (changePct >= -1) return "bg-red-400/50";
-  if (changePct >= -2) return "bg-red-500/70";
-  return "bg-red-600";
+  if (changePct >= -1) return "bg-down-500/50";
+  if (changePct >= -2) return "bg-down-500/70";
+  return "bg-down-700";
 }
 
 // ─── Sector name abbreviations ──────────────────────────────
@@ -342,7 +346,10 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
                 <span
                   className={cn(
                     "text-label font-bold tabular-nums leading-tight",
-                    displayPct >= 0 ? "text-emerald-200" : "text-red-200"
+                    // QA r4-2 — was emerald-200 / red-200 (off-system). Use the
+                    // semantic up-100 / down-100 tints which are AlphaDesk's
+                    // light-end of the chartreuse/coral ladder.
+                    displayPct >= 0 ? "text-up-100" : "text-down-100"
                   )}
                 >
                   {(displayPct ?? 0) >= 0 ? "+" : ""}{(displayPct ?? 0).toFixed(1)}%
@@ -375,30 +382,31 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
             <div className="mt-0.5 flex items-center gap-2">
               <span className={cn(
                 "text-label font-bold tabular-nums",
-                hoveredRect.change_pct >= 0 ? "text-emerald-400" : "text-red-400"
+                // QA r4-2 — emerald-400 / red-400 → semantic profit / loss tokens
+                hoveredRect.change_pct >= 0 ? "text-profit" : "text-loss"
               )}>
                 {(hoveredRect.change_pct ?? 0) >= 0 ? "+" : ""}{(hoveredRect.change_pct ?? 0).toFixed(2)}%
               </span>
-              <span className="text-label text-zinc-500">today</span>
+              <span className="text-label text-fg-muted">today</span>
             </div>
             {hoveredRect.ytd_pct != null && (
               <div className="flex items-center gap-2">
                 <span className={cn(
                   "text-label tabular-nums",
-                  hoveredRect.ytd_pct >= 0 ? "text-emerald-400/70" : "text-red-400/70"
+                  hoveredRect.ytd_pct >= 0 ? "text-profit/70" : "text-loss/70"
                 )}>
                   {(hoveredRect.ytd_pct ?? 0) >= 0 ? "+" : ""}{(hoveredRect.ytd_pct ?? 0).toFixed(2)}%
                 </span>
-                <span className="text-label text-zinc-500">YTD</span>
+                <span className="text-label text-fg-muted">YTD</span>
               </div>
             )}
             {hoveredRect.leader && (
-              <p className="mt-0.5 text-label text-zinc-400">
+              <p className="mt-0.5 text-label text-fg-muted">
                 Leader: <span className="text-white/80">{hoveredRect.leader}</span>
                 {hoveredRect.leader_change_pct != null && (
                   <span className={cn(
                     "ml-1 tabular-nums",
-                    hoveredRect.leader_change_pct >= 0 ? "text-emerald-400/70" : "text-red-400/70"
+                    hoveredRect.leader_change_pct >= 0 ? "text-profit/70" : "text-loss/70"
                   )}>
                     {(hoveredRect.leader_change_pct ?? 0) >= 0 ? "+" : ""}{(hoveredRect.leader_change_pct ?? 0).toFixed(1)}%
                   </span>

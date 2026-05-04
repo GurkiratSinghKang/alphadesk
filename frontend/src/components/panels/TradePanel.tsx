@@ -787,9 +787,24 @@ function PositionsTab() {
           <span className="w-18 text-right">P&L</span>
         </div>
 
-        {positions.map((p) => (
-          <PositionRow key={p.symbol} p={p} onSelect={setSelectedSymbol} />
-        ))}
+        {/* R4-5 N-5: LIVE BOOK price ticks update on every WS quote and
+            previously had no aria-live region — screen readers were silent
+            on every fill / mark-to-market. `polite` (not `assertive`) is
+            correct for a continuous price stream so the SR doesn't
+            interrupt the user. `aria-atomic="false"` lets AT announce
+            only the row that actually changed. The inner `space-y-1`
+            preserves the original visual gap between rows that the
+            outer container previously supplied to its direct children. */}
+        <div
+          aria-live="polite"
+          aria-atomic="false"
+          aria-relevant="text"
+          className="space-y-1"
+        >
+          {positions.map((p) => (
+            <PositionRow key={p.symbol} p={p} onSelect={setSelectedSymbol} />
+          ))}
+        </div>
       </div>
 
       {/* Stop Loss Dialog */}
@@ -1457,7 +1472,7 @@ function JournalTab() {
                       autoFocus
                       onKeyDown={(e) => { if (e.key === "Enter") handleSaveNote(entry.id); }}
                     />
-                    <button onClick={() => handleSaveNote(entry.id)} className="h-6 px-2 rounded bg-primary text-label font-medium text-primary-foreground">Save</button>
+                    <button onClick={() => handleSaveNote(entry.id)} className="h-6 px-2 rounded bg-primary text-label font-medium text-primary-foreground">Save note</button>
                     <button onClick={() => { setEditingId(null); setNoteText(""); }} className="h-6 px-2 rounded border border-border text-label text-muted-foreground">Cancel</button>
                   </div>
                 ) : (

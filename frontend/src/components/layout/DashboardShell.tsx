@@ -17,7 +17,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
           so it doesn't stay 1×1px. Min 44px touch target + padding. */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:w-auto focus:h-auto focus:min-h-[44px] focus:inline-flex focus:items-center focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:bg-primary focus:text-white focus:outline-none focus:ring-2 focus:ring-primary/50 focus:rounded-md"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:w-auto focus:h-auto focus:min-h-touch focus:inline-flex focus:items-center focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:bg-primary focus:text-white focus:outline-none focus:ring-2 focus:ring-primary/50 focus:rounded-md"
       >
         Skip to content
       </a>
@@ -27,7 +27,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
         {children}
       </main>
       <footer role="contentinfo" className="border-t border-border/30 px-4 py-3 text-label text-muted-foreground text-center">
-        AlphaDesk v1.0 — Powered by Claude AI — &copy; {new Date().getFullYear()}
+        AlphaDesk v1.0 — Built on Claude — &copy; {new Date().getFullYear()}
       </footer>
       <CommandPalette />
       <AICopilot />

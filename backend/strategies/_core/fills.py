@@ -72,6 +72,21 @@ class FillSimulator:
             if s.quantity is None:
                 # target_weight path: caller should have translated; skip here
                 continue
+
+            # Plan B.1 (short): multi-leg options pricing path.
+            # Signals with non-empty `legs` are option spreads (vrp-harvest,
+            # earnings-vol, etc.) whose net premium must be priced from the
+            # per-contract bars, not the underlying's bar. The new fill shell
+            # doesn't yet implement that pricing; if an options_provider is
+            # wired via BacktestConfig.options_provider, dispatch to the
+            # legacy path. Otherwise log+skip with a clear warning so the
+            # gap is explicit instead of silently producing nothing.
+            if s.legs:
+                multileg_fill = self._fill_multileg(s, asof)
+                if multileg_fill is not None:
+                    fills.append(multileg_fill)
+                continue
+
             bar = next_bars.get(s.symbol)
             if bar is None:
                 continue  # no fill — symbol not in next-bar universe
@@ -181,6 +196,101 @@ class FillSimulator:
             return Decimal(str(bar["close"]))
         # midpoint
         return (Decimal(str(bar["high"])) + Decimal(str(bar["low"]))) / Decimal("2")
+
+    # ── Plan B.1: multi-leg options dispatch ────────────────────────────
+    _multileg_warned: bool = False  # class-level, log warning once per process
+
+    def _fill_multileg(self, signal: "Signal", asof: date) -> "Fill | None":
+        """Dispatch a multi-leg (spread) signal to the legacy options pricing path.
+
+        Plan B.1 short: when ``BacktestConfig.options_provider`` is wired,
+        delegate to the legacy ``ExecutionSimulator._fill_multileg_option``
+        which already implements per-leg real-price pricing, half-spread
+        slippage, BS fallback, and net-premium sign conventions. When the
+        provider is None, log+skip with a structured warning so the gap is
+        explicit rather than silent.
+
+        The full port of multi-leg fill semantics into the new shell
+        (replacing this delegation with an in-shell implementation) is a
+        follow-on plan; this short version creates the seam and unblocks
+        kind=research → kind=autonomous transitions for vrp-harvest and
+        earnings-vol when run via legacy path.
+        """
+        from strategies._core.contracts import Fill
+        import logging
+
+        log = logging.getLogger("alphadesk.strategies._core.fills")
+
+        if self._config.options_provider is None:
+            if not FillSimulator._multileg_warned:
+                FillSimulator._multileg_warned = True
+                log.warning(
+                    "FillSimulator: encountered multi-leg signal for %s but no "
+                    "options_provider is wired via BacktestConfig.options_provider. "
+                    "Multi-leg signal SKIPPED (no Fill emitted). Wire an "
+                    "OptionsProvider to enable real per-contract premium pricing.",
+                    signal.symbol,
+                )
+            return None
+
+        # When wired: delegate to legacy ExecutionSimulator's multi-leg pricer.
+        # We construct a minimal PendingOrder + Bar shape that the legacy path
+        # accepts, then translate the resulting legacy Fill into a new-shell Fill.
+        # This is the pragmatic seam — the legacy code is correct and tested,
+        # so we lean on it until the full in-shell port lands.
+        try:
+            from backtest.execution import ExecutionSimulator, PendingOrder
+            from backtest.costs import DefaultCostModel
+        except Exception as exc:  # pragma: no cover
+            log.warning(
+                "FillSimulator: legacy backtest.execution import failed (%s); "
+                "multi-leg signal skipped.", exc,
+            )
+            return None
+
+        # Minimal cost-model + simulator wired with the user's options_provider.
+        cost = DefaultCostModel(default_spread_pct=Decimal("0"))
+        sim = ExecutionSimulator(
+            cost,
+            default_spread_pct=Decimal(str(self._config.slippage_bps / 10_000)),
+            options_provider=self._config.options_provider,
+        )
+        # Construct PendingOrder shape the legacy fill_multileg expects.
+        # The legacy API is internal; we build the order from the new-shell
+        # Signal's legs, qty, etc. Any signature mismatch surfaces as an
+        # exception caught below.
+        try:
+            order = PendingOrder(
+                signal=signal,
+                symbol=signal.symbol,
+                quantity=signal.quantity or 0,
+                order_type=signal.order_type,
+                limit_price=signal.limit_price,
+                stop_price=signal.stop_price,
+                legs=signal.legs,
+                tag=signal.tag,
+            )
+            legacy_fill = sim._fill_multileg_option(order, bar=None)
+        except Exception as exc:
+            log.warning(
+                "FillSimulator: legacy multi-leg dispatch raised %s for %s; "
+                "skipping signal.", exc, signal.symbol,
+            )
+            return None
+
+        if legacy_fill is None:
+            return None
+
+        # Translate legacy Fill shape → new-shell Fill. Both share `symbol`,
+        # `quantity`, `price`, `commission` so the basic mapping is direct.
+        return Fill(
+            symbol=legacy_fill.symbol,
+            asof=asof,
+            quantity=legacy_fill.quantity,
+            price=legacy_fill.price,
+            commission=getattr(legacy_fill, "commission", Decimal("0")),
+            signal_tag=signal.tag,
+        )
 
 
 class Portfolio:

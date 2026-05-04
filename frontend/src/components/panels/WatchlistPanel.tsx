@@ -259,7 +259,7 @@ const WatchlistRow = React.memo(function WatchlistRow({
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") onSelect();
       }}
-      className={`group flex w-full items-center gap-2 px-3 py-2.5 sm:py-1.5 text-body-sm sm:text-label min-h-[44px] sm:min-h-0 transition-colors hover:bg-accent/50 active:bg-accent/60 cursor-pointer ${flashClass} ${
+      className={`group flex w-full items-center gap-2 px-3 py-2.5 sm:py-1.5 text-body-sm sm:text-label min-h-touch sm:min-h-0 transition-colors hover:bg-accent/50 active:bg-accent/60 cursor-pointer ${flashClass} ${
         isSelected ? "bg-primary/10 border-l-2 border-l-primary" : "border-l-2 border-l-transparent"
       }`}
     >

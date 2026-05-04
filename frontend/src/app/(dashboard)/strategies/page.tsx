@@ -122,7 +122,7 @@ function statusRegime(
       return { regime: "neutral", vol: "elevated", label: "paper only" };
     return { regime: "neutral", vol: "elevated", label: "paused" };
   }
-  return { regime: "neutral", label: "coming soon" };
+  return { regime: "neutral", label: "in development" };
 }
 
 // ─── Bucket assignment ───────────────────────────────────────
@@ -799,7 +799,7 @@ export default function StrategiesListingPage() {
   ) : (
     <>
       {counts.active} active · {counts.paused} paused · {counts.coming_soon}{" "}
-      coming soon
+      in development
       <span className="text-fg-hint"> · {counts.total} total</span>
     </>
   );

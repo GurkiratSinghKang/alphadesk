@@ -359,13 +359,13 @@ export function ActivityFeed({ feedItems, onNavigate, isLoading }: ActivityFeedP
           ) : feedItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8">
               <Info className="h-6 w-6 mb-2 opacity-30 text-muted-foreground" />
-              <p className="text-body">No activity yet today</p>
-              <p className="text-hint mt-1">Events appear when the pipeline runs</p>
+              <p className="text-body">No activity yet today.</p>
+              <p className="text-hint mt-1">Events appear when the pipeline runs.</p>
               <button
                 onClick={() => onNavigate("/pipeline")}
                 className="mt-2 text-label text-[var(--primary)] hover:underline"
               >
-                Run Pipeline &rarr;
+                Run pipeline &rarr;
               </button>
             </div>
           ) : (

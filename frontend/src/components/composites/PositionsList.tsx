@@ -41,7 +41,7 @@ const EMPTY_COPY: Record<PositionTab, { title: string; hint: string }> = {
     hint: "Queued and working orders appear here.",
   },
   journal: {
-    title: "Journal — coming soon.",
+    title: "Journal — in development.",
     hint: "Closed trades with rationale will live here.",
   },
 };

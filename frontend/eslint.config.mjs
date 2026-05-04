@@ -58,6 +58,20 @@ const eslintConfig = defineConfig([
           selector: "TemplateElement[value.raw=/\\b(p|pl|pr|pt|pb|px|py|m|ml|mr|mt|mb|mx|my|gap|gap-x|gap-y|space-x|space-y|w|h|min-w|min-h|max-w|max-h|top|bottom|left|right|inset-x|inset-y)-\\[(2|4|6|8|12|16|20|24|32|40|48|64|96)px\\]/]",
           message: "Use spacing-* token utilities — these px values have exact-token equivalents.",
         },
+        // QA r4-2 — guard against amber-consumer copy-paste growth.
+        // The token --amber-500 is DEPRECATED in favour of intent-specific
+        // tokens (--state-warning, --state-info-time, --state-stale).
+        // This rule warns when source files reference --amber-500 directly
+        // so future edits are nudged to the right semantic token. The token
+        // itself is still defined in design-tokens.css for backward compat.
+        {
+          selector: "Literal[value=/--amber-500/]",
+          message: "Use --state-warning (semantic warn), --state-info-time (stale/time indicators), or --state-stale per intent. Direct --amber-500 is deprecated and will be removed once all consumers migrate.",
+        },
+        {
+          selector: "TemplateElement[value.raw=/--amber-500/]",
+          message: "Use --state-warning (semantic warn), --state-info-time (stale/time indicators), or --state-stale per intent. Direct --amber-500 is deprecated and will be removed once all consumers migrate.",
+        },
       ],
     },
   },

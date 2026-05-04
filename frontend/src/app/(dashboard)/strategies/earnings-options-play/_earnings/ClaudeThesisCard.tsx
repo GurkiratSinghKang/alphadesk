@@ -205,11 +205,11 @@ function FullResearchTrigger({ running, error, onRunFull, symbol }: FullResearch
             ? "Generating full research"
             : "Run full research"
         }
-        /* B-57 min-h-[44px]: iPad touch target.
+        /* B-57 min-h-touch (44px): iPad touch target via --touch-target-floor token.
            B-88 hover:text-gold-300 lifts the CTA text from --brand
            (7.58:1 on bg-card, borderline AAA) to --gold-300 (9.89:1,
            AAA) so the hover state reads distinctly brighter. */
-        className="min-h-[44px] rounded border border-[color:var(--border)] bg-transparent px-3 py-2 t-mono text-label u-brand transition-colors hover:border-[color:var(--brand)] hover:text-gold-300 disabled:opacity-50"
+        className="min-h-touch rounded border border-[color:var(--border)] bg-transparent px-3 py-2 t-mono text-label u-brand transition-colors hover:border-[color:var(--brand)] hover:text-gold-300 disabled:opacity-50"
       >
         {running ? (
           <>▸ Generating full research<LoadingDots inline /></>

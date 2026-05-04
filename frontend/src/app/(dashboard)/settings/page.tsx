@@ -21,6 +21,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { DashboardPageLayout } from "@/components/layouts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
+import { useDestructiveAction } from "@/components/destructive/useDestructiveAction";
 import { useUIStore } from "@/stores/ui";
 import { usePreferencesStore } from "@/stores/preferences";
 import { useMarketStore } from "@/stores/market";
@@ -309,6 +311,12 @@ export default function SettingsPage() {
   const brokerForm = BROKER_FORMS[brokerProvider];
   const hasActiveAlpaca = brokerConnections.some((c) => c.provider === "alpaca" && c.status === "active");
 
+  // R4-5 W-6: replaced the old native browser confirm() with the same
+  // destructive-confirmation pattern used by the other six destructive sites
+  // in app/. Keeps copy/visual treatment consistent and gives screen readers
+  // a real dialog instead of a native alert box.
+  const destructive = useDestructiveAction();
+
   const loadBrokerData = useCallback(async () => {
     setBrokerLoading(true);
     try {
@@ -374,11 +382,7 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleDisableConnection(connection: BrokerConnection) {
-    const confirmed = window.confirm(
-      `Disable ${connection.provider.toUpperCase()} ${connection.account_env} connection ending ${connection.key_last4 ?? "unknown"}?`,
-    );
-    if (!confirmed) return;
+  async function executeDisableConnection(connection: BrokerConnection) {
     setConnectionBusyId(connection.id);
     try {
       await deleteBrokerConnection(connection.id);
@@ -389,6 +393,22 @@ export default function SettingsPage() {
     } finally {
       setConnectionBusyId(null);
     }
+  }
+
+  function handleDisableConnection(connection: BrokerConnection) {
+    const providerLabel = brokerLabel(connection.provider);
+    const last4 = connection.key_last4 ? `ending ${connection.key_last4}` : "(no key fingerprint)";
+    destructive.request({
+      title: "Disable broker connection",
+      description: `${providerLabel} (${connection.account_env}) ${last4}.`,
+      consequences: [
+        "Stops the periodic reconciler from reading this account.",
+        "Existing trades, fills, and history remain in the local ledger.",
+        "You can re-enable by re-entering credentials in the form above.",
+      ],
+      confirmLabel: "Disable connection",
+      onConfirm: () => executeDisableConnection(connection),
+    });
   }
 
   async function handleRunReconciliation() {
@@ -552,6 +572,7 @@ export default function SettingsPage() {
   }
 
   return (
+    <>
     <DashboardPageLayout eyebrow="§ SETTINGS" title="Settings">
       <div className="space-y-4">
         {/* Trading Mode */}
@@ -934,19 +955,19 @@ export default function SettingsPage() {
             <Toggle
               checked={notifications.orderFills}
               onChange={(v) => setNotificationPref("orderFills", v)}
-              label="Order Fills"
+              label="Order fills"
               description="Get notified when orders are filled"
             />
             <Toggle
               checked={notifications.alertsTriggered}
               onChange={(v) => setNotificationPref("alertsTriggered", v)}
-              label="Alerts Triggered"
+              label="Alerts triggered"
               description="Notify when price alerts hit their target"
             />
             <Toggle
               checked={notifications.pipelineCompleted}
               onChange={(v) => setNotificationPref("pipelineCompleted", v)}
-              label="Pipeline Completed"
+              label="Pipeline completed"
               description="Notify when trading pipeline finishes a run"
             />
             {/* Persona-8 #4: "Strategy Events" toggle removed — no producer
@@ -966,7 +987,7 @@ export default function SettingsPage() {
             <Toggle
               checked={display.compactStrategyView}
               onChange={(v) => setDisplayPref("compactStrategyView", v)}
-              label="Compact Strategy View"
+              label="Compact strategy view"
               description="Single-line rows in the strategy rail. Hides subtitles, packs more strategies into the same vertical space."
             />
             {/* Persona-8 #2: "Animation Speed" picker removed — there's no
@@ -1059,7 +1080,7 @@ export default function SettingsPage() {
               ) : (
                 <Download className="h-3 w-3" aria-hidden />
               )}
-              Trade History (CSV)
+              Trade history (CSV)
             </Button>
             <Button
               variant="outline"
@@ -1128,7 +1149,7 @@ export default function SettingsPage() {
       <Dialog open={liveConfirmOpen} onOpenChange={setLiveConfirmOpen}>
         <DialogContent className="bg-[var(--surface)] border-border">
           <DialogHeader>
-            <DialogTitle>Switch to Live Trading?</DialogTitle>
+            <DialogTitle>Live trading requires admin enablement</DialogTitle>
             <DialogDescription>
               Live trading requires broker API keys configured on the server.
               Contact your admin to provision credentials — this toggle does
@@ -1153,7 +1174,7 @@ export default function SettingsPage() {
               }}
               className="bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-white text-label"
             >
-              Got it
+              Understood
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1197,5 +1218,18 @@ export default function SettingsPage() {
         </DialogContent>
       </Dialog>
     </DashboardPageLayout>
+    {destructive.pending && (
+      <DestructiveConfirmModal
+        open={true}
+        onOpenChange={(open) => !open && destructive.dismiss()}
+        loading={destructive.loading}
+        title={destructive.pending.title}
+        description={destructive.pending.description}
+        consequences={destructive.pending.consequences}
+        confirmLabel={destructive.pending.confirmLabel}
+        onConfirm={destructive.fire}
+      />
+    )}
+    </>
   );
 }

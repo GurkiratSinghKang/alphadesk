@@ -26,7 +26,7 @@ import type { SymbolGroupId } from "@/stores/market";
 
 const GROUP_COLORS: Record<Exclude<SymbolGroupId, 0>, string> = {
   1: "var(--loss)", // red — primary research / "main" panel
-  2: "var(--amber-500, #d97706)", // amber — watching
+  2: "var(--state-warning, #d97706)", // amber — watching (semantic warn)
   3: "var(--profit)", // chartreuse — paired symbol
   4: "var(--ice-500, #5b8def)", // ice — comparison
 };

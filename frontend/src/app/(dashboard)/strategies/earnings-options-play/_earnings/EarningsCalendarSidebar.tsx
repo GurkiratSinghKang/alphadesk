@@ -230,10 +230,11 @@ export default function EarningsCalendarSidebar({
                     data-report-state={state}
                     className={cn(
                       // B-57: px-3/py-2 ensures ≥44 px touch target on iPad.
-                      // Round-8 / MO-05: explicit ``min-h-[44px]`` floor —
+                      // Round-8 / MO-05: explicit ``min-h-touch`` floor —
                       // the previous padding-only approach allowed slim rows
-                      // (~36px) on phones with compressed line-height.
-                      "flex w-full min-h-[44px] items-center justify-between rounded px-3 py-2 font-mono text-body-sm text-left transition-colors",
+                      // (~36px) on phones with compressed line-height. QA r4-4
+                      // migrated the arbitrary value onto the token utility.
+                      "flex w-full min-h-touch items-center justify-between rounded px-3 py-2 font-mono text-body-sm text-left transition-colors",
                       r.symbol === selected
                         ? "bg-[color:var(--bg-accent-subtle)] border-l-2 border-[color:var(--fg-accent)] text-[color:var(--fg-base)]"
                         : "hover:bg-[color:var(--bg-elevated)] text-[color:var(--fg-muted)] hover:text-[color:var(--fg-base)]",
@@ -359,7 +360,7 @@ export function buildEmptyStateMessage({
   }
 
   // B-107 fallback: name whichever filters are restricting the set.
-  if (!filters) return "No earnings match —";
+  if (!filters) return "No earnings match the current filters.";
   const windowKey = filters.window ?? "both";
   const windowText =
     windowKey === "current" ? "the current week"
@@ -375,5 +376,5 @@ export function buildEmptyStateMessage({
   if (filters.watchlistOnly) {
     parts.push("on your watchlist");
   }
-  return `${parts.join(" ")} \u00b7`;
+  return `${parts.join(" ")}.`;
 }

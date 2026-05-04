@@ -1589,7 +1589,7 @@ function PipelineSwimlane({
               tone === "profit"
                 ? "bg-[color:var(--profit)]/65"
                 : tone === "amber"
-                  ? "bg-[color:var(--amber-500,#d97706)]/65"
+                  ? "bg-[color:var(--state-warning,#d97706)]/65"
                   : tone === "loss"
                     ? "bg-[color:var(--loss)]/65"
                     : "bg-[color:var(--border)]/40";
@@ -1618,7 +1618,7 @@ function PipelineSwimlane({
             clean
           </span>
           <span className="inline-flex items-center gap-1">
-            <span className="inline-block h-2 w-2 rounded-sm bg-[color:var(--amber-500,#d97706)]/65" />
+            <span className="inline-block h-2 w-2 rounded-sm bg-[color:var(--state-warning,#d97706)]/65" />
             partial
           </span>
           <span className="inline-flex items-center gap-1">

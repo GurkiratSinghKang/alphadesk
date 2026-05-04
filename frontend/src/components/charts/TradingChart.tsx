@@ -764,7 +764,9 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
         //   custom    → ★ (brand-gold star above bar)
         if (events && events.length > 0 && mainSeriesRef.current) {
           const markerColors: Record<string, string> = {
-            earnings: getTokenVar("--amber-500", "#d9a441"),
+            // QA r4-2 — earnings is a time/event indicator, not a warning;
+            // moved to --state-info-time (slightly more neutral mustard).
+            earnings: getTokenVar("--state-info-time", "#c9a17a"),
             dividend: getTokenVar("--ice-500", "#5b8def"),
             fomc: getTokenVar("--gold-500", "#c9a66b"),
             split: getTokenVar("--loss", "#e07856"),
@@ -855,7 +857,9 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
         // ice for the slow line, gold-300 for SMA-fast, and `--fg-dim`
         // for SMA-slow. Two indicators of the same family look related
         // (fast = warmer, slow = cooler) instead of arbitrary rainbow.
-        const amber = getTokenVar("--amber-500", "#d9a441");
+        // QA r4-2 — indicator-overlay accent is a chart series color, not
+        // a warning. Migrated to --rust-500 (the new chart-5 anchor).
+        const amber = getTokenVar("--rust-500", "#c47a4a");
         const ice = getTokenVar("--ice-500", "#8db3c4");
         const goldMid = getTokenVar("--gold-300", "#e0c070");
         const fgDim = getTokenVar("--fg-dim", "#a8a08d");

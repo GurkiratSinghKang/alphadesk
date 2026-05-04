@@ -79,24 +79,28 @@ function ApiDegradedBanner({
   const labels = issues.map((issue) => issue.label).join(", ");
   const count = issues.reduce((sum, issue) => sum + issue.count, 0);
   const newest = issues[0];
+  // QA r4-2 — token-ized. Raw amber hex literals replaced with the
+  // --state-warning-* semantic tokens (dark warning bg, warning border,
+  // warning fg, warning fg-muted). The button hover shade is derived
+  // via color-mix so we don't need a one-off token for it.
   return (
     <div
       role="status"
       aria-live="polite"
       data-slot="api-degraded-banner"
-      className="w-full border-b border-[#6f541f] bg-[#21190d] px-4 py-2 text-[#f8d590]"
+      className="w-full border-b border-state-warning-border bg-state-warning-bg px-4 py-2 text-state-warning-fg"
     >
       <div className="mx-auto flex max-w-[1500px] flex-col gap-2 text-label leading-snug sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <span className="font-semibold uppercase tracking-wide">Data unavailable</span>
-          <span className="mx-2 text-[#d9b165]">·</span>
+          <span className="mx-2 text-state-warning-fg-muted">·</span>
           <span className="font-medium">{labels}</span>
-          <span className="mx-2 text-[#d9b165]">·</span>
-          <span className="text-[#e7c477]">
+          <span className="mx-2 text-state-warning-fg-muted">·</span>
+          <span className="text-state-warning-fg-muted">
             grouped {count} backend issue{count === 1 ? "" : "s"}; affected views stay cached, locked, or empty.
           </span>
           {newest?.message ? (
-            <span className="ml-2 hidden text-[#d9b165] md:inline">
+            <span className="ml-2 hidden text-state-warning-fg-muted md:inline">
               Latest: {newest.message}
             </span>
           ) : null}
@@ -104,7 +108,7 @@ function ApiDegradedBanner({
         <button
           type="button"
           onClick={onDismiss}
-          className="inline-flex min-h-8 shrink-0 items-center justify-center self-start rounded-sm border border-[#8c6a28] px-3 font-sans text-label font-semibold text-[#f8d590] transition-colors hover:bg-[#3a2a12] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f8d590] sm:self-auto"
+          className="inline-flex min-h-8 shrink-0 items-center justify-center self-start rounded-sm border border-state-warning-border px-3 font-sans text-label font-semibold text-state-warning-fg transition-colors hover:bg-[color-mix(in_oklab,var(--state-warning-bg)_55%,var(--state-warning-border))] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-state-warning-fg sm:self-auto"
         >
           Dismiss
         </button>
@@ -260,7 +264,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             legible "Skip to content" affordance on Tab. */}
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[60] focus:w-auto focus:h-auto focus:min-h-[44px] focus:inline-flex focus:items-center focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:bg-primary focus:text-primary-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:rounded-md"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[60] focus:w-auto focus:h-auto focus:min-h-touch focus:inline-flex focus:items-center focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:bg-primary focus:text-primary-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:rounded-md"
         >
           Skip to content
         </a>
@@ -297,7 +301,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           on focus so the link is a visible, tappable target. */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:w-auto focus:h-auto focus:min-h-[44px] focus:inline-flex focus:items-center focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:bg-primary focus:text-primary-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:rounded-md"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:w-auto focus:h-auto focus:min-h-touch focus:inline-flex focus:items-center focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:bg-primary focus:text-primary-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:rounded-md"
       >
         Skip to content
       </a>
@@ -320,7 +324,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           showed "v1.0" while the desk StatusBar read `NEXT_PUBLIC_BUILD_VERSION`
           (e.g. "2025.10.18-a1b2c3d"). */}
       <footer role="contentinfo" className="relative z-0 border-t border-border/50 bg-ink-050/88 px-4 py-3 text-center text-label text-muted-foreground">
-        AlphaDesk {process.env.NEXT_PUBLIC_BUILD_VERSION ?? "dev"} — Powered by Claude AI — &copy; {new Date().getFullYear()}
+        AlphaDesk {process.env.NEXT_PUBLIC_BUILD_VERSION ?? "dev"} — Built on Claude — &copy; {new Date().getFullYear()}
       </footer>
       <CommandPalette />
       <AICopilot />

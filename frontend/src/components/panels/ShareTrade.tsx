@@ -230,7 +230,7 @@ function ShareCard({ data }: { data: ShareCardData }) {
       {/* AI Summary */}
       {data.summary && (
         <div className="rounded-lg bg-primary/5 border border-primary/10 px-3 py-2 mb-4">
-          <div className="text-label text-primary/70 mb-1 font-medium">AI Analysis</div>
+          <div className="text-label text-primary/70 mb-1 font-medium">AI analysis</div>
           <p className="text-label text-foreground/80 leading-relaxed line-clamp-3">
             {data.summary}
           </p>
@@ -379,7 +379,10 @@ export function ShareTradeButton({ symbol: symbolProp, analysis, pnl, pnlPct }: 
       const brand = token("--brand", "#c9a66b");
       const profit = token("--profit", "#a8d04d");
       const loss = token("--loss", "#e07856");
-      const amber = token("--amber-500", "#d9a441");
+      // QA r4-2 — moved from deprecated --amber-500 to --state-warning;
+      // this canvas paint represents a "caution" technical score (neither
+      // profit nor loss tier), which is exactly the warning intent.
+      const amber = token("--state-warning", "#d9a441");
       const fg = token("--fg", "#ece6d2");
       const fgMuted = token("--fg-muted", "#7d7665");
       const fgHint = token("--fg-hint", "#5b5547");
@@ -524,7 +527,7 @@ export function ShareTradeButton({ symbol: symbolProp, analysis, pnl, pnlPct }: 
         ctx.fillRect(20, yOffset, width - 40, 50);
         ctx.fillStyle = brand;
         ctx.font = `500 10px ${fontUi}`;
-        ctx.fillText("AI Analysis", 28, yOffset + 14);
+        ctx.fillText("AI analysis", 28, yOffset + 14);
         ctx.fillStyle = fg;
         ctx.font = `11px ${fontUi}`;
         const summaryTruncated = cardData.summary.length > 100 ? cardData.summary.slice(0, 100) + "..." : cardData.summary;

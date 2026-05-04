@@ -58,8 +58,19 @@
   --color-ice: var(--ice-500);
   --color-wine: var(--wine-500);
   --color-amber: var(--amber-500);
+  --color-rust: var(--rust-500);
   --color-up: var(--up-500);
   --color-down: var(--down-500);
+
+  /* QA r4-2 — semantic warning palette (decomposed from --amber-500). Wired
+     here so utility classes like bg-state-warning-bg, border-state-warning-border,
+     text-state-warning-fg resolve. Use these on banners/toasts/etc. */
+  --color-state-warning: var(--state-warning);
+  --color-state-warning-bg: var(--state-warning-bg);
+  --color-state-warning-border: var(--state-warning-border);
+  --color-state-warning-fg: var(--state-warning-fg);
+  --color-state-warning-fg-muted: var(--state-warning-fg-muted);
+  --color-state-info-time: var(--state-info-time);
 
   /* Ink scale (warm near-blacks) */
   --color-ink-000: var(--ink-000);
@@ -124,7 +135,9 @@
   --color-chart-2: var(--down-500);
   --color-chart-3: var(--gold-300);
   --color-chart-4: var(--ice-500);
-  --color-chart-5: var(--amber-500);
+  /* QA r4-2 — chart-5 routed to --rust-500 (own accent) instead of --amber-500
+     (warning intent). Keeps chart series visually distinct from warnings. */
+  --color-chart-5: var(--rust-500);
 
   /* Fonts — wired to design-tokens.css font vars */
   --font-display: var(--font-display);
@@ -168,6 +181,18 @@
   --spacing-12: var(--space-12);
   --spacing-16: var(--space-16);
   --spacing-24: var(--space-24);
+
+  /* QA r4-4 — Touch / tap-target floor.
+     Unlocks Tailwind utilities: `min-h-touch`, `h-touch`, `min-w-touch`. */
+  --spacing-touch: var(--touch-target-floor);
+
+  /* QA r4-4 — Marketing / long-form rhythm.
+     Unlocks Tailwind utilities: `space-y-section`, `space-y-section-sm`,
+     `space-y-prose` (and the `mt-*` / `mb-*` / `gap-*` family via the same
+     spacing namespace). */
+  --spacing-section: var(--space-section);
+  --spacing-section-sm: var(--space-section-sm);
+  --spacing-prose: var(--space-prose);
 
   /* QA r6a — Shadow tokens */
   --shadow-1: var(--shadow-1);

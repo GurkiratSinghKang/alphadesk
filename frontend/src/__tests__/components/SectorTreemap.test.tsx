@@ -118,7 +118,9 @@ describe('SectorTreemap component', () => {
 
   // ─── Color coding (Tailwind classes) ─────────────────────────
 
-  it('applies emerald-600 class for > +2% change', () => {
+  // QA r4-2 — migrated from off-system bg-emerald-* / bg-red-* defaults
+  // to AlphaDesk's semantic up-* / down-* (chartreuse/coral) tokens.
+  it('applies up-700 (semantic) class for > +2% change', () => {
     const { container } = render(
       <SectorTreemap
         sectors={[{ sector: 'Tech', change_pct: 2.5 }]}
@@ -127,10 +129,10 @@ describe('SectorTreemap component', () => {
       />,
     );
     const rect = container.querySelector('.absolute') as HTMLElement;
-    expect(rect.className).toContain('bg-emerald-600');
+    expect(rect.className).toContain('bg-up-700');
   });
 
-  it('applies red-600 class for < -2% change', () => {
+  it('applies down-700 (semantic) class for < -2% change', () => {
     const { container } = render(
       <SectorTreemap
         sectors={[{ sector: 'Energy', change_pct: -2.5 }]}
@@ -139,10 +141,10 @@ describe('SectorTreemap component', () => {
       />,
     );
     const rect = container.querySelector('.absolute') as HTMLElement;
-    expect(rect.className).toContain('bg-red-600');
+    expect(rect.className).toContain('bg-down-700');
   });
 
-  it('applies zinc-700 class for neutral changes', () => {
+  it('applies neutral class for near-zero changes', () => {
     const { container } = render(
       <SectorTreemap
         sectors={[{ sector: 'Flat', change_pct: 0.1 }]}

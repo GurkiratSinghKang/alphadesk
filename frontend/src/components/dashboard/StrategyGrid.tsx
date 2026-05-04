@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Activity, Target, LayoutGrid, List } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -202,6 +203,7 @@ interface StrategyGridProps {
 }
 
 export function StrategyGrid({ strategies, regimeLabel, onStrategyClick }: StrategyGridProps) {
+  const router = useRouter();
   // Always start with "expanded" during SSR/hydration to avoid mismatch,
   // then sync from localStorage after mount
   const [viewMode, setViewMode] = useState<ViewMode>("expanded");
@@ -255,7 +257,21 @@ export function StrategyGrid({ strategies, regimeLabel, onStrategyClick }: Strat
           </div>
         </div>
       </div>
-      {viewMode === "expanded" ? (
+      {strategies.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-10">
+          <Target className="h-6 w-6 mb-2 opacity-30 text-muted-foreground" />
+          <p className="text-xs text-muted-foreground">No strategies enabled.</p>
+          <p className="text-label text-muted-foreground mt-1">
+            Activate a strategy to start surfacing positions and P&amp;L here.
+          </p>
+          <button
+            onClick={() => router.push("/strategies")}
+            className="mt-2 text-label text-[var(--primary)] hover:underline"
+          >
+            Browse strategies &rarr;
+          </button>
+        </div>
+      ) : viewMode === "expanded" ? (
         <div className="p-3 space-y-4">
           {(["fundamental", "technical", "other"] as StrategyGroup[]).map((group) => {
             const grouped = strategies.filter(

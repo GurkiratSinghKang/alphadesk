@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { BarChart3 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { StrategyData } from "@/components/dashboard/StrategyGrid";
@@ -21,6 +22,7 @@ interface StrategyPnl {
 }
 
 export function PnlAttribution({ strategies }: PnlAttributionProps) {
+  const router = useRouter();
   const { items, totalPnl } = useMemo(() => {
     // Compute dollar P&L from invested_amount and total_return_pct
     const withPnl: StrategyPnl[] = strategies
@@ -56,8 +58,17 @@ export function PnlAttribution({ strategies }: PnlAttributionProps) {
           <BarChart3 className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold text-foreground">P&L Attribution</h2>
         </div>
-        <div className="flex items-center justify-center py-8">
-          <p className="text-label text-muted-foreground">No strategy P&L data yet</p>
+        <div className="flex flex-col items-center justify-center py-8">
+          <p className="text-label text-muted-foreground">No strategy P&L data yet.</p>
+          <p className="text-label text-muted-foreground mt-1">
+            Attribution appears once strategies hold positions.
+          </p>
+          <button
+            onClick={() => router.push("/strategies")}
+            className="mt-2 text-label text-[var(--primary)] hover:underline"
+          >
+            Configure strategies &rarr;
+          </button>
         </div>
       </div>
     );
