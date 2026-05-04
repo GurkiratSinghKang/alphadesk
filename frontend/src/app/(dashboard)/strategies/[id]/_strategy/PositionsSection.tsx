@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import Mono from "@/components/typography/Mono";
 import PnLNumber from "@/components/primitives/PnLNumber";
+import EmptyState from "@/components/primitives/EmptyState";
 import { cn } from "@/lib/utils";
 import type { StrategyPositionDetail } from "@/lib/api";
 
@@ -49,23 +50,12 @@ export default function PositionsSection({
   className,
 }: PositionsSectionProps) {
   if (!positions || positions.length === 0) {
-    // 2026-04-21 polish: secondary copy lifted from 12px to 13px (the
-    // fs-hint floor) so the empty-state hint is legible without looking
-    // like a test-double placeholder.
     return (
-      <div
-        className={cn(
-          "rounded-lg border border-border bg-bg-elev-1 px-5 py-10 text-center",
-          className
-        )}
-      >
-        <p className="font-display italic text-[17px] text-fg-muted">
-          No positions open.
-        </p>
-        <p className="mt-2 font-sans text-[13px] text-fg-hint">
-          Positions will appear here when the strategy next enters a trade.
-        </p>
-      </div>
+      <EmptyState
+        title="This strategy hasn't traded yet"
+        description="Open positions and signals will populate here once the strategy goes live."
+        className={className}
+      />
     );
   }
 
