@@ -528,7 +528,7 @@ function Section({
           <h2 className="t-h2">
             {title}
           </h2>
-          <Mono size="micro" className="">
+          <Mono size="micro">
             {String(count).padStart(2, "0")}
           </Mono>
         </div>
@@ -820,7 +820,6 @@ export default function StrategiesListingPage() {
       title="Strategies"
       actions={actions}
     >
-      <h1 className="sr-only">Strategies catalogue</h1>
       <main aria-label="Strategies catalogue" className="flex flex-col gap-8">
         {/* Round-8 killer-move 2: catalogue hero strip. Three KpiTile-style
             cards anchor the page in 3 seconds — a portfolio view of all
@@ -945,7 +944,7 @@ export default function StrategiesListingPage() {
                     <h2 className="t-h2">
                       Research
                     </h2>
-                    <Mono size="micro" className="">
+                    <Mono size="micro">
                       {String(researchEntries.length).padStart(2, "0")}
                     </Mono>
                   </div>

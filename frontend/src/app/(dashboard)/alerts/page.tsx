@@ -24,6 +24,7 @@ import {
 } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
+import { fmtPlural } from "@/lib/intl";
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -784,9 +785,9 @@ export default function AlertsPage() {
       })
     );
     if (failed > 0) {
-      toast({ type: "error", message: `Failed to delete ${failed} ${failed === 1 ? "alert" : "alerts"}` });
+      toast({ type: "error", message: `Failed to delete ${fmtPlural(failed, "alert")}` });
     } else {
-      toast({ type: "success", message: `Cleared ${triggered.length} triggered ${triggered.length === 1 ? "alert" : "alerts"}` });
+      toast({ type: "success", message: `Cleared ${fmtPlural(triggered.length, "triggered alert")}` });
     }
     fetchAlerts();
   };
@@ -803,7 +804,7 @@ export default function AlertsPage() {
       })
     );
     if (failed > 0) {
-      toast({ type: "error", message: `Failed to delete ${failed} ${failed === 1 ? "alert" : "alerts"}` });
+      toast({ type: "error", message: `Failed to delete ${fmtPlural(failed, "alert")}` });
     } else {
       toast({ type: "success", message: "All alerts deleted" });
     }
@@ -911,8 +912,6 @@ export default function AlertsPage() {
       title="Alerts & triggers"
       actions={headerActions}
     >
-      <h1 className="sr-only">Alerts &amp; triggers</h1>
-
       {/* Round-8 killer-move 2: alerts hero summary line. The page
           previously had no anchor — a 30%-vertical Create form
           dominated even when alerts existed. This 1-line t-meta

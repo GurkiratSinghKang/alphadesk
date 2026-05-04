@@ -60,9 +60,9 @@ export default function DashboardErrorPage({
   }, [error, resolvedRoute]);
 
   const message =
-    (error.message && error.message.trim().length > 0
+    error.message && error.message.trim().length > 0
       ? error.message
-      : fallbackMessage) ?? fallbackMessage;
+      : fallbackMessage;
 
   const wrapperClass = fullScreen
     ? "flex min-h-screen items-center justify-center bg-bg text-fg"
@@ -78,7 +78,7 @@ export default function DashboardErrorPage({
             {resolvedHeadline}
           </Display>
           <p className="font-display italic text-[15px] leading-snug text-fg-muted">
-            {message || "The page failed to render — refresh, or jump to a different surface. The desk has been notified."}
+            {message}
           </p>
           {error.digest ? (
             <p className="t-mono-micro text-fg-hint">Ref: {error.digest}</p>
