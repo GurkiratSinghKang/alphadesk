@@ -130,7 +130,8 @@ export function OptionsPanel() {
   const quoteData = useQuote(selectedSymbol);
   const { selectedStrikes, toggleStrike } = useOptionsStore();
   const today = new Date().toDateString();
-  const expirations = useMemo(generateExpirations, [today]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed on `today` so expirations regenerate after midnight; generateExpirations reads the current date internally.
+  const expirations = useMemo(() => generateExpirations(), [today]);
   const [selectedExpiry, setSelectedExpiry] = useState(expirations[2] ?? "");
 
   // Reset selectedExpiry when expirations regenerate (e.g. after midnight)

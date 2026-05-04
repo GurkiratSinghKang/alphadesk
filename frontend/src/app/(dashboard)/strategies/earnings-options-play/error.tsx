@@ -11,7 +11,6 @@ export default function EarningsOptionsPlayError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // eslint-disable-next-line no-console
     console.error("[earnings-options-play] route error", error);
   }, [error]);
   return (

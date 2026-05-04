@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Plus,
   Minus,
@@ -33,7 +33,6 @@ import {
   getChangeTextClass,
   cn,
 } from "@/lib/utils";
-import { fmtPlural } from "@/lib/intl";
 import { HelpCircle } from "@/components/ui/HelpCircle";
 import { safeGetItem, safeSetItem } from "@/lib/storage";
 import { PnlCalendar } from "@/components/panels/PnlCalendar";
@@ -371,8 +370,9 @@ function TradeBuilderTab() {
       const order = await placeOrder(pendingOrder);
       addOrder(order);
       setPendingOrder(null);
-    } catch (err: any) {
-      toast({ type: "error", message: "Order failed: " + (err?.message || "Unknown error") });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      toast({ type: "error", message: "Order failed: " + message });
     } finally {
       setSubmitting(false);
     }
@@ -937,10 +937,11 @@ function OrdersTab() {
       await cancelOrder(id);
       updateOrderStatus(id, "cancelled");
       toast({ type: "success", message: "Order cancelled" });
-    } catch (err: any) {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
       toast({
         type: "error",
-        message: "Cancel failed: " + (err?.message || "Unknown error"),
+        message: "Cancel failed: " + message,
       });
     } finally {
       setCancelling((prev) => {

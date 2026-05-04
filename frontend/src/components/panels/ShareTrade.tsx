@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { Share2, Copy, Download, Check } from "lucide-react";
 import {
   Dialog,
@@ -164,7 +164,7 @@ function ShareCard({ data }: { data: ShareCardData }) {
           </div>
         ) : (
           <div className="rounded-lg bg-bg-elev-2 border border-border-hair px-3 py-2">
-            <div className="text-label text-muted-foreground mb-0.5">Today's Range</div>
+            <div className="text-label text-muted-foreground mb-0.5">Today&apos;s Range</div>
             <div className="text-sm font-bold text-foreground tabular-nums">
               {(data.low ?? 0).toFixed(2)}–{(data.high ?? 0).toFixed(2)}
             </div>
@@ -293,22 +293,43 @@ export function ShareTradeButton({ symbol: symbolProp, analysis, pnl, pnlPct }: 
     ? realResistance
     : null;
 
-  const cardData: ShareCardData = {
-    symbol: selectedSymbol,
-    price,
-    change,
-    changePct,
-    high: quote?.high ?? price,
-    low: quote?.low ?? price,
-    volume: quote?.volume ?? 0,
-    technicalScore: techScore,
-    rsi,
-    support,
-    resistance,
-    summary: analysis?.summary ?? null,
-    pnl: pnl ?? null,
-    pnlPct: pnlPct ?? null,
-  };
+  // Wrap the card data in useMemo so its identity stays stable across
+  // renders — the downstream useCallback hooks key on it and would
+  // otherwise rebuild every render.
+  const cardData: ShareCardData = useMemo(
+    () => ({
+      symbol: selectedSymbol,
+      price,
+      change,
+      changePct,
+      high: quote?.high ?? price,
+      low: quote?.low ?? price,
+      volume: quote?.volume ?? 0,
+      technicalScore: techScore,
+      rsi,
+      support,
+      resistance,
+      summary: analysis?.summary ?? null,
+      pnl: pnl ?? null,
+      pnlPct: pnlPct ?? null,
+    }),
+    [
+      selectedSymbol,
+      price,
+      change,
+      changePct,
+      quote?.high,
+      quote?.low,
+      quote?.volume,
+      techScore,
+      rsi,
+      support,
+      resistance,
+      analysis?.summary,
+      pnl,
+      pnlPct,
+    ],
+  );
 
   const handleCopyText = useCallback(async () => {
     const text = buildTextSummary(cardData);

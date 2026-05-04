@@ -22,7 +22,6 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useMarketStore } from "@/stores/market";
 import { useUIStore } from "@/stores/ui";
-import { usePortfolioStore } from "@/stores/portfolio";
 import { cn, safeNum } from "@/lib/utils";
 import { HelpCircle } from "@/components/ui/HelpCircle";
 import { chatWithAgent, getAnalysis, analyzeSymbol, placeOrder } from "@/lib/api";
@@ -513,9 +512,12 @@ function SentimentTab({ symbol, analysis, loading, timedOut }: { symbol: string;
       </div>
     );
   }
-  // Vary estimated flow amounts by symbol charCode seed so different symbols show different amounts
+  // Vary estimated flow amounts by symbol charCode seed so different symbols show different amounts.
+  // Deterministic Park-Miller LCG seeded by symbol — each render with the same symbol
+  // produces the same numbers, so the closure-mutation here is render-stable mock data.
   let flowSeed = 0;
   for (let c = 0; c < symbol.length; c++) flowSeed += symbol.charCodeAt(c);
+  // eslint-disable-next-line react-hooks/immutability -- intentional: deterministic seeded RNG drives 3 mock display values; mutation is render-local and the result is identical per-symbol
   const flowRng = () => { flowSeed = (flowSeed * 16807) % 2147483647; return (flowSeed - 1) / 2147483646; };
   const callSweep = (1.5 + flowRng() * 3.0).toFixed(1);
   const putBuy = (0.5 + flowRng() * 1.5).toFixed(1);
@@ -796,8 +798,9 @@ function OrderTab({ symbol }: { symbol: string }) {
         stop_price: orderType === "stop" ? stopPrice : orderType === "stop_limit" ? stopPrice : undefined,
       });
       toast({ type: "success", message: `Order placed: ${buildOrderLabel()}` });
-    } catch (err: any) {
-      toast({ type: "error", message: err?.message ?? "Order failed" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Order failed";
+      toast({ type: "error", message });
     } finally {
       setSubmitting(false);
     }

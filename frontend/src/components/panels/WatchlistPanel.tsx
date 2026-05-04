@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { Plus, X, TrendingUp, TrendingDown, MoreHorizontal, ChevronUp, ChevronDown, Save, ShoppingCart, Settings } from "lucide-react";
+import { Plus, X, TrendingUp, TrendingDown, MoreHorizontal, ChevronUp, ChevronDown, Save, Settings } from "lucide-react";
 import { HelpCircle } from "@/components/ui/HelpCircle";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";

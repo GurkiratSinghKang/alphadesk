@@ -103,6 +103,7 @@ function usePerformanceMonitor() {
     p99ResponseMs: 0,
   });
 
+  // eslint-disable-next-line react-hooks/purity -- useRef initial value runs once on mount; behavior-preserving sentinel for ws uptime calculations.
   const wsStartRef = useRef<number>(Date.now());
   const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
@@ -117,21 +118,14 @@ function usePerformanceMonitor() {
 
   // Track WebSocket state
   useEffect(() => {
-    let reconnects = 0;
-
     const handleWsOpen = () => {
       wsStartRef.current = Date.now();
     };
-    const handleWsClose = () => {
-      reconnects++;
-    };
 
     window.addEventListener("alphadesk:ws-open", handleWsOpen);
-    window.addEventListener("alphadesk:ws-close", handleWsClose);
 
     return () => {
       window.removeEventListener("alphadesk:ws-open", handleWsOpen);
-      window.removeEventListener("alphadesk:ws-close", handleWsClose);
     };
   }, []);
 

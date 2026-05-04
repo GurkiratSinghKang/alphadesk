@@ -205,23 +205,29 @@ export function StressTest() {
   const [customPct, setCustomPct] = useState<string>("-10");
   const [showPositions, setShowPositions] = useState(false);
 
-  const activeScenario = selectedScenario === "custom"
-    ? {
-        id: "custom",
-        name: "Custom Scenario",
-        description: `All positions ${parseFloat(customPct) >= 0 ? "+" : ""}${customPct}%`,
-        modifier: () => (parseFloat(customPct) || 0) / 100,
-        color: parseFloat(customPct) >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]",
-      }
-    // Fallback to SCENARIOS[0] if the persisted id ever drifts from the list
-    // (e.g. a scenario was removed in a release). Never assert non-null — a
-    // missing scenario used to blow up `.modifier` on load.
-    : (SCENARIOS.find((s) => s.id === selectedScenario) ?? SCENARIOS[0]);
+  // Wrap in useMemo so the conditional object identity is stable across
+  // renders; otherwise the downstream `result` memo invalidates every render.
+  const activeScenario = useMemo(
+    () =>
+      selectedScenario === "custom"
+        ? {
+            id: "custom",
+            name: "Custom Scenario",
+            description: `All positions ${parseFloat(customPct) >= 0 ? "+" : ""}${customPct}%`,
+            modifier: () => (parseFloat(customPct) || 0) / 100,
+            color: parseFloat(customPct) >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]",
+          }
+        // Fallback to SCENARIOS[0] if the persisted id ever drifts from the list
+        // (e.g. a scenario was removed in a release). Never assert non-null — a
+        // missing scenario used to blow up `.modifier` on load.
+        : (SCENARIOS.find((s) => s.id === selectedScenario) ?? SCENARIOS[0]),
+    [selectedScenario, customPct],
+  );
 
   const result = useMemo(() => {
     if (!positions.length) return null;
     return computeStressResult(positions, activeScenario.modifier);
-  }, [positions, activeScenario, selectedScenario, customPct]);
+  }, [positions, activeScenario]);
 
   if (!open) {
     return (

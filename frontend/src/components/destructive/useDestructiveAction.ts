@@ -21,7 +21,6 @@ export function useDestructiveAction() {
     } catch (err) {
       // Consumer's onConfirm should handle/log errors themselves; we just
       // release the loading state and KEEP the modal open so they can retry.
-      // eslint-disable-next-line no-console
       console.error("[destructive] action failed", err);
     } finally {
       setLoading(false);

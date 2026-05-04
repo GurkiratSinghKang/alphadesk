@@ -404,6 +404,12 @@ export default function ChartPane({
     timeframe: "D",
     limit: 60,
   });
+  // Key on primitive signature (symbols + per-symbol bar count) —
+  // ``compareBars`` is a react-query wrapper whose identity churns
+  // every poll and would otherwise re-fit the chart every render.
+  // Extracted to variables so the lint rule can statically check them.
+  const compareSymbolsKey = compareSymbols.join(",");
+  const compareBarCountsKey = compareSymbols.map((s) => compareBars[s]?.length ?? 0).join(",");
   // Build the {symbol, bars} array from the closes-per-symbol cache.
   // Convert closes[] back into OHLCVBar[] (we only need close + time).
   const compareSeriesProp = React.useMemo(() => {
@@ -423,14 +429,8 @@ export default function ChartPane({
       }));
       return [{ symbol: sym, bars }];
     });
-    // Key on primitive signature (symbols + per-symbol bar count) —
-    // ``compareBars`` is a react-query wrapper whose identity churns
-    // every poll and would otherwise re-fit the chart every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    compareSymbols.join(","),
-    compareSymbols.map((s) => compareBars[s]?.length ?? 0).join(","),
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed on primitive signatures (compareSymbolsKey, compareBarCountsKey) instead of identity-unstable compareSymbols/compareBars
+  }, [compareSymbolsKey, compareBarCountsKey]);
 
   // Slice-8 / CH-3D (2026 chart audit, TradingView signature): Bar Replay.
   //   ``replayEnabled`` — toggles the entire replay UX
@@ -511,38 +511,68 @@ export default function ChartPane({
     [visibleData],
   );
 
+  // Extract `marketDepth` top-bid/ask snapshots to local variables so that
+  // the lint rule can statically check the dependency expressions.
+  const mdProvider = marketDepth?.provider;
+  const mdKind = marketDepth?.kind;
+  const mdIsL2 = marketDepth?.isL2;
+  const mdTimestamp = marketDepth?.timestamp;
+  const mdTopBid = marketDepth?.bids?.[0];
+  const mdTopAsk = marketDepth?.asks?.[0];
+  const mdTopBidPrice = mdTopBid?.price;
+  const mdTopBidSize = mdTopBid?.size;
+  const mdTopBidVenue = mdTopBid?.venue;
+  const mdTopAskPrice = mdTopAsk?.price;
+  const mdTopAskSize = mdTopAsk?.size;
+  const mdTopAskVenue = mdTopAsk?.venue;
+  const mdBidsLen = marketDepth?.bids?.length;
+  const mdAsksLen = marketDepth?.asks?.length;
   const effectiveTopOfBook = React.useMemo(
     () => depthToTopOfBook(marketDepth) ?? topOfBook,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed on stable primitive snapshots (mdProvider, mdKind, ...) instead of identity-unstable marketDepth object
     [
-      marketDepth?.provider,
-      marketDepth?.kind,
-      marketDepth?.isL2,
-      marketDepth?.timestamp,
-      marketDepth?.bids?.[0]?.price,
-      marketDepth?.bids?.[0]?.size,
-      marketDepth?.bids?.[0]?.venue,
-      marketDepth?.asks?.[0]?.price,
-      marketDepth?.asks?.[0]?.size,
-      marketDepth?.asks?.[0]?.venue,
-      marketDepth?.bids?.length,
-      marketDepth?.asks?.length,
+      mdProvider,
+      mdKind,
+      mdIsL2,
+      mdTimestamp,
+      mdTopBidPrice,
+      mdTopBidSize,
+      mdTopBidVenue,
+      mdTopAskPrice,
+      mdTopAskSize,
+      mdTopAskVenue,
+      mdBidsLen,
+      mdAsksLen,
       topOfBook,
     ],
   );
 
+  // Extract `effectiveTopOfBook` fields to locals so the lint rule can
+  // statically check the dependency expressions.
+  const etbBid = effectiveTopOfBook?.bid;
+  const etbAsk = effectiveTopOfBook?.ask;
+  const etbBidSize = effectiveTopOfBook?.bidSize;
+  const etbAskSize = effectiveTopOfBook?.askSize;
+  const etbBidExchange = effectiveTopOfBook?.bidExchange;
+  const etbAskExchange = effectiveTopOfBook?.askExchange;
+  const etbSource = effectiveTopOfBook?.source;
+  const etbIsL2 = effectiveTopOfBook?.isL2;
+  const etbKind = effectiveTopOfBook?.kind;
+  const etbDepthLevels = effectiveTopOfBook?.depthLevels;
   const topBook = React.useMemo(
     () => normalizeTopOfBook(effectiveTopOfBook),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed on extracted primitive fields, not the identity-unstable effectiveTopOfBook object
     [
-      effectiveTopOfBook?.bid,
-      effectiveTopOfBook?.ask,
-      effectiveTopOfBook?.bidSize,
-      effectiveTopOfBook?.askSize,
-      effectiveTopOfBook?.bidExchange,
-      effectiveTopOfBook?.askExchange,
-      effectiveTopOfBook?.source,
-      effectiveTopOfBook?.isL2,
-      effectiveTopOfBook?.kind,
-      effectiveTopOfBook?.depthLevels,
+      etbBid,
+      etbAsk,
+      etbBidSize,
+      etbAskSize,
+      etbBidExchange,
+      etbAskExchange,
+      etbSource,
+      etbIsL2,
+      etbKind,
+      etbDepthLevels,
     ],
   );
 

@@ -44,15 +44,13 @@ function getHealthBgClass(health: MarketHealth): string {
 }
 
 export function MarketBreadth({ sectors }: MarketBreadthProps) {
-  const { advancing, declining, unchanged, health, advDecRatio } = useMemo(() => {
+  const { advancing, declining, health, advDecRatio } = useMemo(() => {
     let adv = 0;
     let dec = 0;
-    let unch = 0;
 
     for (const s of sectors) {
       if (s.change_pct > 0) adv++;
       else if (s.change_pct < 0) dec++;
-      else unch++;
     }
 
     const total = sectors.length;
@@ -62,7 +60,6 @@ export function MarketBreadth({ sectors }: MarketBreadthProps) {
     return {
       advancing: adv,
       declining: dec,
-      unchanged: unch,
       health: h,
       advDecRatio: ratio,
     };

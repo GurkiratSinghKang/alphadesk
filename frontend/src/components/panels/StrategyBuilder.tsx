@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Brain, Sparkles, Play, Plus, X, AlertTriangle, Lightbulb, BarChart3, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { refineStrategy, type StrategyRefinement } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";

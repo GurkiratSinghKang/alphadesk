@@ -96,7 +96,7 @@ export const CONTACT_CLAUSES: StaticClause[] = [
         <div className="mt-3">
           <EditorialP>
             If your issue is with broker execution itself (orders stuck,
-            funds missing, rejection you don't understand), contact your
+            funds missing, rejection you don&apos;t understand), contact your
             brokerage directly — AlphaDesk is a client of Alpaca, not a
             custodian of your funds.
           </EditorialP>

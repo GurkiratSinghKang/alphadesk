@@ -107,6 +107,7 @@ function formatTime(date: Date): string {
 
 export function buildFeedItems(
   pipelineStatus: PipelineStatus | null,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO(typed-api): pipeline log shape is dynamic across strategies; type via FastAPI codegen
   pipelineLog: Record<string, any> | null,
   regime: RegimeData | null,
 ): FeedItem[] {
@@ -126,6 +127,7 @@ export function buildFeedItems(
     let totalAnalyzed = 0;
     let totalRequested = 0;
     let totalApproved = 0;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO(typed-api): strategy result shape varies; type via FastAPI codegen
     for (const s of Object.values(strats) as any[]) {
       totalScreened += s.screened ?? 0;
       totalAnalyzed += s.analyzed ?? 0;
@@ -150,6 +152,7 @@ export function buildFeedItems(
     const rejections = master.rejections ?? [];
     if (rejections.length > 0) {
       // Show each rejection with its remediation advice
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO(typed-api): rejection shape; type via FastAPI codegen
       for (const r of rejections.slice(0, 5) as any[]) {
         items.push({
           id: `rejection-${r.symbol}-${r.strategy}`,
