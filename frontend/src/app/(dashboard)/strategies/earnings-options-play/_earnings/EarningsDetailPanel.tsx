@@ -10,7 +10,8 @@ import {
   type ReactNode,
 } from "react";
 import { ArrowUpCircle, Bookmark, X } from "lucide-react";
-import type { EarningsCandidateDecision, EarningsDetail, EarningsErrorCode, TickerContext, TickerFactEnvelope } from "@/types";
+import type { CalendarRow, EarningsCandidateDecision, EarningsDetail, EarningsErrorCode, TickerContext, TickerFactEnvelope } from "@/types";
+import CalendarWeekHeatmap from "./CalendarWeekHeatmap";
 import type { SelectionSource } from "../page";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +50,10 @@ export interface EarningsDetailPanelProps {
    *  passed through to DetailHeader so it autofocuses on keyboard /
    *  URL changes only, never on pointer clicks. */
   selectionSource?: SelectionSource;
+  /** PR-2 / BUG-04: calendar rows for the pre-selection heatmap view. */
+  calendarRows?: CalendarRow[];
+  /** PR-2 / BUG-04: handler for heatmap row clicks. */
+  onSelectSymbol?: (symbol: string) => void;
 }
 
 /**
@@ -83,6 +88,8 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
       candidateDecision = null,
       onCandidateDecision,
       selectionSource = null,
+      calendarRows = [],
+      onSelectSymbol,
     },
     ref,
   ) {
@@ -183,13 +190,19 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
     );
   }
   if (!detail) {
+    // PR-2 / BUG-04: show the calendar-week heatmap instead of the blank prompt.
+    const headlineSymbol = pickHeadlineSymbol(calendarRows);
     return (
       <section
         ref={ref}
         data-slot="earnings-detail-panel"
-        className="rounded border border-[#5d7268]/40 bg-white/60 p-4"
+        className="rounded border border-[#5d7268]/40 bg-white/60"
       >
-        <p className="font-mono text-[13px] text-[#5d7268]">Select a symbol from the sidebar.</p>
+        <CalendarWeekHeatmap
+          rows={calendarRows}
+          onSelect={onSelectSymbol ?? (() => {})}
+          headlineSymbol={headlineSymbol}
+        />
       </section>
     );
   }
@@ -397,6 +410,20 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
 );
 
 export default EarningsDetailPanel;
+
+/** PR-2 / BUG-04: returns the symbol with the highest IV rank in the
+ *  calendar rows, used to label the HEADLINE row in CalendarWeekHeatmap.
+ *  Falls back to the first row's symbol if no row has an ivRank. */
+function pickHeadlineSymbol(rows: CalendarRow[]): string | undefined {
+  if (rows.length === 0) return undefined;
+  let best = rows[0];
+  for (const row of rows) {
+    if (row.ivRank != null && (best.ivRank == null || row.ivRank > best.ivRank)) {
+      best = row;
+    }
+  }
+  return best.symbol;
+}
 
 const SWIPE_MIN_PX = 72;
 const SWIPE_AXIS_RATIO = 1.2;
