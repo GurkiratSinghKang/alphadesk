@@ -86,7 +86,7 @@ function ApiDegradedBanner({
       data-slot="api-degraded-banner"
       className="w-full border-b border-[#6f541f] bg-[#21190d] px-4 py-2 text-[#f8d590]"
     >
-      <div className="mx-auto flex max-w-[1500px] flex-col gap-2 text-[12px] leading-snug sm:flex-row sm:items-center sm:justify-between">
+      <div className="mx-auto flex max-w-[1500px] flex-col gap-2 text-label leading-snug sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <span className="font-semibold uppercase tracking-wide">Data unavailable</span>
           <span className="mx-2 text-[#d9b165]">·</span>
@@ -104,7 +104,7 @@ function ApiDegradedBanner({
         <button
           type="button"
           onClick={onDismiss}
-          className="inline-flex min-h-8 shrink-0 items-center justify-center self-start rounded-sm border border-[#8c6a28] px-3 font-sans text-[12px] font-semibold text-[#f8d590] transition-colors hover:bg-[#3a2a12] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f8d590] sm:self-auto"
+          className="inline-flex min-h-8 shrink-0 items-center justify-center self-start rounded-sm border border-[#8c6a28] px-3 font-sans text-label font-semibold text-[#f8d590] transition-colors hover:bg-[#3a2a12] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f8d590] sm:self-auto"
         >
           Dismiss
         </button>
@@ -319,7 +319,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           desk StatusBar quote the same stamp. Without this, non-desk pages
           showed "v1.0" while the desk StatusBar read `NEXT_PUBLIC_BUILD_VERSION`
           (e.g. "2025.10.18-a1b2c3d"). */}
-      <footer role="contentinfo" className="relative z-0 border-t border-border/50 bg-ink-050/88 px-4 py-3 text-center text-[12px] text-muted-foreground">
+      <footer role="contentinfo" className="relative z-0 border-t border-border/50 bg-ink-050/88 px-4 py-3 text-center text-label text-muted-foreground">
         AlphaDesk {process.env.NEXT_PUBLIC_BUILD_VERSION ?? "dev"} — Powered by Claude AI — &copy; {new Date().getFullYear()}
       </footer>
       <CommandPalette />

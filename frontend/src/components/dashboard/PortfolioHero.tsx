@@ -203,7 +203,7 @@ export function PortfolioHero({
                 key={p}
                 onClick={() => setPeriod(p)}
                 className={cn(
-                  "rounded px-2 py-0.5 text-[12px] font-medium transition-colors",
+                  "rounded px-2 py-0.5 text-label font-medium transition-colors",
                   period === p
                     ? "bg-primary/20 text-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -223,13 +223,13 @@ export function PortfolioHero({
           <EquityCurveSVG data={filteredHistory} />
         ) : isLoading ? (
           <div className="flex items-center justify-center h-full">
-            <p className="font-display italic text-[13px] text-fg-muted">
+            <p className="font-display italic text-body-sm text-fg-muted">
               Loading equity curve.
             </p>
           </div>
         ) : (
           <div className="flex items-center justify-center h-full px-6 text-center">
-            <p className="font-display italic text-[13px] text-fg-muted max-w-[420px] leading-snug">
+            <p className="font-display italic text-body-sm text-fg-muted max-w-[420px] leading-snug">
               Not enough data for an equity curve &mdash; trades will accumulate into a chart.
             </p>
           </div>

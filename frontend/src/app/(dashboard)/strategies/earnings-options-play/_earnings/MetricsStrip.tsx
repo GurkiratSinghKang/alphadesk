@@ -98,7 +98,7 @@ function Cell({
         {tooltip && <HelpCircle text={tooltip} />}
       </span>
       <span
-        className={"t-mono text-[15px] " + (accent ? "u-brand" : "")}
+        className={"t-mono text-body " + (accent ? "u-brand" : "")}
         aria-hidden={ariaLabel ? true : undefined}
       >
         {value}

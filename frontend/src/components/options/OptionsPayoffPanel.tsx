@@ -44,8 +44,8 @@ export default function OptionsPayoffPanel({
             <ChartLine className="size-4" aria-hidden />
           </span>
           <div className="min-w-0">
-            <h2 className="truncate text-[15px] font-semibold text-ink-1000">{title}</h2>
-            <p className="truncate text-[12px] text-fg-muted">
+            <h2 className="truncate text-body font-semibold text-ink-1000">{title}</h2>
+            <p className="truncate text-label text-fg-muted">
               {draft?.label ?? "Model an option strategy before staging the ticket."}
             </p>
           </div>
@@ -54,7 +54,7 @@ export default function OptionsPayoffPanel({
           <button
             type="button"
             onClick={onOpenBuilder}
-            className="inline-flex min-h-9 items-center rounded-sm border border-border bg-bg px-3 text-[12px] font-semibold text-fg-muted transition hover:border-brand hover:text-fg active:translate-y-px"
+            className="inline-flex min-h-9 items-center rounded-sm border border-border bg-bg px-3 text-label font-semibold text-fg-muted transition hover:border-brand hover:text-fg active:translate-y-px"
           >
             Build strategy
           </button>
@@ -66,7 +66,7 @@ export default function OptionsPayoffPanel({
       ) : summary.status !== "ready" ? (
         <div className="px-4 py-4">
           <MetricGrid summary={summary} compact={compact} />
-          <div className="mt-3 flex gap-2 rounded-md border border-amber/30 bg-amber/10 px-3 py-3 text-[13px] text-fg-muted">
+          <div className="mt-3 flex gap-2 rounded-md border border-amber/30 bg-amber/10 px-3 py-3 text-body-sm text-fg-muted">
             <WarningCircle className="mt-0.5 size-4 shrink-0 text-amber" aria-hidden />
             <span>{summary.reason}</span>
           </div>
@@ -166,7 +166,7 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
             </g>
           ) : null}
         </svg>
-        <div className="pointer-events-none absolute left-2 top-2 rounded border border-border-hair bg-bg-elev-1/95 px-2 py-1 font-mono text-[12px] text-fg-muted shadow-[0_10px_24px_-18px_rgba(16,22,17,0.55)]">
+        <div className="pointer-events-none absolute left-2 top-2 rounded border border-border-hair bg-bg-elev-1/95 px-2 py-1 font-mono text-label text-fg-muted shadow-[0_10px_24px_-18px_rgba(16,22,17,0.55)]">
           {hovered
             ? `${formatCurrency(hovered.underlyingPrice)} -> ${formatCurrency(hovered.pnl)}`
             : "Hover for P/L"}
@@ -185,7 +185,7 @@ function LegList({ draft }: { draft: OptionStrategyDraft }) {
   return (
     <div className="mt-4 grid gap-2">
       {draft.legs.map((leg, index) => (
-        <div key={`${leg.id}-${index}`} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-border-hair bg-bg px-3 py-2 font-mono text-[12px]">
+        <div key={`${leg.id}-${index}`} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-border-hair bg-bg px-3 py-2 font-mono text-label">
           <span className={cn("rounded px-2 py-1 uppercase", leg.side === "buy" ? "bg-profit/10 text-profit" : "bg-loss/10 text-loss")}>
             {leg.side}
           </span>
@@ -202,7 +202,7 @@ function LegList({ draft }: { draft: OptionStrategyDraft }) {
 function EmptyPayoff({ copy, compact = false }: { copy: string; compact?: boolean }) {
   return (
     <div className={cn("px-4 py-4", compact && "px-3 py-3")}>
-      <div className="rounded-md border border-dashed border-border-hair bg-bg px-4 py-6 text-center text-[13px] text-fg-muted">
+      <div className="rounded-md border border-dashed border-border-hair bg-bg px-4 py-6 text-center text-body-sm text-fg-muted">
         {copy}
       </div>
     </div>

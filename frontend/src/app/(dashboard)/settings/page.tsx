@@ -242,7 +242,7 @@ function IntervalSlider({
             // small pills in a 5-option radiogroup can drift below 30px
             // otherwise, violating WCAG 2.5.5.
             className={cn(
-              "flex-1 h-10 px-3 text-[12px] font-medium transition-colors",
+              "flex-1 h-10 px-3 text-label font-medium transition-colors",
               value === opt
                 ? "bg-primary/15 text-primary"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
@@ -612,7 +612,7 @@ export default function SettingsPage() {
                         // accent on the selected side is unmistakable;
                         // live carries a loss-red accent to keep the
                         // cost-of-being-wrong legible at a glance.
-                        "min-h-11 min-w-[88px] px-4 font-sans text-[12px] font-semibold uppercase tracking-wider transition-colors",
+                        "min-h-11 min-w-[88px] px-4 font-sans text-label font-semibold uppercase tracking-wider transition-colors",
                         active
                           ? opt === "live"
                             ? "bg-loss/15 text-loss"
@@ -676,7 +676,7 @@ export default function SettingsPage() {
                       aria-checked={brokerProvider === provider}
                       onClick={() => setBrokerProvider(provider)}
                       className={cn(
-                        "min-h-9 px-3 text-[12px] font-semibold uppercase transition-colors",
+                        "min-h-9 px-3 text-label font-semibold uppercase transition-colors",
                         brokerProvider === provider
                           ? "bg-brand/20 text-brand"
                           : "text-muted-foreground hover:bg-accent/30 hover:text-foreground",
@@ -717,7 +717,7 @@ export default function SettingsPage() {
                       aria-checked={brokerEnv === env}
                       onClick={() => setBrokerEnv(env)}
                       className={cn(
-                        "flex-1 px-3 text-[12px] font-semibold uppercase transition-colors",
+                        "flex-1 px-3 text-label font-semibold uppercase transition-colors",
                         brokerEnv === env
                           ? env === "live"
                             ? "bg-loss/15 text-loss"
@@ -994,7 +994,7 @@ export default function SettingsPage() {
                     aria-checked={display.theme === opt}
                     onClick={() => setDisplayPref("theme", opt)}
                     className={cn(
-                      "min-h-11 px-4 text-[12px] font-medium capitalize transition-colors",
+                      "min-h-11 px-4 text-label font-medium capitalize transition-colors",
                       display.theme === opt
                         ? "bg-primary/15 text-primary"
                         : "text-muted-foreground hover:text-foreground hover:bg-accent/30"

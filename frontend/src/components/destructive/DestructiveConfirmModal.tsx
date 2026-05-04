@@ -37,9 +37,9 @@ export default function DestructiveConfirmModal({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <p className="mt-2 text-[13px] text-fg-muted">{description}</p>
+        <p className="mt-2 text-body-sm text-fg-muted">{description}</p>
         {consequences.length > 0 && (
-          <ul className="mt-3 flex flex-col gap-1.5 text-[13px] text-fg-dim">
+          <ul className="mt-3 flex flex-col gap-1.5 text-body-sm text-fg-dim">
             {consequences.map((c) => (
               <li key={c} className="flex gap-2">
                 <span aria-hidden className="text-fg-hint">·</span>
@@ -50,10 +50,10 @@ export default function DestructiveConfirmModal({
         )}
         <DialogFooter className="mt-5 flex gap-2">
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={loading}>
-            Keep
+            Cancel
           </Button>
           <Button variant="destructive" onClick={onConfirm} disabled={loading}>
-            {loading ? "Working…" : confirmLabel}
+            {loading ? "Confirming…" : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

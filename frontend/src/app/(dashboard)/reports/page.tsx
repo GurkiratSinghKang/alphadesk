@@ -319,7 +319,7 @@ function PortfolioStatement({
       <div>
         <p className="t-label mb-2">Current Positions</p>
         {positions.length === 0 ? (
-          <p className="rounded-lg border border-border bg-[var(--panel)] px-4 py-5 text-center font-display italic text-[13px] text-fg-muted">
+          <p className="rounded-lg border border-border bg-[var(--panel)] px-4 py-5 text-center font-display italic text-body-sm text-fg-muted">
             No positions in this period.
           </p>
         ) : (
@@ -342,7 +342,7 @@ function PortfolioStatement({
               <tbody>
                 {positions.map(p => (
                   <tr key={p.symbol} className="border-b border-border-hair last:border-0">
-                    <td className="px-3 py-2 font-mono text-[13px] text-ink-900">{p.symbol}</td>
+                    <td className="px-3 py-2 font-mono text-body-sm text-ink-900">{p.symbol}</td>
                     <td className="px-3 py-2 text-right t-num-md text-fg">{p.quantity}</td>
                     <td className="px-3 py-2 text-right t-num-md text-fg-muted">{formatCurrency(p.avgCost)}</td>
                     <td className="px-3 py-2 text-right t-num-md text-fg">{formatCurrency(p.currentPrice)}</td>
@@ -354,7 +354,7 @@ function PortfolioStatement({
                     )}>
                       {p.unrealizedPnl > 0 ? "+" : ""}{formatCurrency(p.unrealizedPnl)}
                     </td>
-                    <td className="px-3 py-2 font-mono text-[12px] text-fg-muted">
+                    <td className="px-3 py-2 font-mono text-label text-fg-muted">
                       {p.strategy ?? "—"}
                     </td>
                   </tr>
@@ -569,7 +569,7 @@ function ClosedTradesTable({ trades }: { trades: TradeHistoryEntry[] }) {
         // italic-serif full-sentence headline, always ending with a
         // period. Points at the range selector so the user has a
         // concrete next action.
-        <p className="rounded-lg border border-border bg-[var(--panel)] px-4 py-5 text-center font-display italic text-[13px] text-fg-muted">
+        <p className="rounded-lg border border-border bg-[var(--panel)] px-4 py-5 text-center font-display italic text-body-sm text-fg-muted">
           No trades closed in this period &mdash; adjust the range above to broaden the search.
         </p>
       ) : (
@@ -611,10 +611,10 @@ function ClosedTradesTable({ trades }: { trades: TradeHistoryEntry[] }) {
                   const pnlPct = t.pnl_pct;
                   return (
                     <tr key={t.id} className="border-b border-border-hair last:border-0">
-                      <td className="px-3 py-2 font-mono text-[13px] text-ink-900">
+                      <td className="px-3 py-2 font-mono text-body-sm text-ink-900">
                         {t.symbol}
                       </td>
-                      <td className="px-3 py-2 font-sans text-[13px] text-fg truncate max-w-[140px]">
+                      <td className="px-3 py-2 font-sans text-body-sm text-fg truncate max-w-[140px]">
                         {t.strategy ?? <span className="text-fg-muted">&mdash;</span>}
                       </td>
                       <td className="px-3 py-2 t-meta">
@@ -668,7 +668,7 @@ function ClosedTradesTable({ trades }: { trades: TradeHistoryEntry[] }) {
                 data-testid="closed-trades-prev"
                 className={cn(
                   "inline-flex items-center gap-1 rounded-sm border border-border px-3 py-1.5",
-                  "font-sans text-[12px] text-fg-muted hover:text-fg hover:border-brand transition-colors",
+                  "font-sans text-label text-fg-muted hover:text-fg hover:border-brand transition-colors",
                   "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
                   "disabled:opacity-40 disabled:pointer-events-none",
                 )}
@@ -685,7 +685,7 @@ function ClosedTradesTable({ trades }: { trades: TradeHistoryEntry[] }) {
                 data-testid="closed-trades-next"
                 className={cn(
                   "inline-flex items-center gap-1 rounded-sm border border-border px-3 py-1.5",
-                  "font-sans text-[12px] text-fg-muted hover:text-fg hover:border-brand transition-colors",
+                  "font-sans text-label text-fg-muted hover:text-fg hover:border-brand transition-colors",
                   "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
                   "disabled:opacity-40 disabled:pointer-events-none",
                 )}
@@ -863,13 +863,13 @@ function StrategyPerformanceReport({
           <tbody>
             {strategyRows.map(s => (
               <tr key={s.id} className="border-b border-border-hair last:border-0">
-                <td className="px-3 py-2 font-sans text-[13px] font-medium text-ink-900">{s.name}</td>
+                <td className="px-3 py-2 font-sans text-body-sm font-medium text-ink-900">{s.name}</td>
                 <td className="px-3 py-2 text-center">
                   {/* Status chip — active reads chartreuse-tinted; anything
                       else (paused, draft) reads muted so the eye lands on
                       running strategies first. */}
                   <span className={cn(
-                    "inline-block rounded-sm px-2 py-0.5 font-sans text-[12px] font-semibold uppercase",
+                    "inline-block rounded-sm px-2 py-0.5 font-sans text-label font-semibold uppercase",
                     s.status === "active"
                       ? "bg-[var(--profit-tint)] text-[var(--profit)]"
                       : "bg-bg-elev-1 text-fg-muted",
@@ -905,7 +905,7 @@ function StrategyPerformanceReport({
             {strategyRows.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-3 py-8 text-center">
-                  <p className="font-display italic text-[13px] text-fg-muted">
+                  <p className="font-display italic text-body-sm text-fg-muted">
                     No strategies configured yet.
                   </p>
                 </td>
@@ -1225,7 +1225,7 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
             <tbody>
               {classified.slice(0, 30).map(t => (
                 <tr key={t.id} className="border-b border-border-hair last:border-0">
-                  <td className="px-3 py-2 font-mono text-[13px] text-ink-900">
+                  <td className="px-3 py-2 font-mono text-body-sm text-ink-900">
                     {t.symbol}
                     {/* Round-5 F-9 — WS tag rendered next to the symbol so
                         a glance at the table flags disallowed losses
@@ -1234,7 +1234,7 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
                       <span
                         data-testid="wash-sale-tag"
                         title="Wash-sale: this loss may be disallowed because the same symbol re-opened within 30 days. Best-effort detection — consult a professional."
-                        className="ml-2 inline-block rounded-sm bg-amber/20 px-1.5 py-0.5 text-[12px] font-bold uppercase tracking-wider text-amber-200"
+                        className="ml-2 inline-block rounded-sm bg-amber/20 px-1.5 py-0.5 text-label font-bold uppercase tracking-wider text-amber-200"
                         style={{ letterSpacing: "0.1em" }}
                       >
                         WS
@@ -1243,7 +1243,7 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
                   </td>
                   <td className="px-3 py-2">
                     <span className={cn(
-                      "inline-block rounded-sm px-2 py-0.5 font-sans text-[12px] font-semibold uppercase",
+                      "inline-block rounded-sm px-2 py-0.5 font-sans text-label font-semibold uppercase",
                       t.isLongTerm
                         ? "bg-brand/15 text-brand"
                         : "bg-bg-elev-1 text-fg-muted",
@@ -1269,7 +1269,7 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
       )}
 
       {classified.length === 0 && (
-        <p className="font-display italic text-[13px] text-fg-muted text-center py-6">No realized trades found for {taxYear} &mdash; this tax year has nothing to report.</p>
+        <p className="font-display italic text-body-sm text-fg-muted text-center py-6">No realized trades found for {taxYear} &mdash; this tax year has nothing to report.</p>
       )}
 
       {/* BUG-029 / Round-5 F-9 compliance disclaimer — the tax report is
@@ -1283,7 +1283,7 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
       <p
         role="note"
         data-testid="tax-report-disclaimer"
-        className="rounded-md border border-amber/40 bg-amber/5 px-3 py-2 font-sans text-[12px] leading-snug text-amber-100"
+        className="rounded-md border border-amber/40 bg-amber/5 px-3 py-2 font-sans text-label leading-snug text-amber-100"
       >
         Not tax advice — consult a professional. Wash-sale flags are
         computational best-effort: same-symbol re-buys within 30 days are
@@ -1408,7 +1408,7 @@ export default function ReportsPage() {
             data-testid={`reports-range-${r}`}
             onClick={() => setRange(r)}
             className={cn(
-              "font-mono text-[12px] px-2.5 py-1 rounded transition-colors",
+              "font-mono text-label px-2.5 py-1 rounded transition-colors",
               active
                 ? "bg-bg-elev-2 text-fg"
                 : "text-fg-muted hover:text-fg"
@@ -1454,7 +1454,7 @@ export default function ReportsPage() {
               <p className="t-section-display">
                 Reports become available after your first closed trades.
               </p>
-              <p className="font-sans text-[13px] leading-relaxed text-fg-muted">
+              <p className="font-sans text-body-sm leading-relaxed text-fg-muted">
                 Portfolio statement, strategy performance, and the tax-year
                 breakdown will appear here once trades accumulate. Nothing
                 is exportable yet.
@@ -1468,7 +1468,7 @@ export default function ReportsPage() {
                 ].map(([label, detail]) => (
                   <div key={label} className="rounded-md border border-border-hair bg-bg px-3 py-3">
                     <p className="t-label text-fg-hint">{label}</p>
-                    <p className="mt-1 text-[12px] leading-snug text-fg-muted">{detail}</p>
+                    <p className="mt-1 text-label leading-snug text-fg-muted">{detail}</p>
                   </div>
                 ))}
               </div>
@@ -1477,7 +1477,7 @@ export default function ReportsPage() {
                   href="/trade"
                   className={cn(
                     "inline-flex items-center gap-1.5 rounded-sm border border-border-strong",
-                    "bg-transparent px-4 py-2 font-sans text-[13px] font-medium",
+                    "bg-transparent px-4 py-2 font-sans text-body-sm font-medium",
                     "text-fg hover:bg-bg-elev-1 hover:border-brand transition-colors",
                     "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
                   )}
@@ -1489,7 +1489,7 @@ export default function ReportsPage() {
                   href="/strategies"
                   className={cn(
                     "inline-flex min-h-10 items-center gap-1.5 rounded-sm border border-border-hair",
-                    "bg-bg px-4 font-sans text-[13px] font-medium text-fg-muted",
+                    "bg-bg px-4 font-sans text-body-sm font-medium text-fg-muted",
                     "text-fg hover:bg-bg-elev-1 hover:border-brand transition-colors",
                     "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
                   )}
@@ -1500,7 +1500,7 @@ export default function ReportsPage() {
                   href="/analytics"
                   className={cn(
                     "inline-flex min-h-10 items-center gap-1.5 rounded-sm border border-border-hair",
-                    "bg-bg px-4 font-sans text-[13px] font-medium text-fg-muted",
+                    "bg-bg px-4 font-sans text-body-sm font-medium text-fg-muted",
                     "text-fg hover:bg-bg-elev-1 hover:border-brand transition-colors",
                     "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
                   )}
@@ -1523,7 +1523,7 @@ export default function ReportsPage() {
           {summary ? (
             <PortfolioStatement summary={summary} positions={positions} trades={filteredTrades} />
           ) : (
-            <p className="font-display italic text-[13px] text-fg-muted text-center py-6">
+            <p className="font-display italic text-body-sm text-fg-muted text-center py-6">
               Unable to load portfolio data.
             </p>
           )}
@@ -1546,7 +1546,7 @@ export default function ReportsPage() {
               onChange={(e) => setTaxYear(parseInt(e.target.value))}
               className={cn(
                 "h-7 rounded-sm border border-border bg-bg px-2",
-                "font-mono text-[12px] tabular-nums text-ink-900",
+                "font-mono text-label tabular-nums text-ink-900",
                 "focus-visible:outline-none focus-visible:border-brand focus-visible:ring-1 focus-visible:ring-brand",
               )}
             >

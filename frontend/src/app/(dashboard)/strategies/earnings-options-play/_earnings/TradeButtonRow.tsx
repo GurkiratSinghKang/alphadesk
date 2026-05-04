@@ -84,7 +84,7 @@ export default function TradeButtonRow({
   ) {
     return (
       <div data-slot="trade-button-row" className="mt-4 border-t border-[color:var(--border)] pt-3">
-        <p className="t-mono text-[12px] u-muted">
+        <p className="t-mono text-label u-muted">
           {ladder?.isDemo === true || syntheticChain
             ? "— synthetic options chain, trade links disabled until live OPRA quotes are available."
             : eventAlreadyPassed
@@ -149,7 +149,7 @@ export default function TradeButtonRow({
   if (noButtonsAvailable) {
     return (
       <div data-slot="trade-button-row" className="mt-4 border-t border-[color:var(--border)] pt-3">
-        <p className="t-mono text-[12px] u-muted">
+        <p className="t-mono text-label u-muted">
           — Narrow chain: only ATM strikes available. Try a different expiry, a
           higher-volume symbol, or wait for 15Δ/30Δ wings to populate.
         </p>
@@ -389,7 +389,7 @@ function DefinedRiskTradeLink({
       onFocus={onHoverEnter}
       onBlur={onHoverLeave}
       className={cn(
-        "group min-h-[44px] rounded border bg-[color:var(--bg-elev-1)] px-3 py-2 t-mono text-[12px] flex flex-col items-center justify-center gap-0.5 hover:border-[color:var(--brand)]",
+        "group min-h-[44px] rounded border bg-[color:var(--bg-elev-1)] px-3 py-2 t-mono text-label flex flex-col items-center justify-center gap-0.5 hover:border-[color:var(--brand)]",
         recommended
           ? "border-[color:var(--brand)] shadow-[0_0_0_1px_var(--brand)]"
           : "border-[color:var(--border)]",
@@ -401,7 +401,7 @@ function DefinedRiskTradeLink({
       </span>
       <span
         id={`${dataSlot}-risk`}
-        className="text-[12px] uppercase tracking-wider u-profit"
+        className="text-label uppercase tracking-wider u-profit"
       >
         {recommended ? "✓ Suggested · defined risk" : "✓ Defined risk"}
       </span>

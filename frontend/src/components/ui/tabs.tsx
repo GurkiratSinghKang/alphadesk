@@ -66,7 +66,7 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
       className={cn(
         "ui-stateful relative inline-flex items-center justify-center gap-1.5 whitespace-nowrap",
         "min-h-8 px-3 rounded-sm",
-        "font-sans text-[12px] font-semibold tracking-[0.12em] uppercase",
+        "font-sans text-label font-semibold tracking-[0.12em] uppercase",
         "text-fg-muted hover:text-fg",
         "transition-colors",
         "group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start",

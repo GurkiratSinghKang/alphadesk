@@ -77,7 +77,7 @@ function CommandInput({
         <CommandPrimitive.Input
           data-slot="command-input"
           className={cn(
-            "w-full font-mono tabular-nums text-[13px] text-ink-1000 outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
+            "w-full font-mono tabular-nums text-body-sm text-ink-1000 outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
             className
           )}
           {...props}
@@ -129,7 +129,7 @@ function CommandGroup({
       className={cn(
         "overflow-hidden p-1 text-fg",
         "**:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1.5",
-        "**:[[cmdk-group-heading]]:text-[12px] **:[[cmdk-group-heading]]:font-semibold",
+        "**:[[cmdk-group-heading]]:text-label **:[[cmdk-group-heading]]:font-semibold",
         "**:[[cmdk-group-heading]]:tracking-[0.16em] **:[[cmdk-group-heading]]:uppercase",
         "**:[[cmdk-group-heading]]:text-fg-muted",
         className
@@ -187,7 +187,7 @@ function CommandShortcut({
     <span
       data-slot="command-shortcut"
       className={cn(
-        "ml-auto font-mono text-[12px] tracking-[0.04em] text-fg-muted",
+        "ml-auto font-mono text-label tracking-[0.04em] text-fg-muted",
         "group-data-selected/command-item:text-fg",
         className
       )}

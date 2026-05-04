@@ -107,7 +107,7 @@ export default function StrategyCard({
             {name}
           </div>
           <div
-            className="font-sans font-semibold text-[12px] uppercase text-fg-muted mt-[3px]"
+            className="font-sans font-semibold text-label uppercase text-fg-muted mt-[3px]"
             style={{ letterSpacing: 0 }}
           >
             {subtitle}
@@ -117,11 +117,11 @@ export default function StrategyCard({
 
       {noBacktest ? (
         <div
-          className="font-display italic text-[16px] leading-tight text-fg-muted"
+          className="font-display italic text-numeric-md leading-tight text-fg-muted"
           style={{ letterSpacing: 0 }}
         >
           No backtest
-          <span className="block font-sans not-italic text-[12px] mt-0.5 text-fg-hint">
+          <span className="block font-sans not-italic text-label mt-0.5 text-fg-hint">
             Discretionary bucket — P&amp;L tracked from trade ledger.
           </span>
         </div>
@@ -148,7 +148,7 @@ export default function StrategyCard({
         />
       )}
 
-      <div className="flex justify-between font-mono text-[12px] text-fg-muted">
+      <div className="flex justify-between font-mono text-label text-fg-muted">
         <span>{positions} positions</span>
         {noBacktest ? (
           <span className="italic text-fg-hint">Manual trades</span>
@@ -168,7 +168,7 @@ export default function StrategyCard({
       <span
         aria-hidden
         className={cn(
-          "absolute right-3.5 bottom-3 font-display italic text-[13px] text-brand",
+          "absolute right-3.5 bottom-3 font-display italic text-body-sm text-brand",
           "opacity-0 -translate-x-1.5 pointer-events-none",
           "transition-all duration-200",
           "group-hover/strat:opacity-100 group-hover/strat:translate-x-0"

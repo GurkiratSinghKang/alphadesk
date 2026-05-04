@@ -123,7 +123,7 @@ export default function EquityPanel({
         >
           {RANGES.map((r) => {
             const active = r === activeRange;
-            // 2026-04-21 polish: range chips were 24px tall (text-[12px]
+            // 2026-04-21 polish: range chips were 24px tall (text-label
             // + py-1) — below the 36px desktop hit-target floor and with
             // no visible focus ring. Raised to h-8 / min-w-[40px] and added
             // a focus-visible outline so keyboard users can see where they
@@ -139,7 +139,7 @@ export default function EquityPanel({
                 data-testid={`range-${r}`}
                 onClick={() => onRangeChange(r)}
                 className={cn(
-                  "inline-flex h-8 min-w-[40px] items-center justify-center font-mono text-[12px] tabular-nums px-2.5 rounded transition-colors",
+                  "inline-flex h-8 min-w-[40px] items-center justify-center font-mono text-label tabular-nums px-2.5 rounded transition-colors",
                   active
                     ? "bg-bg-elev-2 text-fg"
                     : "text-fg-muted hover:text-fg",
@@ -197,7 +197,7 @@ export default function EquityPanel({
                 <Eyebrow as="span">{s.label}</Eyebrow>
               </dt>
               <dd>
-                <Mono className={cn("text-[13px]", pctToneClass(s.tone))}>
+                <Mono className={cn("text-body-sm", pctToneClass(s.tone))}>
                   {s.value}
                 </Mono>
               </dd>

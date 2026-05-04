@@ -170,7 +170,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         className="rounded border border-[color:var(--fg-border)] p-4"
       >
         <div role="alert">
-          <p className="font-mono text-[13px] text-[color:var(--fg-neg)]">Error · {error}</p>
+          <p className="font-mono text-body-sm text-[color:var(--fg-neg)]">Error · {error}</p>
         </div>
       </section>
     );
@@ -181,10 +181,10 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         ref={ref}
         data-slot="earnings-detail-panel"
         aria-busy="true"
-        className="rounded border border-[#5d7268]/40 bg-white/60 p-4"
+        className="rounded border border-border-hair bg-bg-elev-1/60 p-4"
       >
         <div role="status" aria-live="polite" aria-atomic="true">
-          <p className="font-mono text-[13px] text-[#5d7268]">Loading detail…</p>
+          <p className="font-mono text-body-sm text-fg-muted">Loading detail…</p>
         </div>
       </section>
     );
@@ -196,7 +196,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
       <section
         ref={ref}
         data-slot="earnings-detail-panel"
-        className="rounded border border-[#5d7268]/40 bg-white/60"
+        className="rounded border border-border-hair bg-bg-elev-1/60"
       >
         <CalendarWeekHeatmap
           rows={calendarRows}
@@ -247,15 +247,15 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
           aria-live="polite"
           className="mb-3 rounded border border-[color:var(--warn,#d97706)] bg-[color:var(--warn-tint,rgba(217,119,6,0.12))] px-3 py-2"
         >
-          <p className="font-mono text-[12px] text-[color:var(--warn,#d97706)]">
+          <p className="font-mono text-label text-[color:var(--warn,#d97706)]">
             ⚠ Partial data — some providers were unavailable.
           </p>
           {missingFields && missingFields.length > 0 ? (
-            <p className="mt-1 font-mono text-[12px] u-muted">
+            <p className="mt-1 font-mono text-label u-muted">
               Missing: {missingFields.join(", ")}
             </p>
           ) : (
-            <p className="mt-1 font-mono text-[12px] u-muted">
+            <p className="mt-1 font-mono text-label u-muted">
               Some data unavailable — see fields marked —
             </p>
           )}
@@ -279,7 +279,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         </span>
         <div
           aria-hidden="true"
-          className="mb-2 flex items-center justify-between rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 font-mono text-[12px] uppercase tracking-[0.08em] text-[color:var(--fg-muted)] md:hidden"
+          className="mb-2 flex items-center justify-between rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 font-mono text-label uppercase tracking-[0.08em] text-[color:var(--fg-muted)] md:hidden"
         >
           <span>Swipe left: discard</span>
           <span>Swipe right: save</span>
@@ -293,7 +293,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
             data-slot="candidate-decision-undo"
             role="status"
             aria-live="polite"
-            className="mb-2 flex items-center justify-between gap-3 rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 t-mono text-[12px] text-[color:var(--fg-muted)]"
+            className="mb-2 flex items-center justify-between gap-3 rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 t-mono text-label text-[color:var(--fg-muted)]"
           >
             <span>
               {undoDecision.next
@@ -393,7 +393,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
 
       <p
         data-slot="data-disclaimer"
-        className="mt-3 border-t border-[color:var(--border)] pt-2 font-mono text-[12px] u-muted"
+        className="mt-3 border-t border-[color:var(--border)] pt-2 font-mono text-label u-muted"
       >
         Data from FMP + Alpaca. IV rank may be delayed.{" "}
         <a
@@ -586,7 +586,7 @@ function CandidateDecisionButton({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "inline-flex min-h-[44px] items-center gap-1.5 rounded border px-3 py-2 t-mono text-[12px] transition-colors",
+        "inline-flex min-h-[44px] items-center gap-1.5 rounded border px-3 py-2 t-mono text-label transition-colors",
         active
           ? "border-[color:var(--brand)] bg-[color:var(--brand-tint)] u-brand"
           : "border-[color:var(--border)] bg-transparent u-muted hover:border-[color:var(--brand)] hover:u-brand",
@@ -645,10 +645,10 @@ function PartialDataBanner({ codes }: { codes: EarningsErrorCode[] }) {
       aria-live="polite"
       className="mb-3 rounded border border-[color:var(--warn,#d97706)] bg-[color:var(--warn-tint,rgba(217,119,6,0.12))] px-3 py-2"
     >
-      <p className="font-mono text-[12px] text-[color:var(--warn,#d97706)]" aria-hidden="true">
+      <p className="font-mono text-label text-[color:var(--warn,#d97706)]" aria-hidden="true">
         ⚠ PARTIAL DATA
       </p>
-      <ul className="mt-1 space-y-0.5 font-mono text-[12px] u-muted">
+      <ul className="mt-1 space-y-0.5 font-mono text-label u-muted">
         {codes.map((c) => (
           <li key={c} data-slot="partial-data-banner-item">
             {ERROR_CODE_COPY[c] ?? c}

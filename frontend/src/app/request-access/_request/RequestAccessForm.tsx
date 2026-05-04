@@ -47,9 +47,9 @@ const instrumentOptions: Array<{ value: Instrument; label: string }> = [
 ];
 
 const inputClass =
-  "h-12 w-full rounded-[8px] border border-[#cddbd0] bg-white/80 px-4 font-sans text-[15px] text-[#12281f] outline-none transition-colors placeholder:text-[#8b9a91] focus-visible:border-[#0f7a5d] focus-visible:shadow-[0_0_0_4px_rgba(15,122,93,0.15)]";
-const labelClass = "font-sans text-[13px] font-medium text-[#203c31]";
-const helperClass = "font-sans text-[12px] leading-[1.45] text-[#5d7268]";
+  "h-12 w-full rounded-[8px] border border-[#cddbd0] bg-white/80 px-4 font-sans text-body text-[#12281f] outline-none transition-colors placeholder:text-[#8b9a91] focus-visible:border-[#0f7a5d] focus-visible:shadow-[0_0_0_4px_rgba(15,122,93,0.15)]";
+const labelClass = "font-sans text-body-sm font-medium text-[#203c31]";
+const helperClass = "font-sans text-label leading-[1.45] text-[#5d7268]";
 
 function detailFromBody(body: unknown): string | null {
   if (!body || typeof body !== "object") return null;
@@ -149,12 +149,12 @@ export default function RequestAccessForm() {
             <CheckCircle className="h-5 w-5" aria-hidden weight="regular" />
           </div>
           <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-[#0f7a5d]">
-            Request received
+            § 02 · CONFIRMATION
           </p>
           <h2 className="mt-3 font-sans text-[24px] font-semibold leading-tight tracking-tight text-[#12281f]">
             Request received
           </h2>
-          <p className="mt-2 font-sans text-[13px] leading-[1.55] text-[#5d7268]">
+          <p className="mt-2 font-sans text-body-sm leading-[1.55] text-[#5d7268]">
             The desk reviews requests in batches — typically within one trading session. You'll get an email at the address above when access is provisioned.
           </p>
           {requestId && (
@@ -164,8 +164,8 @@ export default function RequestAccessForm() {
           )}
         </div>
         <div className="grid gap-3 rounded-[8px] border border-[#d7e4d9] bg-white/70 p-4">
-          <p className="font-sans text-[13px] font-medium text-[#12281f]">What happens next</p>
-          <p className="font-sans text-[13px] leading-[1.55] text-[#5d7268]">
+          <p className="font-sans text-body-sm font-medium text-[#12281f]">What happens next</p>
+          <p className="font-sans text-body-sm leading-[1.55] text-[#5d7268]">
             We review the book context, trading mode, jurisdiction, and instrument set. If there is a fit, onboarding starts with paper routing and an operator walkthrough.
           </p>
         </div>
@@ -184,7 +184,7 @@ export default function RequestAccessForm() {
         </Button>
         <Link
           href="/login"
-          className="text-center font-sans text-[13px] font-medium text-[#0f7a5d] underline decoration-[#0f7a5d]/35 underline-offset-4 transition-colors hover:text-[#0a5f49]"
+          className="text-center font-sans text-body-sm font-medium text-[#0f7a5d] underline decoration-[#0f7a5d]/35 underline-offset-4 transition-colors hover:text-[#0a5f49]"
         >
           Back to sign in
         </Link>
@@ -201,7 +201,7 @@ export default function RequestAccessForm() {
         <h2 className="mt-3 font-sans text-[24px] font-semibold leading-tight tracking-tight text-[#12281f]">
           Start your workspace request
         </h2>
-        <p className="mt-2 font-sans text-[13px] leading-[1.55] text-[#5d7268]">
+        <p className="mt-2 font-sans text-body-sm leading-[1.55] text-[#5d7268]">
           Tell us what you trade, how you work, and where an AI review layer would help most.
         </p>
       </div>
@@ -309,7 +309,7 @@ export default function RequestAccessForm() {
             <label
               key={value}
             className={
-                "flex min-h-11 cursor-pointer items-center justify-center rounded-[8px] border px-3 font-sans text-[13px] transition-all active:scale-[0.98] " +
+                "flex min-h-11 cursor-pointer items-center justify-center rounded-[8px] border px-3 font-sans text-body-sm transition-all active:scale-[0.98] " +
                 (form.trading_mode === value
                   ? "border-[#0f7a5d]/[0.55] bg-[#e8f5ea] text-[#0d654d]"
                   : "border-[#cddbd0] bg-white/70 text-[#5d7268] hover:border-[#0f7a5d]/[0.35] hover:text-[#12281f]")
@@ -338,7 +338,7 @@ export default function RequestAccessForm() {
               <label
                 key={option.value}
                 className={
-                  "flex min-h-10 cursor-pointer items-center rounded-[8px] border px-3 font-sans text-[13px] transition-all active:scale-[0.98] " +
+                  "flex min-h-10 cursor-pointer items-center rounded-[8px] border px-3 font-sans text-body-sm transition-all active:scale-[0.98] " +
                   (active
                     ? "border-[#0f7a5d]/[0.55] bg-[#e8f5ea] text-[#0d654d]"
                     : "border-[#cddbd0] bg-white/70 text-[#5d7268] hover:border-[#0f7a5d]/[0.35] hover:text-[#12281f]")
@@ -364,7 +364,7 @@ export default function RequestAccessForm() {
           id="request-note"
           value={form.note}
           onChange={(e) => update("note", e.target.value)}
-          className="min-h-32 w-full resize-y rounded-[8px] border border-[#cddbd0] bg-white/80 px-4 py-3 font-sans text-[15px] leading-[1.5] text-[#12281f] outline-none transition-colors placeholder:text-[#8b9a91] focus-visible:border-[#0f7a5d] focus-visible:shadow-[0_0_0_4px_rgba(15,122,93,0.15)]"
+          className="min-h-32 w-full resize-y rounded-[8px] border border-[#cddbd0] bg-white/80 px-4 py-3 font-sans text-body leading-[1.5] text-[#12281f] outline-none transition-colors placeholder:text-[#8b9a91] focus-visible:border-[#0f7a5d] focus-visible:shadow-[0_0_0_4px_rgba(15,122,93,0.15)]"
           placeholder="Describe the strategy work, execution needs, and what would make AlphaDesk useful."
           required
         />
@@ -386,7 +386,7 @@ export default function RequestAccessForm() {
         <div
           role="alert"
           aria-live="assertive"
-          className="inline-flex items-start gap-2 rounded-[8px] border border-[#c95d42]/[0.26] bg-[#fff1ec] px-3 py-2 font-sans text-[13px] leading-[1.45] text-[#8f321f]"
+          className="inline-flex items-start gap-2 rounded-[8px] border border-[#c95d42]/[0.26] bg-[#fff1ec] px-3 py-2 font-sans text-body-sm leading-[1.45] text-[#8f321f]"
         >
           <WarningCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden weight="regular" />
           {error}

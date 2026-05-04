@@ -412,7 +412,9 @@ describe("Earnings Options Play — race protection (Round-5)", () => {
     );
     const { container } = render(withQueryClient(<EarningsOptionsPlayPage />));
     await waitFor(() => {
-      expect(container.textContent).toMatch(/provider blew up/i);
+      // Pillar-6 fix: error state now shows <EmptyState> with Retry CTA
+      // instead of the raw error message. Check for the declarative title.
+      expect(container.textContent).toMatch(/earnings calendar unavailable/i);
     });
   });
 

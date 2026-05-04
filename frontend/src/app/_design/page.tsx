@@ -291,7 +291,7 @@ export default function DesignPreviewPage() {
             <div className="flex flex-col gap-2">
               <Eyebrow as="div">Symbol</Eyebrow>
               <Input defaultValue="NVDA" />
-              <span className="font-display italic text-[12px] text-fg-muted">
+              <span className="font-display italic text-label text-fg-muted">
                 Ticker · case-insensitive
               </span>
             </div>
@@ -301,7 +301,7 @@ export default function DesignPreviewPage() {
                 <InputGroupInput defaultValue="250" />
                 <InputGroupAddon align="inline-end">shares</InputGroupAddon>
               </InputGroup>
-              <span className="font-display italic text-[12px] text-fg-muted">
+              <span className="font-display italic text-label text-fg-muted">
                 Fractional supported
               </span>
             </div>
@@ -311,14 +311,14 @@ export default function DesignPreviewPage() {
                 <InputGroupAddon align="inline-start">$</InputGroupAddon>
                 <InputGroupInput defaultValue="134.28" />
               </InputGroup>
-              <span className="font-display italic text-[12px] text-fg-muted">
+              <span className="font-display italic text-label text-fg-muted">
                 —
               </span>
             </div>
             <div className="flex flex-col gap-2">
               <Eyebrow as="div">Stop loss (error)</Eyebrow>
               <Input defaultValue="-5.0%" aria-invalid />
-              <span className="font-display italic text-[12px] text-loss">
+              <span className="font-display italic text-label text-loss">
                 Must be ≥ 3% per risk policy
               </span>
             </div>
@@ -426,8 +426,8 @@ export default function DesignPreviewPage() {
                       <span
                         className={
                           r.side === "Long"
-                            ? "text-up-500 uppercase tracking-[0.14em] text-[12px] font-sans font-semibold"
-                            : "text-down-500 uppercase tracking-[0.14em] text-[12px] font-sans font-semibold"
+                            ? "text-up-500 uppercase tracking-[0.14em] text-label font-sans font-semibold"
+                            : "text-down-500 uppercase tracking-[0.14em] text-label font-sans font-semibold"
                         }
                       >
                         {r.side}

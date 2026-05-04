@@ -409,7 +409,7 @@ export function AICopilot() {
               <h2 id="ai-copilot-title" className="text-sm font-semibold text-foreground">
                 AI Copilot
               </h2>
-              <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+              <div className="flex items-center gap-1.5 text-label text-muted-foreground">
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--profit)]" />
                 {contextLabel}
               </div>
@@ -423,7 +423,7 @@ export function AICopilot() {
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="border-b border-[var(--border)] bg-amber/10 px-4 py-3 text-[12px] leading-relaxed text-amber">
+        <div className="border-b border-[var(--border)] bg-amber/10 px-4 py-3 text-label leading-relaxed text-amber">
           <p className="font-semibold uppercase tracking-wide">Advice boundary</p>
           <p className="mt-1">
             Copilot can summarize data and suggest checks. It cannot send orders; verify quote, strategy, size, and ticket inputs yourself.
@@ -473,18 +473,18 @@ export function AICopilot() {
                     )}
                   >
                     {msg.role === "assistant" && (
-                      <div className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-primary">
+                      <div className="mb-1.5 flex items-center gap-1.5 text-label font-medium text-primary">
                         <Brain className="h-3 w-3" />
                         Copilot
                       </div>
                     )}
                     <div className="whitespace-pre-wrap">{msg.content}</div>
                     {msg.role === "assistant" && msg.provenance ? (
-                      <div className="mt-2 rounded-sm border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 font-mono text-[12px] leading-snug text-muted-foreground">
+                      <div className="mt-2 rounded-sm border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 font-mono text-label leading-snug text-muted-foreground">
                         {msg.provenance}
                       </div>
                     ) : null}
-                    <div className="mt-1.5 text-[12px] text-muted-foreground">
+                    <div className="mt-1.5 text-label text-muted-foreground">
                       {msg.timestamp.toLocaleTimeString("en-US", {
                         hour: "2-digit",
                         minute: "2-digit",
@@ -500,7 +500,7 @@ export function AICopilot() {
                           key={s}
                           onClick={() => sendMessage(s)}
                           disabled={loading}
-                          className="min-h-9 rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 text-[12px] text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
+                          className="min-h-9 rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 text-label text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
                         >
                           {s}
                         </button>
@@ -511,7 +511,7 @@ export function AICopilot() {
               ))}
               {loading && (
                 <div className="mr-2 rounded-lg bg-[var(--panel)] px-3 py-2.5">
-                  <div className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-primary">
+                  <div className="mb-1.5 flex items-center gap-1.5 text-label font-medium text-primary">
                     <Brain className="h-3 w-3" />
                     Copilot
                   </div>
@@ -555,8 +555,8 @@ export function AICopilot() {
               <Send className="h-3 w-3" />
             </button>
           </div>
-          <div className="mt-2 text-center text-[12px] text-muted-foreground">
-            <kbd className="rounded border border-[var(--border)] bg-[var(--surface)] px-1 py-0.5 font-mono text-[12px]">
+          <div className="mt-2 text-center text-label text-muted-foreground">
+            <kbd className="rounded border border-[var(--border)] bg-[var(--surface)] px-1 py-0.5 font-mono text-label">
               Cmd+J
             </kbd>{" "}
             to toggle

@@ -88,7 +88,7 @@ export default function TopBar({
           className="w-72 bg-[var(--surface)] border-border p-0"
         >
           <SheetHeader className="border-b border-border">
-            <SheetTitle className="flex items-baseline gap-1.5 text-[20px]">
+            <SheetTitle className="flex items-baseline gap-1.5 text-numeric-lg">
               <span className="text-brand">α</span>
               <span>AlphaDesk</span>
             </SheetTitle>
@@ -151,7 +151,7 @@ export default function TopBar({
         href="/"
         prefetch={false}
         aria-label="AlphaDesk home"
-        className="inline-flex min-h-11 items-center gap-1.5 font-display italic text-[20px] text-ink-1000 no-underline md:min-h-8"
+        className="inline-flex min-h-11 items-center gap-1.5 font-display italic text-numeric-lg text-ink-1000 no-underline md:min-h-8"
         style={{ letterSpacing: 0 }}
       >
         <span className="text-brand">α</span>
@@ -177,7 +177,7 @@ export default function TopBar({
                 // sm-md breakpoints on landscape phones where the
                 // hamburger hides. Enforce 44px tap targets below md.
                 "inline-flex items-center min-h-[44px] md:min-h-[36px]",
-                "font-sans text-[13px] px-3 py-1.5 rounded-xs no-underline transition-colors",
+                "font-sans text-body-sm px-3 py-1.5 rounded-xs no-underline transition-colors",
                 active
                   ? "text-ink-1000 bg-bg-elev-1"
                   : "text-fg-muted hover:text-fg",
@@ -206,7 +206,7 @@ export default function TopBar({
           aria-keyshortcuts="Meta+K Control+K"
           className={cn(
             "hidden md:inline-flex items-center gap-2 rounded-md border border-border",
-            "bg-bg-elev-1 px-2.5 py-1 text-[12px] text-fg-muted",
+            "bg-bg-elev-1 px-2.5 py-1 text-label text-fg-muted",
             "hover:text-fg hover:border-border-strong transition-colors",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           )}
@@ -216,7 +216,7 @@ export default function TopBar({
           <span>Search</span>
           <kbd
             aria-hidden="true"
-            className="ml-1 rounded-sm border border-border bg-bg px-1 font-mono text-[13px] leading-none text-fg-muted"
+            className="ml-1 rounded-sm border border-border bg-bg px-1 font-mono text-body-sm leading-none text-fg-muted"
           >
             {shortcutLabel}
           </kbd>

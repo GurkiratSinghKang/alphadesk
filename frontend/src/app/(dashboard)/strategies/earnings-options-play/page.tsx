@@ -448,7 +448,7 @@ export default function EarningsOptionsPlayPage() {
           focus, ``sr-only`` otherwise. */}
       <a
         href="#earnings-detail-panel"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:border focus:border-[color:var(--brand)] focus:bg-[color:var(--bg-card)] focus:px-3 focus:py-2 focus:t-mono focus:text-[12px]"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:border focus:border-[color:var(--brand)] focus:bg-[color:var(--bg-card)] focus:px-3 focus:py-2 focus:t-mono focus:text-label"
       >
         Skip to detail panel
       </a>
@@ -488,6 +488,8 @@ export default function EarningsOptionsPlayPage() {
           // B-107: restore defaults from the empty-state "Loosen a filter"
           // CTA. Matches the initial state in readFiltersFromURL.
           onResetFilters={() => setFilters({ window: "both", minIvRank: 0, sort: "date" })}
+          // Pillar-6: surface a Retry CTA when the calendar fetch errors.
+          onRetry={() => calendarQuery.refetch()}
         />
         {/* Round-8 / AX-05: id target for the skip-to-detail link. */}
         <div id="earnings-detail-panel">
@@ -547,7 +549,7 @@ function StrategyIntroCard() {
   return (
     <aside
       data-slot="earnings-intro"
-      className="mb-3 rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-4 py-3 text-[13px] leading-relaxed text-fg-muted"
+      className="mb-3 rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-4 py-3 text-body-sm leading-relaxed text-fg-muted"
     >
       <p>
         <strong className="u-brand">This strategy looks for defined-risk earnings option trades.</strong>{" "}

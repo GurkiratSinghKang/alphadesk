@@ -38,7 +38,7 @@ export default function SignalSection({
         {paragraphs.map((p, i) => (
           <p
             key={i}
-            className="font-display italic text-[15px] leading-relaxed text-fg"
+            className="font-display italic text-body leading-relaxed text-fg"
           >
             {p}
           </p>
@@ -52,7 +52,7 @@ export default function SignalSection({
         // weight as every other eyebrow on the page.
         <div className="rounded-md border-l-2 border-brand bg-bg-elev-1 py-3 pl-4 pr-4">
           <p className="t-label">Edge</p>
-          <p className="mt-1.5 font-display italic text-[15px] text-fg">
+          <p className="mt-1.5 font-display italic text-body text-fg">
             {edge}
           </p>
         </div>
@@ -65,10 +65,10 @@ export default function SignalSection({
               key={i}
               className="flex gap-4 border-b border-border-hair pb-3 last:border-0"
             >
-              <Mono className="pt-0.5 text-[12px] text-fg-hint">
+              <Mono className="pt-0.5 text-label text-fg-hint">
                 {String(i + 1).padStart(2, "0")}
               </Mono>
-              <p className="font-sans text-[13px] leading-relaxed text-fg-dim">
+              <p className="font-sans text-body-sm leading-relaxed text-fg-dim">
                 {step}
               </p>
             </li>

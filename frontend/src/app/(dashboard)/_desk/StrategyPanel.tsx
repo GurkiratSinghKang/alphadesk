@@ -67,18 +67,18 @@ export function StrategyPanel({
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-[15px] font-medium text-ink-1000">{strategy.name}</p>
-                  <p className="mt-1 truncate text-[13px] text-fg-muted">
+                  <p className="truncate text-body font-medium text-ink-1000">{strategy.name}</p>
+                  <p className="mt-1 truncate text-body-sm text-fg-muted">
                     {strategy.positions} positions · {formatCurrency(strategy.invested, true)} invested
                   </p>
                 </div>
-                <span className={cn("font-mono text-[13px]", strategy.returnPct > 0 ? "text-profit" : strategy.returnPct < 0 ? "text-loss" : "text-fg-muted")}>
+                <span className={cn("font-mono text-body-sm", strategy.returnPct > 0 ? "text-profit" : strategy.returnPct < 0 ? "text-loss" : "text-fg-muted")}>
                   {strategy.returnPct === 0 ? "—" : formatPercent(strategy.returnPct)}
                 </span>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <StrategyStatusChip tone={strategy.readinessTone} label={strategy.readinessLabel} />
-                <span className="min-w-0 truncate text-[12px] text-fg-muted">{strategy.readinessDetail}</span>
+                <span className="min-w-0 truncate text-label text-fg-muted">{strategy.readinessDetail}</span>
               </div>
             </button>
           ))
@@ -88,8 +88,8 @@ export function StrategyPanel({
               <div className="flex size-10 items-center justify-center rounded-sm bg-profit/10 text-profit">
                 <ShieldCheck className="size-5" aria-hidden />
               </div>
-              <p className="mt-4 text-[15px] font-semibold text-ink-1000">{emptyCopy}</p>
-              <p className="mt-2 text-[13px] leading-snug text-fg-muted">
+              <p className="mt-4 text-body font-semibold text-ink-1000">{emptyCopy}</p>
+              <p className="mt-2 text-body-sm leading-snug text-fg-muted">
                 Only blocked systems appear here; healthy strategies stay out of the way.
               </p>
             </div>
@@ -122,8 +122,8 @@ function StrategyPanelHeader({
           <Icon className="size-4" aria-hidden />
         </span>
         <div className="min-w-0">
-          <h3 id={id} className="truncate text-[15px] font-semibold text-ink-1000">{title}</h3>
-          <p className="mt-0.5 text-[12px] leading-snug text-fg-muted">{detail}</p>
+          <h3 id={id} className="truncate text-body font-semibold text-ink-1000">{title}</h3>
+          <p className="mt-0.5 text-label leading-snug text-fg-muted">{detail}</p>
         </div>
       </div>
       {actionLabel && onAction ? (
@@ -140,7 +140,7 @@ function StrategyStatusChip({ label, tone }: { label: string; tone: StatusTone }
   return (
     <span
       className={cn(
-        "inline-flex min-h-7 items-center gap-1.5 rounded-sm border px-2.5 py-1 font-mono text-[12px]",
+        "inline-flex min-h-7 items-center gap-1.5 rounded-sm border px-2.5 py-1 font-mono text-label",
         tone === "profit" && "border-profit/30 bg-profit/10 text-profit",
         tone === "loss" && "border-loss/30 bg-loss/10 text-loss",
         tone === "amber" && "border-amber/30 bg-amber/10 text-amber",

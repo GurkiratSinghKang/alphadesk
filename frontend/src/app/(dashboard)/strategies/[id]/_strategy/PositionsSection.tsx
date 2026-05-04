@@ -123,20 +123,20 @@ export default function PositionsSection({
                   <Link
                     href={`/trade?symbol=${p.symbol}`}
                     className={cn(
-                      "rounded-sm font-sans text-[15px] font-semibold text-fg transition-colors hover:text-brand",
+                      "rounded-sm font-sans text-body font-semibold text-fg transition-colors hover:text-brand",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                     )}
                   >
                     {p.symbol}
                   </Link>
-                  <div className="mt-1 font-mono text-[12px] uppercase text-fg-hint tracking-normal">
+                  <div className="mt-1 font-mono text-label uppercase text-fg-hint tracking-normal">
                     {formatEntryDate(p.entry_date)}
                   </div>
                 </td>
                 <td className="px-4 py-3">
                   <span
                     className={cn(
-                      "inline-flex items-center rounded-sm border px-2 py-0.5 font-sans text-[12px] font-semibold uppercase",
+                      "inline-flex items-center rounded-sm border px-2 py-0.5 font-sans text-label font-semibold uppercase",
                       side === "Long"
                         ? "border-profit/40 bg-profit/5 text-profit"
                         : "border-loss/40 bg-loss/5 text-loss"
@@ -152,10 +152,10 @@ export default function PositionsSection({
                     digits column-align at the decimal point. Secondary
                     lines (P&L %, stop/take) use 12px for hierarchy. */}
                 <td className="px-4 py-3 text-right">
-                  <Mono className="text-[15px] text-fg tabular-nums">{Math.abs(shares)}</Mono>
+                  <Mono className="text-body text-fg tabular-nums">{Math.abs(shares)}</Mono>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <Mono className="text-[15px] text-fg tabular-nums">
+                  <Mono className="text-body text-fg tabular-nums">
                     {entryPrice.toFixed(2)}
                   </Mono>
                 </td>
@@ -164,17 +164,17 @@ export default function PositionsSection({
                     <PnLNumber
                       value={unrealizedPnl}
                       format="currency"
-                      className="text-[15px]"
+                      className="text-body"
                     />
                     <PnLNumber
                       value={unrealizedPnlPct}
                       format="percent"
-                      className="text-[12px]"
+                      className="text-label"
                     />
                   </div>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <div className="flex flex-col items-end gap-0.5 font-mono text-[12px] tabular-nums">
+                  <div className="flex flex-col items-end gap-0.5 font-mono text-label tabular-nums">
                     <span className="text-loss">
                       Stop {stopLoss != null ? stopLoss.toFixed(2) : "\u2014"}
                     </span>
@@ -184,7 +184,7 @@ export default function PositionsSection({
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <span className="font-display italic text-[13px] text-fg-muted">
+                  <span className="font-display italic text-body-sm text-fg-muted">
                     {strategyLabel}
                   </span>
                 </td>

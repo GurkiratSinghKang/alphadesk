@@ -27,7 +27,7 @@ const badgeVariants = cva(
   [
     "group/badge ui-stateful inline-flex items-center gap-1.5",
     "min-h-6 px-3 py-0.5",
-    "rounded-sm border text-[12px] font-semibold tracking-[0.12em] uppercase",
+    "rounded-sm border text-label font-semibold tracking-[0.12em] uppercase",
     "relative overflow-hidden font-sans whitespace-nowrap",
     "transition-colors",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg",

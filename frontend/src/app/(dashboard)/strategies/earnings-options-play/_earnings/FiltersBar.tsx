@@ -122,7 +122,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
                 // pills hit Apple HIG / WCAG 2.5.8 touch-target floors
                 // on phones; ``px-3 py-2`` widens the horizontal hit
                 // area as well.
-                "min-h-[44px] rounded border px-3 py-2 font-mono text-[12px] inline-flex items-center",
+                "min-h-[44px] rounded border px-3 py-2 font-mono text-label inline-flex items-center",
                 checked
                   ? "border-[color:var(--fg-accent)] text-[color:var(--fg-accent)]"
                   : "border-[color:var(--fg-border)] text-[color:var(--fg-muted)] hover:text-[color:var(--fg-base)]",
@@ -170,7 +170,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
           // Round-4 (CLUSTER E/9): 24×24 thumb classes for touch targets.
           className={cn("w-full md:w-32 max-w-full", SLIDER_THUMB_CLASSES)}
         />
-        <span className="font-mono text-[13px] tabular-nums text-[color:var(--fg-base)]">{localIvRank}</span>
+        <span className="font-mono text-body-sm tabular-nums text-[color:var(--fg-base)]">{localIvRank}</span>
       </label>
 
       {/* TIME — radiogroup (CLUSTER C/7). Replaces the previous select
@@ -197,7 +197,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
                 // pills hit Apple HIG / WCAG 2.5.8 touch-target floors
                 // on phones; ``px-3 py-2`` widens the horizontal hit
                 // area as well.
-                "min-h-[44px] rounded border px-3 py-2 font-mono text-[12px] inline-flex items-center",
+                "min-h-[44px] rounded border px-3 py-2 font-mono text-label inline-flex items-center",
                 checked
                   ? "border-[color:var(--fg-accent)] text-[color:var(--fg-accent)]"
                   : "border-[color:var(--fg-border)] text-[color:var(--fg-muted)] hover:text-[color:var(--fg-base)]",
@@ -244,7 +244,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
           onBlur={() => onSettleRef?.()}
           // Round-8 / MO-06: bump padding so the SORT select hits
           // 44px on phones; the ``py-0.5`` left it ~22px tall.
-          className="min-h-[44px] rounded border border-[color:var(--fg-border)] bg-transparent px-2 py-1.5 font-mono text-[12px] text-[color:var(--fg-base)]"
+          className="min-h-[44px] rounded border border-[color:var(--fg-border)] bg-transparent px-2 py-1.5 font-mono text-label text-[color:var(--fg-base)]"
         >
           {SORT_OPTIONS.map((o) => (
             <option key={o.key} value={o.key}>{o.label}</option>

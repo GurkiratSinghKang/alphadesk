@@ -31,7 +31,7 @@ export default function LimitationsSection({
       {items.map((it, i) => (
         <li
           key={i}
-          className="font-display italic text-[15px] leading-relaxed text-fg-dim"
+          className="font-display italic text-body leading-relaxed text-fg-dim"
         >
           {it}
         </li>

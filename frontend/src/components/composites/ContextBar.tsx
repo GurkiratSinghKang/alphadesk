@@ -57,7 +57,7 @@ export default function ContextBar({ cells, className }: ContextBarProps) {
                 className={cn(
                   "font-mono tabular-nums font-medium",
                   cell.emphasis
-                    ? "text-gold-300 text-[28px] leading-none"
+                    ? "text-gold-300 text-h1 leading-none"
                     : cell.valueTone === "profit"
                       ? "text-up-500 text-base"
                       : cell.valueTone === "loss"
@@ -73,7 +73,7 @@ export default function ContextBar({ cells, className }: ContextBarProps) {
               {cell.delta ? (
                 <span
                   className={cn(
-                    "hidden font-mono tabular-nums text-[13px] sm:inline",
+                    "hidden font-mono tabular-nums text-body-sm sm:inline",
                     cell.deltaTone === "profit"
                       ? "text-up-500"
                       : cell.deltaTone === "loss"

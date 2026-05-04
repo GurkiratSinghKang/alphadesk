@@ -100,7 +100,7 @@ export function PnlCalendarMini() {
       <div className="relative p-3" ref={containerRef}>
         <div className="grid grid-cols-7 gap-1">
           {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-            <div key={i} className="text-center text-[12px] font-medium text-muted-foreground py-0.5">{d}</div>
+            <div key={i} className="text-center text-label font-medium text-muted-foreground py-0.5">{d}</div>
           ))}
           {cells.map((cell, i) => {
             if (cell.day === 0) return <div key={`e-${i}`} />;
@@ -114,7 +114,7 @@ export function PnlCalendarMini() {
               <div
                 key={cell.day}
                 className={cn(
-                  "relative flex flex-col items-center justify-center rounded-md py-1 text-[12px] tabular-nums",
+                  "relative flex flex-col items-center justify-center rounded-md py-1 text-label tabular-nums",
                   isToday && "ring-1 ring-primary/50",
                   hasPnl && positive && "bg-[var(--profit)]",
                   hasPnl && !positive && "bg-[var(--loss)]",
@@ -139,7 +139,7 @@ export function PnlCalendarMini() {
               >
                 <span className={cn("font-medium", hasPnl ? "text-white" : "text-muted-foreground")}>{cell.day}</span>
                 {hasPnl && (
-                  <span className="text-[12px] tabular-nums text-white/80 leading-none">
+                  <span className="text-label tabular-nums text-white/80 leading-none">
                     {cell.pnl! >= 0 ? '+' : ''}{formatCurrency(cell.pnl!)}
                   </span>
                 )}
@@ -162,7 +162,7 @@ export function PnlCalendarMini() {
             <p className={cn("text-sm font-semibold tabular-nums mt-0.5", hovered.pnl >= 0 ? "text-[var(--profit)] glow-profit" : "text-[var(--loss)] glow-loss")}>
               {hovered.pnl >= 0 ? "+" : "-"}{formatCurrency(Math.abs(hovered.pnl))}
             </p>
-            <div className="flex items-center gap-3 mt-1 text-[12px] text-muted-foreground">
+            <div className="flex items-center gap-3 mt-1 text-label text-muted-foreground">
               <span>{hovered.trades} trades</span>
               <span>Win: {(hovered.winRate ?? 0) > 0 ? `${(hovered.winRate ?? 0).toFixed(0)}%` : "N/A"}</span>
             </div>

@@ -130,9 +130,9 @@ export function WsStatusBanner() {
       <div
         role="alert"
         aria-live="assertive"
-        className="w-full bg-amber/10 text-amber border-b border-amber/20 px-4 py-1.5 text-[12px] flex items-center justify-center gap-3"
+        className="w-full border-b border-loss/20 bg-loss/10 text-loss px-4 py-1.5 text-label flex items-center justify-center gap-3"
       >
-        <span className="font-medium">
+        <span className="border-l-2 border-loss pl-2 font-medium">
           Data link offline. Execution remains locked until quotes recover.
         </span>
         <button
@@ -140,7 +140,7 @@ export function WsStatusBanner() {
           onClick={() => {
             if (typeof window !== "undefined") window.location.reload();
           }}
-          className="rounded border border-amber/40 px-2 py-0.5 text-[12px] font-medium hover:bg-amber/20 focus:outline-none focus:ring-2 focus:ring-amber/50"
+          className="rounded border border-loss/40 px-2 py-0.5 text-label font-medium hover:bg-loss/20 focus:outline-none focus:ring-2 focus:ring-loss/50"
         >
           Reload
         </button>
@@ -157,7 +157,7 @@ export function WsStatusBanner() {
         role="alert"
         aria-live="assertive"
         data-testid="broker-degraded-banner"
-        className="w-full bg-amber/10 text-amber border-b border-amber/20 px-4 py-1.5 text-[12px] flex items-center justify-center gap-2"
+        className="w-full bg-amber/10 text-amber border-b border-amber/20 px-4 py-1.5 text-label flex items-center justify-center gap-2"
       >
         <span className="font-semibold uppercase tracking-wide">LIMITED DATA</span>
         <span className="font-medium">— broker unavailable, execution locked</span>
@@ -170,7 +170,7 @@ export function WsStatusBanner() {
       <div
         role="status"
         aria-live="polite"
-        className="w-full bg-amber/10 text-amber border-b border-amber/20 px-4 py-1.5 text-[12px] text-center"
+        className="w-full bg-amber/10 text-amber border-b border-amber/20 px-4 py-1.5 text-label text-center"
       >
         Reconnecting to live data…
       </div>
@@ -184,7 +184,7 @@ export function WsStatusBanner() {
     <div
       role="status"
       aria-live="polite"
-      className="w-full bg-bg-elev-1 text-fg-muted border-b border-border px-4 py-1.5 text-[12px] text-center"
+      className="w-full bg-bg-elev-1 text-fg-muted border-b border-border px-4 py-1.5 text-label text-center"
     >
       Market data link starting
     </div>

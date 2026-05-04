@@ -143,7 +143,7 @@ export function MarketContext({ indices, sectors, news, summary, sparkData, isDe
                       >
                         <Newspaper className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                         <div className="min-w-0 flex-1">
-                          <p className="text-[13px] leading-snug text-foreground group-hover:text-blue-400 transition-colors line-clamp-2">
+                          <p className="text-body-sm leading-snug text-foreground group-hover:text-blue-400 transition-colors line-clamp-2">
                             {article.title}
                           </p>
                           <p className="mt-0.5 text-xs text-muted-foreground">
@@ -162,7 +162,7 @@ export function MarketContext({ indices, sectors, news, summary, sparkData, isDe
                     >
                       <Newspaper className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-[13px] leading-snug text-foreground line-clamp-2">
+                        <p className="text-body-sm leading-snug text-foreground line-clamp-2">
                           {article.title}
                         </p>
                         <p className="mt-0.5 text-xs text-muted-foreground">

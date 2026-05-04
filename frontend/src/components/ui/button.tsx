@@ -47,8 +47,8 @@ const buttonVariants = cva(
           "bg-transparent text-fg border-border-strong hover:bg-bg-elev-1 hover:border-brand",
         ghost:
           "bg-transparent text-fg-dim hover:text-fg hover:bg-bg-elev-1",
-        buy: "bg-up-500/10 text-up-500 border-up-500/30 hover:bg-up-500/20 uppercase tracking-[0.1em] text-[12px]",
-        sell: "bg-down-500/10 text-down-500 border-down-500/30 hover:bg-down-500/20 uppercase tracking-[0.1em] text-[12px]",
+        buy: "bg-up-500/10 text-up-500 border-up-500/30 hover:bg-up-500/20 uppercase tracking-[0.1em] text-label",
+        sell: "bg-down-500/10 text-down-500 border-down-500/30 hover:bg-down-500/20 uppercase tracking-[0.1em] text-label",
         link: "bg-transparent text-brand border-0 border-b border-brand-dim rounded-none px-0 h-auto hover:text-gold-300",
 
         // Legacy aliases — keep older callers working
@@ -60,11 +60,11 @@ const buttonVariants = cva(
           "bg-down-500/10 text-down-500 border-down-500/30 hover:bg-down-500/20",
       },
       size: {
-        sm: "h-8 px-3 text-[12px]",
-        default: "h-9 px-4 text-[13px]",
-        lg: "h-11 px-6 text-[15px]",
+        sm: "h-8 px-3 text-label",
+        default: "h-9 px-4 text-body-sm",
+        lg: "h-11 px-6 text-body",
         // Legacy sizes — preserved for existing callers
-        xs: "h-7 px-2.5 text-[12px] [&_svg:not([class*='size-'])]:size-3",
+        xs: "h-7 px-2.5 text-label [&_svg:not([class*='size-'])]:size-3",
         icon: "size-[34px] p-0",
         "icon-xs": "size-7 p-0 [&_svg:not([class*='size-'])]:size-3",
         "icon-sm": "size-8 p-0 [&_svg:not([class*='size-'])]:size-4",

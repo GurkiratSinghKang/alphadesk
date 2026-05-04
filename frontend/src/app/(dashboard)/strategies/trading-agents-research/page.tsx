@@ -532,7 +532,7 @@ export default function TradingAgentsResearchPage() {
           {error && (
             <div
               role="alert"
-              className="mb-4 rounded-md border border-loss/40 bg-loss/10 px-4 py-3 text-[13px] leading-relaxed text-loss"
+              className="mb-4 rounded-md border border-loss/40 bg-loss/10 px-4 py-3 text-body-sm leading-relaxed text-loss"
             >
               {error}
             </div>
@@ -600,7 +600,7 @@ function RunForm({
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h2 className="font-sans text-[18px] font-semibold tracking-tight text-fg">Research setup</h2>
-          <p className="mt-1 text-[12px] leading-relaxed text-fg-muted">
+          <p className="mt-1 text-label leading-relaxed text-fg-muted">
             Multi-agent report saved as an auditable artifact.
           </p>
         </div>
@@ -609,7 +609,7 @@ function RunForm({
           disabled={submitting || !canStartRun}
           className={cn(
             "inline-flex h-10 items-center gap-2 rounded-md border border-brand bg-brand px-4",
-            "font-sans text-[13px] font-semibold text-bg transition duration-200 active:translate-y-px",
+            "font-sans text-body-sm font-semibold text-bg transition duration-200 active:translate-y-px",
             "hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60",
           )}
         >
@@ -623,7 +623,7 @@ function RunForm({
           <input
             value={symbol}
             onChange={(event) => setSymbol(event.target.value.toUpperCase())}
-            className="h-10 rounded-md border border-border bg-bg-elev-1 px-3 font-mono text-[15px] text-fg outline-none transition focus:border-brand"
+            className="h-10 rounded-md border border-border bg-bg-elev-1 px-3 font-mono text-body text-fg outline-none transition focus:border-brand"
             maxLength={12}
             required
           />
@@ -633,7 +633,7 @@ function RunForm({
             type="date"
             value={tradeDate}
             onChange={(event) => setTradeDate(event.target.value)}
-            className="h-10 rounded-md border border-border bg-bg-elev-1 px-3 font-mono text-[15px] text-fg outline-none transition focus:border-brand"
+            className="h-10 rounded-md border border-border bg-bg-elev-1 px-3 font-mono text-body text-fg outline-none transition focus:border-brand"
             required
           />
         </Field>
@@ -672,7 +672,7 @@ function RunForm({
               <label
                 key={item}
                 className={cn(
-                  "flex h-9 items-center gap-2 rounded-md border px-3 font-sans text-[13px] transition active:translate-y-px",
+                  "flex h-9 items-center gap-2 rounded-md border px-3 font-sans text-body-sm transition active:translate-y-px",
                   checked
                     ? "border-brand/70 bg-brand/10 text-fg"
                     : "border-border-hair bg-bg-card text-fg-muted hover:border-border",
@@ -707,7 +707,7 @@ function RunForm({
               value={deepModel}
               onChange={(event) => setDeepModel(event.target.value)}
               placeholder="provider default"
-              className="h-10 rounded-md border border-border bg-bg-card px-3 font-mono text-[13px] text-fg outline-none transition focus:border-brand"
+              className="h-10 rounded-md border border-border bg-bg-card px-3 font-mono text-body-sm text-fg outline-none transition focus:border-brand"
             />
           </Field>
           <Field label="Quick model">
@@ -715,7 +715,7 @@ function RunForm({
               value={quickModel}
               onChange={(event) => setQuickModel(event.target.value)}
               placeholder="provider default"
-              className="h-10 rounded-md border border-border bg-bg-card px-3 font-mono text-[13px] text-fg outline-none transition focus:border-brand"
+              className="h-10 rounded-md border border-border bg-bg-card px-3 font-mono text-body-sm text-fg outline-none transition focus:border-brand"
             />
           </Field>
         </div>
@@ -774,11 +774,11 @@ function ResearchBrief({
               <h2 className="min-w-0 font-sans text-[36px] font-semibold leading-none tracking-tight text-fg md:text-[54px]">
                 {runSymbol}
               </h2>
-              <span className="mb-1 whitespace-nowrap rounded-pill border border-border bg-bg-elev-1 px-3 py-1.5 font-mono text-[14px] text-fg-muted md:text-[16px]">
+              <span className="mb-1 whitespace-nowrap rounded-pill border border-border bg-bg-elev-1 px-3 py-1.5 font-mono text-[14px] text-fg-muted md:text-numeric-md">
                 {run.trade_date ?? "No trade date"}
               </span>
             </div>
-            <p className="mt-3 max-w-3xl text-[13px] leading-relaxed text-fg-muted">
+            <p className="mt-3 max-w-3xl text-body-sm leading-relaxed text-fg-muted">
               {runProvider} research with {runAnalysts.length ? runAnalysts.map(analystLabel).join(", ") : "no selected"} analysts.
             </p>
           </div>
@@ -788,7 +788,7 @@ function ResearchBrief({
             <p className={cn("mt-2 font-mono text-[26px] font-semibold leading-none tracking-tight", tone.text)}>
               {signal}
             </p>
-            <p className="mt-3 text-[12px] leading-relaxed text-fg-muted">
+            <p className="mt-3 text-label leading-relaxed text-fg-muted">
               {thinMemo
                 ? "This saved run contains only the processed signal. Run it again to generate the full committee brief."
                 : "Synthesized from portfolio manager, analyst evidence, and risk debate."}
@@ -815,7 +815,7 @@ function ResearchBrief({
           {run.error && (
             <div className="rounded-md border border-loss/50 bg-loss/10 px-4 py-3">
               <p className="t-label text-loss">{run.error.code}</p>
-              <p className="mt-1 text-[13px] leading-relaxed text-fg">{run.error.message}</p>
+              <p className="mt-1 text-body-sm leading-relaxed text-fg">{run.error.message}</p>
             </div>
           )}
 
@@ -866,7 +866,7 @@ function DecisionHighlights({ highlights }: { highlights: string[] }) {
               <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-brand/35 bg-brand/10 font-mono text-[10px] text-brand">
                 {index + 1}
               </span>
-              <p className="min-w-0 break-words text-[13px] leading-relaxed text-fg">{line}</p>
+              <p className="min-w-0 break-words text-body-sm leading-relaxed text-fg">{line}</p>
             </div>
           </div>
         ))}
@@ -918,7 +918,7 @@ function MemoSectionList({
       <div className="flex flex-col gap-2 border-b border-border-hair px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="t-label text-fg-muted">Complete research memo</p>
-          <p className="mt-1 text-[12px] leading-relaxed text-fg-muted">
+          <p className="mt-1 text-label leading-relaxed text-fg-muted">
             Source sections stay collapsed until you need the supporting text.
           </p>
         </div>
@@ -934,7 +934,7 @@ function MemoSectionList({
             className="group scroll-mt-24 px-4 py-4"
           >
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-              <span className="break-words font-sans text-[15px] font-semibold text-fg">{section.title}</span>
+              <span className="break-words font-sans text-body font-semibold text-fg">{section.title}</span>
               <span className="flex shrink-0 items-center gap-2">
                 <span className="font-mono text-[11px] text-fg-hint">{memoSectionLineCount(section.body)} lines</span>
                 <CaretRight className="h-4 w-4 text-fg-muted transition group-open:rotate-90" weight="bold" />
@@ -958,7 +958,7 @@ function TickerFactPanel({ context }: { context: TickerContext | null }) {
           <ShieldCheck className="h-4 w-4 text-brand" weight="bold" />
           <p className="t-label text-fg-muted">Ticker facts</p>
         </div>
-        <p className="text-[12px] leading-relaxed text-fg-muted">
+        <p className="text-label leading-relaxed text-fg-muted">
           No shared ticker facts loaded for this report yet.
         </p>
       </section>
@@ -1043,7 +1043,7 @@ function ReadableMemo({ body }: { body: string }) {
         if (numbered) {
           return (
             <div key={`${index}-${line}`} className="flex gap-3">
-              <span className="mt-0.5 w-6 shrink-0 font-mono text-[12px] text-brand">{numbered[1]}.</span>
+              <span className="mt-0.5 w-6 shrink-0 font-mono text-label text-brand">{numbered[1]}.</span>
               <p className="min-w-0 break-words text-[13.5px] leading-7 text-fg">
                 {stripMarkdown(numbered[2])}
               </p>
@@ -1052,7 +1052,7 @@ function ReadableMemo({ body }: { body: string }) {
         }
         if (line.startsWith("|")) {
           return (
-            <p key={`${index}-${line}`} className="break-words font-mono text-[12px] leading-relaxed text-fg-muted">
+            <p key={`${index}-${line}`} className="break-words font-mono text-label leading-relaxed text-fg-muted">
               {clean}
             </p>
           );
@@ -1080,14 +1080,14 @@ function KeyLevels({ levels }: { levels: LevelItem[] }) {
             const tone = levelTone(level.label);
             return (
               <div key={`${level.value}-${level.label}`} className={cn("rounded-md border px-3 py-2", levelToneClass(tone))}>
-                <p className="font-mono text-[17px] font-semibold text-fg">{level.value}</p>
-                <p className="mt-1 break-words text-[12px] leading-relaxed text-fg-muted">{level.label || "Referenced level"}</p>
+                <p className="font-mono text-h3 font-semibold text-fg">{level.value}</p>
+                <p className="mt-1 break-words text-label leading-relaxed text-fg-muted">{level.label || "Referenced level"}</p>
               </div>
             );
           })}
         </div>
       ) : (
-        <p className="rounded-md border border-dashed border-border-hair px-3 py-5 text-center text-[12px] leading-relaxed text-fg-muted">
+        <p className="rounded-md border border-dashed border-border-hair px-3 py-5 text-center text-label leading-relaxed text-fg-muted">
           No explicit price levels in this saved memo.
         </p>
       )}
@@ -1111,7 +1111,7 @@ function ArtifactPanel({ files }: { files: string[] }) {
           ))}
         </div>
       ) : (
-        <p className="text-[12px] text-fg-muted">No artifacts saved.</p>
+        <p className="text-label text-fg-muted">No artifacts saved.</p>
       )}
     </section>
   );
@@ -1124,7 +1124,7 @@ function InlineStatus({ status, message }: { status: TradingAgentsRunStatus; mes
         {renderStatusIcon(status, cn("h-4 w-4", statusClass(status), status === "running" && "animate-spin"))}
         <p className="t-label text-fg-muted">Progress</p>
       </div>
-      <p className="mt-2 text-[13px] leading-relaxed text-fg">{message}</p>
+      <p className="mt-2 text-body-sm leading-relaxed text-fg">{message}</p>
     </div>
   );
 }
@@ -1133,8 +1133,8 @@ function ThinMemoPanel({ run, signal }: { run: TradingAgentsRun; signal: string 
   return (
     <section className="rounded-lg border border-brand/35 bg-brand/10 p-5">
       <p className="t-label text-brand">Processed signal only</p>
-      <h3 className="mt-2 font-sans text-[22px] font-semibold tracking-tight text-fg">{signal}</h3>
-      <p className="mt-3 max-w-2xl text-[13px] leading-relaxed text-fg-muted">
+      <h3 className="mt-2 font-sans text-h2 font-semibold tracking-tight text-fg">{signal}</h3>
+      <p className="mt-3 max-w-2xl text-body-sm leading-relaxed text-fg-muted">
         This run was saved before the research wrapper emitted the full committee memo. The artifacts exist, but
         the UI received only the terminal signal for {displayText(run.symbol, "this symbol")}. A fresh run will populate the portfolio-manager
         decision, analyst evidence, debate, risk view, and price map.
@@ -1164,8 +1164,8 @@ function EmptyResearchState() {
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-border bg-bg-elev-1">
           <Scales className="h-5 w-5 text-brand" weight="bold" />
         </div>
-        <h2 className="mt-4 font-sans text-[22px] font-semibold tracking-tight text-fg">No report selected</h2>
-        <p className="mt-2 text-[13px] leading-relaxed text-fg-muted">
+        <h2 className="mt-4 font-sans text-h2 font-semibold tracking-tight text-fg">No report selected</h2>
+        <p className="mt-2 text-body-sm leading-relaxed text-fg-muted">
           Select a saved run or start a new one to view the committee decision, analyst evidence, risk debate,
           and generated artifacts.
         </p>
@@ -1190,7 +1190,7 @@ function RuntimePanel({
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <h2 className="font-sans text-[18px] font-semibold tracking-tight text-fg">Runtime</h2>
-          <p className="mt-1 text-[12px] leading-relaxed text-fg-muted">
+          <p className="mt-1 text-label leading-relaxed text-fg-muted">
             {runtime
               ? runtime.ready
                 ? runtime.bootstrap_required
@@ -1225,7 +1225,7 @@ function RuntimePanel({
           {warnings.length > 0 && (
             <ul className="mt-3 flex flex-col gap-2">
               {warnings.map((warning) => (
-                <li key={warning} className="rounded-md border border-brand/40 bg-brand/10 px-3 py-2 text-[12px] leading-relaxed text-fg">
+                <li key={warning} className="rounded-md border border-brand/40 bg-brand/10 px-3 py-2 text-label leading-relaxed text-fg">
                   {warning}
                 </li>
               ))}
@@ -1291,7 +1291,7 @@ function RunHistory({
                   <span className="block font-mono text-[14px] font-semibold text-fg">
                     {displayText(run.symbol, "Unknown")} / {displayText(run.trade_date, "No date")}
                   </span>
-                  <span className="block break-words text-[12px] leading-relaxed text-fg-muted">
+                  <span className="block break-words text-label leading-relaxed text-fg-muted">
                     {signal} - {formatStamp(run.created_at)}
                   </span>
                 </span>
@@ -1321,7 +1321,7 @@ function Fact({ icon: Icon, label, value }: { icon: IconType; label: string; val
         <Icon className="h-3.5 w-3.5 text-brand" weight="bold" />
         <p className="t-label text-fg-muted">{label}</p>
       </div>
-      <p className="mt-1 font-mono text-[13px] text-fg">{value}</p>
+      <p className="mt-1 font-mono text-body-sm text-fg">{value}</p>
     </div>
   );
 }
@@ -1330,7 +1330,7 @@ function RuntimeFact({ label, value, good }: { label: string; value: string; goo
   return (
     <div className="rounded-md border border-border-hair bg-bg-elev-1 px-3 py-2">
       <p className="t-label text-fg-muted">{label}</p>
-      <p className={cn("mt-1 font-mono text-[13px]", good ? "text-profit" : "text-loss")}>{value}</p>
+      <p className={cn("mt-1 font-mono text-body-sm", good ? "text-profit" : "text-loss")}>{value}</p>
     </div>
   );
 }

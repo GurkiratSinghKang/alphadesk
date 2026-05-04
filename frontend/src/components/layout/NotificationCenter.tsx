@@ -89,7 +89,7 @@ function NotificationRow({ notification, onRead }: { notification: AppNotificati
           )}
         </div>
         <p className="mt-0.5 text-muted-foreground leading-snug">{notification.detail}</p>
-        <span className="mt-1 block text-[12px] text-muted-foreground">{relativeTime(notification.timestamp)}</span>
+        <span className="mt-1 block text-label text-muted-foreground">{relativeTime(notification.timestamp)}</span>
       </div>
     </button>
   );
@@ -137,7 +137,7 @@ export function NotificationCenter() {
         <Button variant="ghost" size="icon" className="relative h-11 w-11 sm:h-8 sm:w-8" aria-label="Notifications">
           <Bell className="h-4 w-4 text-muted-foreground" />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[12px] font-bold text-primary-foreground">
+            <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-label font-bold text-primary-foreground">
               {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
@@ -152,7 +152,7 @@ export function NotificationCenter() {
             {unreadCount > 0 && (
               <button
                 onClick={markAllRead}
-                className="flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+                className="flex items-center gap-1 text-label text-muted-foreground hover:text-foreground transition-colors"
                 title="Mark all as read"
               >
                 <CheckCheck className="h-3 w-3" />
@@ -162,7 +162,7 @@ export function NotificationCenter() {
             {notifications.length > 0 && (
               <button
                 onClick={clearAll}
-                className="flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+                className="flex items-center gap-1 text-label text-muted-foreground hover:text-foreground transition-colors"
                 title="Clear all"
               >
                 <Trash2 className="h-3 w-3" />
@@ -183,7 +183,7 @@ export function NotificationCenter() {
                 key={tab.value}
                 onClick={() => setActiveTab(tab.value)}
                 className={cn(
-                  "rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors",
+                  "rounded-md px-2.5 py-1 text-label font-medium transition-colors",
                   activeTab === tab.value
                     ? "bg-primary/15 text-primary"
                     : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
@@ -191,7 +191,7 @@ export function NotificationCenter() {
               >
                 {tab.label}
                 {count > 0 && (
-                  <span className="ml-1 inline-flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-primary/20 px-1 text-[12px] font-bold text-primary">
+                  <span className="ml-1 inline-flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-primary/20 px-1 text-label font-bold text-primary">
                     {count}
                   </span>
                 )}
@@ -221,7 +221,7 @@ export function NotificationCenter() {
         {/* Footer */}
         {filtered.length > 0 && (
           <div className="border-t border-border px-3 py-2 text-center">
-            <span className="text-[12px] text-muted-foreground">
+            <span className="text-label text-muted-foreground">
               {filtered.length} notification{filtered.length !== 1 ? "s" : ""}
               {unreadCount > 0 && ` · ${unreadCount} unread`}
             </span>

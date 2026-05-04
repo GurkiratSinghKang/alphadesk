@@ -596,7 +596,7 @@ export default function StrategyDetailPage() {
       {/* Breadcrumb — BUG-020: previously said "Dashboard / <name>" even
           though this page lives under /strategies. Anchor to the strategies
           catalogue so the trail mirrors the URL path. */}
-      <nav className="flex items-center gap-2 font-sans text-[13px] text-fg-muted" aria-label="Breadcrumb">
+      <nav className="flex items-center gap-2 font-sans text-body-sm text-fg-muted" aria-label="Breadcrumb">
         {/* 2026-04-21 polish: breadcrumb size lifted from 12px to 13px and a
             focus-visible ring added — previously the link had no visible
             outline when tabbed to, making keyboard navigation blind to it. */}
@@ -647,7 +647,7 @@ export default function StrategyDetailPage() {
       {showNoBacktestNote ? (
         <p
           data-testid="no-backtest-note"
-          className="-mt-6 font-display italic text-[13px] leading-snug text-fg-muted"
+          className="-mt-6 font-display italic text-body-sm leading-snug text-fg-muted"
         >
           No backtest (discretionary) — Sharpe, MaxDD, CAGR and Hit Rate are not shown for manually-traded positions.
         </p>
@@ -686,7 +686,7 @@ export default function StrategyDetailPage() {
       {suspiciousSharpe ? (
         <p
           data-testid="sharpe-caveat"
-          className="-mt-6 font-display italic text-[13px] leading-snug text-fg-muted"
+          className="-mt-6 font-display italic text-body-sm leading-snug text-fg-muted"
         >
           Live deployment may diverge from this OOS Sharpe — see in-sample limitations below.
         </p>
@@ -702,7 +702,7 @@ export default function StrategyDetailPage() {
           />
           <div className="flex flex-col">
             <Eyebrow as="span">Last trade</Eyebrow>
-            <Mono className="text-[13px] text-fg">
+            <Mono className="text-body-sm text-fg">
               {formatLastTrade(perf?.last_trade_date)}
             </Mono>
           </div>
@@ -720,7 +720,7 @@ export default function StrategyDetailPage() {
             onClick={handleToggle}
             disabled={toggling || !perf}
             className={cn(
-              "inline-flex h-9 items-center gap-1.5 rounded-sm border border-border bg-bg-elev-1 px-3.5 font-sans text-[12px] font-semibold text-fg transition-colors",
+              "inline-flex h-9 items-center gap-1.5 rounded-sm border border-border bg-bg-elev-1 px-3.5 font-sans text-label font-semibold text-fg transition-colors",
               "hover:bg-bg-elev-2 disabled:opacity-50",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             )}
@@ -742,7 +742,7 @@ export default function StrategyDetailPage() {
             type="button"
             onClick={() => router.push(`/?strategy=${strategyId}`)}
             className={cn(
-              "inline-flex h-9 items-center gap-1.5 rounded-sm bg-brand px-3.5 font-sans text-[12px] font-semibold text-primary-foreground transition-colors hover:bg-gold-300",
+              "inline-flex h-9 items-center gap-1.5 rounded-sm bg-brand px-3.5 font-sans text-label font-semibold text-primary-foreground transition-colors hover:bg-gold-300",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
             )}
             aria-label={`View ${meta.name} trades on the desk`}
@@ -801,7 +801,7 @@ export default function StrategyDetailPage() {
             {academicSources.map((src, i) => (
               <li
                 key={i}
-                className="font-display italic text-[13px] leading-relaxed text-fg-muted"
+                className="font-display italic text-body-sm leading-relaxed text-fg-muted"
               >
                 {src}
               </li>
@@ -824,7 +824,7 @@ export default function StrategyDetailPage() {
           <Display size="md" as="h2">
             When to deploy
           </Display>
-          <p className="max-w-[640px] font-display italic text-[15px] leading-relaxed text-fg">
+          <p className="max-w-[640px] font-display italic text-body leading-relaxed text-fg">
             {content.whenToUse}
           </p>
         </section>
@@ -838,14 +838,14 @@ export default function StrategyDetailPage() {
           reachable with a legible outline. */}
       {!perf ? (
         <div className="flex flex-col items-center gap-3 border-t border-border-hair pt-6">
-          <span className="font-display italic text-[15px] text-fg-muted">
+          <span className="font-display italic text-body text-fg-muted">
             Performance data unavailable.
           </span>
           <button
             type="button"
             onClick={fetchData}
             className={cn(
-              "inline-flex h-9 items-center gap-1.5 rounded-sm border border-border bg-bg-elev-1 px-4 font-sans text-[12px] font-semibold text-fg transition-colors hover:bg-bg-elev-2",
+              "inline-flex h-9 items-center gap-1.5 rounded-sm border border-border bg-bg-elev-1 px-4 font-sans text-label font-semibold text-fg transition-colors hover:bg-bg-elev-2",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             )}
             style={{ letterSpacing: 0 }}
@@ -866,7 +866,7 @@ export default function StrategyDetailPage() {
           `text-fg-hint` keeps it visually subordinate to the editorial
           sections. */}
       <footer className="border-t border-border-hair pt-6">
-        <p className="font-sans text-[13px] leading-relaxed text-fg-hint">
+        <p className="font-sans text-body-sm leading-relaxed text-fg-hint">
           Past performance does not guarantee future results. Backtest
           metrics are derived from historical data; live results may
           differ materially. See the{" "}

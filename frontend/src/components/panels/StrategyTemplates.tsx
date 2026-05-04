@@ -155,7 +155,7 @@ function TemplateCard({
             </h3>
             <Badge
               variant="outline"
-              className={cn("mt-0.5 text-[12px] px-1.5 py-0", RISK_COLORS[template.riskLevel])}
+              className={cn("mt-0.5 text-label px-1.5 py-0", RISK_COLORS[template.riskLevel])}
             >
               {template.riskLevel.toUpperCase()} RISK
             </Badge>
@@ -164,7 +164,7 @@ function TemplateCard({
         {isActive && (
           <Badge
             variant="outline"
-            className="border-primary/40 text-primary bg-primary/10 text-[12px]"
+            className="border-primary/40 text-primary bg-primary/10 text-label"
           >
             <Check className="h-2.5 w-2.5 mr-0.5" />
             Active
@@ -178,7 +178,7 @@ function TemplateCard({
 
       <div className="mt-3 grid grid-cols-2 gap-2">
         <div className="rounded-md bg-[var(--panel)] px-2.5 py-1.5">
-          <p className="text-[12px] uppercase tracking-wider text-muted-foreground">
+          <p className="text-label uppercase tracking-wider text-muted-foreground">
             Sharpe
           </p>
           <p className="text-xs font-semibold tabular-nums text-foreground">
@@ -186,7 +186,7 @@ function TemplateCard({
           </p>
         </div>
         <div className="rounded-md bg-[var(--panel)] px-2.5 py-1.5">
-          <p className="text-[12px] uppercase tracking-wider text-muted-foreground">
+          <p className="text-label uppercase tracking-wider text-muted-foreground">
             Max DD
           </p>
           <p className="text-xs font-semibold tabular-nums text-foreground">
@@ -196,14 +196,14 @@ function TemplateCard({
       </div>
 
       <div className="mt-3">
-        <p className="text-[12px] text-muted-foreground mb-1.5">
+        <p className="text-label text-muted-foreground mb-1.5">
           Strategies included:
         </p>
         <div className="flex flex-wrap gap-1">
           {template.strategies.map((sid) => (
             <span
               key={sid}
-              className="rounded-md bg-[var(--panel)] px-2 py-0.5 text-[12px] font-medium text-foreground"
+              className="rounded-md bg-[var(--panel)] px-2 py-0.5 text-label font-medium text-foreground"
             >
               {sid
                 .split("-")

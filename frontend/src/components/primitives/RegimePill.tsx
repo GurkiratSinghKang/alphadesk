@@ -65,7 +65,7 @@ export default function RegimePill({
       className={cn(
         "inline-flex items-center gap-2 py-1.5 px-3.5",
         "rounded-pill border border-border",
-        "font-display italic text-[13px] text-fg",
+        "font-display italic text-body-sm text-fg",
         className
       )}
       {...rest}

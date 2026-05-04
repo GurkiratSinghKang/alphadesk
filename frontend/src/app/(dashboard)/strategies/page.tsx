@@ -251,7 +251,7 @@ function StrategyCatalogCard({
           >
             {s.displayName}
           </div>
-          <div className="font-sans text-[12px] leading-[1.45] text-fg-muted">
+          <div className="font-sans text-label leading-[1.45] text-fg-muted">
             {s.subtitle}
           </div>
           {pillLabel ? (
@@ -265,7 +265,7 @@ function StrategyCatalogCard({
               aria-label={pillAriaLabel}
               className={cn(
                 "mt-1 inline-flex w-fit items-center rounded-pill border border-amber/60 px-2 py-0.5",
-                "font-sans text-[12px] font-semibold uppercase tracking-normal text-amber-100"
+                "font-sans text-label font-semibold uppercase tracking-normal text-amber-100"
               )}
             >
               {pillLabel}
@@ -281,10 +281,10 @@ function StrategyCatalogCard({
 
       <div className="rounded-sm border border-border-hair bg-bg px-3 py-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className={cn("inline-flex rounded-sm border px-2 py-0.5 font-mono text-[12px]", readinessChipClass(readiness.tone))}>
+          <span className={cn("inline-flex rounded-sm border px-2 py-0.5 font-mono text-label", readinessChipClass(readiness.tone))}>
             {readiness.label}
           </span>
-          <span className="text-[12px] leading-snug text-fg-muted">{readiness.reason}</span>
+          <span className="text-label leading-snug text-fg-muted">{readiness.reason}</span>
         </div>
       </div>
 
@@ -323,10 +323,10 @@ function StrategyCatalogCard({
         // 2026-04-21 polish: inline Mono raised from 10.5px to 12px so the
         // path token sits on the --fs-label floor and is legible at desk
         // viewing distance. Body copy raised to 12px (fs-label) to match.
-        <p className="font-sans text-[12px] leading-relaxed text-fg-hint">
+        <p className="font-sans text-label leading-relaxed text-fg-hint">
           Advertised in the catalogue. No backend implementation ships yet —
           the strategy will become tradable once the Python package lands
-          under <Mono className="text-[12px]">backend/strategies/</Mono>.
+          under <Mono className="text-label">backend/strategies/</Mono>.
         </p>
       )}
     </>
@@ -365,7 +365,7 @@ function StrategyCatalogCard({
       <span
         aria-hidden
         className={cn(
-          "mt-0.5 inline-flex items-center gap-1 font-display italic text-[13px] text-brand",
+          "mt-0.5 inline-flex items-center gap-1 font-display italic text-body-sm text-brand",
           "opacity-0 transition-opacity duration-150",
           "group-hover/strat:opacity-100 group-focus/strat:opacity-100"
         )}
@@ -388,7 +388,7 @@ function MetricCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="t-label">{label}</span>
-      <Mono className="text-[13px] tabular-nums text-fg">{value}</Mono>
+      <Mono className="text-body-sm tabular-nums text-fg">{value}</Mono>
     </div>
   );
 }
@@ -471,7 +471,7 @@ function StrategyReadinessWorkbench({
             aria-checked={activeFilter === filter.value}
             onClick={() => onFilterChange(filter.value)}
             className={cn(
-              "inline-flex min-h-10 shrink-0 items-center rounded-sm border px-3 font-sans text-[13px] font-semibold transition-colors",
+              "inline-flex min-h-10 shrink-0 items-center rounded-sm border px-3 font-sans text-body-sm font-semibold transition-colors",
               activeFilter === filter.value
                 ? "border-brand/40 bg-brand/15 text-brand"
                 : "border-border-hair bg-bg text-fg-muted hover:border-brand/30 hover:text-fg",
@@ -534,7 +534,7 @@ function Section({
         </div>
       </header>
       {strategies.length === 0 ? (
-        <div className="rounded-md border border-dashed border-border-hair bg-bg-elev-1 px-4 py-8 text-center font-display italic text-[15px] text-fg-muted">
+        <div className="rounded-md border border-dashed border-border-hair bg-bg-elev-1 px-4 py-8 text-center font-display italic text-body text-fg-muted">
           {empty}
         </div>
       ) : (
@@ -878,14 +878,14 @@ export default function StrategiesListingPage() {
           // reach it after tabbing past the page title.
           <div
             role="alert"
-            className="flex flex-col gap-3 rounded-md border border-border-hair bg-bg-elev-1 px-4 py-4 font-sans text-[13px] text-fg-muted sm:flex-row sm:items-center sm:justify-between"
+            className="flex flex-col gap-3 rounded-md border border-border-hair bg-bg-elev-1 px-4 py-4 font-sans text-body-sm text-fg-muted sm:flex-row sm:items-center sm:justify-between"
           >
             <span>Couldn&apos;t load catalogue: {loadError}</span>
             <button
               type="button"
               onClick={loadSummaries}
               className={cn(
-                "inline-flex h-9 items-center justify-center rounded-sm border border-border bg-bg-elev-2 px-4 font-sans text-[12px] font-semibold text-fg transition-colors",
+                "inline-flex h-9 items-center justify-center rounded-sm border border-border bg-bg-elev-2 px-4 font-sans text-label font-semibold text-fg transition-colors",
                 "hover:bg-bg-card",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               )}
@@ -985,7 +985,7 @@ export default function StrategiesListingPage() {
               disclosure copy is legible without sitting flush on the
               typographic floor. Still visually subordinate to the sections
               above thanks to `text-fg-hint`. */}
-          <p className="font-sans text-[13px] leading-relaxed text-fg-hint">
+          <p className="font-sans text-body-sm leading-relaxed text-fg-hint">
             Past performance does not guarantee future results. Backtest
             metrics are derived from historical data; live results may
             differ materially. See the{" "}

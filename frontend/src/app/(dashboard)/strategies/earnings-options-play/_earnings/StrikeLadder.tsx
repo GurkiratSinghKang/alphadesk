@@ -15,7 +15,7 @@ export default function StrikeLadder({ ladder }: StrikeLadderProps) {
     return (
       <section data-slot="strike-ladder">
         <h3 className="t-section-cap italic mt-4">Strike ladder</h3>
-        <p className="mt-1 font-mono text-[12px] text-[color:var(--fg-muted)]">
+        <p className="mt-1 font-mono text-label text-[color:var(--fg-muted)]">
           — options chain unavailable.
         </p>
       </section>
@@ -55,7 +55,7 @@ export default function StrikeLadder({ ladder }: StrikeLadderProps) {
             onClick={() => setShowGreeks((v) => !v)}
             aria-expanded={showGreeks}
             aria-controls="ladder-greeks-cols"
-            className="rounded border border-[color:var(--border)] bg-transparent px-3 py-2 t-mono text-[12px] u-muted hover:border-[color:var(--brand)] hover:u-brand"
+            className="rounded border border-[color:var(--border)] bg-transparent px-3 py-2 t-mono text-label u-muted hover:border-[color:var(--brand)] hover:u-brand"
           >
             {showGreeks ? "Hide Greeks" : "Show Greeks"}
           </button>
@@ -72,7 +72,7 @@ export default function StrikeLadder({ ladder }: StrikeLadderProps) {
         tabIndex={0}
         className="mt-1 overflow-x-auto"
       >
-        <table className="w-full table-auto border-separate border-spacing-0 t-mono text-[13px] tabular-nums">
+        <table className="w-full table-auto border-separate border-spacing-0 t-mono text-body-sm tabular-nums">
           <thead className="sticky top-0 bg-[color:var(--bg-card)] z-10">
             {/*
               Round-8 / AX-11: every Greek glyph carries an

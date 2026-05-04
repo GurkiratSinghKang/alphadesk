@@ -99,7 +99,7 @@ export function WorkspaceSelector() {
         onChange={(e) => handleChange(e.target.value as WorkspaceId)}
         aria-label="Workspace layout"
         title={`Current: ${config.label} — ${config.expanded.length} sections`}
-        className="h-7 rounded border border-border bg-background px-2 text-[12px] text-foreground cursor-pointer hover:border-primary/50 transition-colors"
+        className="h-7 rounded border border-border bg-background px-2 text-label text-foreground cursor-pointer hover:border-primary/50 transition-colors"
       >
         <option value="default">Default</option>
         <option value="research">Morning Research</option>

@@ -10,6 +10,7 @@ import type {
 } from "@/types";
 import { cn } from "@/lib/utils";
 import { fmtDate, fmtPlural } from "@/lib/intl";
+import EmptyState from "@/components/primitives/EmptyState";
 
 export interface EarningsCalendarSidebarProps {
   rows: CalendarRow[];
@@ -38,6 +39,9 @@ export interface EarningsCalendarSidebarProps {
   // B-107: parent hands in a reset callback so the empty-state "Loosen a
   // filter" button can restore defaults.
   onResetFilters?: () => void;
+  /** Pillar-6: callback so the error state can surface a Retry CTA instead
+   *  of a dead-end message when the calendar fetch times out. */
+  onRetry?: () => void;
 }
 
 // B-40: build a same-route deeplink that carries the currently-active
@@ -63,6 +67,7 @@ export default function EarningsCalendarSidebar({
   metaReason,
   filters,
   onResetFilters,
+  onRetry,
 }: EarningsCalendarSidebarProps) {
   const grouped = useMemo(() => groupByDate(rows), [rows]);
   // B-56: first row across all day groups gets the shared ref so the
@@ -71,8 +76,12 @@ export default function EarningsCalendarSidebar({
 
   if (error) {
     return (
-      <aside data-slot="earnings-calendar-sidebar" className="rounded border border-[#5d7268]/40 bg-white/60 p-3">
-        <p className="t-label text-[color:var(--fg-neg)]">Error · {error}</p>
+      <aside data-slot="earnings-calendar-sidebar" className="rounded border border-border-hair bg-bg-elev-1/60 p-3">
+        <EmptyState
+          title="Earnings calendar unavailable"
+          description="The desk's data feed timed out. Retry, or pick a different window above."
+          action={onRetry ? { label: "Retry", onClick: onRetry } : undefined}
+        />
       </aside>
     );
   }
@@ -82,9 +91,9 @@ export default function EarningsCalendarSidebar({
       <aside
         data-slot="earnings-calendar-sidebar"
         aria-busy="true"
-        className="rounded border border-[#5d7268]/40 bg-white/60 p-3"
+        className="rounded border border-border-hair bg-bg-elev-1/60 p-3"
       >
-        <p className="font-mono text-[13px] text-[#5d7268]">Loading earnings…</p>
+        <p className="font-mono text-body-sm text-fg-muted">Loading earnings…</p>
       </aside>
     );
   }
@@ -100,8 +109,8 @@ export default function EarningsCalendarSidebar({
       filters,
     });
     return (
-      <aside data-slot="earnings-calendar-sidebar" className="rounded border border-[#5d7268]/40 bg-white/60 p-3">
-        <p className="font-mono text-[13px] text-[#5d7268]">
+      <aside data-slot="earnings-calendar-sidebar" className="rounded border border-border-hair bg-bg-elev-1/60 p-3">
+        <p className="font-mono text-body-sm text-fg-muted">
           {emptyMessage}
           {onResetFilters && (
             <>
@@ -224,7 +233,7 @@ export default function EarningsCalendarSidebar({
                       // Round-8 / MO-05: explicit ``min-h-[44px]`` floor —
                       // the previous padding-only approach allowed slim rows
                       // (~36px) on phones with compressed line-height.
-                      "flex w-full min-h-[44px] items-center justify-between rounded px-3 py-2 font-mono text-[13px] text-left transition-colors",
+                      "flex w-full min-h-[44px] items-center justify-between rounded px-3 py-2 font-mono text-body-sm text-left transition-colors",
                       r.symbol === selected
                         ? "bg-[color:var(--bg-accent-subtle)] border-l-2 border-[color:var(--fg-accent)] text-[color:var(--fg-base)]"
                         : "hover:bg-[color:var(--bg-elevated)] text-[color:var(--fg-muted)] hover:text-[color:var(--fg-base)]",
@@ -236,14 +245,14 @@ export default function EarningsCalendarSidebar({
                   >
                     <span className="flex items-center gap-1.5">
                       <span className="font-semibold text-[color:var(--fg-base)]">{r.symbol}</span>
-                      <span className="text-[12px] text-[color:var(--fg-muted)]" title={reportTimeTitle}>
+                      <span className="text-label text-[color:var(--fg-muted)]" title={reportTimeTitle}>
                         {r.reportTime}
                       </span>
                       {candidateDecisionLabel && (
                         <span
                           data-slot="candidate-decision-pill"
                           data-decision={candidateDecision}
-                          className="rounded border border-[color:var(--border)] px-1 py-px font-mono text-[12px] uppercase leading-none text-[color:var(--fg-muted)]"
+                          className="rounded border border-[color:var(--border)] px-1 py-px font-mono text-label uppercase leading-none text-[color:var(--fg-muted)]"
                         >
                           {candidateDecision === "order" ? "Order" : candidateDecisionLabel}
                         </span>
@@ -251,7 +260,7 @@ export default function EarningsCalendarSidebar({
                       {isToday && (
                         <span
                           data-slot="today-pill"
-                          className="rounded bg-[color:var(--brand)] px-1 py-px font-mono text-[12px] font-semibold uppercase leading-none text-[color:var(--bg)]"
+                          className="rounded bg-[color:var(--brand)] px-1 py-px font-mono text-label font-semibold uppercase leading-none text-[color:var(--bg)]"
                         >
                           Today
                         </span>
@@ -262,14 +271,14 @@ export default function EarningsCalendarSidebar({
                         {edgeScore != null && (
                           <span
                             data-slot="edge-score-chip"
-                            className="rounded border border-[color:var(--brand)] px-1.5 py-0.5 text-[12px] tabular-nums text-[color:var(--brand)]"
+                            className="rounded border border-[color:var(--brand)] px-1.5 py-0.5 text-label tabular-nums text-[color:var(--brand)]"
                             title={edgeTitle}
                           >
                             Edge {Math.round(edgeScore)}
                           </span>
                         )}
                         {r.ivRank != null && (
-                          <span className="text-[12px] tabular-nums text-[color:var(--fg-pos)]">
+                          <span className="text-label tabular-nums text-[color:var(--fg-pos)]">
                             IV {Math.round(r.ivRank)}
                           </span>
                         )}

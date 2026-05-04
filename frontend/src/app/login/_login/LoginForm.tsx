@@ -28,9 +28,9 @@ const LOCKOUT_STORAGE_KEY = "alphadesk.login_failures";
 const LOCKOUT_WINDOW_MS = 10 * 60 * 1000; // 10 min rolling window
 const LOCKOUT_THRESHOLD = 5; // failures that trigger the lockout
 const authInputClass =
-  "h-12 rounded-[8px] border border-[#cddbd0] bg-white/80 px-4 font-sans text-[15px] text-[#12281f] placeholder:text-[#8b9a91] focus-visible:border-[#0f7a5d] focus-visible:shadow-[0_0_0_4px_rgba(15,122,93,0.15)]";
-const authLabelClass = "font-sans text-[13px] font-medium text-[#203c31]";
-const authMutedClass = "font-sans text-[13px] leading-[1.55] text-[#5d7268]";
+  "h-12 rounded-[8px] border border-[#cddbd0] bg-white/80 px-4 font-sans text-body text-[#12281f] placeholder:text-[#8b9a91] focus-visible:border-[#0f7a5d] focus-visible:shadow-[0_0_0_4px_rgba(15,122,93,0.15)]";
+const authLabelClass = "font-sans text-body-sm font-medium text-[#203c31]";
+const authMutedClass = "font-sans text-body-sm leading-[1.55] text-[#5d7268]";
 
 function readFailures(): number[] {
   if (typeof window === "undefined") return [];
@@ -231,7 +231,7 @@ export default function LoginForm() {
         explicit before they try.
       */}
       <noscript>
-        <p className="font-sans text-[13px] text-[#5d7268]">
+        <p className="font-sans text-body-sm text-[#5d7268]">
           JavaScript is required to sign in to AlphaDesk.
         </p>
       </noscript>
@@ -252,7 +252,7 @@ export default function LoginForm() {
         <div
           role="status"
           aria-live="polite"
-          className="rounded-[8px] border border-[#0f7a5d]/[0.24] bg-[#e8f5ea] px-3 py-2 font-sans text-[13px] text-[#0d654d]"
+          className="rounded-[8px] border border-[#0f7a5d]/[0.24] bg-[#e8f5ea] px-3 py-2 font-sans text-body-sm text-[#0d654d]"
         >
           Your session expired. Please sign in again.
         </div>
@@ -284,7 +284,7 @@ export default function LoginForm() {
           </label>
           <Link
             href="/login/reset"
-            className="inline-flex min-h-8 items-center rounded-[6px] px-1 font-sans text-[12px] text-[#5d7268] transition-colors hover:text-[#0f7a5d]"
+            className="inline-flex min-h-8 items-center rounded-[6px] px-1 font-sans text-label text-[#5d7268] transition-colors hover:text-[#0f7a5d]"
           >
             Forgot password?
           </Link>
@@ -326,7 +326,7 @@ export default function LoginForm() {
           </button>
         </div>
         {capsLock && (
-          <p className="font-sans text-[12px] text-[#8a5c18]">
+          <p className="font-sans text-label text-[#8a5c18]">
             Caps lock is on.
           </p>
         )}
@@ -355,7 +355,7 @@ export default function LoginForm() {
           id="login-error"
           role="alert"
           aria-live="assertive"
-          className="inline-flex items-start gap-2 rounded-[8px] border border-[#c95d42]/[0.26] bg-[#fff1ec] px-3 py-2 font-sans text-[13px] leading-[1.45] text-[#8f321f]"
+          className="inline-flex items-start gap-2 rounded-[8px] border border-[#c95d42]/[0.26] bg-[#fff1ec] px-3 py-2 font-sans text-body-sm leading-[1.45] text-[#8f321f]"
         >
           <WarningCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden weight="regular" />
           {error}
@@ -367,14 +367,14 @@ export default function LoginForm() {
           <p
             role="alert"
             aria-live="assertive"
-            className="font-sans text-[13px] text-[#8f321f]"
+            className="font-sans text-body-sm text-[#8f321f]"
           >
             Too many attempts. Try again in {formatRemaining(lockoutRemainingMs)}.
           </p>
           <button
             type="button"
             onClick={handleResetLockout}
-            className="self-start rounded-[6px] font-sans text-[12px] text-[#5d7268] underline decoration-[#b4c4b9] underline-offset-4 transition-colors hover:text-[#0f7a5d]"
+            className="self-start rounded-[6px] font-sans text-label text-[#5d7268] underline decoration-[#b4c4b9] underline-offset-4 transition-colors hover:text-[#0f7a5d]"
           >
             Clear local timer
           </button>
@@ -383,7 +383,7 @@ export default function LoginForm() {
       )}
 
       {!locked && failCount >= 3 && (
-        <p className="font-sans text-[12px] text-[#8a5c18]">
+        <p className="font-sans text-label text-[#8a5c18]">
           {LOCKOUT_THRESHOLD - failCount} attempt{LOCKOUT_THRESHOLD - failCount === 1 ? "" : "s"} left before lockout.
         </p>
       )}
@@ -392,7 +392,7 @@ export default function LoginForm() {
         type="submit"
         size="lg"
         variant="primary"
-        className="mt-1 h-12 w-full rounded-[8px] font-sans text-[15px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_1px_2px_rgba(0,0,0,0.08)]"
+        className="mt-1 h-12 w-full rounded-[8px] font-sans text-body font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_1px_2px_rgba(0,0,0,0.08)]"
         disabled={disabled}
       >
         {loading ? (
@@ -403,7 +403,7 @@ export default function LoginForm() {
         {totpRequired ? "Verify code" : "Sign in"}
       </Button>
 
-      <p className="mt-1 text-center font-sans text-[13px] text-[#5d7268]">
+      <p className="mt-1 text-center font-sans text-body-sm text-[#5d7268]">
         No account?{" "}
         <Link
           href="/request-access"

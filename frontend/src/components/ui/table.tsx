@@ -27,7 +27,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
         data-slot="table"
         className={cn(
           "w-full caption-bottom border-collapse",
-          "font-mono text-[13px] tabular-nums text-fg",
+          "font-mono text-body-sm tabular-nums text-fg",
           className
         )}
         {...props}
@@ -104,7 +104,7 @@ function TableHead({ className, scope, ...props }: React.ComponentProps<"th">) {
       scope={scope ?? "col"}
       className={cn(
         "px-3 py-2 align-middle whitespace-nowrap",
-        "font-sans text-[12px] font-semibold tracking-[0.12em] uppercase text-fg-muted",
+        "font-sans text-label font-semibold tracking-[0.12em] uppercase text-fg-muted",
         "text-right first:text-left",
         "border-b border-border",
         "[&:has([role=checkbox])]:pr-0",
@@ -138,7 +138,7 @@ function TableCaption({
   return (
     <caption
       data-slot="table-caption"
-      className={cn("mt-4 text-[13px] text-fg-muted", className)}
+      className={cn("mt-4 text-body-sm text-fg-muted", className)}
       {...props}
     />
   )

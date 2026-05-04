@@ -130,7 +130,7 @@ export default function StrategyDisclosure({
             aria-label={pillAriaLabel}
             className={cn(
               "inline-flex items-center rounded-pill border border-amber/60 px-2.5 py-0.5",
-              "font-sans text-[12px] font-semibold uppercase tracking-[0.14em] text-amber-100"
+              "font-sans text-label font-semibold uppercase tracking-[0.14em] text-amber-100"
             )}
           >
             {pillLabel}
@@ -138,7 +138,7 @@ export default function StrategyDisclosure({
         ) : null}
       </div>
       {copy ? (
-        <p className="font-display italic text-[15px] leading-relaxed text-fg-dim">
+        <p className="font-display italic text-body leading-relaxed text-fg-dim">
           {copy}
         </p>
       ) : null}

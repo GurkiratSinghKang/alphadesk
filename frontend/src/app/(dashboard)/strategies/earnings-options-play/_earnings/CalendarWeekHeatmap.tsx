@@ -81,7 +81,7 @@ export default function CalendarWeekHeatmap({
         </div>
       )}
 
-      <p className="border-t border-[color:var(--border-hair)] pt-3 text-[12px] text-[color:var(--fg-muted)]">
+      <p className="border-t border-[color:var(--border-hair)] pt-3 text-label text-[color:var(--fg-muted)]">
         Pick any row above — or use ↑↓ — for the full options play.
       </p>
     </section>
@@ -102,7 +102,7 @@ function DayGroup({
   return (
     <div className="flex gap-4">
       <div className="flex w-32 shrink-0 flex-col gap-1 border-l border-[color:var(--border-hair)] pl-3">
-        <span className="font-mono text-[13px] text-[color:var(--fg)]">
+        <span className="font-mono text-body-sm text-[color:var(--fg)]">
           {formatDayLabel(date)}
         </span>
         <span className="t-label text-[color:var(--fg-muted)]">
@@ -126,7 +126,7 @@ function DayGroup({
                 className="w-1.5 self-stretch rounded-full bg-[color:var(--brand)]/40"
                 aria-hidden
               />
-              <span className="font-mono text-[13px] font-semibold text-[color:var(--fg)]">
+              <span className="font-mono text-body-sm font-semibold text-[color:var(--fg)]">
                 {row.symbol}
               </span>
               <span className="t-label text-[color:var(--fg-muted)]">

@@ -55,11 +55,11 @@ export function StatusStrip() {
     (portfolioResp as { is_demo?: boolean } | undefined)?.is_demo === true;
 
   if (!mounted) {
-    return <div className="flex h-7 shrink-0 items-center border-b border-border bg-[var(--background)] px-4 text-[12px]" />;
+    return <div className="flex h-7 shrink-0 items-center border-b border-border bg-[var(--background)] px-4 text-label" />;
   }
 
   return (
-    <div role="status" className="relative z-10 flex h-7 shrink-0 items-center gap-0 overflow-x-auto whitespace-nowrap border-b border-border/70 bg-ink-100/92 px-3 text-[12px] shadow-[0_12px_34px_-32px_rgba(0,0,0,0.9)] scrollbar-none sm:px-4">
+    <div role="status" className="relative z-10 flex h-7 shrink-0 items-center gap-0 overflow-x-auto whitespace-nowrap border-b border-border/70 bg-ink-100/92 px-3 text-label shadow-[0_12px_34px_-32px_rgba(0,0,0,0.9)] scrollbar-none sm:px-4">
       <div className="flex items-center gap-1.5 pr-3 border-r border-border/50 sm:pr-4">
         <span className="text-fg-muted font-medium">P&L</span>
         {hasPnl ? (
@@ -114,7 +114,7 @@ export function StatusStrip() {
       <div className="relative isolate flex items-center gap-2 px-3 sm:px-4 sm:pr-5">
         <span className="hidden text-foreground font-medium sm:inline">Alpaca ({tradingMode === "paper" ? "Paper" : "Live"})</span>
         <span className={cn(
-          "inline-flex min-h-5 items-center rounded px-2 py-0.5 text-[12px] font-bold uppercase tracking-[0.1em] leading-none",
+          "inline-flex min-h-5 items-center rounded px-2 py-0.5 text-label font-bold uppercase tracking-[0.1em] leading-none",
           tradingMode === "paper"
             ? "bg-[var(--profit)]/15 text-[var(--profit)]"
             : "bg-[var(--loss)]/15 text-[var(--loss)]"
@@ -138,10 +138,10 @@ export function StatusStrip() {
             className="inline-block h-1.5 w-1.5 rounded-full bg-amber"
             aria-hidden
           />
-          <span className="hidden font-semibold uppercase tracking-[0.1em] text-[12px] sm:inline">
+          <span className="hidden font-semibold uppercase tracking-[0.1em] text-label sm:inline">
             Demo data
           </span>
-          <span className="hidden sm:inline text-[12px] text-muted-foreground">
+          <span className="hidden sm:inline text-label text-muted-foreground">
             · link Alpaca in /settings
           </span>
         </Link>

@@ -85,7 +85,7 @@ export default function MarketingShell({
         >
           <Link
             href="/"
-            className="flex items-baseline gap-1 font-display italic text-[22px] text-ink-1000"
+            className="flex items-baseline gap-1 font-display italic text-h2 text-ink-1000"
             style={{ letterSpacing: "-0.02em" }}
           >
             <span className="text-brand">α</span>
@@ -100,7 +100,7 @@ export default function MarketingShell({
                   <Link
                     href={l.href}
                     className={cn(
-                      "font-sans text-[13px] transition-colors",
+                      "font-sans text-body-sm transition-colors",
                       active ? "text-fg" : "text-fg-dim hover:text-fg"
                     )}
                     aria-current={active ? "page" : undefined}
@@ -115,13 +115,13 @@ export default function MarketingShell({
           <div className="ml-auto flex items-center gap-3">
             <Link
               href="/login"
-              className="inline-flex min-h-11 items-center rounded-sm px-2 font-sans text-[13px] text-fg-dim transition-colors hover:text-fg"
+              className="inline-flex min-h-11 items-center rounded-sm px-2 font-sans text-body-sm text-fg-dim transition-colors hover:text-fg"
             >
               Sign in
             </Link>
             <Link
               href="/request-access"
-              className="inline-flex min-h-11 items-center rounded-sm bg-brand px-4 py-2 font-sans text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-gold-300"
+              className="inline-flex min-h-11 items-center rounded-sm bg-brand px-4 py-2 font-sans text-body-sm font-semibold text-primary-foreground transition-colors hover:bg-gold-300"
               style={{ letterSpacing: "0.01em" }}
             >
               Request access
@@ -140,7 +140,7 @@ export default function MarketingShell({
               <span className="text-brand">α</span>
               <span>AlphaDesk</span>
             </div>
-            <p className="mt-3 max-w-[360px] font-display italic text-[16px] text-fg-muted">
+            <p className="mt-3 max-w-[360px] font-display italic text-numeric-md text-fg-muted">
               A systematic trading terminal for humans who&rsquo;d rather read the
               research than refresh the chart.
             </p>
@@ -149,7 +149,7 @@ export default function MarketingShell({
           {FOOTER_COLS.map((col) => (
             <div key={col.heading}>
               <div
-                className="mb-4 font-sans text-[12px] font-semibold uppercase text-fg-muted"
+                className="mb-4 font-sans text-label font-semibold uppercase text-fg-muted"
                 style={{ letterSpacing: "0.18em" }}
               >
                 {col.heading}
@@ -160,14 +160,14 @@ export default function MarketingShell({
                     {item.href.startsWith("mailto:") ? (
                       <a
                         href={item.href}
-                        className="block py-1 font-sans text-[13px] text-fg-dim transition-colors hover:text-fg"
+                        className="block py-1 font-sans text-body-sm text-fg-dim transition-colors hover:text-fg"
                       >
                         {item.label}
                       </a>
                     ) : (
                       <Link
                         href={item.href}
-                        className="block py-1 font-sans text-[13px] text-fg-dim transition-colors hover:text-fg"
+                        className="block py-1 font-sans text-body-sm text-fg-dim transition-colors hover:text-fg"
                       >
                         {item.label}
                       </Link>
@@ -180,7 +180,7 @@ export default function MarketingShell({
         </footer>
 
         <div
-          className="flex items-center justify-between border-t border-border py-5 font-mono text-[12px] uppercase text-fg-hint"
+          className="flex items-center justify-between border-t border-border py-5 font-mono text-label uppercase text-fg-hint"
           style={{ letterSpacing: "0.05em" }}
         >
           <span>&copy; {year} AlphaDesk Labs &middot; Not a broker-dealer</span>
