@@ -127,7 +127,13 @@ def has_upcoming_earnings(
     # exclusion window the caller asks for, so e.g. a 5-day pre-earnings
     # quarantine effectively became 10 calendar days. We trust the
     # caller's intent and use ``window_days`` directly.
-    horizon = asof + timedelta(days=window_days)
+    #
+    # P1-J (consolidation §3): ``window_days`` is a *trading-session* count,
+    # not calendar days, so use ``pd.bdate_range`` to map it forward instead
+    # of ``timedelta(days=window_days)`` — a 3-session quarantine over a
+    # weekend was previously ~4-5 sessions of effective skip.
+    bd = pd.bdate_range(start=asof, periods=window_days + 1)
+    horizon = bd[-1].date() if len(bd) else asof + timedelta(days=window_days)
     frame_dates = pd.to_datetime(earnings[date_col], errors="coerce").dt.date
     mask = (
         (earnings["symbol"].astype(str).str.upper() == sym.upper())

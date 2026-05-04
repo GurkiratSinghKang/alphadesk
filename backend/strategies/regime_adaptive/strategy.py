@@ -99,7 +99,17 @@ class RegimeAdaptiveStrategy(Strategy):
             new_confirmed = prev_confirmed
         else:
             new_instant = instant
-            new_streak = prev_streak + 1 if instant == prev_instant else 1
+            # P1-S (consolidation §3): a 1-day instant-flip used to wipe the
+            # streak back to 1, throwing away accumulated confirmation of the
+            # confirmed regime. Soft-decrement instead — same-as-prev increments,
+            # disagreement decrements (floored at 1). New regime confirmation
+            # still requires `confirmation_days` of consecutive matching bars,
+            # but a single noisy classifier read no longer wipes 10 days of
+            # accumulated trust in the confirmed regime.
+            if instant == prev_instant:
+                new_streak = prev_streak + 1
+            else:
+                new_streak = max(1, prev_streak - 1)
             new_confirmed = (
                 instant if new_streak >= params.confirmation_days else prev_confirmed
             )

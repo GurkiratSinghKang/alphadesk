@@ -3,7 +3,9 @@
 Cross-sectional long-only factor strategy combining Jegadeesh-Titman 12-1
 month momentum with the Piotroski F-score quality signal. Monthly rebalance
 into the top-N composite-ranked names from a fixed ~50-name S&P 500-style
-universe (ex-Financials / ex-Utilities per AFP 2014 QMJ).
+universe (Piotroski-style quality composite with AFP-style sector exclusions
+— ex-Financials / ex-Utilities). Note: the quality leg is Piotroski F-score
+only, not Asness-Frazzini-Pedersen (2019) QMJ's 4-pillar composite.
 
 Rule summary (preserved from legacy hooks):
 
@@ -60,7 +62,8 @@ _TRADING_DAYS_PER_MONTH = 21
             "Long-only cross-sectional momentum + quality (Jegadeesh-Titman 1993 "
             "12-1 month momentum + Piotroski 2000 F-score). Top-N composite rank "
             "from a fixed ~50-name S&P-500-style universe, monthly rebalance, "
-            "equal-weighted, ex-Financials / ex-Utilities (QMJ convention)."
+            "equal-weighted, ex-Financials / ex-Utilities (Piotroski-style quality "
+            "with AFP-style sector exclusions — not the AFP/QMJ 4-pillar composite)."
         ),
         lookback_days=_REQUIRED_LOOKBACK_DAYS,
         required_bars=("daily",),
