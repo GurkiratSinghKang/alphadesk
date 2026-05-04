@@ -696,7 +696,7 @@ function PositionsTab() {
           return;
         }
         const confirmed = window.confirm(
-          `Close ALL ${positions.length} position(s)? This will sell all holdings.`
+          `Close ALL ${positions.length} ${positions.length === 1 ? "position" : "positions"}? This will sell all holdings.`
         );
         if (confirmed) {
           // Place market sell orders for each position.
@@ -722,7 +722,7 @@ function PositionsTab() {
               })
             )
           ).then(() => {
-            toast({ type: "success", message: `Closing ${positions.length} position(s)...` });
+            toast({ type: "success", message: `Closing ${positions.length} ${positions.length === 1 ? "position" : "positions"}...` });
           });
         }
       } else if (action === "positions:flatten") {
@@ -731,7 +731,7 @@ function PositionsTab() {
           return;
         }
         const confirmed = window.confirm(
-          `Flatten portfolio? This will close all ${positions.length} position(s) at market price.`
+          `Flatten portfolio? This will close all ${positions.length} ${positions.length === 1 ? "position" : "positions"} at market price.`
         );
         if (confirmed) {
           // Persona 74-5/74-10 — same fix as "close-all" above: surface

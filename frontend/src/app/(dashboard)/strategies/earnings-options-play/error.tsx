@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import DashboardErrorPage from "@/components/error/DashboardError";
 
-export default function DashboardError({
+export default function EarningsOptionsPlayError({
   error,
   reset,
 }: {
@@ -12,16 +12,13 @@ export default function DashboardError({
 }) {
   useEffect(() => {
     // eslint-disable-next-line no-console
-    console.error("[dashboard] route error", error);
+    console.error("[earnings-options-play] route error", error);
   }, [error]);
-
   return (
     <DashboardErrorPage
       error={error}
       reset={reset}
-      surface="Dashboard"
-      headline="The dashboard hit a snag"
-      fallbackMessage="A page-level error stopped the workspace from loading. Refresh, or jump to a different surface from the top nav."
+      surface="Earnings options play"
     />
   );
 }

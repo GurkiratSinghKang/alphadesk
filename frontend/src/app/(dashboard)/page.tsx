@@ -273,10 +273,16 @@ export default function DeskPage() {
   const marketOpen = isMarketOpen();
   const regime = useMemo(() => toRegime(regimeResp?.regime), [regimeResp?.regime]);
   const quote = useMemo(() => toQuote(selectedQuote ?? undefined), [selectedQuote]);
-  const contextCells = useMemo(
-    () => toContextCells(portfolioSummary, positions as Position[], orderCount),
-    [portfolioSummary, positions, orderCount],
-  );
+  // BUG-11: Capital Canvas on the dashboard route is the book-equity hero.
+  // Strip the emphasis Book equity cell from the persistent ContextBar so it
+  // doesn't duplicate the Capital Canvas focal point. Other routes keep the
+  // full bar (including the equity hero) since they don't have a Canvas.
+  const contextCells = useMemo(() => {
+    const all = toContextCells(portfolioSummary, positions as Position[], orderCount);
+    // Dashboard (/) already has Capital Canvas as the equity hero — hide the
+    // ContextBar Book equity cell to avoid a duplicate emphasis display.
+    return all.filter((cell) => !cell.emphasis);
+  }, [portfolioSummary, positions, orderCount]);
   // Phase-2 / SP-1 (Tufte): fetch 30-day daily closes for every open
   // position so the PositionsList row can render a sparkline beside
   // the strategy name. The hook batches via react-query so a 10-leg
@@ -913,12 +919,9 @@ function DashboardCommandCenter({
               </div>
             </div>
 
-            <div className="hidden gap-px bg-border-hair sm:grid sm:grid-cols-2 xl:grid-cols-4">
-              <CommandMetric
-                label="Book equity"
-                value={account.ready ? formatCurrency(account.equity, true) : "Awaiting"}
-                detail={summary.source ? `Source ${summary.source}` : account.ready ? "Broker snapshot" : "Waiting for broker"}
-              />
+            {/* BUG-11: Book equity removed — Capital Canvas below is the equity hero.
+                Keeping Day P/L, Clock, and Strategies for the Command Room scan. */}
+            <div className="hidden gap-px bg-border-hair sm:grid sm:grid-cols-3">
               <CommandMetric
                 label="Day P/L"
                 value={account.ready ? `${pnlSign}${formatCurrency(account.dayPnl, true)}` : "Awaiting"}

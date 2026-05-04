@@ -893,8 +893,8 @@ export default function PipelinePage() {
             {/* Section 1: Current Positions */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <Target className="h-4 w-4 !text-[#5d7268]" aria-hidden />
-                <h2 className="t-display-section !text-[#12281f]">
+                <Target className="h-4 w-4" aria-hidden />
+                <h2 className="t-display-section">
                   Current positions
                 </h2>
                 {displayPositions.length > 0 && (
@@ -1009,8 +1009,8 @@ export default function PipelinePage() {
             {/* Section 2: Today's Pipeline Run */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <Zap className="h-4 w-4 !text-[#5d7268]" aria-hidden />
-                <h2 className="t-display-section !text-[#12281f]">
+                <Zap className="h-4 w-4" aria-hidden />
+                <h2 className="t-display-section">
                   Latest pipeline run
                 </h2>
               </div>
@@ -1100,9 +1100,9 @@ export default function PipelinePage() {
             {/* Section 3: History */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <Clock className="h-4 w-4 !text-[#5d7268]" aria-hidden />
-                <h2 className="t-display-section !text-[#12281f]">
-                  History &nbsp;<span className="t-meta !text-[#5d7268]">· last 7 days</span>
+                <Clock className="h-4 w-4" aria-hidden />
+                <h2 className="t-display-section">
+                  History &nbsp;<span className="t-meta">· last 7 days</span>
                 </h2>
               </div>
               {history.length === 0 ? (
@@ -1311,8 +1311,8 @@ export default function PipelinePage() {
             {/* Section 4: Performance Summary */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <TrendingUp className="h-4 w-4 !text-[#5d7268]" aria-hidden />
-                <h2 className="t-display-section !text-[#12281f]">
+                <TrendingUp className="h-4 w-4" aria-hidden />
+                <h2 className="t-display-section">
                   Performance summary
                 </h2>
               </div>

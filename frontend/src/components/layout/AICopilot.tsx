@@ -310,7 +310,7 @@ export function AICopilot() {
           (result as unknown as { response?: string }).response ||
           "No response";
         if (/error|Error code:/i.test(content)) {
-          content = "AI assistant is currently unavailable. Please try again.";
+          content = "Claude is offline. Check `/pipeline` for upstream status.";
         }
 
         // Capture the conversation_id on first-ever response. The backend
@@ -342,7 +342,7 @@ export function AICopilot() {
               id: `a-${Date.now()}`,
               role: "assistant" as const,
               content:
-                "I'm having trouble connecting. Please try again in a moment.",
+                "Lost the connection to Claude. The desk's pipeline retries automatically — check status at `/pipeline`.",
               provenance: buildCopilotProvenance({
                 symbol: selectedSymbol,
                 quoteTimestamp: selectedQuote?.timestamp,

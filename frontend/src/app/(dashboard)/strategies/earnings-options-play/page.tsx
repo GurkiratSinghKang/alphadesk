@@ -436,6 +436,7 @@ export default function EarningsOptionsPlayPage() {
       title={title}
       actions={actions}
     >
+      <h1 className="sr-only">Earnings options play</h1>
       {/* Round-8 / AX-05: skip-to-detail link for keyboard users so a
           large calendar (12+ rows after sort/filter) doesn't force a
           long tab cycle to reach the active symbol's panel. Visible on

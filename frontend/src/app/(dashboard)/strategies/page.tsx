@@ -525,10 +525,10 @@ function Section({
     <section className="flex flex-col gap-3" data-section={dataSection}>
       <header className="flex items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-3">
-          <h2 className="t-h2 !text-[#12281f]">
+          <h2 className="t-h2">
             {title}
           </h2>
-          <Mono size="micro" className="!text-[#5d7268]">
+          <Mono size="micro" className="">
             {String(count).padStart(2, "0")}
           </Mono>
         </div>
@@ -820,6 +820,7 @@ export default function StrategiesListingPage() {
       title="Strategies"
       actions={actions}
     >
+      <h1 className="sr-only">Strategies catalogue</h1>
       <main aria-label="Strategies catalogue" className="flex flex-col gap-8">
         {/* Round-8 killer-move 2: catalogue hero strip. Three KpiTile-style
             cards anchor the page in 3 seconds — a portfolio view of all
@@ -941,10 +942,10 @@ export default function StrategiesListingPage() {
               >
                 <header className="flex items-baseline justify-between gap-2">
                   <div className="flex items-baseline gap-3">
-                    <h2 className="t-h2 !text-[#12281f]">
+                    <h2 className="t-h2">
                       Research
                     </h2>
-                    <Mono size="micro" className="!text-[#5d7268]">
+                    <Mono size="micro" className="">
                       {String(researchEntries.length).padStart(2, "0")}
                     </Mono>
                   </div>

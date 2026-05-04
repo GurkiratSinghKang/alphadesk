@@ -784,9 +784,9 @@ export default function AlertsPage() {
       })
     );
     if (failed > 0) {
-      toast({ type: "error", message: `Failed to delete ${failed} alert(s)` });
+      toast({ type: "error", message: `Failed to delete ${failed} ${failed === 1 ? "alert" : "alerts"}` });
     } else {
-      toast({ type: "success", message: `Cleared ${triggered.length} triggered alert(s)` });
+      toast({ type: "success", message: `Cleared ${triggered.length} triggered ${triggered.length === 1 ? "alert" : "alerts"}` });
     }
     fetchAlerts();
   };
@@ -803,7 +803,7 @@ export default function AlertsPage() {
       })
     );
     if (failed > 0) {
-      toast({ type: "error", message: `Failed to delete ${failed} alert(s)` });
+      toast({ type: "error", message: `Failed to delete ${failed} ${failed === 1 ? "alert" : "alerts"}` });
     } else {
       toast({ type: "success", message: "All alerts deleted" });
     }
@@ -911,6 +911,7 @@ export default function AlertsPage() {
       title="Alerts & triggers"
       actions={headerActions}
     >
+      <h1 className="sr-only">Alerts &amp; triggers</h1>
 
       {/* Round-8 killer-move 2: alerts hero summary line. The page
           previously had no anchor — a 30%-vertical Create form
