@@ -2414,3 +2414,227 @@ async def get_strategy_positions(
         ))
 
     return results
+
+
+# ---------------------------------------------------------------------------
+# Kill-switch endpoints (Plan B.5)
+# ---------------------------------------------------------------------------
+# Three endpoints expose the three-layer kill-switch shipped in PR #20:
+#   GET  /{strategy_id}/disabled-events  — list disable events for a strategy
+#   POST /{strategy_id}/emergency-disable — manually disable (Layer 3)
+#   POST /{strategy_id}/re-enable         — resolve a manual (Layer 3) disable
+#
+# Auth: all three require admin (matches the operational risk profile of the
+# `risk-monitor` endpoints above; emergency-disable can halt trading).
+
+
+class DisabledEventResponse(BaseModel):
+    id: int
+    strategy: str
+    layer: int
+    triggered_at: datetime
+    reason: str | None = None
+    manual_actor: str | None = None
+    peak_nav: float | None = None
+    current_nav: float | None = None
+    realized_pnl: float | None = None
+    alloc_capital: float | None = None
+    threshold: float | None = None
+    resolved_at: datetime | None = None
+    resolved_by: str | None = None
+
+
+class EmergencyDisableRequest(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=500)
+
+
+class EmergencyDisableResponse(BaseModel):
+    success: bool
+    event_id: int | None = None
+    message: str  # "disabled" / "already_disabled"
+
+
+class ReEnableResponse(BaseModel):
+    success: bool
+    resolved_event_id: int | None = None
+    message: str  # "re_enabled" / "no_active_disable"
+
+
+@router.get(
+    "/{strategy_id}/disabled-events",
+    response_model=list[DisabledEventResponse],
+)
+async def get_strategy_disabled_events(
+    strategy_id: str,
+    include_resolved: bool = False,
+    _admin: str = Depends(require_admin),
+) -> list[DisabledEventResponse]:
+    """List kill-switch disable events for a strategy, newest first.
+
+    By default returns only unresolved events (active disables). Pass
+    ``?include_resolved=true`` to include the full audit history (capped at 100).
+    Admin-only.
+    """
+    from sqlalchemy import text
+    from core.database import _get_session_factory
+
+    factory = _get_session_factory()
+    async with factory() as session:
+        if include_resolved:
+            query = """
+                SELECT id, strategy, layer, triggered_at,
+                       peak_nav, current_nav, realized_pnl, alloc_capital,
+                       threshold, manual_actor, reason, resolved_at, resolved_by
+                FROM strategy_disabled_events
+                WHERE strategy = :strategy
+                ORDER BY triggered_at DESC, id DESC
+                LIMIT 100
+            """
+        else:
+            query = """
+                SELECT id, strategy, layer, triggered_at,
+                       peak_nav, current_nav, realized_pnl, alloc_capital,
+                       threshold, manual_actor, reason, resolved_at, resolved_by
+                FROM strategy_disabled_events
+                WHERE strategy = :strategy
+                  AND resolved_at IS NULL
+                ORDER BY triggered_at DESC, id DESC
+            """
+        result = await session.execute(text(query), {"strategy": strategy_id})
+        rows = result.fetchall()
+
+    return [
+        DisabledEventResponse(
+            id=r[0], strategy=r[1], layer=r[2], triggered_at=r[3],
+            peak_nav=r[4], current_nav=r[5], realized_pnl=r[6], alloc_capital=r[7],
+            threshold=r[8], manual_actor=r[9], reason=r[10],
+            resolved_at=r[11], resolved_by=r[12],
+        )
+        for r in rows
+    ]
+
+
+@router.post(
+    "/{strategy_id}/emergency-disable",
+    response_model=EmergencyDisableResponse,
+)
+async def emergency_disable_strategy(
+    strategy_id: str,
+    payload: EmergencyDisableRequest,
+    admin: str = Depends(require_admin),
+) -> EmergencyDisableResponse:
+    """Manually disable a strategy via Layer 3 of the kill-switch.
+
+    Idempotent: if the strategy already has an unresolved Layer-3 event,
+    returns success=False with the existing event_id. Admin-only.
+    """
+    from sqlalchemy import text
+    from core.database import _get_session_factory
+
+    factory = _get_session_factory()
+    async with factory() as session:
+        # Check for existing unresolved layer-3 event
+        existing_result = await session.execute(
+            text("""
+                SELECT id FROM strategy_disabled_events
+                WHERE strategy = :strategy AND layer = 3 AND resolved_at IS NULL
+                ORDER BY triggered_at DESC, id DESC LIMIT 1
+            """),
+            {"strategy": strategy_id},
+        )
+        existing_row = existing_result.fetchone()
+        if existing_row is not None:
+            return EmergencyDisableResponse(
+                success=False,
+                event_id=int(existing_row[0]),
+                message="already_disabled",
+            )
+
+        # Insert new layer-3 event
+        insert_result = await session.execute(
+            text("""
+                INSERT INTO strategy_disabled_events
+                (strategy, layer, triggered_at, manual_actor, reason)
+                VALUES (:strategy, 3, NOW(), :actor, :reason)
+                RETURNING id
+            """),
+            {
+                "strategy": strategy_id,
+                "actor": admin,
+                "reason": payload.reason,
+            },
+        )
+        new_id = int(insert_result.fetchone()[0])
+        await session.commit()
+
+    write_audit(
+        action="strategy.emergency_disable",
+        actor=admin,
+        resource=strategy_id,
+        metadata={"reason": payload.reason, "event_id": new_id},
+    )
+
+    return EmergencyDisableResponse(
+        success=True,
+        event_id=new_id,
+        message="disabled",
+    )
+
+
+@router.post(
+    "/{strategy_id}/re-enable",
+    response_model=ReEnableResponse,
+)
+async def re_enable_strategy(
+    strategy_id: str,
+    admin: str = Depends(require_admin),
+) -> ReEnableResponse:
+    """Resolve the most-recent unresolved Layer-3 (manual) disable for a strategy.
+
+    No-op if no active manual disable exists. Layer-1 (drawdown) auto-disables
+    must be cleared via SQL — see KILL_SWITCH.md runbook. Admin-only.
+    """
+    from sqlalchemy import text
+    from core.database import _get_session_factory
+
+    factory = _get_session_factory()
+    async with factory() as session:
+        existing_result = await session.execute(
+            text("""
+                SELECT id FROM strategy_disabled_events
+                WHERE strategy = :strategy AND layer = 3 AND resolved_at IS NULL
+                ORDER BY triggered_at DESC, id DESC LIMIT 1
+            """),
+            {"strategy": strategy_id},
+        )
+        existing_row = existing_result.fetchone()
+        if existing_row is None:
+            return ReEnableResponse(
+                success=False,
+                resolved_event_id=None,
+                message="no_active_disable",
+            )
+
+        event_id = int(existing_row[0])
+        await session.execute(
+            text("""
+                UPDATE strategy_disabled_events
+                SET resolved_at = NOW(), resolved_by = :actor
+                WHERE id = :event_id
+            """),
+            {"event_id": event_id, "actor": admin},
+        )
+        await session.commit()
+
+    write_audit(
+        action="strategy.re_enable",
+        actor=admin,
+        resource=strategy_id,
+        metadata={"resolved_event_id": event_id},
+    )
+
+    return ReEnableResponse(
+        success=True,
+        resolved_event_id=event_id,
+        message="re_enabled",
+    )
