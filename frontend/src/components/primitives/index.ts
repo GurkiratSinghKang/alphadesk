@@ -22,3 +22,6 @@ export type { SparklineProps, SparklineTone } from "./Sparkline";
 
 export { default as EmptyState } from "./EmptyState";
 export type { EmptyStateProps } from "./EmptyState";
+
+export { default as TouchTarget } from "./TouchTarget";
+export type { TouchTargetProps } from "./TouchTarget";

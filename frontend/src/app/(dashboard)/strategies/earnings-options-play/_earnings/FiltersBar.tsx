@@ -118,11 +118,12 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
               aria-checked={checked}
               onClick={() => onChange({ ...filters, window: opt.key })}
               className={cn(
-                // Round-8 / MO-06: ``min-h-[44px]`` ensures the radio
+                // Round-8 / MO-06: ``min-h-touch`` ensures the radio
                 // pills hit Apple HIG / WCAG 2.5.8 touch-target floors
                 // on phones; ``px-3 py-2`` widens the horizontal hit
-                // area as well.
-                "min-h-[44px] rounded border px-3 py-2 font-mono text-label inline-flex items-center",
+                // area as well. QA r4-4 migrated the arbitrary value
+                // onto the token utility.
+                "min-h-touch rounded border px-3 py-2 font-mono text-label inline-flex items-center",
                 checked
                   ? "border-[color:var(--fg-accent)] text-[color:var(--fg-accent)]"
                   : "border-[color:var(--fg-border)] text-[color:var(--fg-muted)] hover:text-[color:var(--fg-base)]",
@@ -193,11 +194,12 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
               aria-checked={checked}
               onClick={() => onChange({ ...filters, bmoAmc: opt.key })}
               className={cn(
-                // Round-8 / MO-06: ``min-h-[44px]`` ensures the radio
+                // Round-8 / MO-06: ``min-h-touch`` ensures the radio
                 // pills hit Apple HIG / WCAG 2.5.8 touch-target floors
                 // on phones; ``px-3 py-2`` widens the horizontal hit
-                // area as well.
-                "min-h-[44px] rounded border px-3 py-2 font-mono text-label inline-flex items-center",
+                // area as well. QA r4-4 migrated the arbitrary value
+                // onto the token utility.
+                "min-h-touch rounded border px-3 py-2 font-mono text-label inline-flex items-center",
                 checked
                   ? "border-[color:var(--fg-accent)] text-[color:var(--fg-accent)]"
                   : "border-[color:var(--fg-border)] text-[color:var(--fg-muted)] hover:text-[color:var(--fg-base)]",
@@ -213,11 +215,11 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
       </div>
 
       {/* Watchlist only.
-          Round-8 / MO-07: wrap with ``min-h-[44px]`` so the entire
+          Round-8 / MO-07: wrap with ``min-h-touch`` so the entire
           label (not just the 16px native checkbox) is tappable on
           phones. Padding compensates for the negative-margin trick
           to avoid stretching surrounding flex children. */}
-      <label className="flex min-h-[44px] cursor-pointer items-center gap-2 px-1">
+      <label className="flex min-h-touch cursor-pointer items-center gap-2 px-1">
         <input
           type="checkbox"
           className="h-5 w-5"
@@ -244,7 +246,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
           onBlur={() => onSettleRef?.()}
           // Round-8 / MO-06: bump padding so the SORT select hits
           // 44px on phones; the ``py-0.5`` left it ~22px tall.
-          className="min-h-[44px] rounded border border-[color:var(--fg-border)] bg-transparent px-2 py-1.5 font-mono text-label text-[color:var(--fg-base)]"
+          className="min-h-touch rounded border border-[color:var(--fg-border)] bg-transparent px-2 py-1.5 font-mono text-label text-[color:var(--fg-base)]"
         >
           {SORT_OPTIONS.map((o) => (
             <option key={o.key} value={o.key}>{o.label}</option>

@@ -57,8 +57,11 @@ describe('TopBar', () => {
   it('keeps the mobile menu trigger at a touch-safe size', () => {
     render(<TopBar />);
     const trigger = screen.getByLabelText('Open menu');
-    expect(trigger.className).toContain('min-h-[44px]');
-    expect(trigger.className).toContain('min-w-[44px]');
+    // QA r4-4: arbitrary `min-h-[44px]` migrated to the touch-floor token
+    // utility (`--spacing-touch` → `min-h-touch`). The hit area is identical
+    // (44×44 from `--touch-target-floor`) but now token-driven.
+    expect(trigger.className).toContain('min-h-touch');
+    expect(trigger.className).toContain('min-w-touch');
   });
 
   it('renders status pills cluster in right cluster', () => {

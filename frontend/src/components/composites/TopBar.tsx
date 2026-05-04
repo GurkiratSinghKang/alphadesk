@@ -76,7 +76,7 @@ export default function TopBar({
               /* BUG-024 — WCAG 2.5.5: mobile hamburger was 30×30. Bump to
                  44×44 below md, restore icon-sm at md+ where the top nav
                  renders inline and the hamburger hides anyway. */
-              className="md:hidden min-h-[44px] min-w-[44px]"
+              className="md:hidden min-h-touch min-w-touch"
               aria-label="Open menu"
             >
               <Menu className="h-4 w-4" />
@@ -107,7 +107,7 @@ export default function TopBar({
                   aria-current={active ? "page" : undefined}
                   onClick={() => setMobileMenuOpen(false)}
                   className={cn(
-                    "flex items-center rounded-md px-3 py-3 text-sm font-medium no-underline transition-colors min-h-[44px]",
+                    "flex items-center rounded-md px-3 py-3 text-sm font-medium no-underline transition-colors min-h-touch",
                     active
                       ? "bg-primary/15 text-primary"
                       : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
@@ -122,7 +122,7 @@ export default function TopBar({
               <a
                 href="/reports"
                 onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center rounded-md px-3 py-3 text-sm font-medium no-underline text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors min-h-[44px]"
+                className="flex items-center rounded-md px-3 py-3 text-sm font-medium no-underline text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors min-h-touch"
               >
                 Reports
               </a>
@@ -130,7 +130,7 @@ export default function TopBar({
             <a
               href="/settings"
               onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center rounded-md px-3 py-3 text-sm font-medium no-underline text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors min-h-[44px]"
+              className="flex items-center rounded-md px-3 py-3 text-sm font-medium no-underline text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors min-h-touch"
             >
               Settings
             </a>
@@ -176,7 +176,7 @@ export default function TopBar({
                 // fine at desk resolutions but the top-nav is visible at
                 // sm-md breakpoints on landscape phones where the
                 // hamburger hides. Enforce 44px tap targets below md.
-                "inline-flex items-center min-h-[44px] md:min-h-[36px]",
+                "inline-flex items-center min-h-touch md:min-h-[36px]",
                 "font-sans text-body-sm px-3 py-1.5 rounded-xs no-underline transition-colors",
                 active
                   ? "text-ink-1000 bg-bg-elev-1"
