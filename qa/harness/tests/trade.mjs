@@ -124,6 +124,7 @@ export const spec = {
           "Broker data required",
           "Feed delayed",
           "Awaiting market open",
+          "Place after review",
         ];
         const isBlocked = blockedLabels.some((l) => submitText.includes(l));
         if (!isBlocked && !submitText.includes("Place order")) {
@@ -201,6 +202,7 @@ export const spec = {
           "Broker data required",
           "Feed delayed",
           "Awaiting market open",
+          "Place after review",
         ];
         const isBlocked = blockedLabels.some((l) => submitText.includes(l));
         const expectsCombo = submitText.includes("2-leg combo");

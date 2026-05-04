@@ -14,7 +14,7 @@ import { useAccountEquity, equityAtPoint, startingEquity } from "@/lib/accountEq
 // were set in bland `text-sm font-semibold`, KPI values in unopinionated
 // `text-xs font-medium`. Three shared classes pulled from
 // `styles/design-tokens.css` bring this page onto the same ladder:
-//   .t-section-cap  italic (13px from --fs-section-cap) — section headers
+//   .t-section-display  italic (13px from --fs-section-cap) — section headers
 //   .t-label            12 sans caps 0.12em   — KPI eyebrows
 //   .t-num-md           16 mono tabular-med   — row numbers / percents
 // Kept local to avoid touching shared composites.
@@ -686,7 +686,7 @@ function SectionCard({
   valueTone?: "profit" | "loss" | "neutral";
   children: React.ReactNode;
 }) {
-  // 2026-04-21: lifted to serif-italic `.t-section-cap` so every
+  // 2026-04-21: lifted to serif-italic `.t-section-display` so every
   // analytics card shares the editorial voice the dashboard hero set.
   // Eyebrow chip is optional and prints above the title as `§ LABEL`
   // when supplied — matches the page-level header pattern.
@@ -705,7 +705,7 @@ function SectionCard({
             {eyebrow ? (
               <span className="t-label">{eyebrow}</span>
             ) : null}
-            <h2 className="t-section-cap text-ink-1000 truncate">{title}</h2>
+            <h2 className="t-section-display text-ink-1000 truncate">{title}</h2>
           </div>
         </div>
         {value ? (
@@ -983,7 +983,7 @@ export default function AnalyticsPage() {
                   → in-line CTA linking to /trade. Matches the voice used
                   on the alerts/reports empty states. */}
               <span className="t-label">§ AWAITING DATA</span>
-              <p className="t-section-cap">
+              <p className="t-section-display">
                 Analytics become available after your first closed trades.
               </p>
               <p className="font-sans text-[13px] leading-relaxed text-fg-muted">

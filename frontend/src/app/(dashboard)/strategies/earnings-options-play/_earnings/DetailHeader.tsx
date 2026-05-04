@@ -76,7 +76,7 @@ export default function DetailHeader({
           id="detail-header-title"
           ref={headingRef}
           tabIndex={-1}
-          className="t-section-cap italic mt-1 break-words outline-none"
+          className="t-section-display italic mt-1 break-words outline-none"
         >
           {company} <span className="text-[color:var(--fg-dim)]">· {symbol}</span>
         </h2>
