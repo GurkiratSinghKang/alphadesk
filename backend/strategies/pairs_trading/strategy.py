@@ -481,10 +481,34 @@ def _rescreen(
         df = _price_transform(df, params.prices_in_log_space)
         if len(df) < _MIN_BARS_FOR_SCREEN:
             continue
+        # P1-M (consolidation §3): asymmetric regression direction.
+        # The alphabetic ``y_sym`` was previously fixed as the regressand, but
+        # cointegration is direction-sensitive: regressing y on x and x on y
+        # can yield materially different ADF p-values. Run both orderings and
+        # pick the one with the lower ADF p-value (most evidence of
+        # cointegration). The chosen direction is reflected in pair.y / pair.x.
         try:
-            pvalue, _adf, beta, residuals = engle_granger_adf(df["y"], df["x"])
+            pv_yx, _adf_yx, beta_yx, res_yx = engle_granger_adf(df["y"], df["x"])
         except Exception:
+            pv_yx, beta_yx, res_yx = float("nan"), float("nan"), None
+        try:
+            pv_xy, _adf_xy, beta_xy, res_xy = engle_granger_adf(df["x"], df["y"])
+        except Exception:
+            pv_xy, beta_xy, res_xy = float("nan"), float("nan"), None
+
+        # Pick the direction with the smaller ADF p-value (better evidence).
+        # If both fail, skip the pair.
+        candidates_dir: list[tuple[float, str, str, float, Any]] = []
+        if np.isfinite(pv_yx) and res_yx is not None:
+            candidates_dir.append((float(pv_yx), y_sym, x_sym, float(beta_yx), res_yx))
+        if np.isfinite(pv_xy) and res_xy is not None:
+            # When swapped, the pair labels flip too: the regressand is x_sym.
+            candidates_dir.append((float(pv_xy), x_sym, y_sym, float(beta_xy), res_xy))
+        if not candidates_dir:
             continue
+        candidates_dir.sort(key=lambda r: r[0])
+        pvalue, dir_y_sym, dir_x_sym, beta, residuals = candidates_dir[0]
+
         if not np.isfinite(pvalue) or pvalue > params.adf_pvalue_max:
             continue
         if not np.isfinite(beta) or abs(beta) < 1e-9 or abs(beta) > 10.0:
@@ -516,9 +540,9 @@ def _rescreen(
         if not np.isfinite(h) or h >= params.hurst_max:
             continue
         candidates.append((pvalue, ActivePair(
-            pair_id=f"{y_sym}-{x_sym}",
+            pair_id=f"{dir_y_sym}-{dir_x_sym}",
             sector=sector,
-            y=y_sym, x=x_sym,
+            y=dir_y_sym, x=dir_x_sym,
             beta=float(beta),
             screen_pvalue=float(pvalue),
             screen_halflife=float(hl),
