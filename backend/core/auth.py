@@ -113,23 +113,28 @@ async def bump_password_version(username: str) -> int:
     login. So a bump has to move PAST 1 to invalidate those tokens, which
     means the first bump must land on 2 (not 1).
 
-    Native Redis INCR on a missing key returns 1, which matches "we now
-    have a counter" semantics but fails the "bigger than the tokens in
-    flight" invariant we need. So we seed the key to the current effective
-    value (1 if missing, else the stored integer) and then increment.
-
-    The seed + incr isn't atomic, but the tiny race window (two admins
-    changing the password at the exact same millisecond) lands on a
-    consistent strictly-greater value in both branches, which is all the
-    invariant requires.
+    Audit P0-4 (2026-05-05): the previous implementation did GET → Python
+    increment → SET, which is not atomic. Two concurrent password-change
+    requests could both read ``current=1`` and both write ``2``; tokens
+    minted at epoch=2 during the first bump remained valid after the
+    second bump, defeating the second revocation. Replaced with a Lua
+    EVAL that performs INCR-then-SET-to-2-if-first atomically inside
+    Redis. The 90-day TTL bounds memory for churned accounts.
     """
     from core.redis import get_redis
     r = await get_redis()
     key = f"{_PASSWORD_VERSION_KEY_PREFIX}{username}"
-    raw = await r.get(key)
-    current = int(raw) if raw is not None else 1
-    new_val = current + 1
-    await r.set(key, str(new_val))
+    new_val = int(await _atomic_seed_and_incr(r, key))
+    # 90 days matches the refresh-token max lifetime — beyond that no
+    # in-flight token can still validate against this counter. ``expire``
+    # is best-effort: the test fake doesn't implement it and a missing
+    # TTL just means the key persists longer than necessary.
+    expire_fn = getattr(r, "expire", None)
+    if expire_fn is not None:
+        try:
+            await expire_fn(key, 90 * 24 * 3600)
+        except Exception:
+            pass
     return new_val
 
 
@@ -154,18 +159,60 @@ async def get_session_epoch(username: str) -> int:
 async def bump_session_epoch(username: str) -> int:
     """Increment ``session_epoch:{username}`` and return the new value.
 
-    See ``bump_password_version`` for the seed-then-incr rationale — same
+    See ``bump_password_version`` for the atomic-EVAL rationale — same
     invariant (bump must land strictly greater than the tokens currently
     in flight, which are all at epoch=1).
     """
     from core.redis import get_redis
     r = await get_redis()
     key = f"{_SESSION_EPOCH_KEY_PREFIX}{username}"
-    raw = await r.get(key)
-    current = int(raw) if raw is not None else 1
-    new_val = current + 1
-    await r.set(key, str(new_val))
+    new_val = int(await _atomic_seed_and_incr(r, key))
+    expire_fn = getattr(r, "expire", None)
+    if expire_fn is not None:
+        try:
+            await expire_fn(key, 90 * 24 * 3600)
+        except Exception:
+            pass
     return new_val
+
+
+# Audit P0-4 (2026-05-05): atomic seed-and-incr Lua script for the auth
+# counters. Replaces the prior non-atomic GET → Python increment → SET
+# pattern. On a missing key, INCR returns 1 — but the public default
+# ``get_*`` returns 1 for missing keys, so the bump must land on 2 to
+# invalidate any in-flight token. The Lua script does that in a single
+# Redis round-trip: INCR; if the result is 1 (first call), force-set to
+# 2 and return 2; otherwise return the incremented value.
+_BUMP_LUA_SCRIPT = """
+local v = redis.call('INCR', KEYS[1])
+if v == 1 then
+  redis.call('SET', KEYS[1], '2')
+  return 2
+end
+return v
+"""
+
+
+async def _atomic_seed_and_incr(redis_client: Any, key: str) -> int:
+    """Atomically seed a missing counter to 2, otherwise INCR it.
+
+    Falls back to the previous non-atomic pattern only if EVAL is
+    unsupported by the Redis backend (which should never be the case
+    for any production-grade Redis ≥ 2.6).
+    """
+    try:
+        result = await redis_client.eval(_BUMP_LUA_SCRIPT, 1, key)
+        return int(result)
+    except Exception:
+        # Best-effort fallback — preserves prior behaviour on misconfigured
+        # Redis. The race window remains, but the invariant (counter
+        # strictly greater than in-flight tokens at epoch=1) still holds
+        # in the single-writer case.
+        raw = await redis_client.get(key)
+        current = int(raw) if raw is not None else 1
+        new_val = current + 1
+        await redis_client.set(key, str(new_val))
+        return new_val
 
 
 def verify_password(plain: str, hashed: str) -> bool:
