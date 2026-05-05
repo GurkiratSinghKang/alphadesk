@@ -339,15 +339,30 @@ class TickerContextService:
         max_age_seconds: int | None = None,
         on_stale: OnStale = "allow_with_warning",
     ) -> TickerContextResponse:
-        contexts: dict[str, TickerContext] = {}
+        # Audit B-F8 (2026-05-05): the prior loop awaited each symbol's
+        # ``self.get(...)`` serially. At 50 symbols × 4 needs = 200
+        # provider lookups, the wall-clock latency was 200 × per-call
+        # latency rather than max(per-call). asyncio.gather() runs them
+        # concurrently — each ``get`` is already async-safe (per-symbol
+        # locks live in ``_LOCAL_FACT_LOCKS``) so concurrent calls for
+        # different symbols don't contend.
         normalized_needs = [_normalize_need(n) for n in (needs or ["quote", "options_summary", "earnings", "research"])]
-        for symbol in list(dict.fromkeys(_normalize_symbol(s) for s in symbols)):
-            contexts[symbol] = await self.get(
-                symbol,
-                needs=normalized_needs,
-                max_age_seconds=max_age_seconds,
-                on_stale=on_stale,
-            )
+        unique_symbols = list(dict.fromkeys(_normalize_symbol(s) for s in symbols))
+        results = await asyncio.gather(
+            *(
+                self.get(
+                    symbol,
+                    needs=normalized_needs,
+                    max_age_seconds=max_age_seconds,
+                    on_stale=on_stale,
+                )
+                for symbol in unique_symbols
+            ),
+            return_exceptions=False,
+        )
+        contexts: dict[str, TickerContext] = {
+            sym: ctx for sym, ctx in zip(unique_symbols, results)
+        }
         return TickerContextResponse(symbols=contexts)
 
     async def get(
