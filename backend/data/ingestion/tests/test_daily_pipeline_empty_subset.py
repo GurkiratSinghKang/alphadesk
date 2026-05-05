@@ -33,7 +33,16 @@ async def test_research_only_subset_skips_before_provider_io(
     monkeypatch.setattr(dp, "_base_url", lambda: "https://paper-api.alpaca.markets")
     monkeypatch.setattr(dp, "replay_pending_brackets", _replay_pending_brackets)
 
-    requested = ["earnings-options-play", "vrp_harvest"]
+    # Plan B.1 full port (PR #42) flipped vrp_harvest + earnings_vol from
+    # kind="research" → kind="autonomous" (with paper_only=True still gating
+    # live capital). The remaining research-mode strategies are
+    # earnings-options-play (UI screener, no autonomous run) and
+    # claude-alpha (LLM v0 research scaffold). Both are research-only;
+    # neither runs in the autonomous loop, which keeps the test premise
+    # ("a subset of pure research strategies skips before provider IO") intact.
+    # Alphabetic order matches the pipeline's normalisation of the
+    # requested_strategies field on the result.
+    requested = ["claude-alpha", "earnings-options-play"]
     result = await dp._run_pipeline_inner(only_strategies=requested)
 
     assert result["skipped"] is True
