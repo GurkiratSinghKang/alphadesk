@@ -60,6 +60,40 @@ class Quote(BaseModel):
     open: float = 0.0
     close: float = 0.0
     is_demo: bool = False
+    # Batch EH-1 (2026-05-05): extended-hours pricing.
+    # ---------------------------------------------------------------
+    # AMD reported earnings, gapped to ~$403 post-market, but the
+    # dashboard kept showing the regular-session $356 close. The new
+    # fields below let the frontend surface pre/post-market prints
+    # alongside (not in place of) the regular-session figures.
+    #
+    # Contract:
+    #   * ``regular_close_price`` — the most recent regular-session
+    #     close. Falls back to the previous day's close before 16:00 ET.
+    #   * ``extended_price`` — last trade printed in pre or post hours.
+    #     ``None`` outside extended hours OR when no extended trade has
+    #     printed (illiquid options especially).
+    #   * ``extended_change`` / ``extended_change_pct`` — diff vs.
+    #     ``regular_close_price``. Both ``None`` when ``extended_price``
+    #     is ``None`` so the frontend doesn't render fake zeros.
+    #   * ``extended_session`` — "pre" or "post"; ``None`` during
+    #     regular hours / when no extended trade is available.
+    #   * ``extended_volume`` — cumulative extended-hours volume from
+    #     the upstream snapshot when published; otherwise ``None``.
+    #   * ``last_trade_time`` — wall-clock UTC of the most recent trade
+    #     across all sessions (regular OR extended). Frontend uses
+    #     this to detect stale data (>5min from now == "stale" badge).
+    #   * ``session`` — quick classifier for the *current* market
+    #     state, not the trade's session. UI uses this to switch
+    #     between "Live" / "Pre-market" / "After hours" / "Closed".
+    regular_close_price: float | None = None
+    extended_price: float | None = None
+    extended_change: float | None = None
+    extended_change_pct: float | None = None
+    extended_session: Literal["pre", "post"] | None = None
+    extended_volume: int | None = None
+    last_trade_time: datetime | None = None
+    session: Literal["pre", "regular", "post", "closed"] = "regular"
 
 
 class Bar(BaseModel):
@@ -191,6 +225,9 @@ def _demo_quote(symbol: str) -> Quote:
     day_open = round(prev_close * (1 + rng.uniform(-0.003, 0.003)), 2)
     day_high = round(max(last, day_open) * (1 + abs(rng.gauss(0, 0.005))), 2)
     day_low = round(min(last, day_open) * (1 - abs(rng.gauss(0, 0.005))), 2)
+    # EH-1: demo quotes are deliberately simple — no extended-hours
+    # fabrication. Frontend treats demo data as "regular hours close"
+    # and shows the demo badge.
     return Quote(
         symbol=s, bid=bid, ask=ask,
         bidSize=bid_size, askSize=ask_size,
@@ -200,6 +237,9 @@ def _demo_quote(symbol: str) -> Quote:
         change=change, changePct=change_pct,
         high=day_high, low=day_low, open=day_open, close=prev_close,
         is_demo=True,
+        regular_close_price=prev_close,
+        last_trade_time=datetime.now(timezone.utc),
+        session=_classify_session(),
     )
 
 
@@ -336,6 +376,85 @@ def _alpaca_data_headers() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Batch EH-1 (2026-05-05): extended-hours derivation helpers
+# ---------------------------------------------------------------------------
+
+def _classify_session(now: datetime | None = None) -> Literal["pre", "regular", "post", "closed"]:
+    """Wrapper around ``core.time.current_session`` so callers don't
+    re-import it everywhere. Lazy import keeps the market service
+    free of cycles when ``core.time`` is patched in tests."""
+    from core.time import current_session
+
+    return current_session(now)
+
+
+def _classify_trade_session(trade_dt: datetime | None) -> Literal["pre", "regular", "post"] | None:
+    """Classify a single trade's session from its UTC timestamp.
+
+    Returns ``None`` for regular-hour trades or when the timestamp is
+    missing — callers only emit ``extended_session`` when the trade
+    actually printed in pre/post hours, so a regular-session trade
+    contributes ``None`` here (not "regular").
+    """
+    if trade_dt is None:
+        return None
+    from core.time import classify_trade_session
+
+    s = classify_trade_session(trade_dt)
+    if s in ("pre", "post"):
+        return s  # type: ignore[return-value]
+    return None
+
+
+def _compute_extended_fields(
+    *,
+    last_trade_price: float | None,
+    last_trade_dt: datetime | None,
+    regular_close: float | None,
+    extended_volume: int | None = None,
+) -> dict:
+    """Build the EH-1 quote-payload extension from raw snapshot inputs.
+
+    Returns a dict with the new ``extended_*`` and ``last_trade_time``
+    keys plus the ``session`` classifier. Designed so callers can
+    ``**spread`` it into the ``Quote(...)`` constructor without
+    branching at the call site.
+
+    Rules:
+      * If ``last_trade_dt`` is missing OR the trade was in regular
+        hours, ``extended_price`` and friends are all ``None``.
+      * Extended change/pct only emit when both ``extended_price``
+        and ``regular_close`` are non-zero — otherwise we'd render a
+        spurious -100% during the first post-market tick.
+    """
+    extended_session = _classify_trade_session(last_trade_dt)
+    extended_price: float | None = None
+    extended_change: float | None = None
+    extended_change_pct: float | None = None
+
+    if extended_session is not None and last_trade_price not in (None, 0):
+        extended_price = float(last_trade_price)
+        if regular_close not in (None, 0):
+            extended_change = round(extended_price - float(regular_close), 4)
+            extended_change_pct = round(
+                (extended_change / float(regular_close)) * 100, 2
+            )
+
+    # ``extended_volume`` may be ``None`` when the upstream snapshot
+    # doesn't separate it. Don't fabricate; pass through.
+    return {
+        "regular_close_price": regular_close,
+        "extended_price": extended_price,
+        "extended_change": extended_change,
+        "extended_change_pct": extended_change_pct,
+        "extended_session": extended_session,
+        "extended_volume": extended_volume,
+        "last_trade_time": last_trade_dt,
+        "session": _classify_session(),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Data-fetching entry points (formerly in api.routes.market)
 # ---------------------------------------------------------------------------
 
@@ -396,6 +515,27 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
                         change_pct = (
                             round((change / prev_close) * 100, 2) if prev_close else 0.0
                         )
+                        # EH-1: option contract extended-hours block.
+                        # Polygon emits ``last_trade.t`` (also ``last_trade.sip_timestamp``)
+                        # in nanoseconds. Most options have ZERO trades
+                        # outside RTH so ``extended_price`` will be None
+                        # for the vast majority — that's the correct
+                        # answer; the frontend renders "no extended trades".
+                        trade_ts_ns = lt.get("sip_timestamp") or lt.get("t")
+                        opt_trade_dt: datetime | None = None
+                        if trade_ts_ns:
+                            try:
+                                opt_trade_dt = datetime.fromtimestamp(
+                                    int(trade_ts_ns) / 1_000_000_000,
+                                    tz=timezone.utc,
+                                )
+                            except (ValueError, OverflowError):
+                                opt_trade_dt = None
+                        eh = _compute_extended_fields(
+                            last_trade_price=last_price if last_price else None,
+                            last_trade_dt=opt_trade_dt,
+                            regular_close=prev_close if prev_close else None,
+                        )
                         quote = Quote(
                             symbol=contract,
                             bid=bid,
@@ -411,6 +551,7 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
                             low=float(day.get("low", 0) or 0),
                             open=float(day.get("open", 0) or 0),
                             close=prev_close,
+                            **eh,
                         )
                         try:
                             from core.redis import cache_set as _cs
@@ -450,6 +591,22 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
                         change_pct = (
                             round((change / prev_close) * 100, 2) if prev_close else 0.0
                         )
+                        # EH-1: option contract extended-hours block.
+                        # Alpaca emits the trade time as RFC3339.
+                        opt_trade_ts = lt.get("t")
+                        opt_trade_dt: datetime | None = None
+                        if opt_trade_ts:
+                            try:
+                                opt_trade_dt = datetime.fromisoformat(
+                                    str(opt_trade_ts).replace("Z", "+00:00")
+                                )
+                            except ValueError:
+                                opt_trade_dt = None
+                        eh = _compute_extended_fields(
+                            last_trade_price=last_price if last_price else None,
+                            last_trade_dt=opt_trade_dt,
+                            regular_close=prev_close if prev_close else None,
+                        )
                         quote = Quote(
                             symbol=contract,
                             bid=bid,
@@ -465,6 +622,7 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
                             low=float(daily.get("l", 0) or 0),
                             open=float(daily.get("o", 0) or 0),
                             close=prev_close,
+                            **eh,
                         )
                         try:
                             from core.redis import cache_set as _cs
@@ -507,6 +665,7 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
                     lq = ticker.get("lastQuote", {})
                     lt = ticker.get("lastTrade", {})
                     day = ticker.get("day", {})
+                    prev_day = ticker.get("prevDay", {})
                     # Round-4 CLUSTER 5 #19: prefer the upstream trade
                     # timestamp over server-side wall-clock so cached
                     # values are honestly aged. Polygon emits ``t`` as
@@ -522,6 +681,21 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
                             ts = datetime.now(timezone.utc)
                     else:
                         ts = datetime.now(timezone.utc)
+                    # EH-1: derive extended-hours block.
+                    # ``day.c`` is set after 16:00 ET; before that it's
+                    # 0 / null and we fall back to ``prevDay.c`` so the
+                    # change basis is always the most recent regular
+                    # close. Extended trades are anything outside
+                    # 09:30-16:00 ET (classified by trade timestamp).
+                    last_price = lt.get("p", 0) or 0
+                    day_close = day.get("c") or None
+                    prev_close = prev_day.get("c") or None
+                    regular_close = day_close if day_close not in (None, 0) else prev_close
+                    eh = _compute_extended_fields(
+                        last_trade_price=last_price,
+                        last_trade_dt=ts,
+                        regular_close=regular_close,
+                    )
                     quote = Quote(
                         symbol=symbol.upper(),
                         bid=lq.get("p", 0),
@@ -530,9 +704,10 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
                         askSize=int(lq.get("S") or lq.get("ask_size") or 0),
                         bidExchange=str(lq.get("x") or lq.get("bid_exchange") or "") or None,
                         askExchange=str(lq.get("X") or lq.get("ask_exchange") or "") or None,
-                        last=lt.get("p", 0),
+                        last=last_price,
                         volume=day.get("v", 0),
                         timestamp=ts,
+                        **eh,
                     )
                     await cache_set(cache_key, quote.model_dump(mode="json"), ttl_seconds=5)
                     return quote
@@ -546,9 +721,15 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
 
             headers = _alpaca_data_headers()
             async with httpx.AsyncClient(timeout=10.0) as client:
+                # EH-1: prefer the ``feed=sip`` snapshot. SIP includes
+                # extended-hours trades (pre + post). The IEX feed only
+                # carries regular-session prints, which is exactly the
+                # bug we're fixing — IEX would still report AMD's $356
+                # close at 6pm ET regardless of the post-print spike.
                 resp = await client.get(
                     f"{ALPACA_DATA_URL}/v2/stocks/{symbol.upper()}/snapshot",
                     headers=headers,
+                    params={"feed": "sip"},
                 )
                 if resp.status_code == 200:
                     data = resp.json()
@@ -574,6 +755,23 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
                             ts = datetime.now(timezone.utc)
                     else:
                         ts = datetime.now(timezone.utc)
+                    # EH-1: regular_close = today's daily close after
+                    # 16:00 ET, else prior session's close. Alpaca's
+                    # ``dailyBar.c`` is set continuously through the
+                    # session (it's the last RTH trade), but we want
+                    # the *closed* daily close — so before 16:00 ET we
+                    # always lean on prevDailyBar.
+                    day_close = daily.get("c") or None
+                    cur_session = _classify_session()
+                    if cur_session == "post" and day_close not in (None, 0):
+                        regular_close = day_close
+                    else:
+                        regular_close = prev_close if prev_close not in (None, 0) else day_close
+                    eh = _compute_extended_fields(
+                        last_trade_price=last_price,
+                        last_trade_dt=ts,
+                        regular_close=regular_close,
+                    )
                     quote = Quote(
                         symbol=symbol.upper(),
                         bid=lq.get("bp", 0),
@@ -591,6 +789,7 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
                         low=daily.get("l", 0),
                         open=daily.get("o", 0),
                         close=prev_close,
+                        **eh,
                     )
 
                     from core.redis import cache_set
