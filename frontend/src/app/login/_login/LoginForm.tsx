@@ -296,6 +296,14 @@ export default function LoginForm() {
         <label htmlFor="login-username" className={authLabelClass}>
           Username
         </label>
+        {/* Audit A-F11 (2026-05-05): the form rejected empty submission via
+         * the disabled-button trick (button is disabled until both fields
+         * have content), but neither field carried ``required`` /
+         * ``aria-required``. Screen-reader users got no announcement that
+         * the field was mandatory; password managers couldn't infer the
+         * field's status. Adding the attributes makes the form's contract
+         * explicit at the DOM level + matches the disabled-button gate
+         * already in handleSubmit. */}
         <Input
           id="login-username"
           value={username}
@@ -307,6 +315,8 @@ export default function LoginForm() {
           placeholder="email or desk handle"
           autoComplete="username"
           autoFocus
+          required
+          aria-required="true"
           className={authInputClass}
         />
       </div>
@@ -337,6 +347,8 @@ export default function LoginForm() {
             onKeyUp={handlePasswordKey}
             placeholder="your password"
             autoComplete="current-password"
+            required
+            aria-required="true"
             className={`${authInputClass} pr-12`}
             aria-invalid={error ? true : undefined}
           />
@@ -379,6 +391,8 @@ export default function LoginForm() {
             inputMode="numeric"
             autoComplete="one-time-code"
             autoFocus
+            required
+            aria-required="true"
             className={`${authInputClass} font-mono`}
           />
         </div>

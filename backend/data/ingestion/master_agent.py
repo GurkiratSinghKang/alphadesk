@@ -21,6 +21,26 @@ from data.volatility_map import VOL_MAP_PRE_SP500
 logger = logging.getLogger("alphadesk.master_agent")
 
 
+# Audit B-F14 (2026-05-05): module-level set to retain references to
+# in-flight ``loop.create_task`` results from ``MasterAgent.update_drawdown``
+# (and any other sync-context ``_schedule`` callers). Without this,
+# Python's asyncio.Task GC can collect the persistence Task before it
+# completes, dropping the peak/drawdown DB write silently. The done-
+# callback also surfaces exceptions that would otherwise vanish.
+_MASTER_AGENT_PENDING_TASKS: set[Any] = set()
+
+
+def _handle_master_agent_task_done(task: Any) -> None:
+    _MASTER_AGENT_PENDING_TASKS.discard(task)
+    exc = task.exception() if not task.cancelled() else None
+    if exc is not None:
+        logger.error(
+            "master_agent persistence task failed silently: %s: %s",
+            type(exc).__name__, exc,
+            exc_info=exc,
+        )
+
+
 class MasterAgent:
     """Central coordinator that approves/rejects trade requests from strategies.
 
@@ -598,11 +618,21 @@ class MasterAgent:
         drawdown = (current_value - peak) / peak if peak > 0 else 0
 
         # Helper to schedule async persistence without breaking the sync API.
+        # Audit B-F14 (2026-05-05): the previous code did
+        # ``loop.create_task(coro)`` and discarded the Task. asyncio's GC
+        # is allowed to collect a Task whose only reference is held
+        # internally, especially during heavy event-loop scheduling
+        # bursts. If the persistence Task is collected mid-run, the
+        # await chain is cancelled silently and the peak/drawdown row
+        # never lands in the DB. The retained-set + done-callback
+        # pattern keeps the Task alive and surfaces failures.
         def _schedule(coro: Any) -> None:
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
-                    loop.create_task(coro)
+                    task = loop.create_task(coro)
+                    _MASTER_AGENT_PENDING_TASKS.add(task)
+                    task.add_done_callback(_handle_master_agent_task_done)
                 else:
                     coro.close()  # no loop — drop the coroutine cleanly
             except RuntimeError:

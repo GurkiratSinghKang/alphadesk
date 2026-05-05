@@ -60,6 +60,9 @@ export default function KillSwitchStatusPanel({
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState("");
   const [forbidden, setForbidden] = useState(false);
+  // A-F8: tracks the native <details> open state so the <summary> can
+  // mirror it via aria-expanded for AT users.
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -240,8 +243,21 @@ export default function KillSwitchStatusPanel({
       ) : (
         <div className="space-y-2 text-sm">
           <p className="text-profit">Strategy is enabled — no active kill-switch trigger.</p>
-          <details>
-            <summary className="cursor-pointer text-sm text-fg-muted">
+          {/* Audit A-F8 (2026-05-05): native ``<details><summary>`` is a
+           * disclosure widget. Most screen readers handle the open/closed
+           * state via the implicit ``open`` attribute, but coverage is
+           * inconsistent (NVDA + JAWS + VoiceOver each differ on whether
+           * they announce the state, the change, or both). Add an
+           * explicit ``aria-expanded`` mirroring of ``detailsOpen`` plus
+           * an ``onToggle`` listener so AT users get a deterministic
+           * announcement: "Emergency disable, expanded" or
+           * "Emergency disable, collapsed". The native semantics still
+           * drive the actual show/hide; we only annotate. */}
+          <details onToggle={(e) => setDetailsOpen((e.currentTarget).open)}>
+            <summary
+              className="cursor-pointer text-sm text-fg-muted"
+              aria-expanded={detailsOpen}
+            >
               Emergency disable
             </summary>
             <div className="mt-2 space-y-2">
