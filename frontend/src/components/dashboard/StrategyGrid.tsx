@@ -29,6 +29,15 @@ export interface StrategyData {
 
 // ─── Strategy Card Component ─────────────────────────────────
 
+// Audit F-F4 (2026-05-05): the memo'd StrategyCard previously received an
+// inline arrow ``onClick={() => onStrategyClick(strategy.id)}`` from the
+// parent on every render — busting the React.memo reference-equality
+// check and forcing every card to re-render whenever StrategyGrid did
+// (e.g. on every quote tick that flowed through). Refactored so the
+// child receives a stable callback ``onClick: (id: string) => void``
+// plus its own ``strategy.id`` and invokes it locally — the parent's
+// ``onStrategyClick`` is already stable from the dashboard hook so the
+// memo now actually skips work between identical-strategy renders.
 const StrategyCard = React.memo(function StrategyCard({
   strategy,
   regimeLabel: _regimeLabel,
@@ -37,21 +46,22 @@ const StrategyCard = React.memo(function StrategyCard({
 }: {
   strategy: StrategyData;
   regimeLabel: string;
-  onClick: () => void;
+  onClick: (id: string) => void;
   index?: number;
 }) {
   const meta = STRATEGY_META[strategy.id];
   const Icon = meta?.icon ?? Activity;
   const regimeNote = meta?.regimeNote ?? "";
+  const handleClick = React.useCallback(() => onClick(strategy.id), [onClick, strategy.id]);
 
   return (
     <Card
       className="cursor-pointer border-border bg-[var(--bg-card)] card-glow hover:bg-[var(--bg-card)]/80 card-stagger"
       style={{ animationDelay: `${index * 50}ms` }}
-      onClick={onClick}
+      onClick={handleClick}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleClick(); } }}
     >
       <CardContent className="p-3.5">
         <div className="flex items-start justify-between gap-2">
@@ -145,21 +155,24 @@ const StrategyCard = React.memo(function StrategyCard({
 
 // ─── Compact Strategy Row ────────────────────────────────────
 
+// F-F4: same pattern as StrategyCard — receive stable ``onClick(id)`` so
+// the React.memo skip works across parent re-renders.
 const CompactStrategyRow = React.memo(function CompactStrategyRow({
   strategy,
   onClick,
   index = 0,
 }: {
   strategy: StrategyData;
-  onClick: () => void;
+  onClick: (id: string) => void;
   index?: number;
 }) {
   const meta = STRATEGY_META[strategy.id];
   const Icon = meta?.icon ?? Activity;
+  const handleClick = React.useCallback(() => onClick(strategy.id), [onClick, strategy.id]);
 
   return (
     <button
-      onClick={onClick}
+      onClick={handleClick}
       className="card-stagger flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left transition-colors hover:bg-accent/50"
       style={{ animationDelay: `${index * 30}ms` }}
     >
@@ -296,7 +309,7 @@ export function StrategyGrid({ strategies, regimeLabel, onStrategyClick }: Strat
                       key={strategy.id}
                       strategy={strategy}
                       regimeLabel={regimeLabel}
-                      onClick={() => onStrategyClick(strategy.id)}
+                      onClick={onStrategyClick}
                       index={i}
                     />
                   ))}
@@ -326,7 +339,7 @@ export function StrategyGrid({ strategies, regimeLabel, onStrategyClick }: Strat
                     <CompactStrategyRow
                       key={strategy.id}
                       strategy={strategy}
-                      onClick={() => onStrategyClick(strategy.id)}
+                      onClick={onStrategyClick}
                       index={i}
                     />
                   ))}

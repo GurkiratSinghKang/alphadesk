@@ -28,7 +28,7 @@
  *     legs=NVDA260424P00200000:sell:1:1.45,NVDA260424C00220000:sell:1:1.32   (NEW — limits)
  *     legs=NVDA260424P00200000:sell:1,NVDA260424C00220000:sell:1             (OLD — still works)
  */
-	import { useEffect, useMemo, useState, type ElementType } from "react";
+	import { useEffect, useMemo, useRef, useState, type ElementType } from "react";
 	import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
@@ -393,6 +393,19 @@ export default function TradePage() {
   // OrderBar surfaces a per-leg banner; buildExecutionReadiness gates
   // submit via deriveLegReadiness (lib/legQuoteReadiness.ts).
   const [legsUnavailable, setLegsUnavailable] = useState<LegQuoteUnavailable[]>([]);
+  // Audit MF-P0-3 (2026-05-05): refs that mirror activeLegs +
+  // legsUnavailable so the async ``handleSubmit`` reads the freshest
+  // committed state instead of a closure snapshot from a prior render.
+  // Critical when the chart overlay's ``submit`` arrow is captured at
+  // memo time but fires after a state change has cleared/added legs.
+  const activeLegsRef = useRef(activeLegs);
+  const legsUnavailableRef = useRef(legsUnavailable);
+  useEffect(() => {
+    activeLegsRef.current = activeLegs;
+  }, [activeLegs]);
+  useEffect(() => {
+    legsUnavailableRef.current = legsUnavailable;
+  }, [legsUnavailable]);
   // QA r1 A2 follow-up: hydrate the OCC quote into the store. The data
   // pipeline bridge only fans out for the equity watchlist + selected
   // symbol — option contracts deep-linked via ?contract= / ?legs= aren't
@@ -532,8 +545,38 @@ export default function TradePage() {
       }
     }
     fetchRecent();
-    const id = setInterval(fetchRecent, 20_000);
-    return () => { cancelled = true; clearInterval(id); };
+    // Audit F-F10 (2026-05-05): the prior 20s interval ran independent
+    // of the dashboard's 30s order poll, so a user with both surfaces
+    // open (or rapid back-and-forth navigation) doubled the load on
+    // /api/v1/orders. Two changes:
+    //   (1) Match the dashboard's 30s cadence so the desk-shared query
+    //       lands in lockstep across components that read it.
+    //   (2) Pause when the tab is hidden — stale orders rendered to a
+    //       background tab carry no value and traders only act on this
+    //       view when it's actually visible. The store's WebSocket
+    //       subscription continues to mutate ``recentOrders`` from
+    //       fill events regardless of poll cadence.
+    const POLL_MS = 30_000;
+    let id: ReturnType<typeof setInterval> | null = setInterval(fetchRecent, POLL_MS);
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        if (id != null) {
+          clearInterval(id);
+          id = null;
+        }
+      } else {
+        if (id == null) {
+          fetchRecent();
+          id = setInterval(fetchRecent, POLL_MS);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      cancelled = true;
+      if (id != null) clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [orderFilter]);
 	  // Audit MF-P1-3 (2026-05-05): the prior memo re-filtered ``recentOrders``
 	  // even though the fetch path already requested only the matching status
@@ -621,9 +664,18 @@ export default function TradePage() {
     // Mirrors the live-render `legReadiness` memo above; we recompute
     // here because handleSubmit is async and the snapshot fetcher may
     // have settled with new failures since the last render.
+    //
+    // Audit MF-P0-3 (2026-05-05): read leg state from the refs so the
+    // value is always the latest committed React state, not the
+    // closure snapshot from the render where the chart overlay's
+    // ``submit`` arrow was last memoized. Without this, a click
+    // arriving at the same React tick the retry effect cleared
+    // ``legsUnavailable`` would still see the stale ``blocked`` state
+    // and refuse to place the order. Refs are kept in sync via the
+    // useEffect just below this declaration.
     const submittedLegReadiness = deriveLegReadiness({
-      totalLegs: activeLegs.length,
-      unavailable: legsUnavailable,
+      totalLegs: activeLegsRef.current.length,
+      unavailable: legsUnavailableRef.current,
     });
     const submittedReadiness = buildExecutionReadiness({
       preview: submittedPreview,
