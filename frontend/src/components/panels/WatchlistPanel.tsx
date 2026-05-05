@@ -123,51 +123,35 @@ function ColumnSelector({
   );
 }
 
-// ─── Mock sparkline (tiny SVG) ───────────────────────────────
+// ─── Mini sparkline placeholder ──────────────────────────────
+//
+// Batch B (P0-07) — the previous implementation drew an LCG-seeded
+// "shape" per symbol that looked like real intraday performance but
+// was pure noise (ticker hash → 9 RNG draws → trend-biased polyline).
+// AlphaDesk does not have a per-symbol intraday time-series feed for
+// arbitrary watchlist tickers today, so the only honest render is a
+// flat low-opacity line that signals "no data" without faking shape.
+// When a real per-symbol series is wired (e.g. a bars endpoint), pass
+// it via a prop and draw a real polyline; do not regenerate noise.
 
-function MiniSparkline({ trend, symbol }: { trend: number; symbol: string }) {
-  // Generate unique sparkline shape per symbol using a simple hash seed
-  let seed = 0;
-  for (let i = 0; i < symbol.length; i++) seed += symbol.charCodeAt(i) * (i + 1);
-
-  const rng = () => {
-    seed = (seed * 16807 + 11) % 2147483647;
-    return (seed - 1) / 2147483646;
-  };
-
-  const numPoints = 9;
-  const rawValues: number[] = [];
-  for (let i = 0; i < numPoints; i++) rawValues.push(rng());
-
-  // Bias toward upward or downward trend
-  const biased = rawValues.map((v, i) => {
-    const trendBias = trend > 0 ? (i / numPoints) * 0.4 : trend < 0 ? ((numPoints - i) / numPoints) * 0.4 : 0;
-    return v * 0.6 + trendBias;
-  });
-
-  const minV = Math.min(...biased);
-  const maxV = Math.max(...biased);
-  const range = maxV - minV || 1;
-
-  const points = biased
-    .map((v, i) => {
-      const x = (i / (numPoints - 1)) * 32;
-      const y = 12 - ((v - minV) / range) * 10 + 1;
-      return `${(x ?? 0).toFixed(1)},${(y ?? 0).toFixed(1)}`;
-    })
-    .join(" ");
-
+function MiniSparkline({ trend }: { trend: number }) {
   const color = trend > 0 ? "var(--profit)" : trend < 0 ? "var(--loss)" : "var(--neutral)";
 
   return (
-    <svg width="36" height="14" className="shrink-0">
-      <polyline
-        points={points}
-        fill="none"
+    <svg
+      width="36"
+      height="14"
+      className="shrink-0 opacity-30"
+      aria-hidden="true"
+    >
+      <line
+        x1="2"
+        x2="34"
+        y1="7"
+        y2="7"
         stroke={color}
         strokeWidth="1.5"
         strokeLinecap="round"
-        strokeLinejoin="round"
       />
     </svg>
   );
@@ -257,7 +241,10 @@ const WatchlistRow = React.memo(function WatchlistRow({
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") onSelect();
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
       }}
       className={`group flex w-full items-center gap-2 px-3 py-2.5 sm:py-1.5 text-body-sm sm:text-label min-h-touch sm:min-h-0 transition-colors hover:bg-accent/50 active:bg-accent/60 cursor-pointer ${flashClass} ${
         isSelected ? "bg-primary/10 border-l-2 border-l-primary" : "border-l-2 border-l-transparent"
@@ -267,7 +254,7 @@ const WatchlistRow = React.memo(function WatchlistRow({
         <div className="font-medium text-foreground tabular-nums">{symbol}</div>
       </div>
 
-      <MiniSparkline trend={hasRealChange ? change : 0} symbol={symbol} />
+      <MiniSparkline trend={hasRealChange ? change : 0} />
 
       {/* Price area — click to open quick-trade popover */}
       {selectedColumns.includes("last") && (

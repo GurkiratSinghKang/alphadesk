@@ -31,49 +31,60 @@ export interface StrategyTemplate {
   icon: typeof Shield;
 }
 
+// Batch B (P1-10) — TEMPLATES used to list 0-live strategies (claude-alpha,
+// mean-reversion, vcp-breakout, dividend-capture, gap-fill — all marked
+// `maxPositions: '0 live'` in strategy-content.ts) inside recommended
+// bundles, alongside hard-coded `sharpeRange` / `typicalDrawdown` strings
+// that were never derived from a backtest. The Sharpe and drawdown numbers
+// kept for the templates below correspond to bundles that contain ONLY live
+// strategies; bundles that included a 0-live strategy had that strategy
+// dropped (rather than published a fabricated metric range that conflated
+// research stubs with production behavior). When the dropped strategies
+// graduate to live, restore them to their parent bundle and update the
+// metric ranges from a real backtest.
 const TEMPLATES: StrategyTemplate[] = [
   {
     id: "conservative-income",
     name: "Conservative Income",
     description:
-      "Dividend capture paired with covered calls for steady income generation with minimal downside risk.",
+      "VRP harvesting for steady income generation with minimal downside risk.",
     riskLevel: "low",
     sharpeRange: "0.8 - 1.2",
     typicalDrawdown: "3 - 5%",
-    strategies: ["dividend-capture", "vrp-harvesting"],
+    strategies: ["vrp-harvesting"],
     icon: Shield,
   },
   {
     id: "aggressive-growth",
     name: "Aggressive Growth",
     description:
-      "Momentum-driven breakout strategies targeting high-growth equities with strong technical setups.",
+      "Momentum-driven strategies targeting high-growth equities with strong technical setups.",
     riskLevel: "high",
     sharpeRange: "1.2 - 2.0",
     typicalDrawdown: "12 - 20%",
-    strategies: ["momentum-quality", "vcp-breakout"],
+    strategies: ["momentum-quality"],
     icon: Rocket,
   },
   {
     id: "market-neutral",
     name: "Market Neutral",
     description:
-      "Delta-neutral approach combining pairs trading and mean reversion to profit regardless of market direction.",
+      "Delta-neutral statistical-arbitrage pairs trading to profit regardless of market direction.",
     riskLevel: "medium",
     sharpeRange: "1.0 - 1.6",
     typicalDrawdown: "5 - 8%",
-    strategies: ["pairs-trading", "mean-reversion"],
+    strategies: ["pairs-trading"],
     icon: GitMerge,
   },
   {
     id: "ai-powered",
     name: "AI-Powered",
     description:
-      "Claude Alpha intelligence combined with regime-adaptive allocation for AI-driven alpha generation.",
+      "Regime-adaptive allocation that rotates between live AlphaDesk strategies based on the current market regime.",
     riskLevel: "medium",
     sharpeRange: "1.1 - 1.8",
     typicalDrawdown: "6 - 10%",
-    strategies: ["claude-alpha", "regime-adaptive"],
+    strategies: ["regime-adaptive"],
     icon: Brain,
   },
   {

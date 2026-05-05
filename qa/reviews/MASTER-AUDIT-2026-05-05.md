@@ -226,10 +226,21 @@ Nine audit-fix commits delivered on `feature/deployment`:
 | `a84b2154` | fix(a11y): autoFocus Cancel in DestructiveConfirmModal | A-F4 — initial focus on safe action |
 | `671c84c7` | fix(pipeline): wire kill-switch layer 3 | B-F3, R-F1 — manual emergency disable now works |
 | `9e188f1a` | fix(fill_reconciler): monotonic filled_qty guard | R-F4 — multi-leg fill backward |
+| `02fb4860` | fix(agents): stop leaking exception details | B-F13 — internal error details no longer in response body |
+| `5c64716e` | fix(redis): atomic INCR+EXPIRE for cache_incr | B-F11 — TTL leak on crash window |
+| `fed2aec0` | fix(a11y): role + live region on KillSwitchStatusPanel | A-F6 — screen-reader announces kill-switch state changes |
+| `32d2024c` | fix(crypto): PBKDF2 + per-encryption salt | B-F7 — broker-credential encryption hardened |
+| `012659bd` | fix(kill-switch): thread-pool bridge for sync facade | B-F4, R-F2 — Postgres repo no longer crashes inside async context |
+| `6da98c22` | fix(broker): per-user rate-limits on write endpoints | B-F12 — credential write + reconciliation throttled |
+| `f127d92e` | fix(trading_gate): retain audit Task ref + log failures | P3-5 — compliance audit writes no longer silently dropped |
 
-**Verification:** 451 backend tests pass (1 pre-existing failure in
-`test_trades_surveillance.py::test_halt_trading_writes_audit_log` —
-unrelated to these changes). Frontend `npm run typecheck` clean.
+**Verification:** 451+ backend tests pass after each round (1 pre-existing
+failure in `test_trades_surveillance.py::test_halt_trading_writes_audit_log`
+— unrelated to these changes). Frontend `npm run typecheck` clean.
+
+**16 audit-fix commits delivered** across three rounds in this cycle. The
+remaining work is summarised below — multi-user Alpaca routing has a
+fix-agent in flight (uncommitted changes visible in working tree).
 
 ### Still open — not yet fixed
 

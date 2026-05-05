@@ -113,6 +113,13 @@ class StrategySummary(BaseModel):
     win_rate: float
     active_positions_count: int
     sparkline: list[float] = []
+    # Batch B (P0-06) — disclosure flag set when ``sparkline`` was produced by
+    # ``_generate_equity_curve`` (an MD5(strategy_id)-seeded random walk that
+    # forces the curve to land on the true total_return). The values are not
+    # historical equity; consumers must render a synthetic-data indicator and
+    # MUST NOT compute Sharpe/drawdown from these points. Will flip back to
+    # False once the endpoint reads from a ledger-derived equity curve.
+    sparkline_is_synthetic: bool = False
     # Wave 4 — mirror the flags on the list endpoint so the strategies grid
     # can render NOT-READY badges without a per-strategy follow-up fetch.
     live_disabled: bool = False
@@ -1350,9 +1357,17 @@ async def list_strategies() -> list[StrategySummary]:
 
         # Build compact sparkline (last 20 equity curve points)
         sparkline_data: list[float] = []
+        # Batch B (P0-06) — every code path that populates ``sparkline_data``
+        # below routes through ``_generate_equity_curve``, which is a
+        # MD5(strategy_id)-seeded random walk forced to terminate at
+        # total_return. Until this is replaced with a real ledger-derived
+        # curve, mark the field synthetic so the frontend can disclose it.
+        sparkline_is_synthetic = False
         if gross_deployed > 0:
             curve = _generate_equity_curve(sid, max(gross_deployed, 1), total_return)
             sparkline_data = [p["value"] for p in curve[-20:]] if curve else []
+            if sparkline_data:
+                sparkline_is_synthetic = True
 
         live_disabled, paper_only = _live_flags_for(sid)
         summaries.append(StrategySummary(
@@ -1367,6 +1382,7 @@ async def list_strategies() -> list[StrategySummary]:
             win_rate=win_rate,
             active_positions_count=active_count,
             sparkline=sparkline_data,
+            sparkline_is_synthetic=sparkline_is_synthetic,
             live_disabled=live_disabled,
             paper_only=paper_only,
         ))
