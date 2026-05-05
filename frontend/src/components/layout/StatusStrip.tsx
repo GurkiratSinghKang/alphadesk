@@ -8,12 +8,67 @@ import { useUIStore } from "@/stores/ui";
 import { formatCurrency, cn } from "@/lib/utils";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { useRegime, usePortfolioSummary, useBrokerConnections } from "@/hooks/useQueries";
+import { getMarketSession } from "@/lib/marketHours";
+
+// EH-3d: derive the global session pill label from the NY clock.
+//   · "PRE-MARKET" — weekday before 09:30 ET
+//   · "AFTER HOURS" — weekday between 16:00 ET and 24:00 ET
+//   · "OVERNIGHT" — 00:00–04:00 ET (technically still "after hours" the
+//     next morning but the term in industry use is "overnight"; the
+//     EH brief calls this state out separately)
+//   · null — regular session or weekend (regular pill display only)
+//
+// Defensive: ``getMarketSession`` already handles weekends (returns
+// "closed") and the helper is browser-time-zone safe via Intl. We keep
+// the exported tester so the unit test below can mock the clock.
+export type SessionPillLabel = "PRE-MARKET" | "AFTER HOURS" | "OVERNIGHT";
+
+export function getSessionPillLabel(now: Date = new Date()): SessionPillLabel | null {
+  const session = getMarketSession(now);
+  if (session === "open" || session === "closed") return null;
+  if (session === "pre") {
+    // OVERNIGHT band 00:00–04:00 ET. Reuse Intl to avoid host-tz drift.
+    try {
+      const fmt = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York",
+        hour: "2-digit",
+        hour12: false,
+      });
+      const parts = fmt.formatToParts(now);
+      const hourPart = parts.find((p) => p.type === "hour");
+      const hour = hourPart ? parseInt(hourPart.value, 10) % 24 : 6;
+      if (hour < 4) return "OVERNIGHT";
+    } catch {
+      // fall through to PRE-MARKET on Intl failure (extremely rare)
+    }
+    return "PRE-MARKET";
+  }
+  // session === "post"
+  return "AFTER HOURS";
+}
 
 export function StatusStrip() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     const timeout = window.setTimeout(() => setMounted(true), 0);
     return () => window.clearTimeout(timeout);
+  }, []);
+
+  // EH-3d: keep the session pill label fresh. We refresh once per
+  // minute — the bands transition at :00 of an even half-hour (09:30
+  // open, 16:00 close, 04:00 overnight→pre) so 60s is plenty of
+  // resolution and avoids burning re-renders on a 1Hz timer.
+  const [sessionLabel, setSessionLabel] = useState<SessionPillLabel | null>(() =>
+    getSessionPillLabel(),
+  );
+  useEffect(() => {
+    // Sync immediately on mount in case our SSR/initial-state read
+    // happened against a stale Date.
+    setSessionLabel(getSessionPillLabel());
+    const interval = window.setInterval(() => {
+      setSessionLabel(getSessionPillLabel());
+    }, 60_000);
+    return () => window.clearInterval(interval);
   }, []);
 
   const summary = usePortfolioStore((s) => s.summary);
@@ -184,6 +239,24 @@ export function StatusStrip() {
               : "LIVE"}
         </span>
       </div>
+      {/* EH-3d: globally visible session pill. Renders only outside
+          the regular cash session — null during 09:30–16:00 ET on
+          weekdays so the regular layout is byte-for-byte identical
+          to pre-EH. Tooltip reminds the trader that extended-hours
+          data may be limited or stale (per EH brief copy). */}
+      {sessionLabel && (
+        <span
+          role="status"
+          aria-live="polite"
+          data-slot="session-pill"
+          data-session={sessionLabel}
+          title="Extended hours data may be limited or stale"
+          className="ml-2 inline-flex shrink-0 items-center gap-1.5 rounded-sm border border-amber/40 bg-amber/10 px-2 py-0.5 text-label font-bold uppercase tracking-[0.12em] leading-none text-amber"
+        >
+          <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full bg-amber" />
+          {sessionLabel}
+        </span>
+      )}
       {/* Wave 3N persona-94 #8: `is_demo` is the backend's signal that
           no Alpaca credentials are configured. Don't just mute the other
           cells — tell the user what state they're in and link them to

@@ -18,7 +18,51 @@ import { useUIStore } from "@/stores/ui";
 import { formatCurrency, formatPercent, getChangeTextClass, cn } from "@/lib/utils";
 import { screenStocks } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
+import { ExtendedHoursBadge } from "@/components/primitives/ExtendedHoursBadge";
 import type { Quote, QuickOrderEvent } from "@/types";
+
+// EH-3a: format an ET-local timestamp for the AH/PM tooltip. Backend
+// emits ISO; we render "HH:mm ET" to match the design copy in the
+// brief. Returns "—" when the input is missing/unparseable so the
+// tooltip never crashes the row render. Defensive against legacy
+// backend payloads that pre-date the ``last_trade_time`` field.
+function formatEtTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(d) + " ET";
+  } catch {
+    return "—";
+  }
+}
+
+// EH-3a: build the tooltip copy for the AH/PM badge. Uses extended_*
+// fields when present and falls back to em-dashes when any are missing
+// — the badge still renders, the tooltip just degrades gracefully.
+function extendedTooltip(quote: Quote | undefined): string | undefined {
+  if (!quote || !quote.extended_session) return undefined;
+  const label = quote.extended_session === "post" ? "After-hours" : "Pre-market";
+  const price = quote.extended_price;
+  const change = quote.extended_change;
+  const changePct = quote.extended_change_pct;
+  const time = formatEtTime(quote.last_trade_time);
+  const priceStr = typeof price === "number" ? formatCurrency(price) : "—";
+  const changeStr =
+    typeof change === "number"
+      ? `${change >= 0 ? "+" : ""}${formatCurrency(change)}`
+      : "—";
+  const changePctStr =
+    typeof changePct === "number"
+      ? `${changePct >= 0 ? "+" : ""}${changePct.toFixed(2)}%`
+      : "—";
+  return `${label}: ${priceStr} (${changeStr}, ${changePctStr}) at ${time}`;
+}
 
 // ─── Column Configuration ────────────────────────────────────
 
@@ -235,15 +279,37 @@ const WatchlistRow = React.memo(function WatchlistRow({
     setShowQuickTrade(false);
   }, [symbol, quote]);
 
-  // Calculate change from quote data
-  const hasRealChange = quote?.changePct != null;
+  // EH-3a: when the backend reports an active extended session,
+  // prefer the extended price + change pair over the regular intraday
+  // figures. ``extended_session`` is the source of truth: only "pre"
+  // or "post" trigger the swap, anything else (null / undefined /
+  // "regular") falls through to the regular display path. Defensive
+  // against partial backends — if the session token is set but
+  // ``extended_change_pct`` is null, we revert to the regular pct so
+  // the row never shows a blank %-cell.
+  const isExtended =
+    quote?.extended_session === "pre" || quote?.extended_session === "post";
+  const ehChangePct =
+    isExtended && typeof quote?.extended_change_pct === "number"
+      ? quote!.extended_change_pct
+      : null;
+  const ehPrice =
+    isExtended && typeof quote?.extended_price === "number"
+      ? quote!.extended_price
+      : null;
+
+  // Calculate change from quote data — fall through to extended values
+  // when an active session is reported.
+  const hasRealChange =
+    (isExtended && ehChangePct != null) || quote?.changePct != null;
   const change = (() => {
     if (!hasRealChange) return 0;
-    let raw = quote!.changePct!;
-    if (Math.abs(raw) < 0.005) raw = 0;
+    const raw = ehChangePct != null ? ehChangePct : quote!.changePct!;
+    if (Math.abs(raw) < 0.005) return 0;
     return raw;
   })();
   const changeColor = getChangeTextClass(change);
+  const tooltipText = extendedTooltip(quote);
 
   return (
     <div
@@ -268,17 +334,36 @@ const WatchlistRow = React.memo(function WatchlistRow({
 
       {/* Price area — click to open quick-trade popover */}
       {selectedColumns.includes("last") && (
-        <div className="relative">
+        <div className="relative flex items-center gap-1">
           <button
             onClick={(e) => {
               e.stopPropagation();
               setShowQuickTrade((v) => !v);
             }}
             aria-label={`Quick trade ${symbol}`}
+            title={tooltipText}
             className="w-16 text-right tabular-nums hover:text-primary transition-colors"
           >
-            {quote ? formatCurrency(quote.last) : "---"}
+            {/* EH-3a: when an active extended session is reported,
+                display the extended price (replacing the regular
+                ``last`` cell). When ``extended_session`` is null we
+                render the unchanged regular price — the regular-hours
+                path is byte-for-byte identical to pre-EH behaviour. */}
+            {quote
+              ? formatCurrency(ehPrice ?? quote.last)
+              : "---"}
           </button>
+          {/* EH-3a: AH / PM pill rendered next to the price. The
+              tooltip carries the long-form copy ("After-hours: $403.82
+              (+$47.54, +13.34%) at 22:35 ET"). When the badge is
+              null/missing the regular display is unaffected. */}
+          {isExtended && (
+            <ExtendedHoursBadge
+              tone={quote?.extended_session ?? null}
+              title={tooltipText}
+              className="ml-0.5"
+            />
+          )}
           {showQuickTrade && quote && (
             <div
               ref={popoverRef}

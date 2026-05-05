@@ -17,6 +17,24 @@ export interface Quote {
   open: number;
   close: number;
   timestamp: number;
+  // ─── Extended-hours pricing (EH-1 backend contract) ────────
+  // The backend (EH-1) emits these on equity quotes when the broker
+  // returns extended-hours trade data. Treat ALL fields as optional —
+  // older snapshots, demo mode, and regular-hours quotes will simply
+  // omit them. UI must render the regular ``last`` / ``change`` /
+  // ``changePct`` triple unchanged when ``extended_session`` is null
+  // or missing. Field names mirror the backend wire contract directly
+  // (snake_case) so the API mapper can pass-through without renaming;
+  // FE consumers can also read camelCase aliases via the optional
+  // ``extendedSession`` mirror below for tests + selectors.
+  regular_close_price?: number | null;
+  extended_price?: number | null;
+  extended_change?: number | null;
+  extended_change_pct?: number | null;
+  extended_session?: "pre" | "post" | null;
+  extended_volume?: number | null;
+  last_trade_time?: string | null;
+  session?: "pre" | "regular" | "post" | "closed" | null;
 }
 
 export interface OHLCVBar {
@@ -132,6 +150,21 @@ export interface Position {
    * so closed-trade attribution and open-position attribution agree.
    */
   strategy?: string | null;
+  // ─── Extended-hours live valuation (EH-1 backend contract) ─
+  // Backend computes these from the broker's extended-hours snapshot:
+  //   live_value           = qty * extended_or_last_price * multiplier
+  //   live_value_change    = vs last regular close
+  //   live_value_change_pct
+  //   value_session        = "regular" | "extended" | "stale"
+  // All optional — older positions and regular-session payloads will
+  // simply omit them and the UI falls back to ``marketValue`` /
+  // ``unrealizedPnl``. ``"stale"`` is set by the backend when the cached
+  // extended-hours mark is older than 5 minutes; the UI surfaces a
+  // STALE pill in that case.
+  live_value?: number | null;
+  live_value_change?: number | null;
+  live_value_change_pct?: number | null;
+  value_session?: "regular" | "extended" | "stale" | null;
 }
 
 export type OrderSide = "buy" | "sell";
@@ -267,6 +300,16 @@ export interface OptionsContract {
   gamma: number | null;
   theta: number | null;
   vega: number | null;
+  // ─── Extended-hours pricing (EH-1 backend contract) ────────
+  // Same shape as Quote above — backend may emit an after-hours mark
+  // for liquid contracts when the broker reports a recent extended-
+  // session trade. Treat as optional. When ``extended_price`` is set
+  // the OrderBar / leg display prefers it over the bid-ask mid.
+  extended_price?: number | null;
+  extended_change?: number | null;
+  extended_change_pct?: number | null;
+  extended_session?: "pre" | "post" | null;
+  last_trade_time?: string | null;
 }
 
 export interface OptionsChain {

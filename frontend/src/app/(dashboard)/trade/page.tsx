@@ -62,6 +62,7 @@ import {
 import type { ChartOrderPlacement, ChartTradeOverlay } from "@/components/charts/ChartPane";
 import OptionsPayoffPanel from "@/components/options/OptionsPayoffPanel";
 import OptionsStrategyBuilder from "@/components/options/OptionsStrategyBuilder";
+import { ExtendedHoursBadge } from "@/components/primitives/ExtendedHoursBadge";
 import { getBars, getOrders, getSnapshot, placeOrder } from "@/lib/api";
 import { barsRequestForRange } from "@/lib/chartRange";
 import { parseOccSymbol } from "@/lib/occ";
@@ -1902,7 +1903,20 @@ function ExecutionQuotePanel({
             </p>
           </div>
         </div>
-        <span className={cn("shrink-0 font-mono text-label", quote.spreadTone)}>{quote.midLabel}</span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          <span className={cn("font-mono text-label", quote.spreadTone)}>{quote.midLabel}</span>
+          {/* EH-3c: when buildExecutionQuote picked up an extended-hours
+              mark, surface a small AH/PM pill next to the mid so the
+              trader knows the displayed price is the extended-session
+              tape, not the regular two-sided mid. Renders nothing on
+              regular sessions — pre-EH layout is unchanged. */}
+          {quote.extendedSession && (
+            <ExtendedHoursBadge
+              tone={quote.extendedSession}
+              title={`Extended-hours mark: ${quote.midLabel}`}
+            />
+          )}
+        </span>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {presets.map((preset) => {
@@ -2083,7 +2097,29 @@ function buildExecutionQuote(quote: ReturnType<typeof toQuote>) {
   const hasBid = Number.isFinite(bid) && bid > 0;
   const hasAsk = Number.isFinite(ask) && ask > 0;
   const hasTwoSided = hasBid && hasAsk && ask >= bid;
-  const mid = hasTwoSided ? (bid + ask) / 2 : last;
+  // EH-3c: prefer the extended-hours mark when the broker reports it.
+  // We only pick it up when the source quote actually carries an
+  // active extended session — ``extended_price`` may be present without
+  // ``extended_session`` on legacy backends, and we should not silently
+  // replace a regular-hours mid in that case. ``buildExecutionQuote``
+  // is called from both the underlying-equity and option-leg paths;
+  // the EH branch fires for either when the field is set.
+  const ehSession =
+    (quote as { extended_session?: "pre" | "post" | null }).extended_session ??
+    null;
+  const ehPriceRaw = (quote as { extended_price?: number | null }).extended_price;
+  const ehPrice =
+    (ehSession === "pre" || ehSession === "post") &&
+    typeof ehPriceRaw === "number" &&
+    Number.isFinite(ehPriceRaw) &&
+    ehPriceRaw > 0
+      ? ehPriceRaw
+      : null;
+  // When the extended mark wins, it becomes the "mid" (closest analog
+  // to the execution price). The bid/ask spread continues to render
+  // the regular two-sided quote so a hedger can still check the lit
+  // book at a glance.
+  const mid = ehPrice ?? (hasTwoSided ? (bid + ask) / 2 : last);
   const spread = hasTwoSided ? ask - bid : 0;
   const spreadPct = hasTwoSided && mid > 0 ? (spread / mid) * 100 : 0;
   const spreadTone =
@@ -2109,6 +2145,12 @@ function buildExecutionQuote(quote: ReturnType<typeof toQuote>) {
     spreadLabel: hasTwoSided ? `${formatCurrency(spread)} · ${spreadPct.toFixed(2)}%` : "Quote needed",
     spreadTone,
     timestamp: normalizeEpochSeconds(quote.timestamp),
+    // EH-3c: surface the extended-session token + price so the
+    // ExecutionQuotePanel can render an "AH" / "PM" indicator next to
+    // the mid without re-deriving from the raw quote. Null on regular
+    // sessions / when the backend didn't emit the field.
+    extendedSession: ehPrice != null ? ehSession : null,
+    extendedPrice: ehPrice,
   };
 }
 

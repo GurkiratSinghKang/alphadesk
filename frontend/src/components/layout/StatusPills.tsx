@@ -1,10 +1,72 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRegime } from "@/hooks/useQueries";
 import { useUIStore } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 import { toRegime } from "@/app/(dashboard)/_desk/selectors";
+import { getMarketSession } from "@/lib/marketHours";
+
+// EH-3d: globally visible session pill — "PRE-MARKET" / "AFTER HOURS"
+// / "OVERNIGHT" — exposed from StatusPills so the same chrome the rest
+// of the app already renders carries the indicator. Returns null
+// during the regular cash session (09:30–16:00 ET, weekdays) and on
+// weekends so the regular layout is unchanged.
+type MarketSessionLabel = "PRE-MARKET" | "AFTER HOURS" | "OVERNIGHT";
+function getMarketSessionLabel(now: Date = new Date()): MarketSessionLabel | null {
+  const session = getMarketSession(now);
+  if (session === "open" || session === "closed") return null;
+  if (session === "pre") {
+    try {
+      const fmt = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York",
+        hour: "2-digit",
+        hour12: false,
+      });
+      const parts = fmt.formatToParts(now);
+      const hourPart = parts.find((p) => p.type === "hour");
+      const hour = hourPart ? parseInt(hourPart.value, 10) % 24 : 6;
+      if (hour < 4) return "OVERNIGHT";
+    } catch {
+      // Defensive: fall through to PRE-MARKET on Intl errors.
+    }
+    return "PRE-MARKET";
+  }
+  return "AFTER HOURS";
+}
+
+function MarketSessionPill() {
+  const [label, setLabel] = useState<MarketSessionLabel | null>(() =>
+    getMarketSessionLabel(),
+  );
+  useEffect(() => {
+    setLabel(getMarketSessionLabel());
+    // 60s tick is sufficient — the bands transition on 30-minute /
+    // hour boundaries, so polling once a minute means at most a
+    // 60s lag at a transition. Lighter-weight than a 1Hz timer.
+    const id = window.setInterval(() => setLabel(getMarketSessionLabel()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+  if (!label) return null;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        data-slot="market-session-pill"
+        data-session={label}
+        className="flex items-center gap-1.5 rounded-sm px-2 py-1 text-eyebrow font-mono uppercase tracking-[0.12em] text-amber hover:bg-bg-elev-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        aria-label={`Market session: ${label}`}
+      >
+        <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-amber" />
+        <span>{label}</span>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        Extended hours data may be limited or stale
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 // Dot color per regime tone. Codebase uses CSS-var-based profit/loss/amber tokens
 // (not bg-profit / bg-down-500 — those don't exist in the design system).
@@ -130,6 +192,9 @@ export default function StatusPills() {
     >
       <RegimePill regime={regime} />
       <VixPill vixLevel={vixLevel} />
+      {/* EH-3d: market session pill — renders only outside RTH so the
+          regular daytime cluster is unchanged. */}
+      <MarketSessionPill />
       <SessionPill mode={tradingMode} />
     </div>
   );
