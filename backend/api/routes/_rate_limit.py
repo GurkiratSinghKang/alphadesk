@@ -188,6 +188,7 @@ async def _check_bucket(
 # dict growing unboundedly (each abandoned deque was empty after the
 # window passed but never cleaned up). Drive a sweep every 60s from the
 # app lifespan.
+# Memory hygiene — sweep stale rate-limit buckets every 60s. Balances overhead vs leak risk.
 _SWEEP_INTERVAL_S = 60.0
 _sweep_task: asyncio.Task | None = None
 

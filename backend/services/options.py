@@ -301,6 +301,7 @@ async def _demo_chain(symbol: str, expiry_filter: date | None,
             expirations = [expiry_filter]
 
     # Determine strike increment based on price
+    # CBOE-standard strike spacing: <$50: $1, $50-$200: $2.50, >=$200: $5. Matches real-market structure.
     if spot < 50:
         strike_inc = 1.0
     elif spot < 200:
@@ -329,6 +330,7 @@ async def _demo_chain(symbol: str, expiry_filter: date | None,
 
             moneyness = abs(math.log(spot / strike)) if strike > 0 else 0
             # IV smile: increase IV further OTM
+            # Demo-only IV smile slope; 1.5x per moneyness unit ~ realistic put-skew shape.
             smile_adj = base_iv * (1 + 1.5 * moneyness)
             iv = round(smile_adj + rng.uniform(-0.02, 0.02), 4)
 

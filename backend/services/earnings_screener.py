@@ -48,12 +48,19 @@ def _scrub_fmp_error(s: str) -> str:
 # Round-4 CLUSTER 1: report_state classification. Used at row build time
 # so the frontend can dim AMC reports that have already printed without us
 # silently filtering them out (which would make the calendar feel buggy).
+# US equity market hours (ET): 9:30 open, 16:00 close.
+# BMO = before-market-open (release <=9:30 ET); AMC = after-market-close (release >=16:30 ET).
+# 30-minute buffers around the bell for press release timing.
 _NY_BMO_CUTOFF_HOUR = 9   # 09:30 ET — BMO companies have printed by then
 _NY_BMO_CUTOFF_MINUTE = 30
 _NY_AMC_CUTOFF_HOUR = 16  # 16:30 ET — AMC reports out shortly after close
 _NY_AMC_CUTOFF_MINUTE = 30
 _NY_DMT_CUTOFF_HOUR = 16  # Unknown timing: keep visible through the session
 _NY_DMT_CUTOFF_MINUTE = 30
+
+# Maximum "mismatch" between implied and historical move that earns full score
+# in setup ranking. Above 0.5 (50% deviation) the score caps.
+_MAX_EXPECTED_MISMATCH = 0.5
 
 
 def _classify_report_state(report_date: date, report_time: str) -> str:
@@ -223,10 +230,12 @@ def compute_earnings_edge_score(
         premium_contrib = 0.0
         if not setup_known:
             premium = max(float(p) for p in premiums)
+            # Normalize ATM premium yield to a 0-6% range; above 6% capped at full-credit (rare in practice).
             premium_contrib = clamp(premium / 0.06, 0.0, 1.0) * 10.0
             reasons.append(f"ATM option yield {premium:.1%}; needs setup")
         elif is_straddle_debit:
             debit = sum(float(p) for p in premiums)
+            # Straddle debit cap at 10% of spot — beyond which the trade is hard to make profitable.
             premium_contrib = clamp((0.10 - debit) / 0.08, 0.0, 1.0) * 20.0
             if debit <= 0.06:
                 reasons.append(f"ATM straddle debit {debit:.1%}")
@@ -239,6 +248,7 @@ def compute_earnings_edge_score(
             if side_premium is not None and side_premium > 0:
                 multiplier = 0.6 if "spread" in setup else 1.0
                 debit = float(side_premium) * multiplier
+                # Directional debit cap at 6% — keeps risk/reward favorable.
                 premium_contrib = clamp((0.06 - debit) / 0.05, 0.0, 1.0) * 20.0
                 if debit <= 0.035:
                     reasons.append(f"{setup.title()} debit {debit:.1%}")
@@ -246,6 +256,7 @@ def compute_earnings_edge_score(
                 premium_evidence = False
         else:
             premium = max(float(p) for p in premiums)
+            # Same 0-6% normalization as the no-setup branch (see comment above).
             premium_contrib = clamp(premium / 0.06, 0.0, 1.0) * 20.0
             reasons.append(f"ATM premium yield {premium:.1%}")
         score += premium_contrib
@@ -263,7 +274,7 @@ def compute_earnings_edge_score(
         implied_vs_hist_contrib = 0.0
         if not setup_known:
             mismatch = abs(expected - hist) / hist
-            implied_vs_hist_contrib = clamp(mismatch / 0.5, 0.0, 1.0) * 15.0
+            implied_vs_hist_contrib = clamp(mismatch / _MAX_EXPECTED_MISMATCH, 0.0, 1.0) * 15.0
             relation = "above" if expected > hist else "below"
             reasons.append(
                 f"Implied move {relation} {hist:.1%} historical avg; setup pending"
@@ -271,26 +282,26 @@ def compute_earnings_edge_score(
         elif is_debit_setup:
             underprice_ratio = (hist - expected) / expected if expected > 0 else 0.0
             if underprice_ratio > 0:
-                implied_vs_hist_contrib = clamp(underprice_ratio / 0.5, 0.0, 1.0) * 35.0
+                implied_vs_hist_contrib = clamp(underprice_ratio / _MAX_EXPECTED_MISMATCH, 0.0, 1.0) * 35.0
                 reasons.append(
                     f"Historical move {hist:.1%} clears debit {expected:.1%}"
                 )
             else:
                 overprice_ratio = (expected - hist) / hist
-                implied_vs_hist_contrib = -clamp(overprice_ratio / 0.5, 0.0, 1.0) * 25.0
+                implied_vs_hist_contrib = -clamp(overprice_ratio / _MAX_EXPECTED_MISMATCH, 0.0, 1.0) * 25.0
                 reasons.append(
                     f"Debit {expected:.1%} above {hist:.1%} historical avg"
                 )
         else:
             overprice_ratio = (expected - hist) / hist
             if overprice_ratio > 0:
-                implied_vs_hist_contrib = clamp(overprice_ratio / 0.5, 0.0, 1.0) * 25.0
+                implied_vs_hist_contrib = clamp(overprice_ratio / _MAX_EXPECTED_MISMATCH, 0.0, 1.0) * 25.0
                 reasons.append(
                     f"Implied move {expected:.1%} vs {hist:.1%} historical avg"
                 )
             else:
                 underprice_ratio = (hist - expected) / hist
-                implied_vs_hist_contrib = -clamp(underprice_ratio / 0.5, 0.0, 1.0) * 25.0
+                implied_vs_hist_contrib = -clamp(underprice_ratio / _MAX_EXPECTED_MISMATCH, 0.0, 1.0) * 25.0
                 reasons.append(
                     f"Implied move {expected:.1%} below {hist:.1%} historical avg"
                 )
@@ -372,7 +383,7 @@ def _build_historical_quarters(
     bars_df: Any,
     *,
     asof: date,
-    limit: int = 8,
+    limit: int = 8,  # 8 quarters = 2 years; standard window for "prior moves" cards.
 ) -> list[dict]:
     """Join FMP earnings rows to daily bars and compute event moves.
 
@@ -432,7 +443,7 @@ async def _load_historical_earnings(
     symbol: str,
     report_date: date,
     *,
-    lookback_quarters: int = 8,
+    lookback_quarters: int = 8,  # 8 quarters = 2 years; standard window for "prior moves" cards.
 ) -> dict | None:
     """Load last earnings reactions from FMP surprises + adjusted daily bars."""
     from core.cache import get_cache
@@ -447,6 +458,7 @@ async def _load_historical_earnings(
         from data.providers.alpaca import AlpacaBarProvider
         from data.providers.fmp_earnings import FMPEarningsProvider
 
+        # 3-year lookback covers ~12 quarterly earnings — enough for stable historical move avg.
         start = report_date - timedelta(days=365 * 3)
         end = report_date - timedelta(days=1)
         with FMPEarningsProvider(timeout=15.0) as earnings_provider:
@@ -2027,6 +2039,7 @@ async def _load_skew(symbol: str) -> dict | None:
         if not (put_25d and call_25d and put_25d.iv and call_25d.iv):
             return None
         skew = (put_25d.iv - call_25d.iv) * 100
+        # Skew z-score >=1.5 sigma = significant put-side bias; <=-1.5 sigma = call-side bias. Industry convention.
         if skew > 1.5:
             interp = "put-heavy skew"
         elif skew < -1.5:

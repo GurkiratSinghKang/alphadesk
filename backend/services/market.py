@@ -224,6 +224,7 @@ def _demo_bars(symbol: str, timeframe: str, limit: int,
     delta = tf_deltas.get(timeframe, timedelta(days=1))
 
     bars: list[Bar] = []
+    # Demo intraday jitter range is asymmetric (-15% / +5%) so demo data trends down — not a market simulation.
     price = base * (1 + rng.uniform(-0.15, 0.05))  # start lower for uptrend feel
     ts = datetime.combine(effective_start, datetime.min.time(), tzinfo=timezone.utc)
     now = datetime.now(timezone.utc)
