@@ -292,9 +292,14 @@ export default function PositionsList({
                   </td>
 
                   <td className="align-middle text-right py-2.5 pr-[18px]">
-                    <div className="text-right flex flex-col">
-                      <PnLNumber value={p.pnl} format="currency" className="text-numeric-lg font-medium" />
-                      <PnLNumber
+                    {/* a11y: row P&L is a live-updating numeric value;
+                        wrap in aria-live polite + atomic so SR users hear
+                        the new figure as ticks arrive. React's
+                        useDeferredValue is applied at the value level via
+                        ``DeferredPnL`` to avoid an announcement storm. */}
+                    <div className="text-right flex flex-col" aria-live="polite" aria-atomic="true">
+                      <DeferredPnL value={p.pnl} format="currency" className="text-numeric-lg font-medium" />
+                      <DeferredPnL
                         value={p.pnlPct}
                         format="percent"
                         className="text-base font-medium mt-[1px]"
@@ -395,6 +400,33 @@ export default function PositionsList({
 }
 
 // ─── Local helpers for Orders tab ────────────────────────────
+
+/**
+ * Defer P&L numeric updates so screen readers in the row's aria-live
+ * region don't announce every websocket tick. ``useDeferredValue``
+ * yields a stable older value during high-frequency updates.
+ */
+function DeferredPnL({
+  value,
+  format,
+  className,
+  tone,
+}: {
+  value: number;
+  format: "currency" | "percent";
+  className?: string;
+  tone?: "loss";
+}) {
+  const deferred = React.useDeferredValue(value);
+  return (
+    <PnLNumber
+      value={deferred}
+      format={format}
+      className={className}
+      tone={tone}
+    />
+  );
+}
 
 function orderTypeLabel(t: OrderRow["type"]): string {
   if (t === "stop_limit") return "stop-limit";

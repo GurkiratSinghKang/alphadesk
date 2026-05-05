@@ -50,14 +50,17 @@ async def test_check_exits_covers_short_take_profit(monkeypatch: pytest.MonkeyPa
         def record_exit(self, symbol: str, shares: int, price: float, reason: str, side: str | None = None) -> None:
             exits.append({"symbol": symbol, "shares": shares, "price": price, "reason": reason, "side": side})
 
-    async def _positions(client: Any) -> list[dict]:
+    async def _positions(client: Any, **kwargs: Any) -> list[dict]:
         return [{"symbol": "TSLA", "current_price": "90"}]
 
-    async def _order(client: Any, symbol: str, qty: int, side: str, strategy: str = "unknown") -> dict:
+    async def _order(
+        client: Any, symbol: str, qty: int, side: str, strategy: str = "unknown",
+        **kwargs: Any,
+    ) -> dict:
         calls.append({"symbol": symbol, "qty": qty, "side": side, "strategy": strategy})
         return {"id": "cover-1", "status": "accepted"}
 
-    async def _fill(client: Any, order_id: str) -> float:
+    async def _fill(client: Any, order_id: str, **kwargs: Any) -> float:
         return 90.0
 
     monkeypatch.setattr(dp, "_get_positions", _positions)
@@ -88,7 +91,11 @@ async def test_ensure_stop_orders_uses_buy_stop_for_short(monkeypatch: pytest.Mo
                 "strategy": "pairs_trading",
             }]
 
-    async def _stop(client: Any, symbol: str, qty: int, stop_price: float, side: str = "sell", strategy: str = "unknown") -> dict:
+    async def _stop(
+        client: Any, symbol: str, qty: int, stop_price: float,
+        side: str = "sell", strategy: str = "unknown",
+        **kwargs: Any,
+    ) -> dict:
         placed.append({"symbol": symbol, "qty": qty, "stop_price": stop_price, "side": side, "strategy": strategy})
         return {"id": "stop-1"}
 
@@ -129,7 +136,10 @@ async def test_execute_approved_orders_respects_trade_cap_inside_batch(
         existing_positions: dict[str, dict] = {}
         cash = 10_000.0
 
-    async def _order(client: Any, symbol: str, qty: int, side: str, strategy: str = "unknown") -> dict:
+    async def _order(
+        client: Any, symbol: str, qty: int, side: str, strategy: str = "unknown",
+        **kwargs: Any,
+    ) -> dict:
         calls.append({"symbol": symbol, "qty": qty, "side": side, "strategy": strategy})
         return {"id": f"{symbol}-1", "status": "accepted"}
 
@@ -174,7 +184,10 @@ async def test_sell_signal_without_open_position_never_opens_short(
             {"strategy": "pead", "symbol": "AAPL", "side": "sell", "shares": 5, "entry_price": 180.0},
         ]
 
-    async def _order(client: Any, symbol: str, qty: int, side: str, strategy: str = "unknown") -> dict:
+    async def _order(
+        client: Any, symbol: str, qty: int, side: str, strategy: str = "unknown",
+        **kwargs: Any,
+    ) -> dict:
         calls.append({"symbol": symbol, "qty": qty, "side": side, "strategy": strategy})
         return {"id": "bad-short", "status": "accepted"}
 
@@ -215,7 +228,10 @@ async def test_sell_signal_cannot_exit_more_than_tracked_open_shares(
             {"strategy": "pead", "symbol": "AAPL", "side": "sell", "shares": 5, "entry_price": 180.0},
         ]
 
-    async def _order(client: Any, symbol: str, qty: int, side: str, strategy: str = "unknown") -> dict:
+    async def _order(
+        client: Any, symbol: str, qty: int, side: str, strategy: str = "unknown",
+        **kwargs: Any,
+    ) -> dict:
         calls.append({"symbol": symbol, "qty": qty, "side": side, "strategy": strategy})
         return {"id": "too-large", "status": "accepted"}
 

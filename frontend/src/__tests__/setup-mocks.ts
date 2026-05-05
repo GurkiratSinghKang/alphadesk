@@ -88,6 +88,31 @@ vi.mock('@/lib/api', async (importOriginal) => {
     getPipelinePositions: vi.fn().mockResolvedValue({ positions: [], performance: {} }),
     getPortfolioSummary: vi.fn().mockResolvedValue({ equity: 100000, cash: 95000, buying_power: 200000, total_market_value: 5000, unrealized_pnl: 0, unrealized_pnl_pct: 0, realized_pnl_today: 0, positions_count: 0 }),
     getQuote: vi.fn().mockResolvedValue({ symbol: 'SPY', last: 679, bid: 678.9, ask: 679.1, volume: 1000000, high: 680, low: 678, open: 679, close: 679, change: 0, changePct: 0, timestamp: Date.now() }),
+    // R6-5 follow-up: getSnapshot powers the multi-leg leg-readiness gate
+    // on /trade. Default to a permissive happy-path that resolves every
+    // requested OCC to a synthetic quote so existing tests that exercise
+    // the submit path don't trip the new "leg quote missing" blocker.
+    // Tests that want to simulate a leg outage can override per-test.
+    getSnapshot: vi.fn().mockImplementation(async (symbols: string[]) => {
+      const out: Record<string, unknown> = {};
+      for (const s of symbols) {
+        out[s] = {
+          symbol: s,
+          last: 1.45,
+          bid: 1.4,
+          ask: 1.5,
+          volume: 100,
+          high: 1.5,
+          low: 1.4,
+          open: 1.45,
+          close: 1.45,
+          change: 0,
+          changePct: 0,
+          timestamp: Date.now(),
+        };
+      }
+      return out;
+    }),
     getMarketDepth: vi.fn().mockResolvedValue({ symbol: 'SPY', kind: 'top_of_book', provider: 'test', bids: [{ price: 678.9, size: 100 }], asks: [{ price: 679.1, size: 100 }], timestamp: Date.now(), isL2: false, isDemo: false, notes: [] }),
     getMarketDepthCapabilities: vi.fn().mockResolvedValue({ activeKind: 'top_of_book', trueL2Available: false, providers: [], notes: [] }),
     getBars: vi.fn().mockResolvedValue([]),

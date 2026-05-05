@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -18,6 +20,51 @@ from services.broker_connections import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+# Audit B-F12 (2026-05-05): the broker connection write endpoints
+# (POST /connections/alpaca, POST /connections/{provider}, DELETE
+# /connections/{id}) and the reconciliation kicker (POST
+# /reconciliation/run) shipped behind ``require_auth`` only — no rate
+# limit. A single authenticated user could pound them and exhaust DB
+# round-trips, Alpaca's verify endpoint, and the reconciler's outbound
+# fan-out. Apply a per-user fixed-window cap (very generous; this is
+# DoS protection, not abuse-accounting).
+_BROKER_WRITE_RL_PER_MINUTE = 30
+_BROKER_RECONCILE_RL_PER_MINUTE = 6
+
+
+async def _broker_rate_limit_or_429(
+    username: str, action: str, *, cap: int = _BROKER_WRITE_RL_PER_MINUTE
+) -> None:
+    """Rate-limit broker write operations per (user, action) per minute."""
+    try:
+        from core.redis import get_redis
+        bucket = int(time.time()) // 60
+        key = f"broker_rl:{action}:{username}:{bucket}"
+        r = await get_redis()
+        pipe = r.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, 60)
+        results = await pipe.execute()
+        current = int(results[0] or 0)
+    except Exception:
+        # Fail open on Redis outage — same posture as the market route.
+        logger.warning("broker rate-limit: redis failure, failing open", exc_info=True)
+        return
+
+    if current > cap:
+        retry_after = max(1, 60 - (int(time.time()) % 60))
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "rate_limited",
+                "message": f"Too many broker {action} requests. Please slow down.",
+                "retry_after_seconds": retry_after,
+            },
+            headers={"Retry-After": str(retry_after)},
+        )
 
 
 class AlpacaConnectionRequest(BaseModel):
@@ -67,6 +114,7 @@ async def save_alpaca_connection(
     request: AlpacaConnectionRequest,
     username: str = Depends(require_auth),
 ) -> dict[str, Any]:
+    await _broker_rate_limit_or_429(username, "save_alpaca")
     try:
         row = await upsert_alpaca_connection(
             username=username,
@@ -86,6 +134,7 @@ async def save_broker_connection(
     request: BrokerConnectionRequest,
     username: str = Depends(require_auth),
 ) -> dict[str, Any]:
+    await _broker_rate_limit_or_429(username, "save_provider")
     provider_key = provider.strip().lower()
     if provider_key not in {"alpaca", "ibkr", "etrade", "schwab"}:
         raise HTTPException(status_code=422, detail="Unsupported broker provider")
@@ -111,6 +160,7 @@ async def disable_connection(
     connection_id: int,
     username: str = Depends(require_auth),
 ) -> None:
+    await _broker_rate_limit_or_429(username, "delete_connection")
     from core.config import settings
     if settings.SKIP_DB_INIT:
         return
@@ -153,6 +203,11 @@ async def list_reconciliation_issues(
 
 @router.post("/reconciliation/run")
 async def run_reconciliation_now(username: str = Depends(require_auth)) -> dict[str, int]:
+    # Tighter cap on reconciliation than on credential writes — each call
+    # spawns Alpaca round-trips and DB scans, so 6/min is plenty.
+    await _broker_rate_limit_or_429(
+        username, "reconciliation_run", cap=_BROKER_RECONCILE_RL_PER_MINUTE
+    )
     try:
         creds = await get_alpaca_credentials(username)
     except BrokerCredentialError as exc:

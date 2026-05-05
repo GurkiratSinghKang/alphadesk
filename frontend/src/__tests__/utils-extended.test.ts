@@ -30,8 +30,12 @@ describe('cn utility', () => {
   });
 
   it('deduplicates conflicting text colors', () => {
-    const result = cn('text-red-500', 'text-blue-500');
-    expect(result).toBe('text-blue-500');
+    // QA r6-2 — switched from raw Tailwind palettes (text-red-500/text-blue-500)
+    // to AlphaDesk semantic tokens. The eslint palette guard now bans the raw
+    // forms project-wide; the dedup behaviour we're verifying still holds for
+    // any text-color class twMerge knows about.
+    const result = cn('text-up-500', 'text-down-500');
+    expect(result).toBe('text-down-500');
   });
 });
 

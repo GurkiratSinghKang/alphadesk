@@ -320,10 +320,20 @@ async def agent_chat(
             timestamp=datetime.now(timezone.utc),
         )
     except Exception as exc:
+        # Audit B-F13 (2026-05-05): the previous handler interpolated
+        # ``str(exc)[:200]`` into the response body, leaking internal
+        # error details (stack frame strings, third-party library
+        # error formats, occasionally connection-string fragments) to
+        # any caller hitting this endpoint. Log the full exception
+        # server-side; return a generic message to the client.
+        logger.exception(
+            "agent_chat handler raised; returning generic error to client",
+            extra={"exc_type": type(exc).__name__},
+        )
         conversation_id = request.conversation_id or str(uuid.uuid4())
         return ChatResponse(
             conversation_id=conversation_id,
-            message=f"Agent system encountered an error: {str(exc)[:200]}. Please check your configuration.",
+            message="Agent system encountered an error. Please try again or check the server logs.",
             actions_taken=[],
             suggestions=["Check API keys in .env", "Try again"],
             timestamp=datetime.now(timezone.utc),
@@ -523,5 +533,7 @@ async def refine_strategy(
             }
 
     except Exception as exc:
+        # Audit B-F13 (2026-05-05): same response-leakage as the chat
+        # handler above. Log full exception server-side; return generic.
         logger.error("Strategy refinement failed: %s", exc, exc_info=True)
-        return {"error": True, "message": f"Strategy refinement failed: {str(exc)[:200]}"}
+        return {"error": True, "message": "Strategy refinement failed. Check server logs for details."}

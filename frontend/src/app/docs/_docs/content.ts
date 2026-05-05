@@ -45,7 +45,7 @@ export const DOC_SECTIONS: DocSection[] = [
     index: "04",
     title: "Strategies",
     content: [
-      "AlphaDesk runs twelve parallel strategies across fundamental, technical, and options books. All share the same execution layer, risk policy, and audit trail.",
+      "AlphaDesk runs nineteen catalogued strategies (twelve currently active) across fundamental, technical, and options books. All share the same execution layer, risk policy, and audit trail.",
       "Fundamental / regime books: Cross-Sectional Momentum + Quality (momentum-quality), Post-Earnings Announcement Drift (PEAD), Systematic VRP Harvesting, Earnings Volatility Premium, HMM Regime-Adaptive Allocation, and Claude Alpha — the AI-driven adaptive sleeve.",
       "Technical books: Time-Series Momentum (ts-momentum), RSI-2 Mean Reversion (rsi2-reversal), Dual Momentum, Statistical Arbitrage Pairs (pairs-trading), KAMA + ATR Breakout (kama-breakout), Opening Range Breakout (ORB), and VWAP Bounce / Breakout.",
       "The full registry with descriptions and regime notes lives in lib/strategies.ts and is the source of truth. Toggle any strategy on or off from the Strategy Grid. Click a card to open its detail page: full performance history, open positions, monthly return heatmap, correlations, conviction distribution, and hold-time statistics.",

@@ -31,49 +31,60 @@ export interface StrategyTemplate {
   icon: typeof Shield;
 }
 
+// Batch B (P1-10) — TEMPLATES used to list 0-live strategies (claude-alpha,
+// mean-reversion, vcp-breakout, dividend-capture, gap-fill — all marked
+// `maxPositions: '0 live'` in strategy-content.ts) inside recommended
+// bundles, alongside hard-coded `sharpeRange` / `typicalDrawdown` strings
+// that were never derived from a backtest. The Sharpe and drawdown numbers
+// kept for the templates below correspond to bundles that contain ONLY live
+// strategies; bundles that included a 0-live strategy had that strategy
+// dropped (rather than published a fabricated metric range that conflated
+// research stubs with production behavior). When the dropped strategies
+// graduate to live, restore them to their parent bundle and update the
+// metric ranges from a real backtest.
 const TEMPLATES: StrategyTemplate[] = [
   {
     id: "conservative-income",
     name: "Conservative Income",
     description:
-      "Dividend capture paired with covered calls for steady income generation with minimal downside risk.",
+      "VRP harvesting for steady income generation with minimal downside risk.",
     riskLevel: "low",
     sharpeRange: "0.8 - 1.2",
     typicalDrawdown: "3 - 5%",
-    strategies: ["dividend-capture", "vrp-harvesting"],
+    strategies: ["vrp-harvesting"],
     icon: Shield,
   },
   {
     id: "aggressive-growth",
     name: "Aggressive Growth",
     description:
-      "Momentum-driven breakout strategies targeting high-growth equities with strong technical setups.",
+      "Momentum-driven strategies targeting high-growth equities with strong technical setups.",
     riskLevel: "high",
     sharpeRange: "1.2 - 2.0",
     typicalDrawdown: "12 - 20%",
-    strategies: ["momentum-quality", "vcp-breakout"],
+    strategies: ["momentum-quality"],
     icon: Rocket,
   },
   {
     id: "market-neutral",
     name: "Market Neutral",
     description:
-      "Delta-neutral approach combining pairs trading and mean reversion to profit regardless of market direction.",
+      "Delta-neutral statistical-arbitrage pairs trading to profit regardless of market direction.",
     riskLevel: "medium",
     sharpeRange: "1.0 - 1.6",
     typicalDrawdown: "5 - 8%",
-    strategies: ["pairs-trading", "mean-reversion"],
+    strategies: ["pairs-trading"],
     icon: GitMerge,
   },
   {
     id: "ai-powered",
     name: "AI-Powered",
     description:
-      "Claude Alpha intelligence combined with regime-adaptive allocation for AI-driven alpha generation.",
+      "Regime-adaptive allocation that rotates between live AlphaDesk strategies based on the current market regime.",
     riskLevel: "medium",
     sharpeRange: "1.1 - 1.8",
     typicalDrawdown: "6 - 10%",
-    strategies: ["claude-alpha", "regime-adaptive"],
+    strategies: ["regime-adaptive"],
     icon: Brain,
   },
   {
@@ -105,10 +116,14 @@ const ALL_STRATEGY_IDS = [
   "manual-discretionary",
 ];
 
+// QA r6-2 — risk tier chip palette migrated off raw Tailwind palettes
+// (emerald/amber/red) to AlphaDesk semantic tokens. low=profit (chartreuse),
+// medium=state-warning (mustard), high=loss (coral). Stays consistent with
+// the rest of the risk-color story in DepthHeatStripe / StressTest.
 const RISK_COLORS: Record<string, string> = {
-  low: "border-emerald-500/40 text-emerald-400 bg-emerald-500/10",
-  medium: "border-amber-500/40 text-amber-400 bg-amber-500/10",
-  high: "border-red-500/40 text-red-400 bg-red-500/10",
+  low: "border-[var(--profit)]/40 text-[var(--profit)] bg-[var(--profit)]/10",
+  medium: "border-state-warning/40 text-state-warning bg-state-warning/10",
+  high: "border-[var(--loss)]/40 text-[var(--loss)] bg-[var(--loss)]/10",
 };
 
 // ─── Template Card ──────────────────────────────────────────
@@ -128,7 +143,7 @@ function TemplateCard({
   return (
     <div
       className={cn(
-        "rounded-xl border bg-[var(--surface)] p-4 transition-all",
+        "rounded-xl border bg-[var(--bg-card)] p-4 transition-all",
         isActive
           ? "border-primary/50 ring-1 ring-primary/20"
           : "border-border hover:border-border/80"

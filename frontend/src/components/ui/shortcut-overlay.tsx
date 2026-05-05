@@ -135,7 +135,7 @@ export function ShortcutOverlay({ onClose }: { onClose: () => void }) {
       <div
         ref={contentRef}
         tabIndex={-1}
-        className="w-[calc(100vw-1rem)] sm:w-full max-w-[640px] max-h-[88vh] sm:max-h-[80vh] flex flex-col rounded-xl border border-border bg-[var(--surface)] shadow-2xl shadow-black/40 outline-none"
+        className="w-[calc(100vw-1rem)] sm:w-full max-w-[640px] max-h-[88vh] sm:max-h-[80vh] flex flex-col rounded-xl border border-border bg-[var(--bg-card)] shadow-2xl shadow-black/40 outline-none"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >

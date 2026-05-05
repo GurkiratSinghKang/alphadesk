@@ -498,7 +498,7 @@ async def _delete_username_keyed_redis_keys(username: str) -> int:
 @router.post("/export")
 async def export_user_data(
     req: Request,
-    username: str = Depends(require_auth),
+    username: str = Depends(require_admin),
 ) -> Response:
     """GDPR Art. 20 — right to data portability.
 
@@ -512,6 +512,13 @@ async def export_user_data(
     comfortably fits the payload budget.  If the bundle ever blows past
     ~50 MB we can switch to ``StreamingResponse`` without touching the
     caller contract.
+
+    Audit B-F2 (2026-05-05): ``_collect_export_bundle`` does not filter
+    Trade/Position/Watchlist/ScreenerPreset/Alert/StrategySignal by
+    username (those tables don't carry a username column). Until the
+    multi-tenant migration adds those columns, this endpoint is
+    restricted to ``require_admin`` so a non-admin user cannot extract
+    every other user's records via their own export.
     """
     bundle = await _collect_export_bundle(username)
 
@@ -549,7 +556,7 @@ async def export_user_data(
 @router.get("/erase/preview")
 async def erase_preview(
     req: Request,
-    username: str = Depends(require_auth),
+    username: str = Depends(require_admin),
 ) -> dict[str, Any]:
     """Dry-run counts for ``POST /api/v1/user/erase``.
 
@@ -584,9 +591,19 @@ async def erase_preview(
 async def erase_user_data(
     body: EraseRequest,
     req: Request,
-    username: str = Depends(require_auth),
+    username: str = Depends(require_admin),
 ) -> JSONResponse:
     """GDPR Art. 17 — right to erasure.
+
+    Audit B-F1 (2026-05-05): the erasure path issues table-wide
+    ``DELETE FROM ...`` against Trade/Position/Watchlist/ScreenerPreset/
+    Alert/StrategySignal with NO ``WHERE username = ...`` clause (most
+    of those tables lack a ``username`` column entirely). In a
+    single-admin deployment this is harmless because the admin IS the
+    only user — but ``POST /admin/users`` allows non-admin users to be
+    created. A non-admin calling /erase with their own password would
+    wipe the admin's books too. Restricted to ``require_admin`` until
+    the multi-tenant migration adds username columns to all six tables.
 
     Cascades across every user-owned table + Redis.  Retention-mandated
     audit rows (SEC 17a-4) are flagged rather than deleted so the system

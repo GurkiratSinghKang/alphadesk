@@ -757,7 +757,7 @@ export default function StrategyDetailPage() {
       {/* § 01 Signal */}
       {content ? (
         <section className="flex flex-col gap-6">
-          <SectionRule tag="§ 01 · Signal" />
+          <SectionRule tag="§ 01 · Signal" tagAs="h2" className="t-h2" />
           <SignalSection
             thesis={content.thesis}
             edge={content.edge}
@@ -768,7 +768,7 @@ export default function StrategyDetailPage() {
 
       {/* § 02 Performance */}
       <section className="flex flex-col gap-6">
-        <SectionRule tag="§ 02 · Performance" />
+        <SectionRule tag="§ 02 · Performance" tagAs="h2" className="t-h2" />
         {perf ? (
           <EquityPanel
             data={equityData}
@@ -787,7 +787,7 @@ export default function StrategyDetailPage() {
 
       {/* § 03 Positions */}
       <section className="flex flex-col gap-6">
-        <SectionRule tag="§ 03 · Positions" />
+        <SectionRule tag="§ 03 · Positions" tagAs="h2" className="t-h2" />
         <PositionsSection
           positions={positions}
           strategyLabel={meta.shortName}
@@ -796,7 +796,7 @@ export default function StrategyDetailPage() {
 
       {/* § 04 Health (kill-switch). Admin-only — quietly hides for non-admins. */}
       <section className="flex flex-col gap-6">
-        <SectionRule tag="§ 04 · Health" />
+        <SectionRule tag="§ 04 · Health" tagAs="h2" className="t-h2" />
         <KillSwitchStatusPanel
           strategyId={strategyId}
           strategyName={meta.shortName ?? meta.name ?? strategyId}
@@ -806,7 +806,7 @@ export default function StrategyDetailPage() {
       {/* § 05 References */}
       {academicSources.length > 0 ? (
         <section className="flex flex-col gap-4">
-          <SectionRule tag="§ 05 · References" />
+          <SectionRule tag="§ 05 · References" tagAs="h2" className="t-h2" />
           <ul className="flex flex-col gap-2">
             {academicSources.map((src, i) => (
               <li
@@ -823,7 +823,7 @@ export default function StrategyDetailPage() {
       {/* § 06 Known limitations */}
       {knownLimitations.length > 0 ? (
         <section className="flex flex-col gap-4">
-          <SectionRule tag="§ 06 · Known limitations" />
+          <SectionRule tag="§ 06 · Known limitations" tagAs="h2" className="t-h2" />
           <LimitationsSection items={knownLimitations} />
         </section>
       ) : null}

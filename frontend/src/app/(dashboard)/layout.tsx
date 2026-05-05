@@ -322,9 +322,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       {/* BUG-037: use the shared build version env so this footer and the
           desk StatusBar quote the same stamp. Without this, non-desk pages
           showed "v1.0" while the desk StatusBar read `NEXT_PUBLIC_BUILD_VERSION`
-          (e.g. "2025.10.18-a1b2c3d"). */}
+          (e.g. "2025.10.18-a1b2c3d").
+          Batch E P0-04: drop the literal "dev" copy on prod-bundle paths.
+          When NEXT_PUBLIC_BUILD_VERSION is unset (only happens in dev or
+          a misconfigured prod), the footer reads simply "AlphaDesk" — no
+          fake "dev" tag bleeding into the marketing footer of a customer
+          deploy. The version stamp is still rendered when a real one is
+          provided so prod retains the deploy-tracking string. */}
       <footer role="contentinfo" className="relative z-0 border-t border-border/50 bg-ink-050/88 px-4 py-3 text-center text-label text-muted-foreground">
-        AlphaDesk {process.env.NEXT_PUBLIC_BUILD_VERSION ?? "dev"} — Built on Claude — &copy; {new Date().getFullYear()}
+        AlphaDesk{process.env.NEXT_PUBLIC_BUILD_VERSION ? ` v${process.env.NEXT_PUBLIC_BUILD_VERSION}` : ""} — Built on Claude — &copy; {new Date().getFullYear()}
       </footer>
       <CommandPalette />
       <AICopilot />

@@ -1,8 +1,39 @@
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
+
+// AlphaDesk type-token classes (`text-eyebrow`, `text-label`, `text-body`,
+// `text-h1`, `text-display-md`, …) are not Tailwind built-ins, so the bare
+// `twMerge` puts them in the same conflict group as colour utilities like
+// `text-primary-foreground`. Result: `cn("text-label", "text-primary-foreground")`
+// drops the colour, leaving the gold "Create alert" CTA invisible on a gold
+// background. Register the tokens as their own font-size group so size-tokens
+// and colour-tokens can coexist on the same element.
+const merge = extendTailwindMerge({
+  override: {
+    classGroups: {
+      "font-size": [
+        {
+          text: [
+            "eyebrow",
+            "label",
+            "body-sm",
+            "body",
+            "h1",
+            "h2",
+            "h3",
+            "display-sm",
+            "display-md",
+            "display-lg",
+            "display-xl",
+          ],
+        },
+      ],
+    },
+  },
+});
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+  return merge(clsx(inputs));
 }
 
 // ─── Currency & Number Formatting ────────────────────────────

@@ -25,6 +25,10 @@ from typing import Any, Iterable
 
 logger = logging.getLogger(__name__)
 
+# P1-14: schema DDL is process-wide idempotent — only run once per process
+# instead of on every TradeLedger() construction.
+_schema_ensured: bool = False
+
 
 # ---------------------------------------------------------------------------
 # Money math helpers
@@ -198,6 +202,61 @@ def _ensure_schema(engine: Any) -> None:
             conn.execute(_text(stmt))
 
 
+def _fetch_alpaca_closed_fill_price(symbol: str) -> float | None:
+    """P1-25: best-effort lookup of the most recent filled exit price for ``symbol``.
+
+    Hits Alpaca's ``GET /v2/orders?status=closed&symbols={symbol}`` and
+    returns the ``filled_avg_price`` of the most recent fill, or ``None``
+    when the broker is unconfigured / unreachable / has no usable record.
+    Synchronous httpx because ``sync_with_alpaca`` is sync.
+    """
+    try:
+        from core.config import settings
+
+        api_key = settings.ALPACA_API_KEY.get_secret_value()
+        secret_key = settings.ALPACA_SECRET_KEY.get_secret_value()
+        if not api_key or not secret_key:
+            return None
+        base_url = getattr(
+            settings, "ALPACA_BASE_URL", "https://paper-api.alpaca.markets"
+        )
+        import httpx
+
+        with httpx.Client(timeout=5.0) as client:
+            resp = client.get(
+                f"{base_url}/v2/orders",
+                params={
+                    "status": "closed",
+                    "symbols": symbol,
+                    "limit": 50,
+                    "direction": "desc",
+                },
+                headers={
+                    "APCA-API-KEY-ID": api_key,
+                    "APCA-API-SECRET-KEY": secret_key,
+                },
+            )
+        if resp.status_code != 200:
+            return None
+        orders = resp.json() or []
+        for order in orders:
+            if (order.get("status") or "").lower() != "filled":
+                continue
+            price = order.get("filled_avg_price")
+            if price in (None, "", 0, "0"):
+                continue
+            try:
+                return float(price)
+            except (TypeError, ValueError):
+                continue
+        return None
+    except Exception as exc:  # broker hiccup is non-fatal
+        logger.warning(
+            "TradeLedger: failed to recover fill price for %s: %s", symbol, exc
+        )
+        return None
+
+
 def _row_to_dict(row: Any) -> dict[str, Any]:
     """Convert a SQLAlchemy Row to the legacy dict shape."""
     m = dict(row._mapping) if hasattr(row, "_mapping") else dict(row)
@@ -251,10 +310,13 @@ class TradeLedger:
     def __init__(self) -> None:
         self._engine = _get_sync_engine()
         if self._engine is not None:
-            try:
-                _ensure_schema(self._engine)
-            except Exception as exc:
-                logger.warning("TradeLedger: schema failure: %s", exc)
+            global _schema_ensured
+            if not _schema_ensured:
+                try:
+                    _ensure_schema(self._engine)
+                    _schema_ensured = True
+                except Exception as exc:
+                    logger.warning("TradeLedger: schema failure: %s", exc)
         # Legacy compatibility for callers that poke at ledger._data["trades"]
         self._data: Any = _LegacyDataView(self)
 
@@ -653,6 +715,8 @@ class TradeLedger:
             "take_profit", "conviction", "rationale", "strategy", "status",
             "exit_price", "exit_time", "exit_reason", "pnl", "pnl_pct",
             "side",
+            # Audit P1-5: per-user scoping requires username filterability.
+            "username",
         }
         bad = [k for k in filter if k not in allowed]
         if bad:
@@ -730,6 +794,8 @@ class TradeLedger:
             "take_profit", "conviction", "rationale", "strategy", "status",
             "exit_price", "exit_time", "exit_reason", "pnl", "pnl_pct",
             "side",
+            # Audit P1-5: per-user scoping requires username filterability.
+            "username",
         }
         if order_by not in allowed:
             raise ValueError(
@@ -975,16 +1041,26 @@ class TradeLedger:
                 # meaningful signal only when we know the broker answered.
                 if broker_probably_degraded:
                     continue
-                # Even here we don't have a fill price, so leave pnl=null
-                # and log that it's a soft close for manual review.
-                self.update(trade["id"], {
+                # P1-25: try to recover a fill price from /v2/orders so we
+                # can record a real pnl rather than null. If no price is
+                # available, mark the close with a distinct exit_reason
+                # (`alpaca_sync_absent_no_price`) so the performance
+                # aggregator can choose to exclude these incomplete rows.
+                fill_price = _fetch_alpaca_closed_fill_price(sym)
+                close_patch: dict[str, Any] = {
                     "status": "closed",
                     "exit_time": datetime.now(timezone.utc).isoformat(),
-                    "exit_reason": "alpaca_sync_absent",
-                })
+                }
+                if fill_price is not None and fill_price > 0:
+                    close_patch["exit_price"] = fill_price
+                    close_patch["exit_reason"] = "alpaca_sync_absent"
+                else:
+                    close_patch["exit_reason"] = "alpaca_sync_absent_no_price"
+                self.update(trade["id"], close_patch)
                 closed.append(sym)
                 logger.info(
-                    "Ledger sync: closed %s (absent from Alpaca response)", sym,
+                    "Ledger sync: closed %s (absent from Alpaca response, exit_price=%s)",
+                    sym, close_patch.get("exit_price"),
                 )
 
         # BUG-018: deterministic microsecond offsets so a batch of trades

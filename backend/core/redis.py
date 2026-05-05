@@ -289,14 +289,37 @@ async def cache_incr(key: str, *, ttl_seconds: int = 86_400) -> int | None:
     and twice the round-trips a Redis ``INCR`` would take. This helper
     collapses the pattern to a single atomic ``INCR`` + ``EXPIRE``.
 
+    Audit B-F11 (2026-05-05): the original implementation issued INCR
+    and EXPIRE as separate round-trips. If the worker crashed (or the
+    Redis connection dropped) between the two, the freshly-created
+    counter key would persist with no TTL — a memory leak per missing
+    EXPIRE. Replaced with a single Lua EVAL that performs both ops
+    atomically inside Redis. The ``incr`` + best-effort ``expire``
+    fallback path is kept for clients that don't support EVAL.
+
     Returns the new counter value, or ``None`` when Redis is
     unreachable (caller treats as best-effort metric).
     """
+    _LUA = (
+        "local v = redis.call('INCR', KEYS[1])\n"
+        "if tonumber(ARGV[1]) > 0 then\n"
+        "  redis.call('EXPIRE', KEYS[1], ARGV[1])\n"
+        "end\n"
+        "return v\n"
+    )
     try:
         r = await get_redis()
-        new = await r.incr(key)
-        if ttl_seconds > 0:
-            await r.expire(key, ttl_seconds)
-        return int(new)
+        try:
+            new = await r.eval(_LUA, 1, key, str(ttl_seconds))
+            return int(new)
+        except Exception:
+            # Best-effort fallback for redis clients without EVAL.
+            new = await r.incr(key)
+            if ttl_seconds > 0:
+                try:
+                    await r.expire(key, ttl_seconds)
+                except Exception:
+                    pass
+            return int(new)
     except Exception:
         return None

@@ -6,8 +6,10 @@
  * or fetch. Import the shared prop types from `./types`.
  */
 
-export { default as TopBar } from "./TopBar";
-export type { TopBarProps } from "./TopBar";
+// chrome-batch-D P1-02 — composites/TopBar removed in favour of the
+// canonical `@/components/layout/TopBar`. There is now exactly one
+// TopBar in the codebase; the desk and every other dashboard route
+// render the same component.
 
 export { default as ContextBar } from "./ContextBar";
 export type { ContextBarProps } from "./ContextBar";

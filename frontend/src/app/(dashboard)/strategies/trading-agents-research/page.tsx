@@ -260,16 +260,57 @@ function extractDollarLevels(text: string): LevelItem[] {
       if (seen.has(value)) continue;
       seen.add(value);
       const start = line.indexOf(match);
-      const context = start >= 0
-        ? line.slice(Math.max(0, start - 40), Math.min(line.length, start + match.length + 40))
-        : line;
-      const before = start >= 0 ? line.slice(Math.max(0, start - 44), start) : "";
-      const after = start >= 0 ? line.slice(start + match.length, Math.min(line.length, start + match.length + 44)) : "";
+      // R6-8 / R5-1 MAJOR (TradingAgents price-map labels): the original
+      // fixed-width 40/44-char window cut mid-word when the dollar value
+      // sat in the interior of a long sentence \u2014 producing render-time
+      // garbage like "d levels" (truncated "Demand levels") and
+      // "ion add zone" (truncated "Distribution add zone"). Snap each
+      // window to the nearest word boundary so the surrounding text
+      // either makes a complete word or starts cleanly after one.
+      const contextStart = start >= 0 ? snapToWordStart(line, Math.max(0, start - 40)) : 0;
+      const contextEnd = start >= 0
+        ? snapToWordEnd(line, Math.min(line.length, start + match.length + 40))
+        : line.length;
+      const context = line.slice(contextStart, contextEnd);
+      const beforeStart = start >= 0 ? snapToWordStart(line, Math.max(0, start - 44)) : 0;
+      const before = start >= 0 ? line.slice(beforeStart, start) : "";
+      const afterEnd = start >= 0
+        ? snapToWordEnd(line, Math.min(line.length, start + match.length + 44))
+        : line.length;
+      const after = start >= 0 ? line.slice(start + match.length, afterEnd) : "";
       levels.push({ value, label: levelLabel(context, value, before, after) });
       if (levels.length >= 6) return levels;
     }
   }
   return levels;
+}
+
+/**
+ * R6-8 / R5-1 MAJOR (TradingAgents price-map labels): walk a slice
+ * boundary backwards/forwards until it lands on whitespace (or a hard
+ * boundary like punctuation), so the resulting substring never starts
+ * or ends inside a word.
+ */
+function snapToWordStart(line: string, idx: number): number {
+  if (idx <= 0) return 0;
+  // If we're already at whitespace or sentence break, no work to do.
+  if (/[\s.,;:!?\-\u2013\u2014/]/.test(line[idx])) return idx;
+  // Walk backwards until we hit one. If we walk past a reasonable
+  // budget without finding one, fall back to the original index \u2014 we'd
+  // rather lose a few characters than blow past a long single token.
+  for (let i = idx; i > Math.max(0, idx - 20); i -= 1) {
+    if (/[\s.,;:!?\-\u2013\u2014/]/.test(line[i])) return i + 1;
+  }
+  return idx;
+}
+
+function snapToWordEnd(line: string, idx: number): number {
+  if (idx >= line.length) return line.length;
+  if (/[\s.,;:!?\-\u2013\u2014/]/.test(line[idx])) return idx;
+  for (let i = idx; i < Math.min(line.length, idx + 20); i += 1) {
+    if (/[\s.,;:!?\-\u2013\u2014/]/.test(line[i])) return i;
+  }
+  return idx;
 }
 
 function levelTone(label: string): LevelTone {
@@ -771,7 +812,7 @@ function ResearchBrief({
               </span>
             </div>
             <div className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2">
-              <h2 className="min-w-0 font-sans text-display-md font-semibold leading-none tracking-tight text-fg md:text-[54px]">
+              <h2 className="min-w-0 font-sans text-display-md font-semibold leading-none tracking-tight text-fg md:text-display-lg">
                 {runSymbol}
               </h2>
               <span className="mb-1 whitespace-nowrap rounded-pill border border-border bg-bg-elev-1 px-3 py-1.5 font-mono text-body-sm text-fg-muted md:text-numeric-md">
@@ -838,7 +879,7 @@ function ResearchBrief({
           <ArtifactPanel files={artifactFiles} />
           <div className="rounded-lg border border-border-hair bg-bg-elev-1 p-4">
             <p className="t-label text-fg-muted">Research guardrail</p>
-            <p className="mt-2 text-[12.5px] leading-relaxed text-fg-muted">
+            <p className="mt-2 text-body-sm leading-relaxed text-fg-muted">
               {run.advisory_disclaimer || "Research is informational and requires human review before trading."}
             </p>
           </div>
@@ -891,7 +932,7 @@ function MemoNavigator({ sections }: { sections: MemoSection[] }) {
             href={`#${memoSectionId(section.title, index)}`}
             className="group flex items-start justify-between gap-3 rounded-md border border-transparent px-2 py-2 transition duration-200 hover:border-border-hair hover:bg-bg-card"
           >
-            <span className="break-words text-[12.5px] leading-relaxed text-fg group-hover:text-brand">{section.title}</span>
+            <span className="break-words text-body-sm leading-relaxed text-fg group-hover:text-brand">{section.title}</span>
             <span className="shrink-0 font-mono text-eyebrow text-fg-hint">
               {memoSectionLineCount(section.body)} lines
             </span>
@@ -982,7 +1023,7 @@ function TickerFactPanel({ context }: { context: TickerContext | null }) {
             key={label}
             className="flex items-center justify-between gap-3 rounded-md border border-border-hair bg-bg-card px-3 py-2"
           >
-            <span className="font-sans text-[12.5px] text-fg">{label}</span>
+            <span className="font-sans text-body-sm text-fg">{label}</span>
             {fact ? (
               <span className="text-right font-mono text-eyebrow text-fg-muted">
                 <span className={tickerFactQualityClass(fact.freshness.quality)}>
@@ -1033,7 +1074,7 @@ function ReadableMemo({ body }: { body: string }) {
           return (
             <div key={`${index}-${line}`} className="flex gap-3">
               <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand/70" />
-              <p className="min-w-0 break-words text-[13.5px] leading-7 text-fg">
+              <p className="min-w-0 break-words text-body leading-7 text-fg">
                 {stripMarkdown(bullet[1])}
               </p>
             </div>
@@ -1044,7 +1085,7 @@ function ReadableMemo({ body }: { body: string }) {
           return (
             <div key={`${index}-${line}`} className="flex gap-3">
               <span className="mt-0.5 w-6 shrink-0 font-mono text-label text-brand">{numbered[1]}.</span>
-              <p className="min-w-0 break-words text-[13.5px] leading-7 text-fg">
+              <p className="min-w-0 break-words text-body leading-7 text-fg">
                 {stripMarkdown(numbered[2])}
               </p>
             </div>
@@ -1058,7 +1099,7 @@ function ReadableMemo({ body }: { body: string }) {
           );
         }
         return (
-          <p key={`${index}-${line}`} className="break-words text-[13.5px] leading-7 text-fg">
+          <p key={`${index}-${line}`} className="break-words text-body leading-7 text-fg">
             {clean}
           </p>
         );

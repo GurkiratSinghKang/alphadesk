@@ -67,9 +67,14 @@ export function AllocationDonut({ cash, invested, equity, buyingPower, unrealize
               transform={`rotate(-90 ${cx} ${cy})`}
               opacity={0.85}
             />}
-            {/* Center text */}
-            <text x={cx} y={cy - 6} textAnchor="middle" className="fill-muted-foreground" fontSize={9}>Total</text>
-            <text x={cx} y={cy + 10} textAnchor="middle" className="fill-foreground" fontSize={13} fontWeight={600}>
+            {/* Center text — P2-05: use inline style with raw CSS vars
+                rather than Tailwind `fill-*` aliases, which routed through
+                shadcn's `--muted-foreground`/`--foreground` aliases and
+                failed to resolve in some older Safari/Firefox SVG contexts.
+                `--fg-dim` and `--fg` are the source-of-truth tokens for
+                muted body text and primary text respectively. */}
+            <text x={cx} y={cy - 6} textAnchor="middle" style={{ fill: 'var(--fg-dim)' }} fontSize={9}>Total</text>
+            <text x={cx} y={cy + 10} textAnchor="middle" style={{ fill: 'var(--fg)' }} fontSize={13} fontWeight={600}>
               {formatCurrency(equity, true)}
             </text>
           </svg>
@@ -117,7 +122,7 @@ export function AllocationDonut({ cash, invested, equity, buyingPower, unrealize
         </div>
       </div>
       {isDemo && (
-        <div className="text-label text-blue-400/70 mt-1">Connect Alpaca API for live data</div>
+        <div className="text-label text-[var(--ice-500)]/70 mt-1">Connect Alpaca API for live data</div>
       )}
     </div>
   );

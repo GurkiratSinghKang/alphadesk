@@ -56,7 +56,7 @@ export default function DocsPage() {
         <div className="mt-16 flex flex-col gap-14">
           {DOC_SECTIONS.map((s) => (
             <section key={s.id} id={s.id} className="scroll-mt-24">
-              <SectionRule tag={`§ ${s.index} · ${s.title}`} />
+              <SectionRule tag={`§ ${s.index} · ${s.title}`} tagAs="h2" className="t-h2" />
               <div className="mt-5 flex flex-col gap-4">
                 {s.content.map((paragraph, i) => (
                   <p

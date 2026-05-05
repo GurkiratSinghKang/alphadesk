@@ -133,7 +133,7 @@ export function PnlAttribution({ strategies }: PnlAttributionProps) {
                   </span>
                 </div>
               </div>
-              <div className="h-4 w-full rounded-sm bg-[var(--surface)] overflow-hidden">
+              <div className="h-4 w-full rounded-sm bg-[var(--bg-card)] overflow-hidden">
                 <div
                   className={cn(
                     "h-full rounded-sm transition-all duration-300",

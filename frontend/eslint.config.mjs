@@ -14,12 +14,35 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
-  // QA r3-3 — allow underscore-prefixed unused vars (intentional ignore convention).
-  // This is the standard TS/ESLint pattern: `_unused` opts out of the warning.
+  // QA r3-3 + Batch F — type-safety + unused-var hardening.
+  // Batch F (P1-05): elevate no-explicit-any to `error` so future ad-hoc
+  // `any` annotations fail the lint gate. The no-unsafe-* family requires
+  // type-aware linting; we enable it on src/**/*.{ts,tsx} only (NOT on the
+  // config files themselves, which lack a tsconfig project). Set to `warn`
+  // so we surface (but don't yet block on) unsafe member access / assignment
+  // / call / return — those will be addressed in subsequent codemod
+  // batches. Existing flagged sites are intentionally NOT fixed in this PR;
+  // accept the noise burst on first enable.
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-unsafe-assignment": "warn",
+      "@typescript-eslint/no-unsafe-call": "warn",
+      "@typescript-eslint/no-unsafe-member-access": "warn",
+      "@typescript-eslint/no-unsafe-return": "warn",
+    },
+  },
   {
     rules: {
+      "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-unused-vars": [
-        "warn",
+        "error",
         {
           args: "after-used",
           argsIgnorePattern: "^_",
@@ -71,6 +94,61 @@ const eslintConfig = defineConfig([
         {
           selector: "TemplateElement[value.raw=/--amber-500/]",
           message: "Use --state-warning (semantic warn), --state-info-time (stale/time indicators), or --state-stale per intent. Direct --amber-500 is deprecated and will be removed once all consumers migrate.",
+        },
+        // Batch F (P1-12) — ban bare-verb button labels. Per the AlphaDesk
+        // copy spec, action labels must be specific ("Save changes", "Cancel
+        // edit") — bare verbs erode trust on a trading surface. Selector
+        // matches a button element whose text node is a single bare verb.
+        {
+          selector: "JSXElement[openingElement.name.name='button'] > JSXText[value=/^\\s*(Save|Cancel|Submit|OK|Got it|Hide|Show|Clear)\\s*$/]",
+          message: "Bare-verb button labels are banned. Use specific copy: 'Save changes', 'Cancel edit', 'Submit order', 'Hide details', etc. (Batch F / P1-12)",
+        },
+        // Batch F (P1-12) — broader catch for ANY arbitrary-px text size or
+        // spacing utility. The earlier r2-3 / r3-2 rules listed only the
+        // specific px values that already had token equivalents; this rule
+        // is the absolute floor — ANY arbitrary px text/spacing utility is
+        // banned, including non-integer values like `text-[12.5px]` or
+        // `gap-[6px]`. Use token utilities (text-eyebrow, text-body-sm,
+        // gap-2, etc.) — see qa/reviews/UI-REMEDIATION-PLAN.md.
+        {
+          selector: "Literal[value=/\\btext-\\[\\d+\\.?\\d*px\\]/]",
+          message: "Arbitrary-px text size banned. Use token utilities: text-eyebrow (11px), text-body-sm (13px), text-body (14px), text-h3 (18px), text-h2 (24px), text-display-* etc. (Batch F / P1-12)",
+        },
+        {
+          selector: "TemplateElement[value.raw=/\\btext-\\[\\d+\\.?\\d*px\\]/]",
+          message: "Arbitrary-px text size banned. Use token utilities. (Batch F / P1-12)",
+        },
+        {
+          selector: "Literal[value=/\\b(gap|p|m|space-y|space-x)-\\[\\d+px\\]/]",
+          message: "Arbitrary-px spacing banned. Use token utilities (gap-1..gap-12, p-1..p-12, m-1..m-12, space-y-1..12). (Batch F / P1-12)",
+        },
+        {
+          selector: "TemplateElement[value.raw=/\\b(gap|p|m|space-y|space-x)-\\[\\d+px\\]/]",
+          message: "Arbitrary-px spacing banned. Use token utilities. (Batch F / P1-12)",
+        },
+        // QA r6-2 — ban off-system Tailwind palette utilities. The R5
+        // audit found that the prior --amber-500 guard (above) only caught
+        // the CSS-var form; Tailwind utility forms like ``text-amber-100``,
+        // ``bg-emerald-500/10``, ``border-red-500/40`` were sneaking in
+        // because they bypass the design-token resolver entirely. The
+        // selector matches both bare class names and class-string fragments
+        // (start-of-string OR whitespace boundary).
+        //
+        // Allowed: slate / zinc / neutral / stone (Tailwind grays — these
+        // are legitimate utility chrome and don't carry chroma intent).
+        // Banned: amber, emerald, red, blue, green, purple, pink, cyan,
+        // teal, indigo, violet, orange, fuchsia, rose, lime, sky, yellow.
+        // Use AlphaDesk semantic tokens instead: state-warning / state-warning-fg
+        // (warn), state-info-time (stale), profit / loss (P&L), brand
+        // (gold accent), ink-* (warm grays), gold-* (brand), up-* / down-*
+        // (P&L variants).
+        {
+          selector: "Literal[value=/(^|\\s)(text|bg|border|ring|fill|stroke|from|to|via|divide|outline|placeholder|caret|accent|decoration|shadow)-(amber|emerald|red|blue|green|purple|pink|cyan|teal|indigo|violet|orange|fuchsia|rose|lime|sky|yellow)-(50|100|200|300|400|500|600|700|800|900|950)/]",
+          message: "Off-system Tailwind palette banned. Use AlphaDesk semantic tokens: state-warning, state-info-time, profit, loss, brand, ink-*, gold-*, up-*, down-*. (R6-2)",
+        },
+        {
+          selector: "TemplateElement[value.raw=/(^|\\s)(text|bg|border|ring|fill|stroke|from|to|via|divide|outline|placeholder|caret|accent|decoration|shadow)-(amber|emerald|red|blue|green|purple|pink|cyan|teal|indigo|violet|orange|fuchsia|rose|lime|sky|yellow)-(50|100|200|300|400|500|600|700|800|900|950)/]",
+          message: "Off-system Tailwind palette banned. Use AlphaDesk semantic tokens: state-warning, state-info-time, profit, loss, brand, ink-*, gold-*, up-*, down-*. (R6-2)",
         },
       ],
     },

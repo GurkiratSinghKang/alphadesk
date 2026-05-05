@@ -200,7 +200,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
                     {row.map((val, j) => (
                       <div
                         key={j}
-                        className="border border-[var(--surface)] transition-all hover:scale-110 hover:z-10 cursor-default flex items-center justify-center"
+                        className="border border-[var(--bg-card)] transition-all hover:scale-110 hover:z-10 cursor-default flex items-center justify-center"
                         style={{
                           width: cellSize,
                           height: cellSize,
@@ -236,7 +236,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
           {/* Right: Insights Panel */}
           <div className="w-52 shrink-0 space-y-3">
             {/* Diversification Score */}
-            <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
+            <div className="rounded-lg border border-border/50 bg-[var(--bg-card)] p-3">
               <div className="flex items-center gap-1.5 mb-2">
                 <Shield className="h-3.5 w-3.5 text-primary" />
                 <span className="text-label font-semibold text-muted-foreground uppercase tracking-wider">
@@ -265,7 +265,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
 
             {/* Most Correlated Pair */}
             {insights.mostCorrelated && (
-              <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
+              <div className="rounded-lg border border-border/50 bg-[var(--bg-card)] p-3">
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <TrendingUp className="h-3 w-3 text-loss" />
                   <span className="text-label font-semibold text-muted-foreground uppercase tracking-wider">
@@ -283,7 +283,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
 
             {/* Most Diversified Pair */}
             {insights.mostInverse && (
-              <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
+              <div className="rounded-lg border border-border/50 bg-[var(--bg-card)] p-3">
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <TrendingDown className="h-3 w-3 text-ice" />
                   <span className="text-label font-semibold text-muted-foreground uppercase tracking-wider">
@@ -301,7 +301,7 @@ export function StrategyCorrelation({ strategies }: StrategyCorrelationProps) {
 
             {/* Top pairs list */}
             {insights.pairs.length > 2 && (
-              <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
+              <div className="rounded-lg border border-border/50 bg-[var(--bg-card)] p-3">
                 <span className="text-label font-semibold text-muted-foreground uppercase tracking-wider">
                   All Pairs
                 </span>

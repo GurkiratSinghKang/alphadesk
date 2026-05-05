@@ -130,7 +130,19 @@ class Settings(BaseSettings):
     JWT_SECRET: SecretStr = SecretStr("")
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD_HASH: str = ""  # bcrypt hash
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours — trading terminal stays open all day
+    # Audit P2-03 (2026-05-05): lowered from 480 (8h) to 60 (1h) to shrink
+    # the stolen-token replay window. The refresh-token flow in
+    # ``backend/api/routes/auth.py`` (``/refresh`` endpoint with HttpOnly
+    # cookie + Redis replay detection + concurrent-refresh race lock) is
+    # already exercised by the browser path on every cookie expiry, so the
+    # session continuity guarantee is unchanged from the user's
+    # perspective: the access-token cookie silently rotates every hour.
+    # CLI / iOS callers receive ``expires_in`` in the login response and
+    # are expected to rotate against ``/api/v1/auth/refresh`` themselves.
+    # Refresh tokens still live 30 days — a continuously-active session
+    # remains seamless; only an idle-then-resumed session forces a
+    # re-login after the refresh token finally expires.
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     # 32+ random bytes recommended. Used to derive the AES-256-GCM key that
     # encrypts user-supplied brokerage credentials at rest.

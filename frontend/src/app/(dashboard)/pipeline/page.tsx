@@ -153,7 +153,7 @@ function PipelineFlow({ run }: { run: PipelineRun | null }) {
               "min-w-0 flex-1 rounded-lg border px-3 py-2 text-center",
               stage.count > 0
                 ? "border-primary/40 bg-primary/5"
-                : "border-border bg-[var(--surface)]"
+                : "border-border bg-[var(--bg-elev-1)]"
             )}>
               <p className={cn("t-num-lg", stage.count > 0 ? "text-primary" : "text-muted-foreground")}>
                 {stage.count}
@@ -677,7 +677,7 @@ export default function PipelinePage() {
     ? "Starting..."
     : isRunning
     ? "Running..."
-    : "Run Now";
+    : "Run now";
 
   const pipelineActions = (
     <>
@@ -833,7 +833,7 @@ export default function PipelinePage() {
                             {status.progress.current} / {status.progress.total}
                           </Mono>
                         </div>
-                        <div className="h-1.5 w-full rounded-full bg-[var(--surface)] overflow-hidden">
+                        <div className="h-1.5 w-full rounded-full bg-[var(--bg-card)] overflow-hidden">
                           <div
                             className="h-full bg-[var(--profit)] transition-all"
                             style={{
@@ -858,7 +858,7 @@ export default function PipelinePage() {
                 the page focused on the running card above. */}
             {!isRunning && scheduler && (
               <section>
-                <Card className="border-border bg-[var(--surface)]">
+                <Card className="border-border bg-[var(--bg-card)]">
                   <CardContent className="p-3 flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-2">
                       <Clock className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
@@ -873,28 +873,45 @@ export default function PipelinePage() {
                           slightly larger than meta — it's the actionable
                           number on this card. */}
                       <Mono className="t-num-md text-foreground">
-                        {scheduler.next_scheduled_run
-                          ? `${new Intl.DateTimeFormat("en-CA", {
-                              timeZone: "America/New_York",
-                              year: "numeric",
-                              month: "2-digit",
-                              day: "2-digit",
-                            }).format(new Date(scheduler.next_scheduled_run))} 09:30 ET`
-                          : "Unknown"}
+                        {(() => {
+                          // R6-8 / R5-B2 fix: same Invalid-Date guard used by
+                          // the heartbeat readout below — if the timestamp
+                          // string fails to parse we fall through to
+                          // "Unavailable" instead of "Invalid Date 09:30 ET".
+                          if (!scheduler.next_scheduled_run) return "Unknown";
+                          const d = new Date(scheduler.next_scheduled_run);
+                          if (isNaN(d.valueOf())) return "Unavailable";
+                          return `${new Intl.DateTimeFormat("en-CA", {
+                            timeZone: "America/New_York",
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                          }).format(d)} 09:30 ET`;
+                        })()}
                       </Mono>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="t-label">Heartbeat</span>
                       <Mono className="t-meta text-foreground">
-                        {scheduler.last_heartbeat
-                          ? new Date(scheduler.last_heartbeat).toLocaleString("en-US", {
+                        {(() => {
+                          // R6-8 / R5-B2 fix: a malformed/empty `last_heartbeat`
+                          // string used to render literally as "Invalid Date ET".
+                          // Validate the parsed Date so we fall through to a
+                          // graceful "Unavailable" instead of leaking the JS
+                          // error to the operator.
+                          if (!scheduler.last_heartbeat) return "Never";
+                          const d = new Date(scheduler.last_heartbeat);
+                          if (isNaN(d.valueOf())) return "Unavailable";
+                          return (
+                            d.toLocaleString("en-US", {
                               timeZone: "America/New_York",
                               month: "short",
                               day: "numeric",
                               hour: "2-digit",
                               minute: "2-digit",
                             }) + " ET"
-                          : "Never"}
+                          );
+                        })()}
                       </Mono>
                       {scheduler.missed_runs > 0 && (
                         <Badge
@@ -923,7 +940,7 @@ export default function PipelinePage() {
                 )}
               </div>
               {displayPositions.length === 0 ? (
-                <Card className="border-border bg-[var(--surface)]">
+                <Card className="border-border bg-[var(--bg-card)]">
                   <CardContent className="p-0">
                     <div className="flex items-center justify-center gap-3 py-4 text-muted-foreground">
                       <Target className="h-5 w-5 opacity-30" />
@@ -932,7 +949,7 @@ export default function PipelinePage() {
                   </CardContent>
                 </Card>
               ) : (
-                <Card className="border-border bg-[var(--surface)] overflow-hidden">
+                <Card className="border-border bg-[var(--bg-card)] overflow-hidden">
                   {/* Viewport audit r5 #4: at 768-900 the table's min-w-[900px]
                       forces horizontal scroll, but macOS/iOS hide scrollbars
                       until actively scrolling — traders missed Stop Loss,
@@ -1036,7 +1053,7 @@ export default function PipelinePage() {
               {todayRun ? (
                 <PipelineFlow run={todayRun} />
               ) : (
-                <Card className="border-border bg-[var(--surface)]">
+                <Card className="border-border bg-[var(--bg-card)]">
                   <CardContent className="flex flex-col items-center gap-3 py-8 text-center">
                     <Zap className="h-7 w-7 text-muted-foreground/40" />
                     {(() => {
@@ -1091,7 +1108,7 @@ export default function PipelinePage() {
               data-slot="pipeline-builder-cta"
               aria-label="Build or backtest a strategy"
             >
-              <div className="rounded-xl border border-border bg-[var(--surface)] p-5">
+              <div className="rounded-xl border border-border bg-[var(--bg-card)] p-5">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 className="t-section-display text-foreground">
@@ -1125,7 +1142,7 @@ export default function PipelinePage() {
                 </h2>
               </div>
               {history.length === 0 ? (
-                <Card className="border-border bg-[var(--surface)]">
+                <Card className="border-border bg-[var(--bg-card)]">
                   <CardContent className="py-8 text-center">
                     <Clock className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
                     <p className="text-label text-muted-foreground">
@@ -1149,7 +1166,7 @@ export default function PipelinePage() {
                     history={history}
                     onCellClick={(date) => handleExpandHistory(date)}
                   />
-                  <Card className="border-border bg-[var(--surface)] overflow-hidden mt-3">
+                  <Card className="border-border bg-[var(--bg-card)] overflow-hidden mt-3">
                   <Table className="min-w-[420px]">
                     <TableHeader>
                       <TableRow className="border-border">
@@ -1339,7 +1356,7 @@ export default function PipelinePage() {
                 </h2>
               </div>
               {!perfData && !hasPnlData && displayPositions.length === 0 ? (
-                <Card className="border-border bg-[var(--surface)]">
+                <Card className="border-border bg-[var(--bg-card)]">
                   <CardContent className="py-8 text-center">
                     <TrendingUp className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
                     <p className="text-label text-muted-foreground">
@@ -1352,7 +1369,7 @@ export default function PipelinePage() {
               // 1280px (xl) with no intermediate step — violent reflow on
               // mid-laptop resize. Add lg:grid-cols-4 for 2→3→4→6.
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
-                <Card className="border-border bg-[var(--surface)] overflow-hidden">
+                <Card className="border-border bg-[var(--bg-card)] overflow-hidden">
                   <div className="h-0.5 bg-gradient-to-r from-[var(--profit)] to-[var(--loss)]" />
                   <CardContent className="p-4 text-center">
                     <p className="t-label mb-1">Total P&L</p>
@@ -1378,7 +1395,7 @@ export default function PipelinePage() {
                   </CardContent>
                 </Card>
 
-                <Card className="border-border bg-[var(--surface)] overflow-hidden">
+                <Card className="border-border bg-[var(--bg-card)] overflow-hidden">
                   <div className="h-0.5 bg-primary/60" />
                   <CardContent className="p-4 text-center">
                     <p className="t-label mb-1">Win rate</p>
@@ -1388,7 +1405,7 @@ export default function PipelinePage() {
                   </CardContent>
                 </Card>
 
-                <Card className="border-border bg-[var(--surface)] overflow-hidden">
+                <Card className="border-border bg-[var(--bg-card)] overflow-hidden">
                   <div className="h-0.5 bg-primary/40" />
                   <CardContent className="p-4 text-center">
                     <p className="t-label mb-1">Total trades</p>
@@ -1398,7 +1415,7 @@ export default function PipelinePage() {
                   </CardContent>
                 </Card>
 
-                <Card className="border-border bg-[var(--surface)] overflow-hidden">
+                <Card className="border-border bg-[var(--bg-card)] overflow-hidden">
                   <div className="h-0.5 bg-primary/30" />
                   <CardContent className="p-4 text-center">
                     <p className="t-label mb-1">Active positions</p>
@@ -1408,7 +1425,7 @@ export default function PipelinePage() {
                   </CardContent>
                 </Card>
 
-                <Card className="border-border bg-[var(--surface)] overflow-hidden">
+                <Card className="border-border bg-[var(--bg-card)] overflow-hidden">
                   <div className="h-0.5 bg-[var(--profit)]/60" />
                   <CardContent className="p-4 text-center">
                     <p className="t-label mb-1">Best trade</p>
@@ -1427,7 +1444,7 @@ export default function PipelinePage() {
                   </CardContent>
                 </Card>
 
-                <Card className="border-border bg-[var(--surface)] overflow-hidden">
+                <Card className="border-border bg-[var(--bg-card)] overflow-hidden">
                   <div className="h-0.5 bg-[var(--loss)]/60" />
                   <CardContent className="p-4 text-center">
                     <p className="t-label mb-1">Worst trade</p>
@@ -1556,7 +1573,7 @@ function PipelineSwimlane({
     days.push({ date: iso, entry: byDate.get(iso) ?? null });
   }
   return (
-    <Card className="border-border bg-[var(--surface)] overflow-hidden mb-3">
+    <Card className="border-border bg-[var(--bg-card)] overflow-hidden mb-3">
       <CardContent className="p-3">
         <div className="flex items-baseline justify-between mb-2">
           <p className="t-label">Last 30 days</p>

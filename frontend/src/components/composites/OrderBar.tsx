@@ -72,6 +72,30 @@ export interface OrderBarProps {
   optionsUnavailable?: { occ: string; underlying: string } | null;
   /** Retry handler invoked from the banner action button. */
   onRetryOptions?: () => void;
+  /**
+   * R6-5 (closes R5-B1, R5-M5) — multi-leg ticket extension of
+   * `optionsUnavailable`. R4-W-3 closed the silent OCC-fallback for the
+   * singular `activeContract` path; this list covers `activeLegs[]`. Each
+   * record describes a leg whose OCC quote was missing from the snapshot
+   * fan-out, so the OrderBar can surface a per-leg banner instead of the
+   * trader staring at the underlying quote dressed as a combo spread.
+   *
+   * The DOM evidence:
+   * `qa/runs/2026-05-04T20-31-40Z/trade/desktop-1440/multi-leg-prefill.dom.html`
+   * captured zero `data-slot="order-bar-options-unavailable"` despite both
+   * staged strangle legs returning 404 in `network.jsonl`.
+   */
+  legsUnavailable?: Array<{
+    occ: string;
+    symbol: string;
+    reason: "404" | "timeout" | "generic";
+  }>;
+  /**
+   * Retry handler for the multi-leg banner. Re-runs the snapshot fan-out
+   * for all staged legs. Distinct from `onRetryOptions` (singular) so the
+   * parent can choose to retry only the failing legs if it wants.
+   */
+  onRetryLegs?: () => void;
   className?: string;
 }
 
@@ -100,6 +124,8 @@ export default function OrderBar({
   onDraftChange,
   optionsUnavailable = null,
   onRetryOptions,
+  legsUnavailable = [],
+  onRetryLegs,
   className,
 }: OrderBarProps) {
   const noStrategies = strategies.length === 0;
@@ -490,9 +516,66 @@ export default function OrderBar({
           ) : null}
         </div>
       ) : null}
+      {/* R6-5 (closes R5-B1, R5-M5) — multi-leg extension of the
+          R4-W-3 single-leg banner above. When `?legs=` deep-link prefills
+          a combo whose OCC quotes 404'd, the trader was previously shown
+          the underlying quote dressed as a leg spread. This banner
+          surfaces every failing leg with a single Retry that re-runs the
+          snapshot fan-out for the whole combo. The execution-readiness
+          pill in the parent independently gates submit (see
+          legQuoteReadiness.ts). */}
+      {legsUnavailable.length > 0 ? (
+        <div
+          role="status"
+          aria-live="polite"
+          data-slot="order-bar-legs-unavailable"
+          data-legs-unavailable-count={legsUnavailable.length}
+          className="col-span-2 flex flex-col gap-2 rounded-sm border border-amber/40 bg-amber/10 px-3 py-2 text-body-sm text-amber @[720px]:basis-full"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-semibold">
+              Quote unavailable for {legsUnavailable.length} combo
+              leg{legsUnavailable.length === 1 ? "" : "s"}
+            </span>
+            {onRetryLegs ? (
+              <button
+                type="button"
+                onClick={onRetryLegs}
+                className="inline-flex items-center gap-1 rounded-sm border border-amber/40 bg-bg-elev-1 px-2 py-1 text-label font-semibold text-amber transition-colors hover:bg-amber/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber"
+              >
+                Retry quotes
+              </button>
+            ) : null}
+          </div>
+          <ul className="grid gap-1 pl-1">
+            {legsUnavailable.map((leg) => (
+              <li
+                key={leg.occ}
+                data-slot="order-bar-leg-unavailable"
+                data-leg-occ={leg.occ}
+                data-leg-reason={leg.reason}
+                className="flex flex-wrap items-baseline gap-2 text-label"
+              >
+                <span className="font-mono text-body-sm">{leg.occ}</span>
+                <span className="text-fg-muted">
+                  {leg.symbol} ·{" "}
+                  {leg.reason === "404"
+                    ? "contract not found"
+                    : leg.reason === "timeout"
+                      ? "request timed out"
+                      : "snapshot fetch failed"}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-label text-fg-muted">
+            The displayed two-sided quote is the underlying — not the
+            combo. Refresh before submit.
+          </p>
+        </div>
+      ) : null}
       <Field label="Strategy">
         <select
-          aria-label="Strategy"
           value={strategyId}
           onChange={(e) => handleStrategyChange(e.target.value)}
           disabled={noStrategies}
@@ -585,7 +668,6 @@ export default function OrderBar({
 
       <Field label="Symbol">
         <Input
-          aria-label="Symbol"
           name="symbol"
           data-testid="order-bar-symbol"
           value={symbolValue}
@@ -600,7 +682,6 @@ export default function OrderBar({
 
       <Field label="Qty">
         <Input
-          aria-label="Quantity"
           name="qty"
           data-testid="order-bar-qty"
           // BUG-002 — HTML-level guards: `type="number"` rejects
@@ -625,7 +706,6 @@ export default function OrderBar({
 
       <Field label="Type">
         <select
-          aria-label="Order type"
           value={type}
           onChange={(e) => setType(e.target.value as OrderTypeOption)}
           disabled={ticketLocked}
@@ -648,7 +728,6 @@ export default function OrderBar({
 
       <Field label="Price">
         <Input
-          aria-label="Price"
           value={priceRequired ? price : ""}
           onChange={(e) => setPrice(e.target.value)}
           inputMode="decimal"
@@ -663,7 +742,6 @@ export default function OrderBar({
 
       <Field label="Stop">
         <Input
-          aria-label="Stop"
           value={stopRequired ? stop : ""}
           onChange={(e) => setStop(e.target.value)}
           inputMode="decimal"
@@ -871,20 +949,30 @@ function Field({
   children,
 }: {
   label: string;
-  children: React.ReactNode;
+  children: React.ReactElement;
 }) {
-  // WCAG / persona 71-4 — render a real <label> wrapping both caption and
-  // input so voice control ("select Strategy") and screen readers can bind
-  // the visible caption to the associated form control. Previously the
-  // caption rendered as a <span> and the input carried only an
-  // `aria-label`, which some AT announced correctly but desktop voice-
-  // control drivers did not associate with the field.
+  // WCAG 1.3.1 / 4.1.2 / persona 71-4 — emit an explicit ``<label
+  // htmlFor>`` instead of an implicit wrapping <label>. The visible
+  // caption is the accessible name; ``React.cloneElement`` injects a
+  // ``React.useId``-generated id into the child input/select. Voice
+  // control ("focus Strategy") and screen readers both bind on the
+  // explicit ``htmlFor`` association — implicit wrapping was unreliable
+  // on desktop voice-control drivers.
+  const id = React.useId();
+  // Only inject the id if the child doesn't already provide one. This
+  // keeps the helper compatible with controls that already own their
+  // id (e.g. the Symbol input, which also exposes ``name``/``data-testid``
+  // for tests).
+  const childWithId = React.isValidElement<{ id?: string }>(children) && !children.props.id
+    ? React.cloneElement(children, { id })
+    : children;
+  const associatedId = React.isValidElement<{ id?: string }>(childWithId) ? childWithId.props.id ?? id : id;
   return (
-    <label className="flex flex-col gap-1 min-w-0">
-      <span className="t-label">
+    <div className="flex flex-col gap-1 min-w-0">
+      <label htmlFor={associatedId} className="t-label">
         {label}
-      </span>
-      {children}
-    </label>
+      </label>
+      {childWithId}
+    </div>
   );
 }

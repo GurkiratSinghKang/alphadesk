@@ -196,7 +196,7 @@ export function StrategyBuilder() {
             {rules.map((rule) => (
               <div key={rule.id} className={cn(
                 "flex items-start gap-2 rounded-lg border p-2.5",
-                rule.valid ? "border-[var(--profit)]/30 bg-[var(--profit)]/5" : "border-amber-500/30 bg-amber-500/5"
+                rule.valid ? "border-[var(--profit)]/30 bg-[var(--profit)]/5" : "border-state-warning/30 bg-state-warning/5"
               )}>
                 <div className="flex-1">
                   <p className="text-label text-foreground">{rule.condition}</p>
@@ -268,9 +268,9 @@ export function StrategyBuilder() {
 
           {/* Improvements */}
           {aiResult.improvements.length > 0 && (
-            <div className="rounded-lg border border-border bg-[var(--surface)] p-3">
+            <div className="rounded-lg border border-border bg-[var(--bg-card)] p-3">
               <div className="flex items-center gap-2 mb-2">
-                <Lightbulb className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                <Lightbulb className="h-3.5 w-3.5 text-state-warning shrink-0" />
                 <p className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Suggested Improvements</p>
               </div>
               <ul className="space-y-1.5">
@@ -286,15 +286,15 @@ export function StrategyBuilder() {
 
           {/* Risk Warnings */}
           {aiResult.risks.length > 0 && (
-            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+            <div className="rounded-lg border border-state-warning/20 bg-state-warning/5 p-3">
               <div className="flex items-center gap-2 mb-2">
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                <p className="text-label uppercase tracking-wider text-amber-500 font-semibold">Risk Warnings</p>
+                <AlertTriangle className="h-3.5 w-3.5 text-state-warning shrink-0" />
+                <p className="text-label uppercase tracking-wider text-state-warning font-semibold">Risk Warnings</p>
               </div>
               <ul className="space-y-1.5">
                 {aiResult.risks.map((risk, i) => (
-                  <li key={i} className="flex items-start gap-2 text-label text-amber-400/90">
-                    <span className="text-amber-500/50 mt-0.5 shrink-0">-</span>
+                  <li key={i} className="flex items-start gap-2 text-label text-state-warning-fg/90">
+                    <span className="text-state-warning/50 mt-0.5 shrink-0">-</span>
                     <span>{risk}</span>
                   </li>
                 ))}
@@ -304,7 +304,7 @@ export function StrategyBuilder() {
 
           {/* Backtest Parameters */}
           {aiResult.backtest_params && Object.keys(aiResult.backtest_params).length > 0 && (
-            <div className="rounded-lg border border-border bg-[var(--surface)] p-3">
+            <div className="rounded-lg border border-border bg-[var(--bg-card)] p-3">
               <div className="flex items-center gap-2 mb-2">
                 <BarChart3 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <p className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Recommended Backtest Parameters</p>

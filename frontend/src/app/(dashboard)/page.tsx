@@ -18,6 +18,7 @@ import {
   FileText,
   Fingerprint,
   Gauge,
+  Key,
   ListChecks,
   Pulse,
   ShieldCheck,
@@ -32,10 +33,13 @@ import {
   ContextBar,
   PositionsList,
   StatusBar,
-  TopBar,
   type OrderRow,
   type PositionTab,
 } from "@/components/composites";
+// chrome-batch-D P1-02 — composites/TopBar was a duplicate of the
+// canonical layout/TopBar; it has been removed and the desk now renders
+// the same TopBar as every other dashboard route.
+import { TopBar } from "@/components/layout/TopBar";
 import { DashboardLayout } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
@@ -52,6 +56,7 @@ import {
 } from "@/lib/api";
 import { isMarketOpen } from "@/lib/marketHours";
 import { isWorkingOrderStatus } from "@/lib/orders";
+import { getStrategyCounts } from "@/lib/strategies";
 import { cn, formatCurrency, formatGreek, formatPercent } from "@/lib/utils";
 // `computeStrategyCounts` was used to render a "N / M" pill inside the
 // dashboard's StrategyRail header; the rail is no longer on the
@@ -59,6 +64,7 @@ import { cn, formatCurrency, formatGreek, formatPercent } from "@/lib/utils";
 // helper still lives in `@/lib/strategiesSummary` for use on the
 // `/strategies` page header.
 import {
+  useCurrentUser,
   usePipelineStatus,
   useRegime,
   useStrategies,
@@ -82,19 +88,10 @@ import {
 } from "./_desk/selectors";
 import { useDeskClock } from "./_desk/useDeskClock";
 
-// BUG-005: unify desk nav with the (dashboard)/layout TopBar nav so docs
-// references to "Dashboard" and "Trade" always resolve. The desk keeps its
-// serif "αAlphaDesk" wordmark (rendered in the composites/TopBar), but the
-// nav link set matches layout/TopBar.tsx exactly.
-const NAV_ROUTES = [
-  { label: "Dashboard", href: "/", active: true },
-  { label: "Strategies", href: "/strategies" },
-  { label: "Trade", href: "/trade" },
-  { label: "Analytics", href: "/analytics" },
-  { label: "Alerts", href: "/alerts" },
-  { label: "Pipeline", href: "/pipeline" },
-  { label: "Reports", href: "/reports" },
-];
+// chrome-batch-D P1-02: with the canonical layout/TopBar now used on the
+// desk, the desk no longer maintains its own NAV_ROUTES list — the nav
+// links live inside the canonical TopBar and are kept in lockstep with
+// every other dashboard route.
 
 // 2026-04-20 round 2 (REVERTED 2026-04-21): tried `export const dynamic
 // = "force-dynamic"` and `revalidate = 0` to bust a stale prerender.
@@ -172,6 +169,42 @@ export default function DeskPage() {
   const strategiesQuery = useStrategies();
   const strategiesResp = strategiesQuery.data;
   const { data: pipelineStatus } = usePipelineStatus();
+  // Batch E P0-05: detect demo-seed accounts so we can hoist a
+  // "Connect your broker" CTA to the top of the Action stack.
+  // The backend hasn't shipped is_demo_seed yet — TODO: wire it via
+  // services/users.py once the migration lands. Until then, treat the
+  // env-configured admin username as demo-seed (matches the audit's
+  // first-login persona that lit up this finding).
+  const { data: currentUser } = useCurrentUser();
+  const isDemoSeedAccount =
+    currentUser?.is_demo_seed === true || currentUser?.username === "admin";
+
+  // Batch E P1-16: persistent dismissal of the off-session readiness
+  // banner. Pre-fix the off-session copy ("markets are closed") rendered
+  // on every dashboard load with no way to acknowledge it — every
+  // returning operator was greeted by it again the next morning. Persist
+  // dismissal in localStorage so a one-time click sticks across sessions.
+  const OFF_SESSION_DISMISS_KEY = "alphadesk.dismissed.off-session-banner";
+  const [offSessionBannerDismissed, setOffSessionBannerDismissed] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      setOffSessionBannerDismissed(
+        window.localStorage.getItem(OFF_SESSION_DISMISS_KEY) === "1",
+      );
+    } catch {
+      // localStorage can throw under strict cookie policies — treat
+      // that as "not dismissed" so the user still gets the banner.
+    }
+  }, []);
+  function dismissOffSessionBanner() {
+    setOffSessionBannerDismissed(true);
+    try {
+      window.localStorage.setItem(OFF_SESSION_DISMISS_KEY, "1");
+    } catch {
+      // No-op — dismissal still applies for the current page lifetime.
+    }
+  }
 
   /* ─── Selected strategy for dashboard focus + deep links ─ */
   const rail = useMemo(() => toRailItems(strategiesResp), [strategiesResp]);
@@ -182,10 +215,21 @@ export default function DeskPage() {
     () => rail.find((s) => s.id === selectedStrategyId) ?? rail[0],
     [rail, selectedStrategyId],
   );
-  const activeStrategyCount = useMemo(
-    () => rail.filter((s) => s.status === "active").length,
-    [rail],
+  // Batch E P1-18: Control-room counter must consume STRATEGY_META so it
+  // matches what /strategies/list renders. Pre-fix the dashboard counted
+  // ``rail.filter(active)`` against ``rail.length`` — that worked but
+  // silently excluded every "planned" entry, so the catalog math
+  // disagreed with the catalog page (which surfaces them under "Coming
+  // soon"). ``getStrategyCounts`` returns the canonical {active, paused,
+  // dev, total} aggregate from STRATEGY_META, with backend per-id status
+  // overlaid via apiStrategies (so a paused live strategy flips into
+  // ``paused``, not ``active``).
+  const strategyCounts = useMemo(
+    () => getStrategyCounts(strategiesResp ?? []),
+    [strategiesResp],
   );
+  const activeStrategyCount = strategyCounts.active;
+  const totalStrategyCountFromMeta = strategyCounts.total;
   useEffect(() => {
     if (!selectedStrategyId && rail[0]?.id) {
       setSelectedStrategyId(rail[0].id);
@@ -687,16 +731,12 @@ export default function DeskPage() {
               Visually-hidden heading provides a landmark for AT and
               document-outline tooling without altering the visual design. */}
           <h1 className="sr-only">Trading dashboard</h1>
-          <TopBar
-            currentRoute="/"
-            routes={NAV_ROUTES}
-            regime={regime}
-            clockEt={clock}
-            avatarInitial="α"
-            // BUG-054 — surface the palette as a visible "Search ⌘K"
-            // chip so users discover it without memorising the shortcut.
-            onOpenSearch={() => useUIStore.getState().setCommandPaletteOpen(true)}
-          />
+          {/* chrome-batch-D P1-02 — canonical TopBar reads its own
+              regime/clock/nav state from the zustand stores, so the desk
+              no longer needs to thread NAV_ROUTES, regime, or clock as
+              props. The visible Search ⌘K affordance lives inside the
+              canonical TopBar via setCommandPaletteOpen. */}
+          <TopBar />
         </div>
       }
       contextBar={<ContextBar cells={contextCells} />}
@@ -714,17 +754,27 @@ export default function DeskPage() {
           selectedQuote={quote}
           selectedStrategyName={selectedStrategy?.name ?? "No strategy selected"}
           activeStrategyCount={activeStrategyCount}
-          totalStrategyCount={rail.length}
+          // Batch E P1-18: pass the meta-derived total so the dashboard
+          // counter ("X / Y") matches /strategies/list. ``rail.length``
+          // excluded planned ghosts and gave a different denominator.
+          totalStrategyCount={totalStrategyCountFromMeta}
+          pausedStrategyCount={strategyCounts.paused}
+          devStrategyCount={strategyCounts.dev}
           strategies={strategiesResp ?? []}
           strategiesLoading={strategiesQuery.isLoading}
           strategiesError={strategiesQuery.isError}
           pipelineStatus={pipelineStatus}
           clockEt={clock}
+          isDemoSeedAccount={isDemoSeedAccount}
+          brokerConnected={brokerStatus === "connected"}
+          offSessionBannerDismissed={offSessionBannerDismissed}
+          onDismissOffSessionBanner={dismissOffSessionBanner}
           onTrade={() => router.push(`/trade?symbol=${encodeURIComponent(selectedSymbol)}`)}
           onPipeline={() => router.push("/pipeline")}
           onStrategies={() => router.push("/strategies")}
           onStrategyClick={handleSelectStrategy}
           onOpenOrders={handleOpenOrders}
+          onConnectBroker={() => router.push("/settings#brokerage")}
         />
       }
       right={
@@ -784,16 +834,23 @@ function DashboardCommandCenter({
   selectedStrategyName,
   activeStrategyCount,
   totalStrategyCount,
+  pausedStrategyCount,
+  devStrategyCount,
   strategies,
   strategiesLoading,
   strategiesError,
   pipelineStatus,
   clockEt,
+  isDemoSeedAccount,
+  brokerConnected,
+  offSessionBannerDismissed,
+  onDismissOffSessionBanner,
   onTrade,
   onPipeline,
   onStrategies,
   onStrategyClick,
   onOpenOrders,
+  onConnectBroker,
 }: {
   summary: PortfolioSummary;
   positions: Position[];
@@ -808,16 +865,31 @@ function DashboardCommandCenter({
   selectedStrategyName: string;
   activeStrategyCount: number;
   totalStrategyCount: number;
+  // Batch E P1-18: paused / dev counts for the Strategies CommandMetric.
+  // ``X / Y`` keeps the headline scan but a tooltip surfaces the full
+  // {active · paused · dev · total} breakdown.
+  pausedStrategyCount: number;
+  devStrategyCount: number;
   strategies: RawStrategy[];
   strategiesLoading: boolean;
   strategiesError: boolean;
   pipelineStatus?: PipelineStatus;
   clockEt: string;
+  // Batch E P0-05: when true (and broker isn't already connected) the
+  // Action stack hoists a "Connect your broker — your desk is showing
+  // demo data" CTA above the operator items.
+  isDemoSeedAccount: boolean;
+  brokerConnected: boolean;
+  // Batch E P1-16: dismissable off-session banner. Persisted in
+  // localStorage by the parent so a one-time click sticks across sessions.
+  offSessionBannerDismissed: boolean;
+  onDismissOffSessionBanner: () => void;
   onTrade: () => void;
   onPipeline: () => void;
   onStrategies: () => void;
   onStrategyClick: (id: string) => void;
   onOpenOrders: () => void;
+  onConnectBroker: () => void;
 }) {
   const account = useMemo(() => buildAccountSnapshot(summary, positions), [summary, positions]);
   const strategyCards = useMemo(
@@ -943,15 +1015,40 @@ function DashboardCommandCenter({
                 <p className="mt-2 max-w-[44ch] text-body-sm leading-relaxed text-fg-muted">
                   Exceptions, exposure, and broker state in the first scan.
                 </p>
-                <div className="mt-4 rounded-md border border-border-hair bg-bg px-3 py-3">
-                  <p className="t-label text-fg-hint">System readiness</p>
-                  <p className="mt-1 text-body-sm font-semibold leading-snug text-ink-1000">
-                    {dashboardReadiness.title}
-                  </p>
-                  <p className="mt-1 text-body-sm leading-relaxed text-fg-muted">
-                    {dashboardReadiness.detail}
-                  </p>
-                </div>
+                {/* Batch E P1-16: when the system is in the "Off-session
+                    review mode" copy, surface a dismiss × so a returning
+                    operator can stop seeing it after acknowledging. The
+                    dismissal persists in localStorage. Other readiness
+                    states (Ready, Syncing, etc.) are always visible
+                    because they reflect transient runtime state. */}
+                {!(
+                  !marketOpen &&
+                  dashboardReadiness.title === "Off-session review mode" &&
+                  offSessionBannerDismissed
+                ) && (
+                  <div className="mt-4 rounded-md border border-border-hair bg-bg px-3 py-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="t-label text-fg-hint">System readiness</p>
+                      {!marketOpen &&
+                      dashboardReadiness.title === "Off-session review mode" ? (
+                        <button
+                          type="button"
+                          onClick={onDismissOffSessionBanner}
+                          aria-label="Dismiss off-session banner"
+                          className="-mt-1 -mr-1 inline-flex size-6 items-center justify-center rounded-sm text-fg-muted hover:bg-bg-elev-2 hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                        >
+                          <span aria-hidden className="font-mono text-body">×</span>
+                        </button>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-body-sm font-semibold leading-snug text-ink-1000">
+                      {dashboardReadiness.title}
+                    </p>
+                    <p className="mt-1 text-body-sm leading-relaxed text-fg-muted">
+                      {dashboardReadiness.detail}
+                    </p>
+                  </div>
+                )}
                 <div className="mt-4 flex flex-wrap gap-2">
                   <StatusChip
                     tone={escalationCount > 0 ? "amber" : "profit"}
@@ -966,10 +1063,10 @@ function DashboardCommandCenter({
             </div>
 
             {/* BUG-11: Book equity removed — Capital Canvas below is the equity hero.
-                Keeping Day P/L, Clock, and Strategies for the Command Room scan. */}
+                Keeping Day P&L, Clock, and Strategies for the Command Room scan. */}
             <div className="hidden gap-px bg-border-hair sm:grid sm:grid-cols-3">
               <CommandMetric
-                label="Day P/L"
+                label="Day P&L"
                 value={account.ready ? `${pnlSign}${formatCurrency(account.dayPnl, true)}` : "Awaiting"}
                 detail={`${account.positionsCount} open line${account.positionsCount === 1 ? "" : "s"}`}
                 valueClassName={pnlTone}
@@ -982,7 +1079,15 @@ function DashboardCommandCenter({
               <CommandMetric
                 label="Strategies"
                 value={`${activeStrategyCount}/${totalStrategyCount || 0}`}
-                detail="Enabled systems"
+                // Batch E P1-18: detail line surfaces the full
+                // STRATEGY_META breakdown so the dashboard counter
+                // matches /strategies/list (which already shows
+                // active · paused · coming soon under each section).
+                detail={
+                  pausedStrategyCount > 0 || devStrategyCount > 0
+                    ? `${activeStrategyCount} active · ${pausedStrategyCount} paused · ${devStrategyCount} dev`
+                    : "Enabled systems"
+                }
                 valueClassName="text-brand"
               />
             </div>
@@ -994,6 +1099,8 @@ function DashboardCommandCenter({
               onTrade={onTrade}
               onOpenOrders={onOpenOrders}
               onPipeline={onPipeline}
+              showDemoSeedCta={isDemoSeedAccount && !brokerConnected}
+              onConnectBroker={onConnectBroker}
             />
             <RiskEscalationPanel
               items={riskEscalations}
@@ -1482,11 +1589,19 @@ function DecisionQueue({
   onTrade,
   onOpenOrders,
   onPipeline,
+  showDemoSeedCta,
+  onConnectBroker,
 }: {
   items: readonly ActionItem[];
   onTrade: () => void;
   onOpenOrders: () => void;
   onPipeline: () => void;
+  // Batch E P0-05: when set, render a prominent "Connect your broker"
+  // card above the operator items. The audit found new operators
+  // mistaking the demo book for their real one — the desk can't lead
+  // with momentum/order CTAs until a real broker is wired up.
+  showDemoSeedCta?: boolean;
+  onConnectBroker?: () => void;
 }) {
   return (
     <div className="min-w-0 bg-bg-elev-1 p-5 md:p-6">
@@ -1502,6 +1617,27 @@ function DecisionQueue({
         </div>
       </div>
       <div className="mt-5 grid gap-3">
+        {showDemoSeedCta && onConnectBroker ? (
+          <button
+            type="button"
+            data-slot="action-stack-demo-seed-cta"
+            onClick={onConnectBroker}
+            className="card-stagger group grid min-h-[104px] grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-md border border-amber/30 bg-amber/5 px-4 py-4 text-left transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-amber/50 hover:bg-amber/10"
+          >
+            <span className="flex size-9 items-center justify-center rounded-sm border border-amber/30 bg-amber/10 text-amber">
+              <Key className="size-4" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <p className="text-body font-semibold leading-tight text-ink-1000">
+                Connect your broker
+              </p>
+              <p className="mt-2 line-clamp-2 text-body-sm leading-snug text-fg-muted">
+                Your desk is showing demo data. Link a paper or live brokerage in Settings to start trading your real account.
+              </p>
+            </div>
+            <ArrowRight className="mt-1 size-4 shrink-0 text-amber transition-transform group-hover:translate-x-0.5" aria-hidden />
+          </button>
+        ) : null}
         {items.length > 0 ? items.map((item, index) => {
           const onClick =
             item.action === "orders" ? onOpenOrders : item.action === "pipeline" ? onPipeline : onTrade;
@@ -2079,7 +2215,9 @@ function buildRiskEscalations({
       title: "Rejected broker events",
       detail: "Inspect the rejection reason before re-submitting or adding similar risk.",
       metric: `${rejected} reject${rejected === 1 ? "" : "s"} today`,
-      owner: "TRDR",
+      // Batch E P1-16: was "TRDR" — read as a four-letter ticker symbol
+      // and confused new operators. Use plain English.
+      owner: "Trader review",
       tone: "loss",
     });
   }
@@ -2088,7 +2226,8 @@ function buildRiskEscalations({
       title: "Working orders need review",
       detail: "Check stale limits, partial fills, and cancel state before increasing gross exposure.",
       metric: `${openOrders} open order${openOrders === 1 ? "" : "s"}`,
-      owner: "TRDR",
+      // Batch E P1-16: was "TRDR".
+      owner: "Working orders",
       tone: "amber",
     });
   }

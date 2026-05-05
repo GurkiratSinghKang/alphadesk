@@ -101,7 +101,7 @@ const SCENARIOS: StressScenario[] = [
       if (isDefensivePosition(pos)) return 0.05;
       return -0.03;
     },
-    color: "text-amber-400",
+    color: "text-state-warning",
   },
   {
     id: "rate-hike",
@@ -113,7 +113,7 @@ const SCENARIOS: StressScenario[] = [
       if (isValuePosition(pos)) return 0.03;
       return -0.02;
     },
-    color: "text-amber-400",
+    color: "text-state-warning",
   },
   {
     id: "black-swan",
@@ -205,6 +205,15 @@ export function StressTest() {
   const [customPct, setCustomPct] = useState<string>("-10");
   const [showPositions, setShowPositions] = useState(false);
 
+  // P2-11: parse customPct via Number()+isFinite rather than parseFloat||0.
+  // The old `parseFloat(customPct) || 0` collapsed three semantically distinct
+  // states (empty input, NaN, literal 0) into "0% impact", silently rendering
+  // a credible-looking but meaningless 0% drawdown. Use a single canonical
+  // `customPctNum` so the description, color, modifier, and disabled state
+  // all branch on the same value.
+  const customPctNum = Number(customPct);
+  const customPctValid = Number.isFinite(customPctNum);
+
   // Wrap in useMemo so the conditional object identity is stable across
   // renders; otherwise the downstream `result` memo invalidates every render.
   const activeScenario = useMemo(
@@ -213,15 +222,17 @@ export function StressTest() {
         ? {
             id: "custom",
             name: "Custom Scenario",
-            description: `All positions ${parseFloat(customPct) >= 0 ? "+" : ""}${customPct}%`,
-            modifier: () => (parseFloat(customPct) || 0) / 100,
-            color: parseFloat(customPct) >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]",
+            description: customPctValid
+              ? `All positions ${customPctNum >= 0 ? "+" : ""}${customPct}%`
+              : "No scenario set",
+            modifier: () => (customPctValid ? customPctNum : 0) / 100,
+            color: customPctValid && customPctNum >= 0 ? "text-[var(--profit)]" : "text-[var(--loss)]",
           }
         // Fallback to SCENARIOS[0] if the persisted id ever drifts from the list
         // (e.g. a scenario was removed in a release). Never assert non-null — a
         // missing scenario used to blow up `.modifier` on load.
         : (SCENARIOS.find((s) => s.id === selectedScenario) ?? SCENARIOS[0]),
-    [selectedScenario, customPct],
+    [selectedScenario, customPct, customPctNum, customPctValid],
   );
 
   const result = useMemo(() => {
@@ -235,7 +246,7 @@ export function StressTest() {
         onClick={() => setOpen(true)}
         className={cn(
           "w-full flex items-center justify-center gap-2 rounded-lg border border-border",
-          "bg-[var(--surface)] px-4 py-2.5 text-label font-medium",
+          "bg-[var(--bg-card)] px-4 py-2.5 text-label font-medium",
           "text-muted-foreground hover:text-foreground hover:border-[var(--chart-4)]/50",
           "transition-all duration-200"
         )}
@@ -275,7 +286,7 @@ export function StressTest() {
                 "flex items-center gap-1 rounded-md border px-2 py-1 text-label font-medium transition-all",
                 selectedScenario === s.id
                   ? "border-[var(--chart-4)]/50 bg-[var(--chart-4)]/10 text-foreground"
-                  : "border-border bg-[var(--surface)] text-muted-foreground hover:text-foreground"
+                  : "border-border bg-[var(--bg-card)] text-muted-foreground hover:text-foreground"
               )}
             >
               {s.icon}
@@ -288,7 +299,7 @@ export function StressTest() {
               "flex items-center gap-1 rounded-md border px-2 py-1 text-label font-medium transition-all",
               selectedScenario === "custom"
                 ? "border-[var(--chart-4)]/50 bg-[var(--chart-4)]/10 text-foreground"
-                : "border-border bg-[var(--surface)] text-muted-foreground hover:text-foreground"
+                : "border-border bg-[var(--bg-card)] text-muted-foreground hover:text-foreground"
             )}
           >
             Custom
@@ -305,15 +316,30 @@ export function StressTest() {
               type="number"
               value={customPct}
               onChange={(e) => setCustomPct(e.target.value)}
-              className="w-20 rounded border border-border bg-[var(--surface)] px-2 py-1 text-label tabular-nums text-foreground outline-none focus:border-[var(--chart-4)]/50"
+              aria-invalid={!customPctValid}
+              className={cn(
+                "w-20 rounded border bg-[var(--bg-card)] px-2 py-1 text-label tabular-nums text-foreground outline-none",
+                customPctValid
+                  ? "border-border focus:border-[var(--chart-4)]/50"
+                  : "border-[var(--state-warning-border)] focus:border-[var(--state-warning)]"
+              )}
               step="1"
             />
             <span className="text-label text-muted-foreground">%</span>
           </div>
         )}
 
-        {/* Scenario description */}
-        <p className="text-label text-muted-foreground">
+        {/* Scenario description — P2-11: when custom is selected with an
+            invalid value, visually dim the description so users see "no
+            scenario set" rather than reading a credible-looking 0% impact.
+            The result block below also dims so the whole card communicates
+            "no scenario active" with a single coordinated state. */}
+        <p
+          className={cn(
+            "text-label text-muted-foreground",
+            selectedScenario === "custom" && !customPctValid && "opacity-60 italic"
+          )}
+        >
           {activeScenario.description}
         </p>
 
@@ -324,12 +350,19 @@ export function StressTest() {
           </div>
         )}
 
-        {/* Results */}
+        {/* Results — P2-11: dim the entire results block when custom is
+            selected with an invalid pct so the user is not led to believe
+            a 0% projection is meaningful. */}
         {result && (
-          <div className="space-y-3">
+          <div
+            className={cn(
+              "space-y-3",
+              selectedScenario === "custom" && !customPctValid && "opacity-50 pointer-events-none"
+            )}
+          >
             {/* Impact summary */}
             <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-lg border border-border bg-[var(--surface)] px-3 py-2">
+              <div className="rounded-lg border border-border bg-[var(--bg-card)] px-3 py-2">
                 <span className="text-label uppercase tracking-wider text-muted-foreground">
                   Projected Value
                 </span>
@@ -337,7 +370,7 @@ export function StressTest() {
                   {formatCurrency(result.totalStressedValue)}
                 </p>
               </div>
-              <div className="rounded-lg border border-border bg-[var(--surface)] px-3 py-2">
+              <div className="rounded-lg border border-border bg-[var(--bg-card)] px-3 py-2">
                 <span className="text-label uppercase tracking-wider text-muted-foreground">
                   Impact
                 </span>
@@ -404,7 +437,7 @@ export function StressTest() {
                   {result.positions.slice(0, 8).map((p) => (
                     <div
                       key={p.symbol}
-                      className="flex items-center justify-between rounded bg-[var(--surface)] px-2 py-1"
+                      className="flex items-center justify-between rounded bg-[var(--bg-card)] px-2 py-1"
                     >
                       <span className="text-label font-medium text-foreground">
                         {p.symbol}

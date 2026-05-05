@@ -4,7 +4,7 @@ import AuthProductFrame from "@/components/auth/AuthProductFrame";
 import LoginForm from "./_login/LoginForm";
 
 export const metadata: Metadata = {
-  title: "AlphaDesk — AI Trading Terminal",
+  title: "AlphaDesk · AI-powered trading terminal",
   description:
     "AlphaDesk is an AI trading terminal for researching ideas, testing strategies, reviewing trades, and operating with control.",
   // Auth surfaces should never appear in search results. Without this,

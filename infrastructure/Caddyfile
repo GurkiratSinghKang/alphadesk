@@ -124,18 +124,19 @@
         # ``object-src 'none'``, and ``upgrade-insecure-requests``
         # remain in place — those close gaps left implicit and don't
         # depend on the frontend build.
-        >Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss://{$DOMAIN:localhost}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
-        # Round-23 / persona-A P0: telemetry path for migrating off
-        # unsafe-inline. The strict policy below runs Report-Only —
-        # browsers POST violations to /api/v1/security/csp-report
-        # without blocking, so we can see exactly which inline
-        # scripts/styles need hashing or nonce-wiring before flipping
-        # the enforced header. ``upgrade-insecure-requests`` intentionally
-        # stays only in the enforced policy above: Chromium ignores it in
-        # Report-Only and surfaces a console error on every page load.
-        # Once the violation log is empty for a week of normal traffic, the
-        # unsafe-inline above can be dropped and this Report-Only line removed.
-        >Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https:; style-src 'self' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss://{$DOMAIN:localhost}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; report-uri /api/v1/security/csp-report"
+        #
+        # Audit P2-02 (2026-05-05): the Report-Only stricter policy that
+        # used to live alongside this header has been merged into the
+        # enforced header below — same allowed sources, same report-uri,
+        # plus ``'unsafe-inline'`` retained until the inline-bootstrap
+        # migration lands. Console captures showed Report-Only had been
+        # in place long enough to inventory inline usage; the next step
+        # is enforcement. Browsers will now BLOCK CSP-violating loads
+        # rather than silently logging them. Move to nonce-based or
+        # hash-based ``script-src`` when M-2 (deploy.yml smoke test
+        # repair) lets us drop ``'unsafe-inline'`` without risking
+        # another blank-page incident.
+        >Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss://{$DOMAIN:localhost}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests; report-uri /api/v1/security/csp-report"
         -Server
         -X-Powered-By
         # BUG-051: strip the ``Via: 1.1 Caddy`` response header. Leaking the

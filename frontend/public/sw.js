@@ -147,7 +147,31 @@ async function navigationStrategy(request) {
       // instead of always redirecting to "/".
       try {
         const reqUrl = new URL(request.url);
-        const target = reqUrl.pathname + reqUrl.search;
+        // Defense-in-depth: with the /trade* skip above, the offline shell
+        // should never be served on a trade route. If it is, surface a
+        // telemetry breadcrumb to active clients so a regression is
+        // detectable. SW context has no navigator.sendBeacon, so we
+        // postMessage to clients which can beacon themselves.
+        if (
+          reqUrl.pathname === "/trade" ||
+          reqUrl.pathname.startsWith("/trade/")
+        ) {
+          try {
+            const all = await self.clients.matchAll({ type: "window" });
+            for (const c of all) {
+              c.postMessage({
+                type: "offline_shell_trade_route",
+                url: reqUrl.pathname,
+              });
+            }
+          } catch (_beaconErr) {
+            // best-effort, never block the navigation response
+          }
+        }
+        let target = reqUrl.pathname + reqUrl.search;
+        // P2-13: reject empty / protocol-relative paths to avoid
+        // open-redirect via the offline-shell "Try again" link.
+        if (!/^\/[^/\\]/.test(target)) target = "/dashboard";
         const text = await cached.text();
         const injected = text.replace(
           "<!--FROM_URL_PLACEHOLDER-->",

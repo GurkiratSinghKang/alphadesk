@@ -76,7 +76,7 @@ export function TopBar() {
               <Menu className="h-4 w-4 text-muted-foreground" />
             </Button>
           } />
-          <SheetContent side="left" className="w-64 bg-[var(--surface)] border-border p-0">
+          <SheetContent side="left" className="w-64 bg-[var(--bg-card)] border-border p-0">
             <SheetHeader className="border-b border-border px-4 py-3">
               <SheetTitle className="flex items-baseline gap-1.5 text-numeric-lg">
                 <span className="font-display italic text-brand">α</span>

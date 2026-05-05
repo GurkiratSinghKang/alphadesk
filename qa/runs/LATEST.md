@@ -2,22 +2,33 @@
 
 > **Pointer file for downstream analysis agents.** Update the run ID below when you produce a newer canonical sweep.
 
-**Latest canonical run:** `2026-05-04T19-42-49Z`
-**Base URL captured:** `https://tradingalpha.net` (post PR #5–#31 deploys — full R1+R2+R3+R4 stack)
-**Manifest:** `qa/runs/2026-05-04T19-42-49Z/manifest.json`
-**Coverage:** 378 steps · 372 pass · 0 fail · 6 skip · 144 PNG snapshots across desktop-1440 + mobile-390
+**Latest canonical run:** `2026-05-05T14-21-21Z`
+**Base URL captured:** `https://tradingalpha.net` (pre-deploy of 2026-05-05 audit-fix commits — same code as 2026-05-04T20-31-40Z plus R6-1/-2/-5/-6/-8 not yet deployed)
+**Manifest:** `qa/runs/2026-05-05T14-21-21Z/manifest.json`
 
 Previous canonical runs:
+- `qa/runs/2026-05-04T20-31-40Z/manifest.json` (post R4 + audit-artifacts + sector_rotation + strategy fixes)
+- `qa/runs/2026-05-04T19-42-49Z/manifest.json` (post R4 — full stack pre R5 sweep)
 - `qa/runs/2026-05-04T15-47-19Z/manifest.json` (post R1+R2+R3-1)
 - `qa/runs/2026-05-04T02-58-02Z/manifest.json` (pre-sprint baseline)
-**Audit reports built on this run:**
+
+**Audit reports built on the 2026-05-05 cycle (live tradingalpha.net):**
+- `qa/reviews/MASTER-AUDIT-2026-05-05.md` — synthesis of all 5 streams
+- `qa/reviews/AUDIT-2026-05-05-backend.md` — 4 P0, 7 P1, 10 P2, 6 P3 (backend code)
+- `qa/reviews/AUDIT-2026-05-05-frontend.md` — 3 P0, 6 P1, 6 P2 (frontend code)
+- `qa/reviews/AUDIT-2026-05-05-personas.md` — 6 personas × workflow walkthroughs
+- `qa/reviews/AUDIT-2026-05-05-runtime.md` — console + network across 26 specs (mostly healthy)
+- `qa/reviews/AUDIT-2026-05-05-visual-pillars.md` — 6-pillar adversarial (10/24, R5 was 16/24)
+- `.audit/2026-05-05/{backend,frontend-perf,realtime-async,a11y-deep,persona-workflow}-findings.md` — parallel-session findings
+
+**Audit reports built on the 2026-05-04 cycle:**
 - `qa/reviews/pillars/01-copywriting.md` (Score 2/4)
 - `qa/reviews/pillars/02-visuals.md` (Score 2/4)
 - `qa/reviews/pillars/03-color.md` (Score 1/4 — POOR)
 - `qa/reviews/pillars/04-typography.md` (Score 2/4)
 - `qa/reviews/pillars/05-spacing.md` (Score 2/4)
 - `qa/reviews/pillars/06-experience.md` (Score 2/4)
-- `qa/reviews/UI-REVIEW.md` — synthesized ranked bug list
+- `qa/reviews/UI-REVIEW.md` — synthesized ranked bug list (R5)
 
 Previous prod run before PR #4 (FMP `both`-window fix): `qa/runs/2026-05-03T23-07-16Z/manifest.json`
 

@@ -73,8 +73,16 @@ export default function StaticArticle({
 
         <div className="mt-section flex flex-col gap-section-sm">
           {clauses.map((c) => (
+            // Merge resolution (PR #45 ↔ origin #43): combine R6-3's
+            // ``space-y-prose`` rhythm token (24px between SectionRule
+            // and body) with batch-F's explicit ``tagAs="h2"`` +
+            // ``className="t-h2"``. Batch F changed SectionRule's
+            // default ``tagAs`` from h2→div, so editorial pages must
+            // pass tagAs explicitly to keep semantic h2s. The
+            // ``mt-5`` body wrapper from HEAD is redundant once
+            // ``space-y-prose`` is on the section.
             <section key={c.index} className="space-y-prose">
-              <SectionRule tag={`§ ${c.index} · ${c.title}`} />
+              <SectionRule tag={`§ ${c.index} · ${c.title}`} tagAs="h2" className="t-h2" />
               {c.body}
             </section>
           ))}

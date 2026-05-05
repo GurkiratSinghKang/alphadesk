@@ -7,7 +7,7 @@ import { useWs } from "@/lib/providers";
 import { useUIStore } from "@/stores/ui";
 import { formatCurrency, cn } from "@/lib/utils";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
-import { useRegime, usePortfolioSummary } from "@/hooks/useQueries";
+import { useRegime, usePortfolioSummary, useBrokerConnections } from "@/hooks/useQueries";
 
 export function StatusStrip() {
   const [mounted, setMounted] = useState(false);
@@ -26,6 +26,37 @@ export function StatusStrip() {
   // flag — when the user has no Alpaca creds, we want to light up the
   // banner regardless of whether regime data has loaded yet.
   const { data: portfolioResp } = usePortfolioSummary();
+  // Batch E P1-21: tri-state PAPER pill. The pill must read from the
+  // SAME source Settings → Brokerage uses so a "Not connected" pill on
+  // the strip can never co-exist with a "Connected" badge in Settings.
+  // The hook is also useBrokerConnections (see useQueries.ts).
+  const { data: brokerConnections } = useBrokerConnections();
+  const activePaperConn = (brokerConnections ?? []).find(
+    (c) => c.status === "active" && c.account_env === "paper",
+  );
+  const activeLiveConn = (brokerConnections ?? []).find(
+    (c) => c.status === "active" && c.account_env === "live",
+  );
+  // Tri-state: NOT CONNECTED (gray) when no active connection,
+  // PAPER (chartreuse) when paper API key valid, LIVE (gold/amber)
+  // when live API key valid. tradingMode is the user's chosen mode
+  // (paper vs live); we surface what the broker connection actually
+  // supports so a user with paper-only creds in "live" mode sees the
+  // mismatch immediately.
+  type BrokerPillState = "not-connected" | "paper" | "live";
+  let brokerPillState: BrokerPillState;
+  if (!activePaperConn && !activeLiveConn) {
+    brokerPillState = "not-connected";
+  } else if (tradingMode === "live" && activeLiveConn) {
+    brokerPillState = "live";
+  } else if (tradingMode === "paper" && activePaperConn) {
+    brokerPillState = "paper";
+  } else {
+    // tradingMode and active connection don't agree — fall back to
+    // whichever connection IS active so the pill still tells the truth
+    // about real-money risk. live takes precedence (high-stakes signal).
+    brokerPillState = activeLiveConn ? "live" : "paper";
+  }
 
   const hasSummary =
     summary.is_demo !== undefined ||
@@ -110,16 +141,47 @@ export function StatusStrip() {
           can never overlap a sibling component's hover outline, and
           reserve a hair of right padding against the strip edge so the
           letter spacing doesn't push the last glyph into the overflow
-          scroll track. */}
+          scroll track.
+
+          Batch E P1-21 — tri-state pill. Was a static "PAPER" or
+          "LIVE" derived from the trading-mode toggle alone, which
+          could lie to a user who hadn't actually configured any
+          broker creds yet (clicked the toggle, saw "PAPER" in the
+          chrome, assumed everything was wired). Now reads:
+            NOT CONNECTED — no active broker connection (gray)
+            PAPER         — paper API key valid (chartreuse)
+            LIVE          — live API key valid (gold/amber)
+          The broker-connections list is the same source Settings →
+          Brokerage uses, so the pill and the Settings badge can
+          never disagree. */}
       <div className="relative isolate flex items-center gap-2 px-3 sm:px-4 sm:pr-5">
-        <span className="hidden text-foreground font-medium sm:inline">Alpaca ({tradingMode === "paper" ? "Paper" : "Live"})</span>
-        <span className={cn(
-          "inline-flex min-h-5 items-center rounded px-2 py-0.5 text-label font-bold uppercase tracking-[0.1em] leading-none",
-          tradingMode === "paper"
-            ? "bg-[var(--profit)]/15 text-[var(--profit)]"
-            : "bg-[var(--loss)]/15 text-[var(--loss)]"
-        )}>
-          {tradingMode}
+        <span className="hidden text-foreground font-medium sm:inline">
+          {brokerPillState === "not-connected"
+            ? "Broker"
+            : `Alpaca (${brokerPillState === "paper" ? "Paper" : "Live"})`}
+        </span>
+        <span
+          aria-label={
+            brokerPillState === "not-connected"
+              ? "No broker connected. Add credentials in Settings."
+              : brokerPillState === "live"
+                ? "Live trading mode — real-money execution active."
+                : "Paper trading mode — simulated execution."
+          }
+          className={cn(
+            "inline-flex min-h-5 items-center rounded px-2 py-0.5 text-label font-bold uppercase tracking-[0.1em] leading-none",
+            brokerPillState === "not-connected"
+              ? "bg-fg-muted/15 text-fg-muted"
+              : brokerPillState === "paper"
+                ? "bg-[var(--profit)]/15 text-[var(--profit)]"
+                : "bg-amber/20 text-amber",
+          )}
+        >
+          {brokerPillState === "not-connected"
+            ? "Not connected"
+            : brokerPillState === "paper"
+              ? "PAPER"
+              : "LIVE"}
         </span>
       </div>
       {/* Wave 3N persona-94 #8: `is_demo` is the backend's signal that

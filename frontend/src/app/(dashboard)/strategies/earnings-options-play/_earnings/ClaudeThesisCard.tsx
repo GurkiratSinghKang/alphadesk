@@ -4,6 +4,32 @@ import { useEffect, useState } from "react";
 import type { ClaudeStructured, ClaudeFullResearch } from "@/types";
 import { RateLimitError } from "@/lib/api";
 import { fmtDate, fmtNumber, fmtPct } from "@/lib/intl";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+/**
+ * R6-8 / R5-B3 fix: Claude occasionally returns a magnitude expressed as a
+ * percentage (e.g. ``8`` for "8%") instead of the documented decimal
+ * fraction (``0.08``). When that happens the Intl ``percent`` formatter
+ * multiplies by 100 again and renders ``+800.0% / -700.0%``, which is both
+ * mathematically wrong and visually disturbing on the PLTR earnings card.
+ *
+ * Clamp to ±100% (±1.0 as a fraction) so the visible number stays within a
+ * believable range; the tooltip surfaces the underlying out-of-range value
+ * so a reviewer can spot upstream data drift without being misled.
+ */
+const FORECAST_CLAMP = 1; // 100% as a fraction
+
+function clampForecast(raw: number): { display: number; clamped: boolean } {
+  if (!Number.isFinite(raw)) return { display: 0, clamped: false };
+  if (raw > FORECAST_CLAMP) return { display: FORECAST_CLAMP, clamped: true };
+  if (raw < -FORECAST_CLAMP) return { display: -FORECAST_CLAMP, clamped: true };
+  return { display: raw, clamped: false };
+}
 
 export interface ClaudeThesisCardProps {
   structured: ClaudeStructured | null;
@@ -87,11 +113,10 @@ export default function ClaudeThesisCard({ structured, full, running, error = nu
           conf {fmtPct(structured.confidence, 0)}
         </span>
       </div>
-      <p className="t-meta mt-1">
-        est. move: {fmtPct(structured.directionMagnitude.bullCasePct, 1, { signDisplay: "always" })}
-        &nbsp;/&nbsp;
-        {fmtPct(structured.directionMagnitude.bearCasePct, 1, { signDisplay: "always" })}
-      </p>
+      <EstMoveLine
+        bullCasePct={structured.directionMagnitude.bullCasePct}
+        bearCasePct={structured.directionMagnitude.bearCasePct}
+      />
       <div
         data-slot="claude-thesis-text"
         className="mt-2 whitespace-pre-wrap font-sans text-body-sm leading-relaxed"
@@ -138,6 +163,50 @@ export default function ClaudeThesisCard({ structured, full, running, error = nu
   );
 }
 
+/**
+ * R6-8 / R5-B3: render Claude's bull/bear-case magnitude with a sane
+ * display clamp. When the upstream value is outside the believable
+ * ±100% band we still surface the rendered number (clamped) but show
+ * an aria-described tooltip so a reviewer knows the source data was
+ * out of range — silent clamping would mask a real upstream bug.
+ */
+function EstMoveLine({
+  bullCasePct,
+  bearCasePct,
+}: {
+  bullCasePct: number;
+  bearCasePct: number;
+}) {
+  const bull = clampForecast(bullCasePct);
+  const bear = clampForecast(bearCasePct);
+  const anyClamped = bull.clamped || bear.clamped;
+  const lineContent = (
+    <>
+      est. move:{" "}
+      <span className={bull.clamped ? "u-muted underline decoration-dotted" : undefined}>
+        {fmtPct(bull.display, 1, { signDisplay: "always" })}
+      </span>
+      &nbsp;/&nbsp;
+      <span className={bear.clamped ? "u-muted underline decoration-dotted" : undefined}>
+        {fmtPct(bear.display, 1, { signDisplay: "always" })}
+      </span>
+    </>
+  );
+  if (!anyClamped) return <p className="t-meta mt-1">{lineContent}</p>;
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger render={<p className="t-meta mt-1" />}>{lineContent}</TooltipTrigger>
+        <TooltipContent side="top">
+          Source data outside reliable range — clamped to ±100% for display.
+          Raw values: bull {fmtPct(bullCasePct, 1, { signDisplay: "always" })}, bear{" "}
+          {fmtPct(bearCasePct, 1, { signDisplay: "always" })}.
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 interface FullResearchTriggerProps {
   running: boolean;
   error: Error | null;
@@ -153,7 +222,11 @@ interface FullResearchTriggerProps {
  */
 function FullResearchTrigger({ running, error, onRunFull, symbol }: FullResearchTriggerProps) {
   const isRateLimit = error instanceof RateLimitError;
-  const initialRetry = isRateLimit ? error.retryAfter ?? 0 : 0;
+  // P2-04: when rate-limited, default to a 5s minimum cooldown if the
+  // backend omitted retryAfter. Previously `?? 0` made the countdown
+  // effect return early so the button briefly enabled before the next
+  // 429 came back — a flicker the user could click through.
+  const initialRetry = isRateLimit ? (error.retryAfter ?? 5) : 0;
   const [retrySec, setRetrySec] = useState(initialRetry);
 
   // Reset countdown whenever a new error / retry duration arrives, then

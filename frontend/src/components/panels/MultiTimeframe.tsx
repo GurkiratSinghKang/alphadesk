@@ -36,7 +36,7 @@ function MiniChart({
 }) {
   if (loading) {
     return (
-      <div className="relative rounded-lg border border-border bg-[var(--surface)] p-2 h-full flex items-center justify-center">
+      <div className="relative rounded-lg border border-border bg-[var(--bg-card)] p-2 h-full flex items-center justify-center">
         <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />
       </div>
     );
@@ -44,7 +44,7 @@ function MiniChart({
 
   if (bars.length < 2) {
     return (
-      <div className="relative rounded-lg border border-border bg-[var(--surface)] p-2 h-full animate-pulse" />
+      <div className="relative rounded-lg border border-border bg-[var(--bg-card)] p-2 h-full animate-pulse" />
     );
   }
 
@@ -78,7 +78,7 @@ function MiniChart({
   return (
     <div
       className={cn(
-        "relative rounded-lg border p-2 h-full flex flex-col bg-[var(--surface)]",
+        "relative rounded-lg border p-2 h-full flex flex-col bg-[var(--bg-card)]",
         aboveAvg
           ? "border-[var(--profit)]/30"
           : "border-[var(--loss)]/30"

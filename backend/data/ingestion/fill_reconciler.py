@@ -514,6 +514,16 @@ async def _apply_event(event: dict[str, Any]) -> None:
                 # fill events so downstream pipeline code can size
                 # against the actually-filled qty rather than the
                 # leg-level qty.
+                #
+                # Audit R-F4 (2026-05-05): the original implementation
+                # unconditionally overwrote ``trade.filled_qty`` with
+                # whatever the latest event reported. Alpaca's trade-update
+                # stream can deliver ``partial_fill`` events out of order
+                # (network-level reordering, server-side replay during
+                # reconnect). A fill of 50 followed by a delayed
+                # partial_fill of 30 would land filled_qty=30 — backward.
+                # That corrupts the dashboard's reported position size and
+                # downstream P&L. Guard with monotonicity: only advance.
                 if event_name in ("fill", "partial_fill"):
                     try:
                         from decimal import Decimal as _Decimal
@@ -524,7 +534,22 @@ async def _apply_event(event: dict[str, Any]) -> None:
                         )
                         fq_dec = _Decimal(str(fq_raw or 0))
                         if fq_dec > 0 and hasattr(trade, "filled_qty"):
-                            trade.filled_qty = fq_dec
+                            existing = getattr(trade, "filled_qty", None)
+                            existing_dec = (
+                                _Decimal(str(existing)) if existing is not None
+                                else _Decimal("0")
+                            )
+                            if fq_dec > existing_dec:
+                                trade.filled_qty = fq_dec
+                            elif fq_dec < existing_dec:
+                                logger.warning(
+                                    "filled_qty backward event ignored "
+                                    "(client_order_id=%s, existing=%s, "
+                                    "incoming=%s, event=%s) — likely "
+                                    "out-of-order partial_fill or replay",
+                                    client_order_id, existing_dec,
+                                    fq_dec, event_name,
+                                )
                     except Exception:
                         logger.debug(
                             "filled_qty stamp failed for %s",

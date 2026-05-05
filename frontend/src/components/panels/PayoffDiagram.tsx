@@ -145,7 +145,7 @@ export function PayoffDiagram({ legs, currentPrice, className }: PayoffDiagramPr
   const fontUi = getTokenVar("--font-ui", "Inter, system-ui, sans-serif");
 
   return (
-    <div className={cn("rounded-md border border-border bg-[var(--surface)] p-2", className)}>
+    <div className={cn("rounded-md border border-border bg-[var(--bg-card)] p-2", className)}>
       <div className="flex items-center justify-between mb-1">
         <span className="text-label font-medium text-muted-foreground uppercase tracking-wider">
           Payoff at Expiration

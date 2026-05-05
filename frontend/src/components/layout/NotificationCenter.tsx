@@ -39,7 +39,7 @@ function NotificationIcon({ category, iconHint }: { category: NotificationCatego
   if (iconHint === "check" || iconHint === "filled") return <CheckCircle2 className={cn(cls, "text-[var(--profit)]")} />;
   if (iconHint === "rejected" || iconHint === "alert-triangle") return <AlertTriangle className={cn(cls, "text-[var(--loss)]")} />;
   if (iconHint === "bot") return <Bot className={cn(cls, "text-[var(--chart-5)]")} />;
-  if (iconHint === "shield") return <Shield className={cn(cls, "text-amber-400")} />;
+  if (iconHint === "shield") return <Shield className={cn(cls, "text-state-warning")} />;
   if (iconHint === "login") return <LogIn className={cn(cls, "text-[var(--chart-4)]")} />;
   if (iconHint === "clock") return <Clock className={cn(cls, "text-muted-foreground")} />;
 
@@ -146,7 +146,7 @@ export function NotificationCenter() {
         </Button>
         }
       />
-      <PopoverContent side="bottom" align="end" sideOffset={4} className="w-[calc(100vw-2rem)] max-w-96 sm:w-96 bg-[var(--surface)] border-border p-0">
+      <PopoverContent side="bottom" align="end" sideOffset={4} className="w-[calc(100vw-2rem)] max-w-96 sm:w-96 bg-[var(--bg-card)] border-border p-0">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
           <span className="text-label font-semibold text-foreground">Notifications</span>
@@ -166,6 +166,7 @@ export function NotificationCenter() {
                 onClick={clearAll}
                 className="flex items-center gap-1 text-label text-muted-foreground hover:text-foreground transition-colors"
                 title="Clear all"
+                aria-label="Clear all notifications"
               >
                 <Trash2 className="h-3 w-3" />
               </button>

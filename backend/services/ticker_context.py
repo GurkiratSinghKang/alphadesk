@@ -31,7 +31,33 @@ OnStale = Literal["allow", "refresh", "reject", "allow_with_warning"]
 _SCHEMA_VERSION = 1
 _CACHE_SCHEMA_VERSION = 1
 _REFRESH_LOCK_SECONDS = 30
+
+# Audit B-F9 / R-F8 (2026-05-05): the per-symbol lock dict grew
+# unboundedly — one entry per ``(symbol, namespace, key)`` tuple,
+# never evicted. Over months of operation that's tens of thousands
+# of stale ``asyncio.Lock`` instances. Bound it with a simple LRU
+# eviction: when the dict crosses ``_LOCAL_FACT_LOCKS_MAX``, drop
+# the oldest 25% of entries. A lock that was just evicted will
+# simply be re-created on next access; correctness is unaffected
+# (the lock only serialises within a single coroutine event-loop
+# tick anyway, so a fresh lock is fine even if there's a pending
+# acquirer somewhere).
 _LOCAL_FACT_LOCKS: dict[str, asyncio.Lock] = {}
+_LOCAL_FACT_LOCKS_MAX = 4096
+_LOCAL_FACT_LOCKS_EVICT_PCT = 0.25
+
+
+def _maybe_evict_local_fact_locks() -> None:
+    """Evict ~25% of the oldest entries when the dict exceeds the cap."""
+    if len(_LOCAL_FACT_LOCKS) <= _LOCAL_FACT_LOCKS_MAX:
+        return
+    # Python 3.7+ dict preserves insertion order — drop the oldest by
+    # taking the first N keys. setdefault re-inserts on miss so
+    # in-flight coroutines holding a reference to an evicted lock keep
+    # working; only NEW callers see the fresh lock.
+    n_to_drop = max(1, int(_LOCAL_FACT_LOCKS_MAX * _LOCAL_FACT_LOCKS_EVICT_PCT))
+    for key in list(_LOCAL_FACT_LOCKS.keys())[:n_to_drop]:
+        _LOCAL_FACT_LOCKS.pop(key, None)
 
 
 class FreshnessMeta(BaseModel):
@@ -367,6 +393,7 @@ class TickerContextService:
                 return _unavailable(spec), warnings
 
         lock_key = f"{symbol}:{spec.namespace}:{spec.key}"
+        _maybe_evict_local_fact_locks()
         lock = _LOCAL_FACT_LOCKS.setdefault(lock_key, asyncio.Lock())
         async with lock:
             reread = await self._load_cached_or_persisted(symbol, spec, max_age_seconds=max_age_seconds)
@@ -420,6 +447,7 @@ class TickerContextService:
                 return _unavailable(spec), warnings
 
         lock_key = f"{symbol}:{spec.namespace}:{spec.key}"
+        _maybe_evict_local_fact_locks()
         lock = _LOCAL_FACT_LOCKS.setdefault(lock_key, asyncio.Lock())
         async with lock:
             reread = await self._load_cached_or_persisted(symbol, spec, max_age_seconds=max_age_seconds)

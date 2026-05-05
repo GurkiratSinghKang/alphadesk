@@ -182,7 +182,7 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
   const pnlSize = compact ? "text-label" : "text-label";
 
   return (
-    <Card className="border-border bg-[var(--surface)]">
+    <Card className="border-border bg-[var(--bg-card)]">
       <CardContent className={compact ? "p-3" : "p-5"}>
         {/* Header with month navigation */}
         <div className="flex items-center justify-between mb-4">
@@ -275,7 +275,7 @@ export function PnlCalendar({ compact = false }: PnlCalendarProps) {
                         className={cn(
                           cellSize,
                           "rounded-md flex flex-col items-center justify-center cursor-default transition-transform hover:scale-105",
-                          cell.isToday && "ring-2 ring-primary ring-offset-1 ring-offset-[var(--surface)]"
+                          cell.isToday && "ring-2 ring-primary ring-offset-1 ring-offset-[var(--bg-card)]"
                         )}
                         style={{ backgroundColor: bg }}
                       >

@@ -275,7 +275,7 @@ const FeedItemRow = React.memo(function FeedItemRow({ item }: { item: FeedItem }
       className={cn(
         "flex items-start gap-3 rounded-lg border-l-2 px-3 py-2.5 transition-colors",
         SEVERITY_BORDER[item.severity],
-        isHighlight ? "bg-[var(--surface)]" : "hover:bg-[var(--surface)]/50"
+        isHighlight ? "bg-[var(--bg-card)]" : "hover:bg-[var(--bg-card)]/50"
       )}
     >
       <div className={cn("mt-0.5 shrink-0", SEVERITY_COLORS[item.severity])}>

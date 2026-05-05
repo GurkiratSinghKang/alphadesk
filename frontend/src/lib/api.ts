@@ -1810,6 +1810,39 @@ export async function getOrders(status?: string): Promise<Order[]> {
   });
 }
 
+// ─── Current user profile ─────────────────────────────────────
+
+/**
+ * Shape returned by ``GET /api/v1/user/me``. Mirrors the backend's
+ * ``user_to_dict`` helper plus an optional ``is_demo_seed`` flag we
+ * carry through for the dashboard's "connect your broker" prompt.
+ *
+ * Batch E (2026-05-05) — P0-05: when the dashboard sees a demo-seeded
+ * account it replaces the Action stack's first card with an explicit
+ * "Connect your broker" CTA so brand-new operators can't mistake the
+ * demo book for their real one.
+ */
+export interface CurrentUserProfile {
+  id?: number | null;
+  username: string;
+  email?: string | null;
+  role?: string;
+  status?: string;
+  display_name?: string | null;
+  profile?: Record<string, unknown> | null;
+  /**
+   * Optional — backend hasn't shipped this flag yet. Until it does,
+   * the dashboard treats ``username === "admin"`` as demo-seed (see
+   * page.tsx). Keep this typed so the wiring is one-line when the
+   * backend lands the field.
+   */
+  is_demo_seed?: boolean;
+}
+
+export function getCurrentUser(): Promise<CurrentUserProfile> {
+  return apiFetch<CurrentUserProfile>("/api/v1/user/me");
+}
+
 // ─── Broker Connections & Reconciliation ─────────────────────
 
 export interface BrokerConnection {

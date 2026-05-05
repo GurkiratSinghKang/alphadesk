@@ -308,18 +308,57 @@ function normalizeTopOfBook(q: TopOfBookQuote | null | undefined): NormalizedTop
   };
 }
 
-const STRUCTURE_COLORS = {
-  support: "rgba(46, 169, 143, 0.72)",
-  resistance: "rgba(200, 92, 92, 0.72)",
-  demand: "rgba(45, 126, 115, 0.78)",
-  supply: "rgba(142, 70, 93, 0.78)",
-  poc: "#c9a66b",
-};
+/**
+ * QA r6-2 — small CSS-var resolver. Reads from `:root` so light/dark
+ * theme swaps automatically; fallback is the SSR-safe value used before
+ * hydration so the chart never renders transparent.
+ */
+function getCSSVar(name: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+  return v ? v.trim() : fallback;
+}
 
-const BOOK_COLORS = {
-  bid: "rgba(46, 169, 143, 0.86)",
-  ask: "rgba(210, 110, 82, 0.86)",
-};
+/**
+ * QA r6-2 — STRUCTURE_COLORS / BOOK_COLORS were raw rgba/hex literals
+ * that bypassed the design-token system. They now resolve from CSS vars
+ * defined in `styles/design-tokens.css` (`--chart-structure-*`,
+ * `--chart-book-*`) so light-mode theme swaps work correctly and the chart
+ * palette stays in sync with the rest of the app.
+ *
+ * Defined as functions (not module-level objects) so they re-resolve on
+ * theme change — the consuming `React.useMemo` blocks already track the
+ * inputs that change when this matters.
+ */
+const STRUCTURE_COLOR_DEFAULTS = {
+  support: "rgba(168, 208, 77, 0.20)",
+  resistance: "rgba(224, 120, 86, 0.20)",
+  demand: "rgba(141, 179, 196, 0.18)",
+  supply: "rgba(217, 164, 65, 0.18)",
+  poc: "rgba(201, 166, 107, 0.30)",
+} as const;
+
+const BOOK_COLOR_DEFAULTS = {
+  bid: "rgba(168, 208, 77, 0.30)",
+  ask: "rgba(224, 120, 86, 0.30)",
+} as const;
+
+function getStructureColors() {
+  return {
+    support: getCSSVar("--chart-structure-support", STRUCTURE_COLOR_DEFAULTS.support),
+    resistance: getCSSVar("--chart-structure-resistance", STRUCTURE_COLOR_DEFAULTS.resistance),
+    demand: getCSSVar("--chart-structure-demand", STRUCTURE_COLOR_DEFAULTS.demand),
+    supply: getCSSVar("--chart-structure-supply", STRUCTURE_COLOR_DEFAULTS.supply),
+    poc: getCSSVar("--chart-structure-poc", STRUCTURE_COLOR_DEFAULTS.poc),
+  };
+}
+
+function getBookColors() {
+  return {
+    bid: getCSSVar("--chart-book-bid", BOOK_COLOR_DEFAULTS.bid),
+    ask: getCSSVar("--chart-book-ask", BOOK_COLOR_DEFAULTS.ask),
+  };
+}
 
 export default function ChartPane({
   data,
@@ -761,12 +800,13 @@ export default function ChartPane({
     const firstTime = visibleData[0].time;
     const lastTime = visibleData[visibleData.length - 1].time;
     const zoneDrawings: Drawing[] = [];
+    const structureColors = getStructureColors();
 
     if (structureZonesOn) {
       for (const zone of marketStructure.zones) {
         const color = zone.kind === "support"
-          ? STRUCTURE_COLORS.support
-          : STRUCTURE_COLORS.resistance;
+          ? structureColors.support
+          : structureColors.resistance;
         zoneDrawings.push({
           id: `market-structure:${zone.id}`,
           kind: "rect",
@@ -788,8 +828,8 @@ export default function ChartPane({
     if (orderBlocksOn) {
       for (const block of marketStructure.orderBlocks) {
         const color = block.kind === "demand"
-          ? STRUCTURE_COLORS.demand
-          : STRUCTURE_COLORS.supply;
+          ? structureColors.demand
+          : structureColors.supply;
         zoneDrawings.push({
           id: `market-block:${block.id}`,
           kind: "rect",
@@ -813,15 +853,16 @@ export default function ChartPane({
 
   const bookPriceLines = React.useMemo(() => {
     if (!topOfBookOn || !topBook) return [];
+    const bookColors = getBookColors();
     return [
       {
         price: topBook.bid,
-        color: BOOK_COLORS.bid,
+        color: bookColors.bid,
         label: `Bid ${formatBookPrice(topBook.bid)} x${formatBookSize(topBook.bidSize)}`,
       },
       {
         price: topBook.ask,
-        color: BOOK_COLORS.ask,
+        color: bookColors.ask,
         label: `Ask ${formatBookPrice(topBook.ask)} x${formatBookSize(topBook.askSize)}`,
       },
     ];
@@ -829,13 +870,14 @@ export default function ChartPane({
 
   const structurePriceLines = React.useMemo(() => {
     const lines: Array<{ price: number; color: string; label?: string }> = [];
+    const structureColors = getStructureColors();
 
     if (liquidityProfileOn) {
       const poc = marketStructure.profile.find((bin) => bin.isPoc);
       if (poc) {
         lines.push({
           price: poc.mid,
-          color: STRUCTURE_COLORS.poc,
+          color: structureColors.poc,
           label: `POC ${formatStructurePrice(poc.mid)}`,
         });
       }
@@ -847,8 +889,8 @@ export default function ChartPane({
         lines.push({
           price: zone.mid,
           color: zone.kind === "support"
-            ? STRUCTURE_COLORS.support
-            : STRUCTURE_COLORS.resistance,
+            ? structureColors.support
+            : structureColors.resistance,
           label: `${label} ${formatStructurePrice(zone.lower)}-${formatStructurePrice(zone.upper)}`,
         });
       }
@@ -861,8 +903,8 @@ export default function ChartPane({
         lines.push({
           price: mid,
           color: block.kind === "demand"
-            ? STRUCTURE_COLORS.demand
-            : STRUCTURE_COLORS.supply,
+            ? structureColors.demand
+            : structureColors.supply,
           label: `${label} ${block.relativeVolume.toFixed(1)}x vol`,
         });
       }

@@ -242,7 +242,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
         <div className="grid grid-cols-2 gap-3">
           {/* Beta */}
           <div
-            className="rounded-lg border border-border bg-[var(--surface)] px-3 py-2"
+            className="rounded-lg border border-border bg-[var(--bg-card)] px-3 py-2"
             title={
               metrics.betaEstimate == null
                 ? "Beta calculation requires historical returns data. Showing N/A because no positions match known tickers."
@@ -270,7 +270,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
           </div>
 
           {/* VaR */}
-          <div className="rounded-lg border border-border bg-[var(--surface)] px-3 py-2">
+          <div className="rounded-lg border border-border bg-[var(--bg-card)] px-3 py-2">
             <div className="flex items-center gap-1 mb-0.5">
               <TrendingDown className="h-3 w-3 text-muted-foreground" />
               <span className="text-label uppercase tracking-wider text-muted-foreground">Daily VaR</span>
@@ -284,7 +284,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
           </div>
 
           {/* Max position */}
-          <div className="rounded-lg border border-border bg-[var(--surface)] px-3 py-2">
+          <div className="rounded-lg border border-border bg-[var(--bg-card)] px-3 py-2">
             <div className="flex items-center gap-1 mb-0.5">
               <AlertTriangle className="h-3 w-3 text-muted-foreground" />
               <span className="text-label uppercase tracking-wider text-muted-foreground">Max Pos</span>
@@ -301,7 +301,7 @@ export function RiskDashboard({ regime }: RiskDashboardProps) {
           </div>
 
           {/* Concentration */}
-          <div className="rounded-lg border border-border bg-[var(--surface)] px-3 py-2">
+          <div className="rounded-lg border border-border bg-[var(--bg-card)] px-3 py-2">
             <div className="flex items-center gap-1 mb-0.5">
               <Shield className="h-3 w-3 text-muted-foreground" />
               <span className="text-label uppercase tracking-wider text-muted-foreground">Top Sector</span>

@@ -5,7 +5,7 @@ import Display from "@/components/typography/Display";
 import SectionRule from "@/components/typography/SectionRule";
 
 export const metadata: Metadata = {
-  title: "Earnings Data Guide - AlphaDesk",
+  title: "Earnings Data Guide — AlphaDesk",
   description:
     "How AlphaDesk builds the earnings options play view, including providers, delayed fields, AI research, and trading limitations.",
 };
@@ -21,7 +21,7 @@ const SECTIONS = [
     ],
   },
   {
-    tag: "02 · Derived Fields",
+    tag: "02 · Derived fields",
     title: "How the dashboard calculates context",
     body: [
       "Expected move is based on the front earnings-cycle options context when the chain is available. Historical earnings move is computed from prior FMP earnings dates joined to adjusted daily bars, using the close before the report and the next available trading-session close.",
@@ -30,7 +30,7 @@ const SECTIONS = [
     ],
   },
   {
-    tag: "03 · AI Research",
+    tag: "03 · AI research",
     title: "When Claude analysis appears",
     body: [
       "The structured thesis is generated and cached per symbol and report date after the calendar row is hydrated. It can be unavailable when the AI provider times out, a budget limit trips, or upstream data is too thin.",
@@ -39,7 +39,7 @@ const SECTIONS = [
     ],
   },
   {
-    tag: "04 · Trading Limits",
+    tag: "04 · Trading limits",
     title: "What the data does not guarantee",
     body: [
       "Options prices can move quickly around earnings, and displayed mid prices can differ from executable fills. Wide markets, halts, stale quotes, and after-hours reports can all change the realized trade.",

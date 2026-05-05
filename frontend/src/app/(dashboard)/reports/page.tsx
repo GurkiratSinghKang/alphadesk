@@ -66,9 +66,17 @@ function downloadCsv(filename: string, csvContent: string) {
   link.setAttribute("href", url);
   link.setAttribute("download", filename);
   document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  // P2-09: wrap click in try/finally so a synchronous handler throw
+  // (e.g. browser blocks the download in headless / CSP contexts) still
+  // unmounts the temp <a> and revokes the object URL. Otherwise the
+  // blob URL would leak and accumulate across exports in long-lived
+  // sessions.
+  try {
+    link.click();
+  } finally {
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
 }
 
 // CSV-injection hardening: Excel/Sheets/Numbers interpret any cell whose
@@ -287,7 +295,7 @@ function PortfolioStatement({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KpiTile label="Equity" value={formatCurrency(summary.equity)} />
         <KpiTile label="Cash" value={formatCurrency(summary.cash)} />
-        <KpiTile label="Buying Power" value={formatCurrency(summary.buyingPower)} />
+        <KpiTile label="Buying power" value={formatCurrency(summary.buyingPower)} />
         <KpiTile label="Positions" value={String(summary.positionsCount)} />
       </div>
 
@@ -317,7 +325,7 @@ function PortfolioStatement({
 
       {/* Current Positions Table */}
       <div>
-        <p className="t-label mb-2">Current Positions</p>
+        <p className="t-label mb-2">Current positions</p>
         {positions.length === 0 ? (
           <p className="rounded-lg border border-border bg-[var(--panel)] px-4 py-5 text-center font-display italic text-body-sm text-fg-muted">
             No positions in this period.
@@ -329,9 +337,9 @@ function PortfolioStatement({
                 <tr className="bg-[var(--panel)] border-b border-border">
                   <th className="px-3 py-2 text-left"><span className="t-label">Symbol</span></th>
                   <th className="px-3 py-2 text-right"><span className="t-label">Qty</span></th>
-                  <th className="px-3 py-2 text-right"><span className="t-label">Avg Cost</span></th>
+                  <th className="px-3 py-2 text-right"><span className="t-label">Avg cost</span></th>
                   <th className="px-3 py-2 text-right"><span className="t-label">Price</span></th>
-                  <th className="px-3 py-2 text-right"><span className="t-label">Mkt Value</span></th>
+                  <th className="px-3 py-2 text-right"><span className="t-label">Mkt value</span></th>
                   <th className="px-3 py-2 text-right"><span className="t-label">P&amp;L</span></th>
                   {/* Round-5 F-6 — Strategy attribution column. Maps to
                       `position.strategy` (added via the backend's
@@ -827,7 +835,7 @@ function StrategyPerformanceReport({
 
   const handleDownload = () => {
     const csv = arrayToCsv(
-      ["Strategy", "Status", "Return %", "Sharpe", "Max Drawdown %", "Trades", "Win Rate %", "Invested"],
+      ["Strategy", "Status", "Return %", "Sharpe", "Max drawdown %", "Trades", "Win rate %", "Invested"],
       strategyRows.map(s => [
         s.name,
         s.status,
@@ -857,7 +865,7 @@ function StrategyPerformanceReport({
               <th className="px-3 py-2 text-right"><span className="t-label">Sharpe</span></th>
               <th className="px-3 py-2 text-right"><span className="t-label">Max DD</span></th>
               <th className="px-3 py-2 text-right"><span className="t-label">Trades</span></th>
-              <th className="px-3 py-2 text-right"><span className="t-label">Win Rate</span></th>
+              <th className="px-3 py-2 text-right"><span className="t-label">Win rate</span></th>
             </tr>
           </thead>
           <tbody>
@@ -1133,19 +1141,19 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
           count so the net dollar figure reads first. */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <KpiTile
-          label="Short-Term Net"
+          label="Short-term net"
           value={fmtSigned(shortTermGains + shortTermLosses)}
           tone={netTone(shortTermGains + shortTermLosses)}
           hint={`${shortTermTrades.length} trades`}
         />
         <KpiTile
-          label="Long-Term Net"
+          label="Long-term net"
           value={fmtSigned(longTermGains + longTermLosses)}
           tone={netTone(longTermGains + longTermLosses)}
           hint={`${longTermTrades.length} trades`}
         />
         <KpiTile
-          label="Total Realized"
+          label="Total realized"
           value={fmtSigned(totalRealized)}
           tone={netTone(totalRealized)}
           hint={
@@ -1218,8 +1226,8 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
                 <th className="px-3 py-2 text-left"><span className="t-label">Symbol</span></th>
                 <th className="px-3 py-2 text-left"><span className="t-label">Type</span></th>
                 <th className="px-3 py-2 text-right"><span className="t-label">P&amp;L</span></th>
-                <th className="px-3 py-2 text-right"><span className="t-label">Days Held</span></th>
-                <th className="px-3 py-2 text-left"><span className="t-label">Exit Date</span></th>
+                <th className="px-3 py-2 text-right"><span className="t-label">Days held</span></th>
+                <th className="px-3 py-2 text-left"><span className="t-label">Exit date</span></th>
               </tr>
             </thead>
             <tbody>
@@ -1234,7 +1242,7 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
                       <span
                         data-testid="wash-sale-tag"
                         title="Wash-sale: this loss may be disallowed because the same symbol re-opened within 30 days. Best-effort detection — consult a professional."
-                        className="ml-2 inline-block rounded-sm bg-amber/20 px-1.5 py-0.5 text-label font-bold uppercase tracking-wider text-amber-200"
+                        className="ml-2 inline-block rounded-sm bg-amber/20 px-1.5 py-0.5 text-label font-bold uppercase tracking-wider text-state-warning-fg"
                         style={{ letterSpacing: "0.1em" }}
                       >
                         WS
@@ -1283,7 +1291,7 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
       <p
         role="note"
         data-testid="tax-report-disclaimer"
-        className="rounded-md border border-amber/40 bg-amber/5 px-3 py-2 font-sans text-label leading-snug text-amber-100"
+        className="rounded-md border border-amber/40 bg-amber/5 px-3 py-2 font-sans text-label leading-snug text-state-warning-fg"
       >
         Not tax advice — consult a professional. Wash-sale flags are
         computational best-effort: same-symbol re-buys within 30 days are

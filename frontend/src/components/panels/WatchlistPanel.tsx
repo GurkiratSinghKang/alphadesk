@@ -78,11 +78,15 @@ function ColumnSelector({
 
   useEffect(() => {
     if (!open) return;
-    function handleClick(e: MouseEvent) {
+    // P2-07: switched from `mousedown` to `pointerdown` so screen-reader /
+    // keyboard activation paths and touch input close the dropdown
+    // consistently — `mousedown` raced AT-driven activations on some
+    // assistive stacks (the popover would close before the click landed).
+    function handleClick(e: PointerEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("pointerdown", handleClick);
+    return () => document.removeEventListener("pointerdown", handleClick);
   }, [open]);
 
   return (
@@ -90,6 +94,8 @@ function ColumnSelector({
       <button
         onClick={() => setOpen((v) => !v)}
         aria-label="Configure watchlist columns"
+        aria-expanded={open}
+        aria-haspopup="listbox"
         className={cn(
           "flex h-9 w-9 sm:h-5 sm:w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors",
           open && "text-primary bg-primary/10"
@@ -99,7 +105,11 @@ function ColumnSelector({
         <Settings className="h-3.5 w-3.5 sm:h-3 sm:w-3" />
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 min-w-[140px] rounded-md border border-border bg-[var(--panel)] p-1.5 shadow-lg shadow-black/20">
+        <div
+          role="group"
+          aria-label="Watchlist columns"
+          className="absolute right-0 top-full mt-1 z-50 min-w-[140px] rounded-md border border-border bg-[var(--panel)] p-1.5 shadow-lg shadow-black/20"
+        >
           <div className="text-label uppercase tracking-wider text-muted-foreground px-2 py-1 mb-0.5">
             Columns
           </div>
@@ -123,51 +133,35 @@ function ColumnSelector({
   );
 }
 
-// ─── Mock sparkline (tiny SVG) ───────────────────────────────
+// ─── Mini sparkline placeholder ──────────────────────────────
+//
+// Batch B (P0-07) — the previous implementation drew an LCG-seeded
+// "shape" per symbol that looked like real intraday performance but
+// was pure noise (ticker hash → 9 RNG draws → trend-biased polyline).
+// AlphaDesk does not have a per-symbol intraday time-series feed for
+// arbitrary watchlist tickers today, so the only honest render is a
+// flat low-opacity line that signals "no data" without faking shape.
+// When a real per-symbol series is wired (e.g. a bars endpoint), pass
+// it via a prop and draw a real polyline; do not regenerate noise.
 
-function MiniSparkline({ trend, symbol }: { trend: number; symbol: string }) {
-  // Generate unique sparkline shape per symbol using a simple hash seed
-  let seed = 0;
-  for (let i = 0; i < symbol.length; i++) seed += symbol.charCodeAt(i) * (i + 1);
-
-  const rng = () => {
-    seed = (seed * 16807 + 11) % 2147483647;
-    return (seed - 1) / 2147483646;
-  };
-
-  const numPoints = 9;
-  const rawValues: number[] = [];
-  for (let i = 0; i < numPoints; i++) rawValues.push(rng());
-
-  // Bias toward upward or downward trend
-  const biased = rawValues.map((v, i) => {
-    const trendBias = trend > 0 ? (i / numPoints) * 0.4 : trend < 0 ? ((numPoints - i) / numPoints) * 0.4 : 0;
-    return v * 0.6 + trendBias;
-  });
-
-  const minV = Math.min(...biased);
-  const maxV = Math.max(...biased);
-  const range = maxV - minV || 1;
-
-  const points = biased
-    .map((v, i) => {
-      const x = (i / (numPoints - 1)) * 32;
-      const y = 12 - ((v - minV) / range) * 10 + 1;
-      return `${(x ?? 0).toFixed(1)},${(y ?? 0).toFixed(1)}`;
-    })
-    .join(" ");
-
+function MiniSparkline({ trend }: { trend: number }) {
   const color = trend > 0 ? "var(--profit)" : trend < 0 ? "var(--loss)" : "var(--neutral)";
 
   return (
-    <svg width="36" height="14" className="shrink-0">
-      <polyline
-        points={points}
-        fill="none"
+    <svg
+      width="36"
+      height="14"
+      className="shrink-0 opacity-30"
+      aria-hidden="true"
+    >
+      <line
+        x1="2"
+        x2="34"
+        y1="7"
+        y2="7"
         stroke={color}
         strokeWidth="1.5"
         strokeLinecap="round"
-        strokeLinejoin="round"
       />
     </svg>
   );
@@ -257,7 +251,10 @@ const WatchlistRow = React.memo(function WatchlistRow({
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") onSelect();
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
       }}
       className={`group flex w-full items-center gap-2 px-3 py-2.5 sm:py-1.5 text-body-sm sm:text-label min-h-touch sm:min-h-0 transition-colors hover:bg-accent/50 active:bg-accent/60 cursor-pointer ${flashClass} ${
         isSelected ? "bg-primary/10 border-l-2 border-l-primary" : "border-l-2 border-l-transparent"
@@ -267,7 +264,7 @@ const WatchlistRow = React.memo(function WatchlistRow({
         <div className="font-medium text-foreground tabular-nums">{symbol}</div>
       </div>
 
-      <MiniSparkline trend={hasRealChange ? change : 0} symbol={symbol} />
+      <MiniSparkline trend={hasRealChange ? change : 0} />
 
       {/* Price area — click to open quick-trade popover */}
       {selectedColumns.includes("last") && (
@@ -628,7 +625,7 @@ function ScreenerTab() {
 
       {/* Filter panel */}
       {showFilters && (
-        <div className="px-3 py-2 border-b border-border bg-[var(--surface)]">
+        <div className="px-3 py-2 border-b border-border bg-[var(--bg-card)]">
           <div className="grid grid-cols-2 gap-1.5">
             <select
               value={filters.marketCap}
@@ -698,7 +695,7 @@ function ScreenerTab() {
       )}
 
       {/* Sortable column headers */}
-      <div className="flex items-center gap-2 px-3 py-1 text-label uppercase tracking-wider text-muted-foreground border-b border-border bg-[var(--surface)]">
+      <div className="flex items-center gap-2 px-3 py-1 text-label uppercase tracking-wider text-muted-foreground border-b border-border bg-[var(--bg-card)]">
         <button onClick={() => handleSort("symbol")} className="flex-1 text-left hover:text-foreground transition-colors">
           Symbol <SortIcon col="symbol" />
         </button>
@@ -747,7 +744,7 @@ function ScreenerTab() {
                   <span className={cn(
                     "text-label font-bold rounded px-1 py-0.5",
                     r.compositeScore >= 70 ? "bg-[var(--profit)]/15 text-[var(--profit)]" :
-                    r.compositeScore >= 40 ? "bg-amber-500/15 text-amber-400" :
+                    r.compositeScore >= 40 ? "bg-state-warning/15 text-state-warning" :
                     "bg-[var(--loss)]/15 text-[var(--loss)]"
                   )}>
                     {r.compositeScore}
@@ -926,7 +923,7 @@ export function WatchlistPanel() {
           </form>
 
           {/* Keyboard hint */}
-          <div className="flex items-center gap-1.5 px-3 py-1 text-label text-muted-foreground/60 bg-[var(--surface)] border-b border-border">
+          <div className="flex items-center gap-1.5 px-3 py-1 text-label text-muted-foreground/60 bg-[var(--bg-card)] border-b border-border">
             <span>Click to select</span>
             <span className="text-muted-foreground/30">|</span>
             <span>
@@ -935,7 +932,7 @@ export function WatchlistPanel() {
           </div>
 
           {/* Column headers */}
-          <div className="flex items-center gap-2 px-3 py-1 text-label uppercase tracking-wider text-muted-foreground border-b border-border bg-[var(--surface)]">
+          <div className="flex items-center gap-2 px-3 py-1 text-label uppercase tracking-wider text-muted-foreground border-b border-border bg-[var(--bg-card)]">
             <button aria-label="Sort by symbol" onClick={() => handleSort("symbol")} className="flex-1 text-left hover:text-foreground transition-colors flex items-center gap-0.5">
               Symbol {sortKey === "symbol" && <span>{sortDir === "asc" ? "▲" : "▼"}</span>}
             </button>

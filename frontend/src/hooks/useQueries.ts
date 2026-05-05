@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { getMarketRegime, getMarketIndices, getStrategies, getPortfolioSummary, getPipelineStatus, getOptionsChain, getIVData, getPnlCalendar, getIndexSparklines, getMorningBrief, getTickerContext } from "@/lib/api";
+import { getMarketRegime, getMarketIndices, getStrategies, getPortfolioSummary, getPipelineStatus, getOptionsChain, getIVData, getPnlCalendar, getIndexSparklines, getMorningBrief, getTickerContext, getCurrentUser, getBrokerConnections } from "@/lib/api";
 
 export function useRegime() {
   return useQuery({
@@ -97,6 +97,46 @@ export function useMorningBrief() {
     queryKey: ['morningBrief'],
     queryFn: getMorningBrief,
     staleTime: 30 * 60 * 1000, // 30 min — brief doesn't change often
+    retry: 1,
+  });
+}
+
+/**
+ * Batch E (2026-05-05) — P0-05.
+ *
+ * The current user's profile (``GET /api/v1/user/me``). Used by the
+ * dashboard to detect demo-seed accounts and surface a "Connect your
+ * broker — your desk is showing demo data" CTA at the top of the
+ * Action stack. Cached for the full session (no auto-refetch) — the
+ * profile only changes on logout, which already invalidates the
+ * QueryClient via ``cleanupAuthCookies``.
+ */
+export function useCurrentUser() {
+  return useQuery({
+    queryKey: ["currentUser"],
+    queryFn: getCurrentUser,
+    // Profile is effectively immutable for the session. A 5-minute stale
+    // window is a generous belt-and-braces against accidental refetches.
+    staleTime: 5 * 60 * 1000,
+    // No interval refetch — there's nothing on this endpoint that
+    // changes mid-session that we need to react to in the desk.
+    retry: 1,
+  });
+}
+
+/**
+ * Batch E (2026-05-05) — P1-21.
+ *
+ * Broker connections list — same source the Settings → Brokerage tab
+ * uses. The StatusStrip's tri-state PAPER pill reads from this so the
+ * pill state stays in lock-step with what Settings shows.
+ */
+export function useBrokerConnections() {
+  return useQuery({
+    queryKey: ["brokerConnections"],
+    queryFn: getBrokerConnections,
+    staleTime: 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
     retry: 1,
   });
 }
