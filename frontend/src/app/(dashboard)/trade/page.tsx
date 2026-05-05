@@ -68,6 +68,11 @@ import { parseOccSymbol } from "@/lib/occ";
 import { ORDER_BAR_DEFAULTS, isValidOrderQty } from "@/lib/orderDefaults";
 import { isMarketOpen } from "@/lib/marketHours";
 import { isWorkingOrderStatus } from "@/lib/orders";
+import {
+  deriveLegReadiness,
+  type LegQuoteUnavailable,
+  type LegReadinessState,
+} from "@/lib/legQuoteReadiness";
 import type { OptionStrategyDraft, OptionStrategyLeg } from "@/lib/optionsPayoff";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { Order, Position } from "@/types";
@@ -367,6 +372,19 @@ export default function TradePage() {
     occ: string;
     underlying: string;
   } | null>(null);
+  // R6-5 (closes R5-B1, R5-M5) — multi-leg extension of optionsUnavailable
+  // above. R4-W-3 shipped the singular activeContract path; the
+  // activeLegs[] array path was untouched. The R5 sweep captured a
+  // strangle deep-link where both legs 404'd and the trader was shown the
+  // underlying NVDA quote dressed as a leg spread, with the
+  // execution-readiness pill claiming "2 passed checks". A trader could
+  // submit a real-money order on bogus pricing.
+  //
+  // This list mirrors the singular pattern: each entry describes a leg
+  // whose OCC was missing from the snapshot fan-out's result map. The
+  // OrderBar surfaces a per-leg banner; buildExecutionReadiness gates
+  // submit via deriveLegReadiness (lib/legQuoteReadiness.ts).
+  const [legsUnavailable, setLegsUnavailable] = useState<LegQuoteUnavailable[]>([]);
   // QA r1 A2 follow-up: hydrate the OCC quote into the store. The data
   // pipeline bridge only fans out for the equity watchlist + selected
   // symbol — option contracts deep-linked via ?contract= / ?legs= aren't
@@ -380,9 +398,31 @@ export default function TradePage() {
     for (const leg of activeLegs) symbols.push(leg.occ);
     if (symbols.length === 0) {
       setOptionsUnavailable(null);
+      setLegsUnavailable([]);
       return;
     }
     let cancelled = false;
+    // R6-5: snapshot helper for the multi-leg branch. getSnapshot's
+    // per-symbol fan-out swallows 404s and returns a partial map; we
+    // detect missing OCCs by absence rather than rejection. The
+    // singular activeContract path (R4-W-3) had the same shape; we now
+    // mirror it for activeLegs[].
+    const computeMissingLegs = (
+      snapshot: Record<string, unknown>,
+    ): LegQuoteUnavailable[] => {
+      if (activeLegs.length === 0) return [];
+      const missing: LegQuoteUnavailable[] = [];
+      for (const leg of activeLegs) {
+        if (!snapshot[leg.occ]) {
+          missing.push({
+            occ: leg.occ,
+            symbol: leg.symbol,
+            reason: "404",
+          });
+        }
+      }
+      return missing;
+    };
     getSnapshot(symbols)
       .then((snapshot) => {
         if (cancelled) return;
@@ -402,6 +442,11 @@ export default function TradePage() {
         } else {
           setOptionsUnavailable(null);
         }
+        // R6-5: same detection mirrored across activeLegs[]. The DOM
+        // snapshot at qa/runs/2026-05-04T20-31-40Z confirmed both legs of
+        // a strangle 404'd and zero `data-slot=order-bar-*` rendered;
+        // setting this state populates the new banner + drives the pill.
+        setLegsUnavailable(computeMissingLegs(snapshot));
       })
       .catch(() => {
         // Total network failure (rare — getSnapshot itself swallows symbol
@@ -412,6 +457,17 @@ export default function TradePage() {
             occ: activeContract.occ,
             underlying: activeContract.symbol,
           });
+        }
+        // R6-5: on a total network failure, every leg is effectively
+        // unavailable. Mark the whole array so the pill goes coral.
+        if (activeLegs.length > 0) {
+          setLegsUnavailable(
+            activeLegs.map((leg) => ({
+              occ: leg.occ,
+              symbol: leg.symbol,
+              reason: "generic",
+            })),
+          );
         }
       });
     return () => {
@@ -551,6 +607,14 @@ export default function TradePage() {
       tradeContextSymbol,
     });
     const nowEpochSubmit = Date.now() / 1000;
+    // R6-5: rebuild leg readiness on the submit path with current state.
+    // Mirrors the live-render `legReadiness` memo above; we recompute
+    // here because handleSubmit is async and the snapshot fetcher may
+    // have settled with new failures since the last render.
+    const submittedLegReadiness = deriveLegReadiness({
+      totalLegs: activeLegs.length,
+      unavailable: legsUnavailable,
+    });
     const submittedReadiness = buildExecutionReadiness({
       preview: submittedPreview,
       quote: executionQuote,
@@ -564,6 +628,7 @@ export default function TradePage() {
           ? null
           : Math.max(0, nowEpochSubmit - executionQuote.timestamp),
       marketOpen: isMarketOpen(),
+      legReadiness: submittedLegReadiness,
     });
 	    if (!submittedReadiness.canSubmit) {
 	      fail(submittedReadiness.blocker ?? "Resolve the execution gate before submitting.");
@@ -798,6 +863,17 @@ export default function TradePage() {
     return Math.max(0, Date.now() / 1000 - ts);
   }, [executionQuote.timestamp]);
   const marketOpen = useMemo(() => isMarketOpen(), []);
+  // R6-5: derive the leg-quote readiness state once and reuse it for both
+  // the live-render readiness pill and the on-submit readiness re-check.
+  // `deriveLegReadiness` is pure — see lib/legQuoteReadiness.ts.
+  const legReadiness = useMemo(
+    () =>
+      deriveLegReadiness({
+        totalLegs: activeLegs.length,
+        unavailable: legsUnavailable,
+      }),
+    [activeLegs.length, legsUnavailable],
+  );
   const executionReadiness = useMemo(
     () =>
       buildExecutionReadiness({
@@ -808,8 +884,9 @@ export default function TradePage() {
         brokerDegraded,
         quoteAgeSeconds,
         marketOpen,
+        legReadiness,
       }),
-    [tradePreview, executionQuote, seriesError, seriesLoading, brokerDegraded, quoteAgeSeconds, marketOpen],
+    [tradePreview, executionQuote, seriesError, seriesLoading, brokerDegraded, quoteAgeSeconds, marketOpen, legReadiness],
   );
   const chartOrderDraft = useMemo(
     () =>
@@ -1118,6 +1195,10 @@ export default function TradePage() {
                 ticketLocked={activeLegs.length > 0}
                 optionsUnavailable={optionsUnavailable}
                 onRetryOptions={() =>
+                  setOptionsSnapshotRetry((tick) => tick + 1)
+                }
+                legsUnavailable={legsUnavailable}
+                onRetryLegs={() =>
                   setOptionsSnapshotRetry((tick) => tick + 1)
                 }
                 className="border-t-0 bg-transparent"
@@ -1477,6 +1558,7 @@ function buildExecutionReadiness({
   brokerDegraded,
   quoteAgeSeconds,
   marketOpen,
+  legReadiness,
 }: {
   preview: PreTradePreview;
   quote: ExecutionQuote;
@@ -1485,6 +1567,15 @@ function buildExecutionReadiness({
   brokerDegraded: boolean;
   quoteAgeSeconds: number | null;
   marketOpen: boolean;
+  /**
+   * R6-5 (closes R5-B1, R5-M5) — derived state for missing leg quotes
+   * on multi-leg combo tickets. When `status === "blocked"` every
+   * staged leg failed and the readiness pill must short-circuit to
+   * coral; when `partial`, amber. When `ready` we fall through to the
+   * existing checks. Always provided (defaults to a `ready` no-op when
+   * no legs are staged).
+   */
+  legReadiness: LegReadinessState;
 }): ExecutionReadiness {
   const hardBlock = preview.checks.find((check) => check.tone === "block");
   const review = preview.checks.find((check) => check.tone === "warn");
@@ -1501,6 +1592,42 @@ function buildExecutionReadiness({
       destination: "Submit locked while broker data is degraded",
       reviewCopy: "Live send locked · broker snapshot required",
       icon: Plug,
+    };
+  }
+
+  // R6-5: leg-quote outage takes precedence over the (often
+  // misleading) underlying-quote `hardBlock` and `review` checks. The
+  // R5 capture proved the pre-existing checks happily passed when the
+  // underlying NVDA quote was fresh, even though both staged strangle
+  // legs 404'd. Short-circuit before those checks see the misleading
+  // underlying-quote success.
+  if (legReadiness.status === "blocked") {
+    return {
+      label: legReadiness.label,
+      tone: "loss",
+      headline: legReadiness.headline,
+      detail: legReadiness.detail,
+      canSubmit: false,
+      blocker: legReadiness.blocker,
+      submitLabel: "Cannot submit — refresh leg quotes",
+      destination: "Submit locked while combo leg quotes are missing",
+      reviewCopy: "Cannot submit · combo leg quotes missing",
+      icon: LockSimple,
+    };
+  }
+
+  if (legReadiness.status === "partial") {
+    return {
+      label: legReadiness.label,
+      tone: "amber",
+      headline: legReadiness.headline,
+      detail: legReadiness.detail,
+      canSubmit: false,
+      blocker: legReadiness.blocker,
+      submitLabel: "Refresh leg quotes",
+      destination: "Submit locked until every leg quote returns",
+      reviewCopy: "Combo leg quote missing · refresh before submit",
+      icon: WarningCircle,
     };
   }
 
