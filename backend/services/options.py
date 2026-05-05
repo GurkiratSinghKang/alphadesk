@@ -121,13 +121,14 @@ class Greeks(BaseModel):
 # ---------------------------------------------------------------------------
 # Demo data helpers
 # ---------------------------------------------------------------------------
+# Demo seed tables live in ``backend/data/symbol_lists.py`` (Batch V). The
+# options service uses its own price/IV tables (kept separate from the
+# market service tables because the existing values diverge — see the
+# module docstring there for the consolidation plan).
 
-_DEMO_BASE_PRICES: dict[str, float] = {
-    "AAPL": 265.0, "NVDA": 197.0, "TSLA": 390.0, "MSFT": 418.0,
-    "AMZN": 249.0, "META": 672.0, "GOOGL": 339.0, "SPY": 700.0,
-    "AMD": 155.0, "NFLX": 1050.0, "CRM": 310.0, "INTC": 25.0,
-    "QQQ": 639.0,
-}
+from data.symbol_lists import (
+    DEMO_BASE_PRICES_OPTIONS as _DEMO_BASE_PRICES,
+)
 
 # B-47/B-48: bounded TTL+LRU caches for the three options-data hot paths.
 # OrderedDict + a single helper keeps memory predictable: under the worst case
@@ -168,11 +169,8 @@ def _ttl_lru_set(
 _real_spot_cache: "_OrderedDict[str, tuple[float, float]]" = _OrderedDict()
 _SPOT_CACHE_TTL = 60  # seconds
 
-_DEMO_BASE_IV: dict[str, float] = {
-    "TSLA": 0.55, "NVDA": 0.48, "AMD": 0.45, "META": 0.38,
-    "NFLX": 0.40, "COIN": 0.65, "AAPL": 0.25, "MSFT": 0.22,
-    "AMZN": 0.30, "GOOGL": 0.26, "SPY": 0.15,
-}
+# See ``backend/data/symbol_lists.py`` for the canonical definition.
+from data.symbol_lists import DEMO_BASE_IV as _DEMO_BASE_IV  # noqa: E402
 
 
 def _symbol_seed(symbol: str) -> int:

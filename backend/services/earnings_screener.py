@@ -644,47 +644,17 @@ _REPORT_TIME_MAP = {"amc": "AMC", "bmo": "BMO", "unknown": "DMT"}
 
 
 # Curated universe of high-market-cap, deeply-liquid, options-heavy US names.
-#
-# Rules for inclusion (all three must hold):
-#   1. Market cap ≥ $25B at the time of vetting (mega + liquid large caps).
-#   2. Weekly or monthly options listed with ≥ 10k contract OI on the
-#      front-month straddle (deep enough to absorb multi-leg fills).
-#   3. Single-name business story — a Claude thesis has substance to work
-#      against (not thematic ETFs or SPACs or inverse/leveraged derivatives).
-#
-# Explicitly excluded even if they're earnings-cycle liquid:
-#   • Sub-$20B meme / retail names (GME, AMC, BB, BBIG, PTON, BYND, LCID,
-#     NIO, XPEV, RIVN, AFRM, SOFI, HOOD, DKNG, MARA, RIOT, ROKU, U,
-#     OKTA-ish, SNAP, PINS, DASH, FSLY, ZM, DOCU, TWLO) — spreads are wide
-#     relative to premium and Claude can't consistently read the tape.
-#   • Foreign ADRs with thin US options chains (kept BABA/TSM/ASML — the
-#     three whose US chains are actually deep; dropped JD/PDD/NTES/BIDU).
+# Authoritative definition lives in ``backend/data/symbol_lists.py`` (Batch V).
+# Re-exported here so existing importers continue to work.
 #
 # B-66: the filter is now unconditional (formerly gated on a vestigial
 # `market_cap` query param that never did anything). If a user wants the
 # full FMP feed they can hit the raw provider directly.
-CURATED_OPTIONABLE_UNIVERSE: frozenset[str] = frozenset({
-    # Mega caps (SP100 + top 30 outside) — $100B+
-    "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "META", "NVDA", "TSLA",
-    "BRK.B", "AVGO", "LLY", "WMT", "JPM", "V", "XOM", "MA", "ORCL",
-    "COST", "HD", "PG", "JNJ", "NFLX", "BAC", "CRM", "ABBV", "CVX",
-    "KO", "MRK", "AMD", "ADBE", "PEP", "TMO", "ACN", "LIN", "CSCO",
-    "MCD", "ABT", "TXN", "GE", "DHR", "WFC", "NOW", "INTU", "IBM",
-    "CAT", "AMGN", "NEE", "ISRG", "PFE", "PM", "QCOM", "GS", "UNP",
-    "VZ", "T", "RTX", "COP", "SPGI", "LOW", "ETN", "BLK", "HON",
-    "SYK", "AXP", "BKNG", "VRTX", "C", "ELV", "DE", "TJX", "ADP",
-    "GILD", "PLD", "PANW", "SCHW", "MMC", "LMT", "CB", "REGN", "MDT",
-    "UBER", "BSX", "MU", "SBUX", "FI", "BX", "AMT", "KLAC", "MDLZ",
-    "ADI", "CVS", "SO", "GEV", "ZTS", "CI", "MO", "CL", "DUK",
-    "BMY", "WM", "ICE", "SNPS", "APH", "SHW", "PYPL", "CME",
-    # Liquid large caps with deep options ($25B–$100B)
-    "BA", "F", "GM", "DIS", "NKE", "SPOT", "TEAM", "ANET", "MRVL",
-    "LRCX", "WDAY", "FTNT", "CDNS", "PLTR", "SNOW", "COIN", "SHOP",
-    "ABNB", "CRWD", "DDOG", "SQ", "DASH", "CVNA", "RBLX", "NET",
-    "MDB", "ZS",
-    # Foreign ADRs with deep US options chains
-    "ASML", "TSM", "BABA",
-})
+from data.symbol_lists import (  # noqa: E402 — re-export for back-compat
+    BMO_AMC_FALLBACK_MAP as _CURATED_REPORT_TIME_FALLBACK,
+    CURATED_OPTIONABLE_UNIVERSE,
+    HEADLINE_EARNINGS_SYMBOLS as _HEADLINE_EARNINGS_SYMBOLS,
+)
 
 
 def _in_curated_universe(symbol: str) -> bool:
@@ -697,70 +667,11 @@ def _in_curated_universe(symbol: str) -> bool:
 # soon after they print, while /earnings still keeps the event row. Rescue
 # a small headline/default-watchlist subset from that per-symbol endpoint
 # so crowded mega-cap days don't show as if MSFT/AMZN/GOOG never reported.
-_HEADLINE_EARNINGS_SYMBOLS: tuple[str, ...] = (
-    "MSFT", "AMZN", "GOOGL", "GOOG", "AAPL", "META", "NVDA", "TSLA",
-)
 _HEADLINE_SYMBOL_RANK: dict[str, int] = {
     symbol: idx for idx, symbol in enumerate(_HEADLINE_EARNINGS_SYMBOLS)
 }
 _HEADLINE_REPORT_TIME_DEFAULTS: dict[str, str] = {
     symbol: "AMC" for symbol in _HEADLINE_EARNINGS_SYMBOLS
-}
-
-
-# Batch P / P-4: BMO/AMC fallback for symbols where FMP's ``time`` field
-# is null / "unknown". The curated universe is small (~150 names) and the
-# AMC vs. BMO classification is stable across quarters for most names —
-# tech megacaps overwhelmingly print AMC, US banks BMO, etc. When FMP's
-# upstream tells us "unknown" we overlay this static map and downgrade to
-# "DMT" only as a last resort. This lets the FE render the correct chip
-# (AMC / BMO) for AMD, NFLX, AVGO, JPM, … on the day-of even when the
-# provider is slow to update.
-#
-# Sources:
-#   * Each symbol's most recent ≥ 6 quarters of confirmed timing on
-#     Bloomberg / earningswhispers / company IR press-release headers.
-#   * Only symbols with a stable pattern (≥ 5 of last 6 reports same
-#     timing) are populated; ambiguous ones stay null and fall through
-#     to "DMT".
-_CURATED_REPORT_TIME_FALLBACK: dict[str, str] = {
-    # Tech / semis (overwhelmingly AMC)
-    "AAPL": "AMC", "MSFT": "AMC", "GOOG": "AMC", "GOOGL": "AMC",
-    "AMZN": "AMC", "META": "AMC", "NVDA": "AMC", "TSLA": "AMC",
-    "AMD": "AMC", "NFLX": "AMC", "AVGO": "AMC", "ADBE": "AMC",
-    "ORCL": "AMC", "CRM": "AMC", "NOW": "AMC", "INTU": "AMC",
-    "PANW": "AMC", "FTNT": "AMC", "CRWD": "AMC", "DDOG": "AMC",
-    "CDNS": "AMC", "SNPS": "AMC", "PLTR": "AMC", "SNOW": "AMC",
-    "MRVL": "AMC", "MU": "AMC", "KLAC": "AMC", "LRCX": "AMC",
-    "ANET": "AMC", "ADI": "AMC", "QCOM": "AMC", "TXN": "AMC",
-    "ZS": "AMC", "MDB": "AMC", "NET": "AMC", "TEAM": "AMC",
-    "WDAY": "AMC", "INTC": "AMC", "CSCO": "AMC", "IBM": "AMC",
-    "PYPL": "AMC", "UBER": "AMC", "ABNB": "AMC", "RBLX": "AMC",
-    "SHOP": "AMC", "COIN": "AMC", "DASH": "AMC", "SPOT": "AMC",
-    # Banks / financials (overwhelmingly BMO)
-    "JPM": "BMO", "BAC": "BMO", "WFC": "BMO", "C": "BMO",
-    "GS": "BMO", "MS": "BMO", "BLK": "BMO", "SCHW": "BMO",
-    "AXP": "BMO", "USB": "BMO", "PNC": "BMO", "TFC": "BMO",
-    # Healthcare / pharma (mostly BMO)
-    "JNJ": "BMO", "PFE": "BMO", "MRK": "BMO", "ABBV": "BMO",
-    "BMY": "BMO", "LLY": "BMO", "AMGN": "BMO", "GILD": "AMC",
-    "VRTX": "AMC", "REGN": "BMO", "BSX": "BMO", "MDT": "BMO",
-    "TMO": "BMO", "ABT": "BMO", "DHR": "BMO", "SYK": "BMO",
-    "ISRG": "AMC", "ELV": "BMO", "CI": "BMO", "CVS": "BMO",
-    "ZTS": "BMO",
-    # Consumer / staples / retail (mixed; document each)
-    "WMT": "BMO", "COST": "AMC", "HD": "BMO", "LOW": "BMO",
-    "TGT": "BMO", "TJX": "BMO", "MCD": "BMO", "SBUX": "AMC",
-    "NKE": "AMC", "DIS": "AMC", "BKNG": "AMC", "CMCSA": "BMO",
-    "PG": "BMO", "KO": "BMO", "PEP": "BMO", "MDLZ": "AMC",
-    "PM": "BMO", "MO": "BMO", "CL": "BMO",
-    # Industrials / energy / materials (mostly BMO)
-    "BA": "BMO", "CAT": "BMO", "DE": "BMO", "GE": "BMO",
-    "HON": "BMO", "RTX": "BMO", "LMT": "BMO", "UPS": "BMO",
-    "UNP": "BMO", "F": "BMO", "GM": "BMO", "XOM": "BMO",
-    "CVX": "BMO", "COP": "BMO",
-    # Misc liquid
-    "V": "AMC", "MA": "AMC", "FI": "BMO",
 }
 
 

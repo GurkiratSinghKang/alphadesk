@@ -140,53 +140,18 @@ class Timeframe(str, Enum):
 # ---------------------------------------------------------------------------
 # Demo data helpers
 # ---------------------------------------------------------------------------
+# Demo seed tables live in ``backend/data/symbol_lists.py`` (Batch V). The
+# market service re-exports them under the previous module-private names so
+# call sites and tests don't have to change. ``_VALID_DEMO_SYMBOLS`` gates
+# demo-data generation to known tickers (S&P 500 + major ETFs / indices);
+# unknown symbols return "no data" rather than fabricated quotes.
 
-_DEMO_BASE_PRICES: dict[str, float] = {
-    "AAPL": 230.0, "NVDA": 140.0, "TSLA": 275.0, "MSFT": 430.0,
-    "AMZN": 195.0, "META": 530.0, "GOOGL": 175.0, "SPY": 590.0,
-    "AMD": 165.0, "NFLX": 680.0, "CRM": 310.0, "INTC": 32.0,
-    "DIS": 115.0, "BA": 195.0, "JPM": 220.0, "V": 295.0,
-    "WMT": 175.0, "PG": 170.0, "KO": 62.0, "XOM": 115.0,
-}
-
-_DEMO_VOLATILITY: dict[str, float] = {
-    "TSLA": 0.025, "NVDA": 0.020, "AMD": 0.020, "META": 0.018,
-    "NFLX": 0.018,
-}
-_DEFAULT_VOLATILITY = 0.012
-
-# ---------------------------------------------------------------------------
-# Valid symbols for demo fallback — only generate fake data for known tickers.
-# Includes S&P 500 / top US stocks plus major ETFs and indices.
-# ---------------------------------------------------------------------------
-_VALID_DEMO_SYMBOLS: set[str] = {
-    # -- Mega-cap / top holdings --
-    "AAPL", "ABBV", "ABT", "ACN", "ADBE", "ADI", "ADP", "ADSK", "AEP", "AIG",
-    "AMAT", "AMD", "AMGN", "AMZN", "ANET", "ANSS", "AON", "APD", "APH", "AVGO",
-    "AXP", "BA", "BAC", "BDX", "BKNG", "BLK", "BMY", "BRK.B", "BSX", "C",
-    "CAT", "CB", "CDNS", "CEG", "CHTR", "CI", "CL", "CMCSA", "CME", "COF",
-    "COP", "COST", "CRM", "CRWD", "CSCO", "CTAS", "CVS", "CVX", "D", "DASH",
-    "DE", "DHR", "DIS", "DUK", "DXCM", "EA", "ECL", "EL", "EMR", "ENPH",
-    "EOG", "EQR", "EW", "EXPE", "F", "FAST", "FDX", "FERG", "FI", "FICO",
-    "FTNT", "GD", "GE", "GILD", "GM", "GOOG", "GOOGL", "GPN", "GS", "HCA",
-    "HD", "HLT", "HON", "IBM", "ICE", "IDXX", "ILMN", "INTC", "INTU", "ISRG",
-    "ITW", "JNJ", "JPM", "KDP", "KHC", "KLAC", "KO", "LIN", "LLY", "LMT",
-    "LOW", "LRCX", "LULU", "MA", "MAR", "MCD", "MCHP", "MCO", "MDLZ", "MDT",
-    "MET", "META", "MMC", "MMM", "MNST", "MO", "MPC", "MRVL", "MS", "MSCI",
-    "MSFT", "MSI", "MU", "NEE", "NFLX", "NKE", "NOC", "NOW", "NSC", "NVDA",
-    "NXPI", "ODFL", "ON", "ORCL", "ORLY", "OXY", "PANW", "PAYX", "PCAR",
-    "PEP", "PFE", "PG", "PGR", "PH", "PLTR", "PM", "PNC", "PSA", "PSX",
-    "PYPL", "QCOM", "REGN", "ROP", "ROST", "RTX", "SBUX", "SCHW", "SHW",
-    "SLB", "SMCI", "SNPS", "SO", "SPGI", "SRE", "SYK", "SYY", "T", "TDG",
-    "TGT", "TJX", "TMO", "TMUS", "TRV", "TSLA", "TT", "TXN", "UNH", "UNP",
-    "UPS", "URI", "USB", "V", "VICI", "VLO", "VRSK", "VRTX", "VZ", "WBA",
-    "WBD", "WDAY", "WEC", "WELL", "WFC", "WM", "WMT", "XEL", "XOM", "ZS",
-    "ZTS",
-    # -- Major ETFs / indices --
-    "DIA", "EEM", "EFA", "GLD", "HYG", "IVV", "IWM", "LQD", "QQQ", "SLV",
-    "SPY", "TLT", "VEA", "VNQ", "VOO", "VTI", "VWO", "XLB", "XLE", "XLF",
-    "XLI", "XLK", "XLP", "XLU", "XLV", "XLY",
-}
+from data.symbol_lists import (
+    DEMO_BASE_PRICES_MARKET as _DEMO_BASE_PRICES,
+    DEMO_DEFAULT_VOLATILITY as _DEFAULT_VOLATILITY,
+    DEMO_TRADEABLE_SYMBOLS as _VALID_DEMO_SYMBOLS,
+    DEMO_VOLATILITY as _DEMO_VOLATILITY,
+)
 
 
 def _is_valid_demo_symbol(symbol: str) -> bool:
@@ -338,8 +303,14 @@ def _polygon_key_empty() -> bool:
 # Alpaca Market Data helpers
 # ---------------------------------------------------------------------------
 
-ALPACA_DATA_URL = "https://data.alpaca.markets"
-ALPACA_TRADING_URL = "https://paper-api.alpaca.markets"
+# Batch W (audit-reports/2026-05-05/HARDCODING-SWEEP.md C-1):
+# centralised in :mod:`core.config`. Read at import so a ``.env``
+# override propagates without touching code.
+from core.config import settings as _settings_w_market  # noqa: E402
+
+ALPACA_DATA_URL = _settings_w_market.ALPACA_DATA_BASE_URL
+ALPACA_TRADING_URL = _settings_w_market.ALPACA_PAPER_BASE_URL
+del _settings_w_market
 
 ALPACA_TF_MAP = {
     "1min": "1Min", "5min": "5Min", "15min": "15Min",
