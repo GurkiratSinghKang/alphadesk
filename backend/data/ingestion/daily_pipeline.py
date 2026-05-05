@@ -466,11 +466,71 @@ def get_pipeline_status() -> dict[str, Any]:
 # =====================================================================
 
 def _alpaca_headers() -> dict[str, str]:
+    """Return server-wide Alpaca headers from env settings.
+
+    DEPRECATED in multi-user deployments — ``_alpaca_creds_for_user`` should
+    be used wherever a ``username`` is in scope so per-user
+    :class:`BrokerConnection` rows are honoured (Audit MB-P0-1). This
+    helper remains for legacy single-admin deployments and for callers that
+    have not yet been threaded through with username.
+    """
     return {
         "APCA-API-KEY-ID": settings.ALPACA_API_KEY.get_secret_value(),
         "APCA-API-SECRET-KEY": settings.ALPACA_SECRET_KEY.get_secret_value(),
         "Content-Type": "application/json",
     }
+
+
+async def _alpaca_creds_for_user(
+    username: str | None,
+) -> tuple[dict[str, str], str]:
+    """Resolve (headers, base_url) for the given user, falling back to env.
+
+    Mirrors the pattern in ``api.routes.trades._alpaca_credentials_or_503``:
+
+      * When ``username`` is provided, look up the active
+        :class:`BrokerConnection` row and use its decrypted credentials and
+        per-environment base URL (paper vs live). This keeps multi-user
+        deployments routing each user's automated orders through their own
+        Alpaca account.
+
+      * When ``username`` is ``None`` or no DB row matches, fall back to
+        the server-wide env credentials returned by ``_alpaca_headers()`` /
+        ``_base_url()``. A deprecation warning is logged so audits can
+        flag any internal caller that has not yet been threaded with the
+        owning username (Audit MB-P0-1).
+
+    Raises ``RuntimeError`` only when the env-fallback path itself trips
+    the safety check in ``_base_url()`` (live broker without
+    ``LIVE_TRADING_ENABLED``); broker-credential errors are surfaced via
+    :class:`services.broker_connections.BrokerCredentialError` which the
+    caller propagates so the pipeline aborts instead of silently routing
+    to the wrong account.
+    """
+    if username:
+        try:
+            from services.broker_connections import get_alpaca_credentials
+
+            creds = await get_alpaca_credentials(username)
+            if creds is not None:
+                headers = {
+                    **creds.headers,
+                    "Content-Type": "application/json",
+                }
+                return headers, creds.base_url.rstrip("/")
+        except Exception:
+            # Surface the credential error rather than silently using env
+            # creds — multi-user deployments must not route a scheduled
+            # strategy to the wrong account when DB lookup blows up.
+            raise
+    else:
+        logger.warning(
+            "daily_pipeline: alpaca creds resolved without a username "
+            "(falling back to env credentials). Multi-user deployments "
+            "should thread `username` through to honour per-user "
+            "BrokerConnection rows. See Audit MB-P0-1."
+        )
+    return _alpaca_headers(), _base_url()
 
 
 def _base_url() -> str:
@@ -546,14 +606,28 @@ def _now_et() -> datetime:
 # Alpaca helpers
 # =====================================================================
 
-async def _get_account(client: httpx.AsyncClient) -> dict[str, Any]:
-    resp = await client.get(f"{_base_url()}/v2/account", headers=_alpaca_headers())
+async def _get_account(
+    client: httpx.AsyncClient,
+    *,
+    username: str | None = None,
+) -> dict[str, Any]:
+    """Audit MB-P0-1: ``username`` routes account fetch through that
+    user's :class:`BrokerConnection` row."""
+    headers, base_url = await _alpaca_creds_for_user(username)
+    resp = await client.get(f"{base_url}/v2/account", headers=headers)
     resp.raise_for_status()
     return resp.json()
 
 
-async def _get_positions(client: httpx.AsyncClient) -> list[dict[str, Any]]:
-    resp = await client.get(f"{_base_url()}/v2/positions", headers=_alpaca_headers())
+async def _get_positions(
+    client: httpx.AsyncClient,
+    *,
+    username: str | None = None,
+) -> list[dict[str, Any]]:
+    """Audit MB-P0-1: ``username`` routes positions fetch through that
+    user's :class:`BrokerConnection` row."""
+    headers, base_url = await _alpaca_creds_for_user(username)
+    resp = await client.get(f"{base_url}/v2/positions", headers=headers)
     resp.raise_for_status()
     return resp.json()
 
@@ -564,6 +638,8 @@ async def _place_order(
     qty: int,
     side: str,
     strategy: str = "unknown",
+    *,
+    username: str | None = None,
 ) -> dict[str, Any]:
     """Place a market order on Alpaca paper.
 
@@ -574,6 +650,12 @@ async def _place_order(
     via this pipeline path. Persona-66 flagged this as one of the most
     exploited bypasses (the daily pipeline POSTs hundreds of orders per
     session with no per-strategy gate).
+
+    Audit MB-P0-1: when ``username`` is provided, route through that
+    user's :class:`BrokerConnection` row so multi-user deployments do
+    not bill every scheduled order to whichever account is in ``.env``.
+    Omitting ``username`` falls back to env credentials with a deprecation
+    warning (see ``_alpaca_creds_for_user``).
     """
     from datetime import datetime, timezone
     from core.trading_gate import reject_if_live_forbidden
@@ -597,9 +679,10 @@ async def _place_order(
         "time_in_force": "day",
         "client_order_id": client_order_id,
     }
+    headers, base_url = await _alpaca_creds_for_user(username)
     resp = await client.post(
-        f"{_base_url()}/v2/orders",
-        headers=_alpaca_headers(),
+        f"{base_url}/v2/orders",
+        headers=headers,
         json=body,
     )
     resp.raise_for_status()
@@ -619,6 +702,8 @@ async def _place_bracket_order(
     stop_price: float,
     take_profit_price: float | None,
     strategy: str = "unknown",
+    *,
+    username: str | None = None,
 ) -> dict[str, Any]:
     """Place a Alpaca bracket buy order — entry + stop-loss (and optional
     take-profit) submitted as a single atomic order_class.
@@ -635,6 +720,9 @@ async def _place_bracket_order(
 
     Wave-A bypass-fix: live-trading deny-gate now enforced here too — the
     bracket path was a sibling bypass of ``_place_order``.
+
+    Audit MB-P0-1: ``username`` is threaded through to per-user
+    :class:`BrokerConnection` credentials.
     """
     from datetime import datetime, timezone
     from core.trading_gate import reject_if_live_forbidden
@@ -660,9 +748,10 @@ async def _place_bracket_order(
     if take_profit_price and take_profit_price > 0:
         body["take_profit"] = {"limit_price": str(round(take_profit_price, 2))}
 
+    headers, base_url = await _alpaca_creds_for_user(username)
     resp = await client.post(
-        f"{_base_url()}/v2/orders",
-        headers=_alpaca_headers(),
+        f"{base_url}/v2/orders",
+        headers=headers,
         json=body,
     )
     resp.raise_for_status()
@@ -684,8 +773,14 @@ async def _place_stop_order(
     stop_price: float,
     side: str = "sell",
     strategy: str = "unknown",
+    *,
+    username: str | None = None,
 ) -> dict[str, Any]:
-    """Place a protective stop order on Alpaca."""
+    """Place a protective stop order on Alpaca.
+
+    Audit MB-P0-1: ``username`` is threaded through to per-user
+    :class:`BrokerConnection` credentials.
+    """
     from core.trading_gate import reject_if_live_forbidden
     _gate_strategy = strategy if strategy and strategy != "unknown" else None
     reject_if_live_forbidden(
@@ -701,9 +796,10 @@ async def _place_stop_order(
         "stop_price": str(round(stop_price, 2)),
         "time_in_force": "gtc",  # Good-til-cancelled
     }
+    headers, base_url = await _alpaca_creds_for_user(username)
     resp = await client.post(
-        f"{_base_url()}/v2/orders",
-        headers=_alpaca_headers(),
+        f"{base_url}/v2/orders",
+        headers=headers,
         json=body,
     )
     resp.raise_for_status()
@@ -722,8 +818,14 @@ async def _place_limit_order(
     limit_price: float,
     side: str = "sell",
     strategy: str = "unknown",
+    *,
+    username: str | None = None,
 ) -> dict[str, Any]:
-    """Place a take-profit limit order on Alpaca."""
+    """Place a take-profit limit order on Alpaca.
+
+    Audit MB-P0-1: ``username`` is threaded through to per-user
+    :class:`BrokerConnection` credentials.
+    """
     from core.trading_gate import reject_if_live_forbidden
     _gate_strategy = strategy if strategy and strategy != "unknown" else None
     reject_if_live_forbidden(
@@ -739,9 +841,10 @@ async def _place_limit_order(
         "limit_price": str(round(limit_price, 2)),
         "time_in_force": "gtc",
     }
+    headers, base_url = await _alpaca_creds_for_user(username)
     resp = await client.post(
-        f"{_base_url()}/v2/orders",
-        headers=_alpaca_headers(),
+        f"{base_url}/v2/orders",
+        headers=headers,
         json=body,
     )
     resp.raise_for_status()
@@ -753,13 +856,25 @@ async def _place_limit_order(
     return order
 
 
-async def _ensure_stop_orders(client: httpx.AsyncClient, ledger: TradeLedger) -> list[dict[str, Any]]:
-    """Ensure all open positions have active stop-loss orders on Alpaca."""
+async def _ensure_stop_orders(
+    client: httpx.AsyncClient,
+    ledger: TradeLedger,
+    *,
+    username: str | None = None,
+) -> list[dict[str, Any]]:
+    """Ensure all open positions have active stop-loss orders on Alpaca.
+
+    Audit MB-P0-1: ``username`` selects which Alpaca account is queried
+    for already-open stop orders (so duplicates are detected against the
+    *user's* account, not the env account) and which account the new
+    stop is placed against.
+    """
     placed: list[dict[str, Any]] = []
     open_positions = ledger.get_open_positions()
 
     # Get existing orders to avoid duplicates
-    resp = await client.get(f"{_base_url()}/v2/orders?status=open", headers=_alpaca_headers())
+    headers, base_url = await _alpaca_creds_for_user(username)
+    resp = await client.get(f"{base_url}/v2/orders?status=open", headers=headers)
     existing_orders = resp.json() if resp.status_code == 200 else []
     symbols_with_stops = {
         (o.get("symbol"), o.get("side"))
@@ -785,6 +900,7 @@ async def _ensure_stop_orders(client: httpx.AsyncClient, ledger: TradeLedger) ->
                     client, sym, trade["shares"], stop_price,
                     side=protective_side,
                     strategy=trade.get("strategy", "unknown"),
+                    username=username,
                 )
                 placed.append({
                     "symbol": sym,
@@ -803,17 +919,24 @@ async def _poll_fill_price(
     order_id: str,
     max_attempts: int = 10,
     delay: float = 1.0,
+    *,
+    username: str | None = None,
 ) -> float | None:
     """Poll Alpaca for an order's filled_avg_price.
 
     Returns the fill price once the order reaches 'filled' status, or
     None if it doesn't fill within *max_attempts* polls.
+
+    Audit MB-P0-1: ``username`` routes the poll through the order
+    owner's :class:`BrokerConnection` row so the status query lands on
+    the same account the order was placed against.
     """
+    headers, base_url = await _alpaca_creds_for_user(username)
     for _ in range(max_attempts):
         try:
             resp = await client.get(
-                f"{_base_url()}/v2/orders/{order_id}",
-                headers=_alpaca_headers(),
+                f"{base_url}/v2/orders/{order_id}",
+                headers=headers,
             )
             if resp.status_code == 200:
                 data = resp.json()
@@ -1029,12 +1152,23 @@ async def replay_pending_brackets() -> list[dict[str, Any]]:
                     actions.append({"id": outbox_id, "action": "discard_invalid"})
                     continue
 
+                # TODO(Audit MB-P0-1): the outbox plan does not currently
+                # carry the owning ``username``, so the boot-replay path
+                # falls through to env credentials. Multi-user deployments
+                # need the outbox row to persist ``username`` at
+                # ``_outbox_create`` time so the replay places the missing
+                # stop on the same Alpaca account the entry filled on. Until
+                # that is wired up, this path will keep using env creds and
+                # log the deprecation warning emitted by
+                # ``_alpaca_creds_for_user(None)``.
+                username = plan.get("username")
                 async with httpx.AsyncClient(timeout=10) as client:
                     # Check current Alpaca state for this symbol
                     try:
+                        headers, base_url = await _alpaca_creds_for_user(username)
                         resp = await client.get(
-                            f"{_base_url()}/v2/positions/{sym}",
-                            headers=_alpaca_headers(),
+                            f"{base_url}/v2/positions/{sym}",
+                            headers=headers,
                         )
                         entry_filled = resp.status_code == 200
                     except Exception:
@@ -1049,9 +1183,10 @@ async def replay_pending_brackets() -> list[dict[str, Any]]:
                     # Check if a stop is already on the books
                     has_stop = False
                     try:
+                        headers, base_url = await _alpaca_creds_for_user(username)
                         r = await client.get(
-                            f"{_base_url()}/v2/orders",
-                            headers=_alpaca_headers(),
+                            f"{base_url}/v2/orders",
+                            headers=headers,
                             params={"status": "open", "symbols": sym},
                         )
                         if r.status_code == 200:
@@ -1071,6 +1206,7 @@ async def replay_pending_brackets() -> list[dict[str, Any]]:
                                 client, sym, qty, float(stop),
                                 side=stop_side,
                                 strategy=strategy,
+                                username=username,
                             )
                             await redis.delete(key)
                             actions.append({
@@ -1120,8 +1256,15 @@ async def _execute_approved_orders(
     client: httpx.AsyncClient,
     master: MasterAgent,
     ledger: TradeLedger,
+    *,
+    username: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Place buy orders for all approved pending orders from the master agent."""
+    """Place buy orders for all approved pending orders from the master agent.
+
+    Audit MB-P0-1: ``username`` is threaded through every per-order
+    submission so multi-user deployments route each order to its owning
+    Alpaca account.
+    """
     orders_placed: list[dict[str, Any]] = []
 
     # Enforce daily trade limit. Track orders submitted in this batch too;
@@ -1202,9 +1345,14 @@ async def _execute_approved_orders(
                 result = await _place_order(
                     client, sym, shares, broker_side,
                     strategy=strategy_name,
+                    username=username,
                 )
                 order_id = result.get("id")
-                fill_price = await _poll_fill_price(client, order_id) if order_id else None
+                fill_price = (
+                    await _poll_fill_price(client, order_id, username=username)
+                    if order_id
+                    else None
+                )
                 exit_price = (
                     fill_price
                     if fill_price is not None
@@ -1268,6 +1416,7 @@ async def _execute_approved_orders(
                 result = await _place_order(
                     client, sym, shares, "sell",
                     strategy=strategy_name,
+                    username=username,
                 )
                 order_id = result.get("id")
                 await _outbox_update(outbox_id, {
@@ -1290,7 +1439,7 @@ async def _execute_approved_orders(
                 )
 
                 if order_id:
-                    fill_price = await _poll_fill_price(client, order_id)
+                    fill_price = await _poll_fill_price(client, order_id, username=username)
                     if fill_price is not None:
                         ledger.update_entry_price(sym, fill_price)
 
@@ -1299,6 +1448,7 @@ async def _execute_approved_orders(
                         stop_oid = await _place_stop_order(
                             client, sym, shares, effective_stop,
                             side="buy", strategy=strategy_name,
+                            username=username,
                         )
                         await _outbox_update(outbox_id, {
                             "status": "entry_and_stop_submitted",
@@ -1314,6 +1464,7 @@ async def _execute_approved_orders(
                             cover = await _place_order(
                                 client, sym, shares, "buy",
                                 strategy=f"{strategy_name}_unwind",
+                                username=username,
                             )
                             logger.critical(
                                 "Emergency short cover submitted for %s order_id=%s",
@@ -1340,6 +1491,7 @@ async def _execute_approved_orders(
                         await _place_limit_order(
                             client, sym, shares, tp_estimate,
                             side="buy", strategy=strategy_name,
+                            username=username,
                         )
                     except Exception as e:
                         logger.error(
@@ -1419,6 +1571,7 @@ async def _execute_approved_orders(
                         effective_stop,
                         tp_estimate if tp_estimate and tp_estimate > 0 else None,
                         strategy=strategy_name,
+                        username=username,
                     )
                     order_id = result.get("id")
                     used_bracket = True
@@ -1442,6 +1595,7 @@ async def _execute_approved_orders(
                     result = await _place_order(
                         client, sym, shares, "buy",
                         strategy=strategy_name,
+                        username=username,
                     )
                     order_id = result.get("id")
                     # Entry submitted, stop NOT yet on the broker — outbox
@@ -1463,6 +1617,7 @@ async def _execute_approved_orders(
                 result = await _place_order(
                     client, sym, shares, "buy",
                     strategy=strategy_name,
+                    username=username,
                 )
                 order_id = result.get("id")
                 await _outbox_update(outbox_id, {
@@ -1486,7 +1641,7 @@ async def _execute_approved_orders(
 
             # Poll for actual fill price and recalculate stop/take-profit
             if order_id:
-                fill_price = await _poll_fill_price(client, order_id)
+                fill_price = await _poll_fill_price(client, order_id, username=username)
                 if fill_price is not None:
                     ledger.update_entry_price(sym, fill_price)
                     logger.info(
@@ -1532,6 +1687,7 @@ async def _execute_approved_orders(
                         stop_oid = await _place_stop_order(
                             client, sym, shares, effective_stop,
                             strategy=strategy_name,
+                            username=username,
                         )
                         logger.info(
                             "Stop-loss order placed for %s: %s",
@@ -1557,6 +1713,7 @@ async def _execute_approved_orders(
                             unwind = await _place_order(
                                 client, sym, shares, "sell",
                                 strategy=f"{strategy_name}_unwind",
+                                username=username,
                             )
                             logger.critical(
                                 "Emergency unwind submitted for %s order_id=%s",
@@ -1585,6 +1742,7 @@ async def _execute_approved_orders(
                         tp_oid = await _place_limit_order(
                             client, sym, shares, order["take_profit"],
                             strategy=strategy_name,
+                            username=username,
                         )
                         logger.info(
                             "Take-profit order placed for %s: %s",
@@ -1655,8 +1813,15 @@ async def _execute_approved_orders(
 async def _check_exits(
     client: httpx.AsyncClient,
     ledger: TradeLedger,
+    *,
+    username: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Check open positions against stop loss / take profit."""
+    """Check open positions against stop loss / take profit.
+
+    Audit MB-P0-1: ``username`` routes broker queries / cancels /
+    replacements through the position owner's :class:`BrokerConnection`
+    row instead of the env credentials.
+    """
     closed_orders: list[dict[str, Any]] = []
     open_trades = ledger.get_open_positions()
 
@@ -1664,7 +1829,7 @@ async def _check_exits(
         return closed_orders
 
     try:
-        positions = await _get_positions(client)
+        positions = await _get_positions(client, username=username)
     except Exception:
         logger.error("Failed to fetch positions", exc_info=True)
         return closed_orders
@@ -1755,21 +1920,23 @@ async def _check_exits(
                 # Cancel old stop order and place new one at higher level
                 try:
                     # Cancel existing stop orders for this symbol
+                    headers, base_url = await _alpaca_creds_for_user(username)
                     resp = await client.get(
-                        f"{_base_url()}/v2/orders?status=open&symbols={sym}",
-                        headers=_alpaca_headers(),
+                        f"{base_url}/v2/orders?status=open&symbols={sym}",
+                        headers=headers,
                     )
                     if resp.status_code == 200:
                         for existing_order in resp.json():
                             if existing_order.get("type") == "stop" and existing_order.get("side") == exit_side:
                                 await client.delete(
-                                    f"{_base_url()}/v2/orders/{existing_order['id']}",
-                                    headers=_alpaca_headers(),
+                                    f"{base_url}/v2/orders/{existing_order['id']}",
+                                    headers=headers,
                                 )
                     await _place_stop_order(
                         client, sym, trade["shares"], rounded_new_stop,
                         side=exit_side,
                         strategy=trade.get("strategy", "unknown"),
+                        username=username,
                     )
                     logger.info(
                         "Trailing stop updated for %s: raised from $%.2f to $%.2f",
@@ -1788,10 +1955,11 @@ async def _check_exits(
                 order = await _place_order(
                     client, sym, trade["shares"], exit_side,
                     strategy=trade.get("strategy", "unknown"),
+                    username=username,
                 )
                 order_id = order.get("id")
                 if order_id:
-                    fill_price = await _poll_fill_price(client, order_id)
+                    fill_price = await _poll_fill_price(client, order_id, username=username)
                     if fill_price is not None:
                         ledger.record_exit(
                             sym, trade["shares"], fill_price, reason,
@@ -1813,9 +1981,10 @@ async def _check_exits(
                 # When one leg fills (stop-loss or take-profit), cancel
                 # the opposing open bracket leg to avoid orphaned orders.
                 try:
+                    headers, base_url = await _alpaca_creds_for_user(username)
                     resp = await client.get(
-                        f"{_base_url()}/v2/orders?status=open&symbols={sym}",
-                        headers=_alpaca_headers(),
+                        f"{base_url}/v2/orders?status=open&symbols={sym}",
+                        headers=headers,
                     )
                     if resp.status_code == 200:
                         for open_order in resp.json():
@@ -1824,8 +1993,8 @@ async def _check_exits(
                             oid = open_order.get("id")
                             if oside == exit_side and otype in ("stop", "limit") and oid:
                                 await client.delete(
-                                    f"{_base_url()}/v2/orders/{oid}",
-                                    headers=_alpaca_headers(),
+                                    f"{base_url}/v2/orders/{oid}",
+                                    headers=headers,
                                 )
                                 logger.info(
                                     "Cancelled orphaned %s order for %s (id=%s) after %s exit",
@@ -1880,12 +2049,19 @@ async def run_daily_pipeline(
     screen_limit: int = SCREEN_TOP_N,
     analyze_limit: int = ANALYZE_TOP_N,
     only_strategies: list[str] | None = None,
+    *,
+    username: str | None = None,
 ) -> dict[str, Any]:
     """Execute the full multi-strategy daily trading pipeline.
 
     Args:
         only_strategies: If provided, only run these strategy names.
             Used by the multi-window scheduler to run subsets at optimal times.
+        username: Audit MB-P0-1 — owning user whose
+            :class:`BrokerConnection` row should receive every order this
+            run places. Falls back to env credentials when omitted (legacy
+            single-admin deployments and the existing scheduler /
+            continuous_monitor callers).
     """
     global _pipeline_status, CANCEL_REQUESTED, CURRENT_STARTED_AT, CURRENT_RUN_ID
 
@@ -1910,6 +2086,7 @@ async def run_daily_pipeline(
                 screen_limit=screen_limit,
                 analyze_limit=analyze_limit,
                 only_strategies=only_strategies,
+                username=username,
             )
         finally:
             # Clear live-run state when the lock is released — operators
@@ -1922,6 +2099,8 @@ async def start_daily_pipeline_async(
     screen_limit: int = SCREEN_TOP_N,
     analyze_limit: int = ANALYZE_TOP_N,
     only_strategies: list[str] | None = None,
+    *,
+    username: str | None = None,
 ) -> str:
     """Fire-and-forget pipeline launcher used by ``POST /pipeline/run``.
 
@@ -1939,6 +2118,10 @@ async def start_daily_pipeline_async(
     Single-worker assumption: AlphaDesk runs a single gunicorn worker, so
     the lock + globals are process-wide unique. If we ever scale to multi-
     worker, this whole module needs to move to Redis-backed state.
+
+    Audit MB-P0-1: ``username`` is forwarded to ``run_daily_pipeline`` so
+    multi-user deployments route every order to the requesting user's
+    Alpaca account.
     """
     global CURRENT_RUN_ID, CURRENT_STARTED_AT
 
@@ -1963,6 +2146,7 @@ async def start_daily_pipeline_async(
             "screen_limit": screen_limit,
             "analyze_limit": analyze_limit,
             "only_strategies": list(only_strategies) if only_strategies else None,
+            "username": username,
         },
     )
 
@@ -1974,6 +2158,7 @@ async def start_daily_pipeline_async(
                 screen_limit=screen_limit,
                 analyze_limit=analyze_limit,
                 only_strategies=only_strategies,
+                username=username,
             )
             if isinstance(result, dict):
                 if result.get("skipped"):
@@ -2014,8 +2199,15 @@ async def _run_pipeline_inner(
     screen_limit: int = SCREEN_TOP_N,
     analyze_limit: int = ANALYZE_TOP_N,
     only_strategies: list[str] | None = None,
+    *,
+    username: str | None = None,
 ) -> dict[str, Any]:
-    """Inner pipeline logic, called under _pipeline_lock."""
+    """Inner pipeline logic, called under _pipeline_lock.
+
+    Audit MB-P0-1: ``username`` is forwarded to every per-broker call so
+    each automated order is routed to the requesting user's Alpaca
+    account in multi-user deployments.
+    """
     global _pipeline_status, CURRENT_STAGE, CURRENT_STRATEGY, CURRENT_PROGRESS
 
     _pipeline_status["last_run"] = datetime.now(timezone.utc).isoformat()
@@ -2122,7 +2314,7 @@ async def _run_pipeline_inner(
             CURRENT_STAGE = "account"
             _check_cancel("account")
             try:
-                account = await _get_account(client)
+                account = await _get_account(client, username=username)
                 equity = float(account.get("equity", 100_000))
                 cash = float(account.get("cash", 0))
                 day_pnl = float(account.get("equity", 0)) - float(
@@ -2185,7 +2377,7 @@ async def _run_pipeline_inner(
 
             # ---- Ensure all existing positions have stop-loss orders ----
             try:
-                stops_placed = await _ensure_stop_orders(client, ledger)
+                stops_placed = await _ensure_stop_orders(client, ledger, username=username)
                 if stops_placed:
                     logger.info("Placed %d missing stop-loss orders", len(stops_placed))
                     log["stops_ensured"] = stops_placed
@@ -2503,19 +2695,21 @@ async def _run_pipeline_inner(
                 _save_log(log)
                 return log
 
-            orders_placed = await _execute_approved_orders(client, master, ledger)
+            orders_placed = await _execute_approved_orders(
+                client, master, ledger, username=username,
+            )
             log["orders_placed"] = orders_placed
 
             # ---- Check exits ----
             CURRENT_STAGE = "exit_check"
             _check_cancel("exit_check")
-            closed = await _check_exits(client, ledger)
+            closed = await _check_exits(client, ledger, username=username)
             log["orders_closed"] = closed
 
             # ---- Portfolio snapshot ----
             try:
-                account = await _get_account(client)
-                positions = await _get_positions(client)
+                account = await _get_account(client, username=username)
+                positions = await _get_positions(client, username=username)
                 log["portfolio_snapshot"] = {
                     "equity": float(account.get("equity", 0)),
                     "cash": float(account.get("cash", 0)),
@@ -2553,8 +2747,14 @@ async def _run_pipeline_inner(
     return log
 
 
-async def run_position_check() -> dict[str, Any]:
-    """Mid-day or end-of-day position check for stop/target exits."""
+async def run_position_check(
+    *, username: str | None = None,
+) -> dict[str, Any]:
+    """Mid-day or end-of-day position check for stop/target exits.
+
+    Audit MB-P0-1: ``username`` routes the broker query / cancel / replace
+    calls through that user's :class:`BrokerConnection` row.
+    """
     logger.info("Running position check")
     ledger = TradeLedger()
     result: dict[str, Any] = {"closed": [], "errors": []}
@@ -2562,7 +2762,7 @@ async def run_position_check() -> dict[str, Any]:
     try:
         _base_url()
         async with httpx.AsyncClient(timeout=30) as client:
-            closed = await _check_exits(client, ledger)
+            closed = await _check_exits(client, ledger, username=username)
             result["closed"] = closed
     except Exception as e:
         logger.error("Position check failed", exc_info=True)

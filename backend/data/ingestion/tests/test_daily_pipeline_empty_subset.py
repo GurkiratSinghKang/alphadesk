@@ -83,7 +83,7 @@ async def test_account_unavailable_aborts_before_strategy_io(
     async def _replay_pending_brackets() -> list:
         return []
 
-    async def _account_down(client) -> dict:
+    async def _account_down(client, **kwargs) -> dict:
         raise RuntimeError("broker offline")
 
     async def _vix_should_not_run(client) -> float:

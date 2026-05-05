@@ -349,6 +349,11 @@ async def _run_window(
     await cache_set("pipeline:scheduler_state", state, ttl_seconds=172800)
 
     try:
+        # TODO(Audit MB-P0-1): the multi-window scheduler is process-wide
+        # (no requesting user) so it falls back to env credentials. Multi-
+        # user deployments need either a per-user scheduler row or a
+        # designated service account. ``run_daily_pipeline`` will log a
+        # deprecation warning when ``username`` is omitted.
         result = await run_daily_pipeline(only_strategies=strategies)
         approved = result.get("approved", [])
         rejected = result.get("rejected", [])

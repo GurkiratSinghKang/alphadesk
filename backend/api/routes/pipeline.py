@@ -142,9 +142,13 @@ async def trigger_pipeline(
             detail={"error": "already_running", "message": "Pipeline is already running"},
         )
 
+    # Audit MB-P0-1: thread the requesting admin's username so each
+    # automated order is routed to *their* Alpaca BrokerConnection row
+    # rather than the server-wide env credentials.
     run_id = await start_daily_pipeline_async(
         screen_limit=screen_limit,
         analyze_limit=analyze_limit,
+        username=username,
     )
 
     return {

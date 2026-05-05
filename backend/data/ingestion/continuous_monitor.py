@@ -221,6 +221,11 @@ async def _run_monitor() -> None:
                         _last_eval_slot = slot_key
                         logger.info("Strategy evaluation triggered (%s ET)", slot_key)
                         try:
+                            # TODO(Audit MB-P0-1): continuous_monitor is a
+                            # process-wide background task with no requesting
+                            # user; falls back to env credentials. Multi-
+                            # user deployments need a service account or
+                            # per-user evaluation slots.
                             await run_daily_pipeline(screen_limit=20, analyze_limit=5)
                         except Exception:
                             logger.error("Strategy evaluation failed", exc_info=True)
