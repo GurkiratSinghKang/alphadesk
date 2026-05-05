@@ -146,6 +146,7 @@ class DailyPipelineRunner:
         providers: ProviderBundle,
         state_store: StateStore,
         positions_provider: PositionsProvider | None = None,
+        kill_switch: Any | None = None,
     ):
         """Construct a DailyPipelineRunner.
 
@@ -158,11 +159,22 @@ class DailyPipelineRunner:
 
         The callable accepts ``asof`` and returns ``list[Position]`` either
         synchronously or as a coroutine; ``run_today`` awaits if needed.
+
+        Audit B-F3 / R-F1 follow-up: ``kill_switch`` is the optional
+        :class:`KillSwitch` instance consulted before each strategy run.
+        Default ``None`` preserves the legacy "no gate" behaviour for
+        backtest / paper smoke / unit-test runners that don't construct a
+        kill-switch (``invoke_strategy_with_kill_switch`` short-circuits to
+        a direct ``strategy.run`` call when ``kill_switch is None``).
+        Production callers wire a ``KillSwitch`` whose repo is
+        ``PostgresDisabledEventsRepo`` so layer-3 manual disable actually
+        halts the next pipeline tick.
         """
         self._strategy = strategy
         self._providers = providers
         self._state_store = state_store
         self._positions_provider = positions_provider
+        self._kill_switch = kill_switch
 
     async def run_today(
         self,
