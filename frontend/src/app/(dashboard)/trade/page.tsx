@@ -784,7 +784,20 @@ export default function TradePage() {
   useEffect(() => {
     setTicketDraft(null);
   }, [orderBarDefaults]);
-  const executionQuote = buildExecutionQuote(quote);
+  // Audit F-F1 (2026-05-05): the prior code did
+  // ``const executionQuote = buildExecutionQuote(quote)`` directly in
+  // the render body. ``buildExecutionQuote`` returns a fresh object on
+  // every call, so every render produced a new reference for
+  // ``executionQuote`` — invalidating six downstream useMemos
+  // (executionReadiness, telemetry-derived values, chart overlays)
+  // every tick of the underlying ``quote`` even when none of the
+  // relevant fields actually changed. Memoise on the quote inputs so
+  // referential stability is preserved across renders that don't
+  // change the quote payload.
+  const executionQuote = useMemo(
+    () => buildExecutionQuote(quote),
+    [quote],
+  );
   // QA r1 A2: when an option contract is staged, build a parallel
   // executionQuote from the contract's own quote. Fall back to a placeholder
   // when the option quote hasn't arrived yet — better to show "--" than the

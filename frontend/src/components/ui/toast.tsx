@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CheckCircle, AlertCircle, Info, AlertTriangle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -151,8 +151,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Audit F-F3 (2026-05-05): the prior code passed
+  // ``value={{ addToast, dismissToast }}`` — a fresh object literal on
+  // every render of the provider. Every consumer of useToast()
+  // re-rendered when ToastProvider re-rendered for any reason
+  // (e.g. a new toast appearing), which cascaded across the app since
+  // the provider sits high in the tree. ``addToast`` and
+  // ``dismissToast`` are already stable via useCallback, so memoise
+  // the value object so React's reference-equality check stops the
+  // cascade.
+  const contextValue = useMemo(
+    () => ({ addToast, dismissToast }),
+    [addToast, dismissToast],
+  );
   return (
-    <ToastContext.Provider value={{ addToast, dismissToast }}>
+    <ToastContext.Provider value={contextValue}>
       {children}
       {/* a11y audit r3 — WCAG 4.1.3: Toast container is a labeled live region
           so AT engines register announcements when toasts append. Individual
