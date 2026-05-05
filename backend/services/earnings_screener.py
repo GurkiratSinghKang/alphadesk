@@ -182,6 +182,9 @@ def compute_earnings_edge_score(
 
     score = 0.0
     reasons: list[str] = []
+    # Wave 4a / Batch Q (Q-8): track each input's contribution to the
+    # composite score so the analyst can audit which signals drove it.
+    components: dict[str, float] = {}
     evidence_count = 0
     setup = (top_setup or "").strip().lower()
     setup_known = bool(setup)
@@ -197,16 +200,18 @@ def compute_earnings_edge_score(
     if iv_rank is not None:
         iv = clamp(float(iv_rank), 0.0, 100.0)
         if not setup_known:
-            score += clamp(100.0 - abs(iv - 55.0) * 1.4, 0.0, 100.0) * 0.10
+            iv_contrib = clamp(100.0 - abs(iv - 55.0) * 1.4, 0.0, 100.0) * 0.10
             reasons.append(f"IV rank {iv:.0f}; setup not selected yet")
         elif is_debit_setup:
-            score += (100.0 - iv) * 0.25
+            iv_contrib = (100.0 - iv) * 0.25
             if iv <= 35:
                 reasons.append(f"IV rank {iv:.0f} keeps debit moderate")
         else:
-            score += iv * 0.35
+            iv_contrib = iv * 0.35
             if iv >= 70:
                 reasons.append(f"IV rank {iv:.0f} keeps premium rich")
+        score += iv_contrib
+        components["iv_rank"] = round(iv_contrib, 2)
         evidence_count += 1
 
     premiums = [
@@ -215,13 +220,14 @@ def compute_earnings_edge_score(
     ]
     if premiums:
         premium_evidence = True
+        premium_contrib = 0.0
         if not setup_known:
             premium = max(float(p) for p in premiums)
-            score += clamp(premium / 0.06, 0.0, 1.0) * 10.0
+            premium_contrib = clamp(premium / 0.06, 0.0, 1.0) * 10.0
             reasons.append(f"ATM option yield {premium:.1%}; needs setup")
         elif is_straddle_debit:
             debit = sum(float(p) for p in premiums)
-            score += clamp((0.10 - debit) / 0.08, 0.0, 1.0) * 20.0
+            premium_contrib = clamp((0.10 - debit) / 0.08, 0.0, 1.0) * 20.0
             if debit <= 0.06:
                 reasons.append(f"ATM straddle debit {debit:.1%}")
         elif directional_debit_side:
@@ -233,15 +239,17 @@ def compute_earnings_edge_score(
             if side_premium is not None and side_premium > 0:
                 multiplier = 0.6 if "spread" in setup else 1.0
                 debit = float(side_premium) * multiplier
-                score += clamp((0.06 - debit) / 0.05, 0.0, 1.0) * 20.0
+                premium_contrib = clamp((0.06 - debit) / 0.05, 0.0, 1.0) * 20.0
                 if debit <= 0.035:
                     reasons.append(f"{setup.title()} debit {debit:.1%}")
             else:
                 premium_evidence = False
         else:
             premium = max(float(p) for p in premiums)
-            score += clamp(premium / 0.06, 0.0, 1.0) * 20.0
+            premium_contrib = clamp(premium / 0.06, 0.0, 1.0) * 20.0
             reasons.append(f"ATM premium yield {premium:.1%}")
+        score += premium_contrib
+        components["premium_yield"] = round(premium_contrib, 2)
         if premium_evidence:
             evidence_count += 1
 
@@ -252,9 +260,10 @@ def compute_earnings_edge_score(
     ):
         expected = float(expected_move_pct)
         hist = float(hist_avg_abs_move_pct)
+        implied_vs_hist_contrib = 0.0
         if not setup_known:
             mismatch = abs(expected - hist) / hist
-            score += clamp(mismatch / 0.5, 0.0, 1.0) * 15.0
+            implied_vs_hist_contrib = clamp(mismatch / 0.5, 0.0, 1.0) * 15.0
             relation = "above" if expected > hist else "below"
             reasons.append(
                 f"Implied move {relation} {hist:.1%} historical avg; setup pending"
@@ -262,48 +271,60 @@ def compute_earnings_edge_score(
         elif is_debit_setup:
             underprice_ratio = (hist - expected) / expected if expected > 0 else 0.0
             if underprice_ratio > 0:
-                score += clamp(underprice_ratio / 0.5, 0.0, 1.0) * 35.0
+                implied_vs_hist_contrib = clamp(underprice_ratio / 0.5, 0.0, 1.0) * 35.0
                 reasons.append(
                     f"Historical move {hist:.1%} clears debit {expected:.1%}"
                 )
             else:
                 overprice_ratio = (expected - hist) / hist
-                score -= clamp(overprice_ratio / 0.5, 0.0, 1.0) * 25.0
+                implied_vs_hist_contrib = -clamp(overprice_ratio / 0.5, 0.0, 1.0) * 25.0
                 reasons.append(
                     f"Debit {expected:.1%} above {hist:.1%} historical avg"
                 )
         else:
             overprice_ratio = (expected - hist) / hist
             if overprice_ratio > 0:
-                score += clamp(overprice_ratio / 0.5, 0.0, 1.0) * 25.0
+                implied_vs_hist_contrib = clamp(overprice_ratio / 0.5, 0.0, 1.0) * 25.0
                 reasons.append(
                     f"Implied move {expected:.1%} vs {hist:.1%} historical avg"
                 )
             else:
                 underprice_ratio = (hist - expected) / hist
-                score -= clamp(underprice_ratio / 0.5, 0.0, 1.0) * 25.0
+                implied_vs_hist_contrib = -clamp(underprice_ratio / 0.5, 0.0, 1.0) * 25.0
                 reasons.append(
                     f"Implied move {expected:.1%} below {hist:.1%} historical avg"
                 )
+        score += implied_vs_hist_contrib
+        components["implied_vs_historical"] = round(implied_vs_hist_contrib, 2)
         evidence_count += 1
 
     if claude_confidence is not None:
         confidence = clamp(float(claude_confidence), 0.0, 1.0)
-        score += confidence * 15.0
+        confidence_contrib = confidence * 15.0
+        score += confidence_contrib
+        components["confidence"] = round(confidence_contrib, 2)
         evidence_count += 1
         if confidence >= 0.6:
             reasons.append(f"Claude confidence {confidence:.0%}")
 
     if evidence_count == 0:
-        return {"edge_score": None, "edge_score_reasons": []}
+        return {
+            "edge_score": None,
+            "edge_score_reasons": [],
+            "edge_score_components": {},
+        }
 
     if days_until is not None:
+        days_contrib = 0.0
         if 0 <= days_until <= 3:
-            score += 5.0
+            days_contrib = 5.0
             reasons.append("Near-term event window")
         elif days_until < 0:
-            score -= 20.0
+            days_contrib = -20.0
             reasons.append("Already reported; edge decays")
+        if days_contrib != 0.0:
+            score += days_contrib
+            components["days_until"] = round(days_contrib, 2)
 
     if setup_known and (
         expected_move_pct is None
@@ -319,6 +340,7 @@ def compute_earnings_edge_score(
     return {
         "edge_score": round(clamp(score, 0.0, 100.0), 1),
         "edge_score_reasons": reasons[:4],
+        "edge_score_components": components,
     }
 
 
@@ -2468,6 +2490,58 @@ async def _hydrate_row(
         days_until=days_until,
         top_setup=claude.get("suggested_play") if claude else None,
     )
+    # Wave 4a / Batch Q: vol-aware ranked top-3 recommendations. The
+    # legacy ``top_setup`` string is kept for back-compat (FE still
+    # reads it); callers should migrate to ``top_setups[0]`` for the
+    # full leg structure / EV / Kelly sizing.
+    top_setups: list = []
+    legacy_top_setup = claude.get("suggested_play") if claude else None
+    if (
+        metrics
+        and not synthetic_ranking_inputs
+        and (quote and quote.get("last"))
+        and metrics.get("current_iv")
+    ):
+        try:
+            from services.earnings_recommender import (
+                recommend_setups,
+                setup_id_to_legacy_top_setup,
+            )
+            from services.options import fetch_chain
+
+            chain = await fetch_chain(symbol)
+            top_setups = await recommend_setups(
+                symbol=symbol,
+                spot=float(quote["last"]),
+                iv_rank=iv_rank,
+                iv_percentile=metrics.get("iv_percentile"),
+                current_iv=float(metrics.get("current_iv") or 0.0),
+                hv_20=metrics.get("hv_20"),
+                expected_move_pct=expected_move_pct,
+                hist_avg_abs_move_pct=metrics.get("hist_avg_abs_move_pct"),
+                claude_verdict=claude.get("verdict") if claude else None,
+                claude_confidence=claude.get("confidence") if claude else None,
+                chain=chain,
+                report_date=report_date_obj,
+                report_time=row.get("report_time", "DMT"),
+            )
+            if top_setups:
+                # Override the legacy top_setup with the recommender's
+                # best pick so FE displays the vol-aware shape rather
+                # than the verdict-mapped one.
+                mapped = setup_id_to_legacy_top_setup(top_setups[0].setup_id)
+                if mapped is not None:
+                    legacy_top_setup = mapped
+        except Exception as e:  # noqa: BLE001
+            log.debug(
+                "earnings recommender failed for %s: %s", symbol, e,
+                extra=_log_ctx(
+                    endpoint="earnings._hydrate_row.recommender",
+                    symbol=symbol,
+                    error=str(e),
+                ),
+            )
+            top_setups = []
     return {
         **row,
         "price": quote["last"] if quote else None,
@@ -2480,7 +2554,8 @@ async def _hydrate_row(
         "hist_avg_abs_move_pct": metrics.get("hist_avg_abs_move_pct") if metrics else None,
         "claude_verdict": claude.get("verdict") if claude else None,
         "claude_confidence": claude.get("confidence") if claude else None,
-        "top_setup": claude.get("suggested_play") if claude else None,
+        "top_setup": legacy_top_setup,
+        "top_setups": top_setups,
         **edge,
         "days_until": days_until,
         "report_state": report_state,

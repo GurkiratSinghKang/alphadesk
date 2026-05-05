@@ -56,6 +56,58 @@ TopSetup = Literal[
 ReportState = Literal["upcoming", "today_pre", "today_done", "past"]
 
 
+# ─── Recommendation engine v2 (Batch Q) ──────────────────────
+# Wave 4a / Batch Q: the calendar row's ``top_setup`` was a single
+# string mapped deterministically from Claude's verdict, with no
+# awareness of the IV regime. For high-IV neutral names (e.g. AMD with
+# IV 119% vs HV 65%) the right structure is a defined-risk short
+# premium (iron condor), not the directional ``bear call spread`` the
+# verdict-only mapper produced. ``EarningsSetup`` carries the full leg
+# structure, P/L, breakevens, EV, and Kelly sizing so the analyst can
+# audit the recommendation; ``top_setups`` is the ranked top-3.
+SetupId = Literal[
+    "iron_condor",
+    "iron_butterfly",
+    "short_strangle",  # naked — flag dangerous
+    "short_straddle",  # naked — flag dangerous
+    "bear_call_spread",
+    "bull_put_spread",
+    "bull_call_spread",
+    "bear_put_spread",
+    "long_call",
+    "long_put",
+    "long_straddle",
+    "long_strangle",
+    "calendar_spread",
+    "diagonal_spread",
+]
+
+
+class OptionLeg(BaseModel):
+    side: Literal["buy", "sell"]
+    contract_type: OptionSide  # "call" | "put"
+    strike: float
+    expiry: date
+    qty: int = 1  # always 1 in the recommendation; sizing handled separately
+    mid: float  # price per share at recommendation time
+
+
+class EarningsSetup(BaseModel):
+    setup_id: SetupId
+    legs: list[OptionLeg]
+    net_credit_or_debit: float  # positive = credit, negative = debit (per share)
+    max_profit: float | None  # dollars per contract; None = unlimited
+    max_loss: float | None  # dollars per contract; None = unlimited (naked)
+    breakevens: list[float]
+    pop_estimate: float = Field(ge=0, le=1)  # probability of profit at expiration
+    expected_value: float  # EV in dollars per contract at recommendation prices
+    risk_reward: float | None  # max_profit / max_loss; None when either side is unlimited
+    rationale: str  # 1-2 sentences explaining why this setup
+    sizing_kelly_pct: float = Field(ge=0, le=0.02)  # capped at 2% of book
+    is_defined_risk: bool
+    requires_margin_estimate: float | None = None  # dollars; None for defined-risk
+
+
 # ─── Calendar row ────────────────────────────────────────────
 
 class CalendarRow(BaseModel):
@@ -86,8 +138,23 @@ class CalendarRow(BaseModel):
     claude_verdict: Verdict | None = None
     claude_confidence: float | None = Field(default=None, ge=0, le=1)
     top_setup: TopSetup | None = None
+    # Wave 4a / Batch Q: structured ranked top-3 recommendations with
+    # full leg structure, P/L, breakevens, EV, and Kelly sizing. The
+    # legacy ``top_setup`` string is preserved for back-compat with the
+    # current frontend; ``top_setups[0].setup_id`` is the canonical
+    # value going forward (translated to the legacy vocab via
+    # ``earnings_recommender._setup_id_to_legacy_top_setup`` so existing
+    # consumers keep parsing).
+    top_setups: list[EarningsSetup] = Field(default_factory=list)
     edge_score: float | None = Field(default=None, ge=0, le=100)
     edge_score_reasons: list[str] = Field(default_factory=list)
+    # Wave 4a / Batch Q (Q-8): edge_score component decomposition so the
+    # analyst can audit which signals drove the score. Keys mirror the
+    # contributors in ``compute_earnings_edge_score`` (e.g. ``"iv_rank"``,
+    # ``"premium_yield"``, ``"implied_vs_historical"``, ``"confidence"``,
+    # ``"days_until"``). Optional with empty default so older cached rows
+    # stay valid.
+    edge_score_components: dict[str, float] = Field(default_factory=dict)
 
 
 class CalendarResponse(BaseModel):
