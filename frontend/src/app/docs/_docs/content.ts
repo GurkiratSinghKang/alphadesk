@@ -24,7 +24,7 @@ export const DOC_SECTIONS: DocSection[] = [
     content: [
       "The Portfolio Hero shows total equity, daily P&L, and an equity curve for the session.",
       "The Activity Feed is a single chronological stream of pipeline runs, trade executions, regime changes, and breaking news.",
-      "The Strategy Grid shows all 12 strategies with status (active/paused), return percentage, win rate, and current position count.",
+      "The Strategy Grid shows the active strategies (currently 12 of 19 catalogued) with status (active/paused), return percentage, win rate, and current position count.",
       "Below the feed: open positions with live P&L, and a P&L Calendar showing daily returns for the current month.",
       "The Market Context strip at the bottom shows S&P 500, NASDAQ 100, Russell 2000, VIX, sector heat, and recent market news.",
     ],

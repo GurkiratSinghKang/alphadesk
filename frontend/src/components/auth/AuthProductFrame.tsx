@@ -349,6 +349,42 @@ export default function AuthProductFrame({
             </div>
           </section>
         </details>
+
+        {/* Audit F1.4 (2026-05-05): trust strip — gives cold prospects a
+         * one-line answer to "is this safe?" without scrolling past the
+         * fold. "Not a broker", "Paper-first execution", and links to
+         * Risk Disclosure / Privacy / Terms anchor the disclosures
+         * traders look for before signing in. */}
+        <footer className="relative z-[1] mt-6 border-t border-[var(--auth-border)] pt-4 pb-2">
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-center font-mono text-eyebrow uppercase tracking-[0.16em] text-[var(--auth-fg-muted)]">
+            <span aria-hidden>·</span>
+            <span>Not a broker-dealer</span>
+            <span aria-hidden>·</span>
+            <span>Paper-first execution</span>
+            <span aria-hidden>·</span>
+            <Link
+              href="/risk"
+              className="text-[var(--auth-fg)] underline underline-offset-4 decoration-[var(--auth-border-soft)] hover:decoration-[var(--auth-fg)]"
+            >
+              Risk disclosure
+            </Link>
+            <span aria-hidden>·</span>
+            <Link
+              href="/privacy"
+              className="text-[var(--auth-fg)] underline underline-offset-4 decoration-[var(--auth-border-soft)] hover:decoration-[var(--auth-fg)]"
+            >
+              Privacy
+            </Link>
+            <span aria-hidden>·</span>
+            <Link
+              href="/terms"
+              className="text-[var(--auth-fg)] underline underline-offset-4 decoration-[var(--auth-border-soft)] hover:decoration-[var(--auth-fg)]"
+            >
+              Terms
+            </Link>
+            <span aria-hidden>·</span>
+          </div>
+        </footer>
       </div>
     </main>
   );
