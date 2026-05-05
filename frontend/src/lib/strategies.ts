@@ -286,6 +286,70 @@ export function isStrategyLive(id: string): boolean {
   return metaStage(id) === "live";
 }
 
+/**
+ * Batch E (2026-05-05) — P1-18.
+ *
+ * Strategy-counter aggregates derived from ``STRATEGY_META``. The
+ * dashboard Control-room counter MUST consume this rather than a
+ * hardcoded ``13/15`` so the desk and ``/strategies/list`` agree on
+ * what counts as "active", "paused", "dev", and "total".
+ *
+ * The "active" classification is the live-stage default and is
+ * overridden when a backend strategy reports ``status: "paused"`` —
+ * pass the backend's strategies array as ``apiStrategies`` so that
+ * runtime status flips into the count. Without an apiStrategies arg,
+ * the function returns the static catalog snapshot (every live entry
+ * is treated as active for documentation / display).
+ */
+export interface StrategyCounts {
+  /** Live strategies (stage="live"); decremented when the backend
+   *  reports a runtime ``status: "paused"`` for that id. */
+  active: number;
+  /** Live strategies that the backend reports as paused. */
+  paused: number;
+  /** Strategies marked ``stage: "planned"`` — visible on /strategies
+   *  with a "Coming soon" badge, not yet implemented in the engine. */
+  dev: number;
+  /** Total entries in STRATEGY_META, including "other" (manual). */
+  total: number;
+}
+
+export function getStrategyCounts(
+  apiStrategies?: ReadonlyArray<{ id: string; status?: string }>,
+): StrategyCounts {
+  const apiById = new Map(
+    (apiStrategies ?? []).map((s) => [s.id, (s.status ?? "").toLowerCase()]),
+  );
+  let active = 0;
+  let paused = 0;
+  let dev = 0;
+  let total = 0;
+  for (const id of Object.keys(STRATEGY_META)) {
+    total += 1;
+    const stage = metaStage(id);
+    if (stage === "planned") {
+      dev += 1;
+      continue;
+    }
+    if (stage === "other") {
+      // ``manual-discretionary`` is ledger-backed but not a runtime
+      // strategy — count it as active when the user has opened the
+      // bucket (we can't know that here; treat as active so the
+      // catalog math reflects "users can place trades against it").
+      active += 1;
+      continue;
+    }
+    // stage === "live" — defer to backend status if we have it.
+    const status = apiById.get(id);
+    if (status === "paused" || status === "disabled" || status === "error") {
+      paused += 1;
+    } else {
+      active += 1;
+    }
+  }
+  return { active, paused, dev, total };
+}
+
 export const STRATEGY_ORDER: string[] = [
   // Research tools (rendered in the Research section, not Active/Coming Soon)
   "earnings-options-play",

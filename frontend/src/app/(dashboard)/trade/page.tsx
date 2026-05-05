@@ -1045,26 +1045,34 @@ export default function TradePage() {
           className="scroll-mt-4 grid overflow-hidden rounded-lg border border-border-hair bg-border-hair shadow-[0_18px_60px_-38px_rgba(16,22,17,0.34)] lg:grid-cols-[minmax(240px,0.58fr)_minmax(0,1fr)_minmax(320px,0.7fr)]"
         >
           <div className="min-w-0 bg-bg-elev-1 px-4 py-4 md:px-5">
-            <div className="flex flex-wrap items-center gap-2">
+            {/* Batch E P0-mobile-only: at <sm: gate the execution-
+                readiness chip onto its own line above the strategy/
+                combo tags so the cockpit eyebrow + chip can't flex-
+                wrap in a way that orphans "Execution cockpit" on a
+                narrow mobile screen. From sm: up the original single-
+                row flex-wrap behaviour returns. */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
               <span className="t-label text-fg-hint">Execution cockpit</span>
-              <TradeStatusPill label={executionReadiness.label} tone={executionReadiness.tone} />
-              {seriesError || seriesLoading ? (
-                <TradeStatusPill label={chartStatusLabel} tone={seriesError ? "amber" : "muted"} />
-              ) : null}
-              {urlStrategy && (
-                <span
-                  data-slot="trade-strategy-tag"
-                  className="inline-flex items-center gap-1 rounded-sm border border-border-hair bg-bg px-2 py-1 font-mono text-label text-fg-muted"
-                >
-                  strategy: <span className="text-fg">{urlStrategy}</span>
-                  {comboType && (
-                    <>
-                      <span aria-hidden> · </span>
-                      combo: <span className="text-fg">{comboType}</span>
-                    </>
-                  )}
-                </span>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <TradeStatusPill label={executionReadiness.label} tone={executionReadiness.tone} />
+                {seriesError || seriesLoading ? (
+                  <TradeStatusPill label={chartStatusLabel} tone={seriesError ? "amber" : "muted"} />
+                ) : null}
+                {urlStrategy && (
+                  <span
+                    data-slot="trade-strategy-tag"
+                    className="inline-flex items-center gap-1 rounded-sm border border-border-hair bg-bg px-2 py-1 font-mono text-label text-fg-muted"
+                  >
+                    strategy: <span className="text-fg">{urlStrategy}</span>
+                    {comboType && (
+                      <>
+                        <span aria-hidden> · </span>
+                        combo: <span className="text-fg">{comboType}</span>
+                      </>
+                    )}
+                  </span>
+                )}
+              </div>
             </div>
             <h1
               data-slot="trade-symbol"
@@ -1076,7 +1084,14 @@ export default function TradePage() {
             <p className="mt-2 truncate text-body-sm text-fg-muted">{symbol.venue} · {intentLabel}</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-px bg-border-hair xl:grid-cols-4">
+          {/* Batch E P0-mobile-only: at <sm: keep the four telemetry
+              cells in a 2-col grid (was already grid-cols-2 mobile,
+              now annotated explicitly) so BID/ASK/SPREAD/MARK can't
+              push into horizontal-overflow at 390px. The xl:grid-cols-4
+              flips to a single row only when the parent column has
+              the width budget. ``min-w-0`` on each cell prevents the
+              mono value from forcing the cell wider than its 1fr share. */}
+          <div className="grid grid-cols-2 gap-px bg-border-hair sm:grid-cols-2 xl:grid-cols-4">
             <TradeTelemetryCard icon={ChartLine} label={primaryQuoteLabel} value={primaryQuoteValue} valueClassName={primaryQuoteTone} />
             <TradeTelemetryCard icon={Crosshair} label="Bid" value={telemetryBidLabel} />
             <TradeTelemetryCard icon={ArrowsLeftRight} label="Ask" value={telemetryAskLabel} />

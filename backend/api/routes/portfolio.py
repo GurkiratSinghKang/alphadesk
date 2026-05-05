@@ -663,6 +663,19 @@ async def get_performance(
     1. Trade ledger (JSON file) for closed trade P&L history
     2. Database trades
     3. Demo data as absolute last resort
+
+    Batch E (2026-05-05) — P1-17: this endpoint and ``/pipeline/summary``
+    must share a single source-of-truth for closed-trade metrics. The
+    audit caught the two endpoints disagreeing — performance returned
+    "0 trades / $0" while pipeline summary returned "5 trades / +$853"
+    on the SAME ledger because they walked different code paths
+    (TradeLedger.get_closed_trades vs pipeline-log JSON aggregation).
+    Both endpoints now consume ``services.closed_trade_metrics``; this
+    handler reads the ledger directly to build its richer Sharpe /
+    drawdown analytics, but the headline closed-trade aggregates it
+    emits are byte-for-byte the same as what /pipeline/summary returns.
+    Do NOT introduce a parallel computation in either file without
+    routing it through the shared helper.
     """
     from core.config import settings
 

@@ -29,11 +29,25 @@ describe("StatusBar", () => {
         buildVersion="2.4.1-edge"
       />,
     );
-    // The trigger button text includes build version (lowercase "build" is intentional)
-    expect(screen.getByText(/build 2\.4\.1-edge/)).toBeDefined();
+    // Batch E P0-04: real version strings render as "v{version}" so readers
+    // can scan them as a deploy stamp. The legacy "build dev" placeholder
+    // still renders that way for the dev-mode fallback (see "dev" test below).
+    expect(screen.getByText(/v2\.4\.1-edge/)).toBeDefined();
   });
 
-  it("shows System OK when all pills are healthy", () => {
+  it('renders "build dev" placeholder when buildVersion is "dev"', () => {
+    render(
+      <StatusBar
+        pills={[{ label: "Alpaca paper · connected", tone: "profit" }]}
+        buildVersion="dev"
+      />,
+    );
+    // The dev fallback keeps the lowercase "build dev" copy so it doesn't
+    // read as a fake semver "vdev" in local development.
+    expect(screen.getByText(/build dev/)).toBeDefined();
+  });
+
+  it("shows Operational when all pills are healthy", () => {
     render(
       <StatusBar
         pills={[
@@ -43,10 +57,12 @@ describe("StatusBar", () => {
         buildVersion="1.0.0"
       />,
     );
-    expect(screen.getByText(/System OK/)).toBeDefined();
+    // Batch E P0-04: aggregate fallback says "Operational" when no amber,
+    // matching the new explicit "operational" health state vocabulary.
+    expect(screen.getByText(/Operational/)).toBeDefined();
   });
 
-  it("shows Degraded when any pill has amber tone", () => {
+  it("shows Degraded when any pill has amber tone (legacy fallback)", () => {
     render(
       <StatusBar
         pills={[
@@ -57,5 +73,22 @@ describe("StatusBar", () => {
       />,
     );
     expect(screen.getByText(/Degraded/)).toBeDefined();
+  });
+
+  it("respects explicit healthState prop over pill aggregation", () => {
+    // Batch E P0-04: deploy-controller-supplied health state wins. A PAPER
+    // pill (amber tone) must NOT flip the bar to Degraded if the deploy
+    // is actually operational — PAPER is a chosen mode, not a degradation.
+    render(
+      <StatusBar
+        pills={[
+          { label: "Alpaca paper · connected", tone: "profit" },
+          { label: "Mode · PAPER", tone: "amber" },
+        ]}
+        buildVersion="2026.05.05-abc1234"
+        healthState="operational"
+      />,
+    );
+    expect(screen.getByText(/Operational/)).toBeDefined();
   });
 });

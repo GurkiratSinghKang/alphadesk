@@ -336,6 +336,18 @@ async def pipeline_summary() -> dict[str, Any]:
     totals for trades placed/rejected, approval rate, most active
     strategy, most common rejection reason, and a portfolio
     since-start snapshot.
+
+    Batch E (2026-05-05) — P1-17: closed-trade metrics
+    (``total_closed_trades``, ``realized_pnl``, win/loss counts, best/
+    worst trade) are now computed via
+    :func:`services.closed_trade_metrics.closed_trade_metrics_for_strategy`,
+    which reads from the same ``TradeLedger`` source that
+    ``/portfolio/performance`` and ``/strategies/{id}/analytics`` use.
+    Before this fix, the two surfaces disagreed: ``/pipeline/summary``
+    counted approved orders from log files (5 trades / +$853) while
+    ``/portfolio/performance`` counted closed trades from the ledger
+    (0 trades / $0 — because no closed rows existed yet). The audit
+    persona-new-user flagged this as a trust-killer P1.
     """
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -411,6 +423,15 @@ async def pipeline_summary() -> dict[str, Any]:
     current = last_equity or starting
     total_return_pct = round((current - starting) / starting * 100, 2) if starting else 0
 
+    # Batch E P1-17: closed-trade metrics MUST come from the same source
+    # /portfolio/performance reads — the trade ledger. Walking pipeline
+    # log files to count "approved orders" produced numbers that the
+    # portfolio analytics page directly contradicted (the audit caught
+    # 5/+$853 here vs 0/$0 there). Use the shared helper so the two
+    # endpoints can never drift again.
+    from services.closed_trade_metrics import closed_trade_metrics_for_strategy
+    closed_trade_metrics = closed_trade_metrics_for_strategy()
+
     return {
         "total_runs": total_runs,
         "total_trades_placed": total_placed,
@@ -424,6 +445,11 @@ async def pipeline_summary() -> dict[str, Any]:
             "current_equity": round(current, 2),
             "total_return_pct": total_return_pct,
         },
+        # Batch E P1-17 — ledger-derived closed-trade metrics. These
+        # values are byte-for-byte the same as what /portfolio/performance
+        # and /strategies/{id}/analytics emit because all three call into
+        # services.closed_trade_metrics.
+        "closed_trade_metrics": closed_trade_metrics,
     }
 
 

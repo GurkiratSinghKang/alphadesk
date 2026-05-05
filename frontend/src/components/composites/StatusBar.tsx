@@ -15,18 +15,29 @@ import type { StatusPill } from "./types";
  *
  * Previously rendered a flat mono-pill rail that read as a developer console
  * (Alpaca paper · Dashboard · Strategies · …). Now collapsed to a single
- * "System OK · build N.N.N" popover-pill. The per-service detail moves
+ * "Operational · v{version}" popover-pill. The per-service detail moves
  * inside the popover so it's available on demand rather than filling the
  * screen at all times.
  *
+ * Batch E (2026-05-05) — P0-04: the visible label is now driven by the
+ * deploy-set ``NEXT_PUBLIC_HEALTH_STATE`` env var (``operational`` or
+ * ``degraded``) rather than aggregating per-service pill tones. This was
+ * surfacing "Degraded · build dev" on production because the Mode pill
+ * carries an amber tone for "PAPER" by design — that is informational,
+ * not a degradation signal. Aggregate-from-pills behaviour is kept as a
+ * fallback when no explicit health state prop is passed (e.g. design lab).
+ *
  * The health dot color signals aggregate status:
- *   profit (green) — all pills healthy
- *   amber          — at least one amber pill
- *   loss (red)     — at least one loss/offline pill
+ *   profit (green) — operational
+ *   amber          — degraded
  */
 export interface StatusBarProps {
   pills: StatusPill[];
   buildVersion: string;
+  /** Explicit health state from the deploy env. When omitted, the bar
+   *  falls back to aggregating per-service pill tones (legacy behaviour
+   *  used by the design-lab page). */
+  healthState?: "operational" | "degraded";
   /** Defaults to "Commands". */
   commandsLabel?: string;
   className?: string;
@@ -94,13 +105,22 @@ function SystemDetailGrid({ pills }: { pills: StatusPill[] }) {
 export default function StatusBar({
   pills,
   buildVersion,
+  healthState,
   className,
 }: StatusBarProps) {
-  const health = aggregateTone(pills);
-  const dotTone: "profit" | "amber" | "muted" =
-    health === "amber" ? "amber" : health === "profit" ? "profit" : "muted";
-  const healthLabel =
-    health === "amber" ? "Degraded" : health === "profit" ? "System OK" : "System";
+  // Batch E P0-04: prefer the deploy-supplied health state when present.
+  // Aggregating from pill tones surfaced "Degraded" on prod whenever the
+  // Mode pill (PAPER vs LIVE) carried an amber tone — but PAPER is a
+  // chosen mode, not a system degradation. Only the deploy controller
+  // (CI / GHA) knows whether the system is genuinely operational.
+  const health: "operational" | "degraded" =
+    healthState ?? (aggregateTone(pills) === "amber" ? "degraded" : "operational");
+  const dotTone: "profit" | "amber" = health === "operational" ? "profit" : "amber";
+  const healthLabel = health === "operational" ? "Operational" : "Degraded";
+  // Versions like "2026.05.05-73a24d56" are already prefixed mentally with
+  // a "v" by readers, so render as "v{version}". Keep "build {version}" for
+  // the legacy "dev" placeholder so it doesn't read like a fake semver.
+  const versionLabel = buildVersion === "dev" ? `build ${buildVersion}` : `v${buildVersion}`;
 
   return (
     <div
@@ -125,7 +145,7 @@ export default function StatusBar({
               aria-label="Open system status detail"
             >
               <StatusDot tone={dotTone} size={5} />
-              <span>{healthLabel} · build {buildVersion}</span>
+              <span>{healthLabel} · {versionLabel}</span>
             </button>
           }
         />
