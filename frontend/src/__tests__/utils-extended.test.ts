@@ -34,8 +34,8 @@ describe('cn utility', () => {
     // to AlphaDesk semantic tokens. The eslint palette guard now bans the raw
     // forms project-wide; the dedup behaviour we're verifying still holds for
     // any text-color class twMerge knows about.
-    const result = cn('text-up-500', 'text-down-500');
-    expect(result).toBe('text-down-500');
+    const result = cn('text-profit', 'text-loss');
+    expect(result).toBe('text-loss');
   });
 });
 

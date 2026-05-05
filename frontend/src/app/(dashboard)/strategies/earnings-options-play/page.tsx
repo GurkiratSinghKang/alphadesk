@@ -564,7 +564,7 @@ function StrategyIntroCard() {
           safeSetItem(INTRO_DISMISS_KEY, "1");
           window.dispatchEvent(new Event(INTRO_DISMISS_EVENT));
         }}
-        className="mt-2 t-meta underline text-fg-muted hover:text-brand"
+        className="mt-2 t-meta underline text-fg-muted hover:text-primary"
       >
         Don&apos;t show again
       </button>

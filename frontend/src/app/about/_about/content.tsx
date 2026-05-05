@@ -60,7 +60,7 @@ export const ABOUT_CLAUSES: StaticClause[] = [
         arbitration — see the{" "}
         <a
           href="/terms"
-          className="text-brand underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
+          className="text-primary underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
         >
           Terms of Service
         </a>{" "}
@@ -85,7 +85,7 @@ export const ABOUT_CLAUSES: StaticClause[] = [
             Trading securities involves substantial risk of loss. Read the{" "}
             <a
               href="/risk"
-              className="text-brand underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
+              className="text-primary underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
             >
               Risk Disclosure
             </a>{" "}
@@ -104,7 +104,7 @@ export const ABOUT_CLAUSES: StaticClause[] = [
         security, and press each have their own address on the{" "}
         <a
           href="/contact"
-          className="text-brand underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
+          className="text-primary underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
         >
           Contact
         </a>{" "}

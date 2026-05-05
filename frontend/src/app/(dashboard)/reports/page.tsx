@@ -676,7 +676,7 @@ function ClosedTradesTable({ trades }: { trades: TradeHistoryEntry[] }) {
                 data-testid="closed-trades-prev"
                 className={cn(
                   "inline-flex items-center gap-1 rounded-sm border border-border px-3 py-1.5",
-                  "font-sans text-label text-fg-muted hover:text-fg hover:border-brand transition-colors",
+                  "font-sans text-label text-fg-muted hover:text-fg hover:border-primary transition-colors",
                   "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
                   "disabled:opacity-40 disabled:pointer-events-none",
                 )}
@@ -693,7 +693,7 @@ function ClosedTradesTable({ trades }: { trades: TradeHistoryEntry[] }) {
                 data-testid="closed-trades-next"
                 className={cn(
                   "inline-flex items-center gap-1 rounded-sm border border-border px-3 py-1.5",
-                  "font-sans text-label text-fg-muted hover:text-fg hover:border-brand transition-colors",
+                  "font-sans text-label text-fg-muted hover:text-fg hover:border-primary transition-colors",
                   "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
                   "disabled:opacity-40 disabled:pointer-events-none",
                 )}
@@ -1253,7 +1253,7 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
                     <span className={cn(
                       "inline-block rounded-sm px-2 py-0.5 font-sans text-label font-semibold uppercase",
                       t.isLongTerm
-                        ? "bg-brand/15 text-brand"
+                        ? "bg-primary/15 text-primary"
                         : "bg-bg-elev-1 text-fg-muted",
                     )}
                     style={{ letterSpacing: "0.08em" }}>
@@ -1486,7 +1486,7 @@ export default function ReportsPage() {
                   className={cn(
                     "inline-flex items-center gap-1.5 rounded-sm border border-border-strong",
                     "bg-transparent px-4 py-2 font-sans text-body-sm font-medium",
-                    "text-fg hover:bg-bg-elev-1 hover:border-brand transition-colors",
+                    "text-fg hover:bg-bg-elev-1 hover:border-primary transition-colors",
                     "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
                   )}
                 >
@@ -1498,7 +1498,7 @@ export default function ReportsPage() {
                   className={cn(
                     "inline-flex min-h-10 items-center gap-1.5 rounded-sm border border-border-hair",
                     "bg-bg px-4 font-sans text-body-sm font-medium text-fg-muted",
-                    "text-fg hover:bg-bg-elev-1 hover:border-brand transition-colors",
+                    "text-fg hover:bg-bg-elev-1 hover:border-primary transition-colors",
                     "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
                   )}
                 >
@@ -1509,7 +1509,7 @@ export default function ReportsPage() {
                   className={cn(
                     "inline-flex min-h-10 items-center gap-1.5 rounded-sm border border-border-hair",
                     "bg-bg px-4 font-sans text-body-sm font-medium text-fg-muted",
-                    "text-fg hover:bg-bg-elev-1 hover:border-brand transition-colors",
+                    "text-fg hover:bg-bg-elev-1 hover:border-primary transition-colors",
                     "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
                   )}
                 >
@@ -1555,7 +1555,7 @@ export default function ReportsPage() {
               className={cn(
                 "h-7 rounded-sm border border-border bg-bg px-2",
                 "font-mono text-label tabular-nums text-ink-900",
-                "focus-visible:outline-none focus-visible:border-brand focus-visible:ring-1 focus-visible:ring-brand",
+                "focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-brand",
               )}
             >
               {/* BUG-038: dropdown reported as "only 2026 visible" —

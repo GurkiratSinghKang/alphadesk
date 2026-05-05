@@ -1111,12 +1111,12 @@ export default function TradePage() {
                   inputMode="text"
                   autoCapitalize="characters"
                   spellCheck={false}
-                  className="col-span-2 h-11 rounded-sm border border-border bg-bg-elev-1 px-3 font-mono text-base text-fg outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-ring sm:col-span-1 md:text-body"
+                  className="col-span-2 h-11 rounded-sm border border-border bg-bg-elev-1 px-3 font-mono text-base text-fg outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring sm:col-span-1 md:text-body"
                 />
                 <button
                   type="button"
                   onClick={commitSymbolDraft}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-sm border border-border bg-brand px-4 text-body-sm font-semibold text-primary-foreground transition-transform hover:-translate-y-0.5"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-sm border border-border bg-primary px-4 text-body-sm font-semibold text-primary-foreground transition-transform hover:-translate-y-0.5"
                 >
                   Load
                   <ArrowRight className="size-4" aria-hidden />
@@ -1145,7 +1145,7 @@ export default function TradePage() {
           >
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-hair px-4 py-3 text-fg">
               <div className="flex min-w-0 items-center gap-2">
-                <ArrowsOut className="size-4 shrink-0 text-brand" aria-hidden />
+                <ArrowsOut className="size-4 shrink-0 text-primary" aria-hidden />
                 <div className="min-w-0">
                   <p className="truncate text-body font-semibold text-fg">Full canvas chart</p>
                   <p className="mt-0.5 line-clamp-2 font-mono text-label text-fg-muted">Structure overlays start off; add only what you need.</p>
@@ -1178,7 +1178,7 @@ export default function TradePage() {
             >
               <header className="flex items-center justify-between gap-3 border-b border-border-hair px-4 py-3">
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-brand/10 text-brand">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
                     <ListChecks className="size-4" aria-hidden />
                   </span>
                   <div className="min-w-0">
@@ -1777,7 +1777,7 @@ function MobileTradeNav() {
           <a
             key={item.href}
             href={item.href}
-            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md border border-transparent px-2 font-mono text-label font-medium text-fg-muted transition-[border-color,background-color,color,transform] hover:border-brand/30 hover:bg-brand/10 hover:text-brand focus-visible:border-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:translate-y-px"
+            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md border border-transparent px-2 font-mono text-label font-medium text-fg-muted transition-[border-color,background-color,color,transform] hover:border-primary/30 hover:bg-primary/10 hover:text-primary focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:translate-y-px"
           >
             <Icon className="size-3.5 shrink-0" aria-hidden />
             <span className="truncate">{item.label}</span>
@@ -1806,7 +1806,7 @@ function ExecutionQuotePanel({
     <div className="border-b border-border-hair bg-bg px-4 py-3">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <Clock className="size-4 shrink-0 text-brand" aria-hidden />
+          <Clock className="size-4 shrink-0 text-primary" aria-hidden />
           <div className="min-w-0">
             <p className="text-body-sm font-semibold text-ink-1000">Fast price loader</p>
             <p className="truncate text-label text-fg-muted">
@@ -1825,7 +1825,7 @@ function ExecutionQuotePanel({
               type="button"
               disabled={disabled}
               onClick={() => onStageLimit(preset.side, preset.price)}
-              className="min-h-10 rounded-sm border border-border-hair bg-bg-elev-1 px-2 text-left transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-brand/40 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
+              className="min-h-10 rounded-sm border border-border-hair bg-bg-elev-1 px-2 text-left transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
             >
               <span className="block truncate text-label font-medium text-fg-muted">{preset.label}</span>
               <span className={cn("block truncate font-mono text-body-sm", preset.tone)}>
@@ -1850,7 +1850,7 @@ function PreTradeImpactPanel({ preview }: { preview: PreTradePreview }) {
     <div className="border-t border-border-hair bg-bg-elev-1 px-4 py-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-brand/10 text-brand">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
             <Scales className="size-4" aria-hidden />
           </span>
           <div className="min-w-0">
@@ -1947,7 +1947,7 @@ function TradeTelemetryCard({
   return (
     <div className="bg-bg px-3 py-3">
       <div className="flex items-center gap-2">
-        <Icon className="size-4 shrink-0 text-brand" aria-hidden />
+        <Icon className="size-4 shrink-0 text-primary" aria-hidden />
         <p className="t-label text-fg-hint">{label}</p>
       </div>
       <p className={cn("mt-3 truncate font-mono text-body text-ink-1000", valueClassName)}>
@@ -2610,7 +2610,7 @@ function TradeIntentPanel({
     return (
       <section className="rounded-lg border border-border-hair bg-bg-elev-1/95 px-4 py-4 shadow-[0_18px_60px_-42px_rgba(16,22,17,0.36)]">
         <div className="flex items-center gap-2">
-          <span className="flex size-8 items-center justify-center rounded-sm bg-brand/10 text-brand">
+          <span className="flex size-8 items-center justify-center rounded-sm bg-primary/10 text-primary">
             <SlidersHorizontal className="size-4" aria-hidden />
           </span>
           <h2 className="text-body font-semibold text-ink-1000">Intent rail</h2>
@@ -2634,7 +2634,7 @@ function TradeIntentPanel({
       >
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <TrendUp className="size-4 text-brand" aria-hidden />
+            <TrendUp className="size-4 text-primary" aria-hidden />
             <h2 className="text-body font-semibold text-ink-1000">Staged contract</h2>
           </div>
           <TradeStatusPill label="1 leg" tone="amber" />
@@ -2668,7 +2668,7 @@ function TradeIntentPanel({
     >
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Gauge className="size-4 text-brand" aria-hidden />
+          <Gauge className="size-4 text-primary" aria-hidden />
           <h2 className="text-body font-semibold text-ink-1000">Staged combo</h2>
         </div>
         <TradeStatusPill label={comboType ?? `${activeLegs.length} legs`} tone="amber" />
@@ -2728,7 +2728,7 @@ function RecentOrdersPanel({
     >
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 items-center gap-2 px-4 pt-4 md:py-4">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-brand/10 text-brand">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
             <Lightning className="size-4" aria-hidden />
           </span>
           <div className="min-w-0">
@@ -2747,7 +2747,7 @@ function RecentOrdersPanel({
               className={cn(
                 "rounded-sm border px-2.5 py-1.5 font-mono text-label transition-colors",
                 activeFilter === filter.id
-                  ? "border-brand/40 bg-brand/15 text-brand"
+                  ? "border-primary/40 bg-primary/15 text-primary"
                   : "border-border-hair bg-bg-elev-2 text-fg-muted hover:text-fg",
               )}
             >

@@ -247,7 +247,7 @@ export default function PositionsList({
                     <button
                       type="button"
                       onClick={() => onRowClick?.(p.id)}
-                      className="text-left font-sans font-medium text-body-sm text-ink-1000 hover:text-brand"
+                      className="text-left font-sans font-medium text-body-sm text-ink-1000 hover:text-primary"
                       style={{ letterSpacing: 0 }}
                     >
                       {p.symbol}
@@ -284,7 +284,7 @@ export default function PositionsList({
                         aria-hidden
                       >
                         <span
-                          className={cn("block h-full", isLoss ? "bg-down-500" : "bg-up-500")}
+                          className={cn("block h-full", isLoss ? "bg-down-500" : "bg-profit")}
                           style={{ width: `${pct}%` }}
                         />
                       </div>
@@ -338,7 +338,7 @@ export default function PositionsList({
                     <button
                       type="button"
                       onClick={() => onRowClick?.(o.symbol)}
-                      className="text-left font-sans font-medium text-body-sm text-ink-1000 hover:text-brand"
+                      className="text-left font-sans font-medium text-body-sm text-ink-1000 hover:text-primary"
                       style={{ letterSpacing: 0 }}
                     >
                       {o.symbol}
@@ -461,7 +461,7 @@ const STATUS_CHIP: Record<OrderRow["status"], string> = {
   partial: "bg-bg-elev-1 text-amber",
   // "partial_fill" is the raw Alpaca event name; equivalent to "partial".
   partial_fill: "bg-bg-elev-1 text-amber",
-  filled: "bg-bg-elev-1 text-up-500",
+  filled: "bg-bg-elev-1 text-profit",
   cancelled: "bg-bg-elev-1 text-fg-muted",
   rejected: "bg-bg-elev-1 text-down-500",
 };

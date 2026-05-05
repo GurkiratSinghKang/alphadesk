@@ -62,7 +62,7 @@ export function StrategyPanel({
               key={strategy.id}
               type="button"
               onClick={() => onStrategyClick(strategy.id)}
-              className="card-stagger group bg-bg-elev-1 px-4 py-4 text-left transition-colors hover:bg-brand/5"
+              className="card-stagger group bg-bg-elev-1 px-4 py-4 text-left transition-colors hover:bg-primary/5"
               style={{ animationDelay: `${index * 40}ms` }}
             >
               <div className="flex items-start justify-between gap-3">
@@ -118,7 +118,7 @@ function StrategyPanelHeader({
   return (
     <header className="flex items-start justify-between gap-3 border-b border-border-hair bg-bg-elev-1 px-4 py-3 sm:items-center">
       <div className="flex min-w-0 items-start gap-2 sm:items-center">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-brand/10 text-brand">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
           <Icon className="size-4" aria-hidden />
         </span>
         <div className="min-w-0">

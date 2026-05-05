@@ -365,7 +365,7 @@ function StrategyCatalogCard({
       <span
         aria-hidden
         className={cn(
-          "mt-0.5 inline-flex items-center gap-1 font-display italic text-body-sm text-brand",
+          "mt-0.5 inline-flex items-center gap-1 font-display italic text-body-sm text-primary",
           "opacity-0 transition-opacity duration-150",
           "group-hover/strat:opacity-100 group-focus/strat:opacity-100"
         )}
@@ -473,8 +473,8 @@ function StrategyReadinessWorkbench({
             className={cn(
               "inline-flex min-h-10 shrink-0 items-center rounded-sm border px-3 font-sans text-body-sm font-semibold transition-colors",
               activeFilter === filter.value
-                ? "border-brand/40 bg-brand/15 text-brand"
-                : "border-border-hair bg-bg text-fg-muted hover:border-brand/30 hover:text-fg",
+                ? "border-primary/40 bg-primary/15 text-primary"
+                : "border-border-hair bg-bg text-fg-muted hover:border-primary/30 hover:text-fg",
             )}
           >
             {filter.label}

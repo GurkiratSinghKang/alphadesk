@@ -94,7 +94,7 @@ export default function MarketingShell({
             className="flex items-baseline gap-1 font-display italic text-h2 text-ink-1000"
             style={{ letterSpacing: "-0.02em" }}
           >
-            <span className="text-brand">α</span>
+            <span className="text-primary">α</span>
             <span>AlphaDesk</span>
           </Link>
 
@@ -127,7 +127,7 @@ export default function MarketingShell({
             </Link>
             <Link
               href="/request-access"
-              className="inline-flex min-h-11 items-center rounded-sm bg-brand px-4 py-2 font-sans text-body-sm font-semibold text-primary-foreground transition-colors hover:bg-gold-300"
+              className="inline-flex min-h-11 items-center rounded-sm bg-primary px-4 py-2 font-sans text-body-sm font-semibold text-primary-foreground transition-colors hover:bg-gold-300"
               style={{ letterSpacing: "0.01em" }}
             >
               Request access
@@ -143,7 +143,7 @@ export default function MarketingShell({
               className="flex items-baseline gap-1 font-display italic text-[36px] text-ink-1000"
               style={{ letterSpacing: "-0.02em" }}
             >
-              <span className="text-brand">α</span>
+              <span className="text-primary">α</span>
               <span>AlphaDesk</span>
             </div>
             <p className="mt-3 max-w-[360px] font-display italic text-numeric-md text-fg-muted">

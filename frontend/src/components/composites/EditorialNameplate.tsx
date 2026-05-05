@@ -41,7 +41,7 @@ export default function EditorialNameplate({
         className="flex items-baseline gap-1.5 font-display italic text-display-sm text-ink-1000"
         style={{ letterSpacing: 0, lineHeight: 1 }}
       >
-        <span className="text-brand">α</span>
+        <span className="text-primary">α</span>
         <span>AlphaDesk</span>
       </div>
 

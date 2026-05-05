@@ -18,7 +18,7 @@ describe('StatusDot', () => {
   it('applies the bg class matching the tone', () => {
     const { container } = render(<StatusDot tone="brand" />);
     const el = container.querySelector('[data-slot="status-dot"]') as HTMLElement;
-    expect(el.className).toContain('bg-brand');
+    expect(el.className).toContain('bg-primary');
   });
 
   it('does not add animate-pulse by default', () => {

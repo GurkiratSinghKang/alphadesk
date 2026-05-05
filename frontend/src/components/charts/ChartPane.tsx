@@ -1343,7 +1343,7 @@ export default function ChartPane({
                   onClick={onRetry}
                   className={cn(
                     "font-sans font-semibold uppercase text-label tracking-[0.12em]",
-                    "text-brand hover:text-gold-300 border border-border bg-bg-elev-1",
+                    "text-primary hover:text-gold-300 border border-border bg-bg-elev-1",
                     "rounded-xs px-3 h-9 transition-colors",
                   )}
                 >
@@ -1871,7 +1871,7 @@ function TradeOverlay({
               type="button"
               disabled={!overlay.canSubmit}
               onClick={overlay.onSubmit}
-              className="h-8 rounded border border-brand bg-brand px-3 font-mono text-eyebrow font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45"
+              className="h-8 rounded border border-primary bg-primary px-3 font-mono text-eyebrow font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45"
             >
               {overlay.submitLabel ?? "Place"}
             </button>

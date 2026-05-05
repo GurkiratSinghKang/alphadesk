@@ -20,7 +20,7 @@ type CardProps = React.ComponentProps<"div"> & {
 
 const accentClass: Record<"brand" | "loss" | "none", string> = {
   brand:
-    "before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 before:bg-brand before:transition-all",
+    "before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 before:bg-primary before:transition-all",
   loss:
     "before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 before:bg-down-500 before:transition-all",
   none: "",

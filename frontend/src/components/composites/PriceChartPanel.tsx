@@ -70,7 +70,7 @@ function MetaCell({ k, value, tone }: { k: string; value: string; tone?: "profit
   const isDash = value === "\u2014" || value === "—";
   return (
     <div className="flex flex-col">
-      <span className="t-label text-fg-hint mb-0.5">{k}</span>
+      <span className="t-label uppercase tracking-wider text-fg-hint mb-0.5">{k}</span>
       {isDash ? (
         <span className="font-display italic text-body-sm text-fg-hint">{value}</span>
       ) : (
@@ -78,7 +78,7 @@ function MetaCell({ k, value, tone }: { k: string; value: string; tone?: "profit
           size="body"
           className={cn(
             "text-base font-medium",
-            tone === "profit" ? "text-up-500" : tone === "loss" ? "text-down-500" : "text-fg"
+            tone === "profit" ? "text-profit" : tone === "loss" ? "text-down-500" : "text-fg"
           )}
         >{value}</Mono>
       )}
@@ -140,7 +140,7 @@ export default function PriceChartPanel({
   useShortcutHandler("chart:set-range", handleRangeShortcut);
 
   const deltaSign = (debouncedChange ?? 0) >= 0 ? "+" : "\u2212";
-  const deltaTone = (debouncedChange ?? 0) >= 0 ? "text-up-500" : "text-down-500";
+  const deltaTone = (debouncedChange ?? 0) >= 0 ? "text-profit" : "text-down-500";
 
   // Round-15 / persona-10 P0: the ``data`` prop was being recomputed
   // from a fresh ``series.map(...)`` literal inline in JSX every parent
@@ -262,8 +262,8 @@ export default function PriceChartPanel({
                 "font-mono text-body-sm px-2.5 py-1 rounded-xs transition-colors",
                 executionDensity
                   ? r === activeRange
-                    ? "bg-brand text-primary-foreground"
-                    : "text-fg-muted hover:bg-brand/10 hover:text-fg"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-fg-muted hover:bg-primary/10 hover:text-fg"
                   : r === activeRange ? "text-ink-1000 bg-bg-elev-1" : "text-fg-muted hover:text-fg"
               )}
               style={{ letterSpacing: 0 }}
@@ -303,8 +303,8 @@ export default function PriceChartPanel({
                 className={cn(
                   "rounded-xs border px-3 py-1.5 font-sans text-label font-semibold uppercase tracking-normal transition-colors",
                   executionDensity
-                    ? "border-border-hair bg-bg-elev-1 text-brand hover:bg-brand/10"
-                    : "border-border bg-bg-elev-1 text-brand hover:text-gold-300",
+                    ? "border-border-hair bg-bg-elev-1 text-primary hover:bg-primary/10"
+                    : "border-border bg-bg-elev-1 text-primary hover:text-gold-300",
                 )}
               >
                 Retry

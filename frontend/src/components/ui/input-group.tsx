@@ -27,7 +27,7 @@ function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
         "group/input-group relative flex h-9 w-full min-w-0 items-center",
         "rounded-sm border border-border bg-bg-elev-1",
         "transition-colors outline-none",
-        "has-[[data-slot=input-group-control]:focus-visible]:border-brand",
+        "has-[[data-slot=input-group-control]:focus-visible]:border-primary",
         "has-[[data-slot=input-group-control]:focus-visible]:shadow-[0_0_0_3px_rgba(201,166,107,0.12)]",
         "has-[[data-slot][aria-invalid=true]]:border-down-500",
         "has-disabled:opacity-50",

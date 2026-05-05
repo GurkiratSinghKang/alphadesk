@@ -72,8 +72,8 @@ export default function StrategyCard({
   const roundedStr = roundedAbs.toFixed(2);
   const isDisplayedNegative = returnPct < 0 && parseFloat(roundedStr) !== 0;
   const sign = isDisplayedNegative ? "−" : "+";
-  const toneClass = isLoss ? "text-down-500" : "text-up-500";
-  const accentClass = isLoss ? "before:bg-down-500" : "before:bg-brand";
+  const toneClass = isLoss ? "text-down-500" : "text-profit";
+  const accentClass = isLoss ? "before:bg-down-500" : "before:bg-primary";
   // BUG-055 — positions-aware guard. An "Invested $4.9K · 0 positions" card
   // is a data contradiction: once all positions exit, cost basis has to be
   // $0. Force both the display and the precise tooltip to "$0" so the card
@@ -168,7 +168,7 @@ export default function StrategyCard({
       <span
         aria-hidden
         className={cn(
-          "absolute right-3.5 bottom-3 font-display italic text-body-sm text-brand",
+          "absolute right-3.5 bottom-3 font-display italic text-body-sm text-primary",
           "opacity-0 -translate-x-1.5 pointer-events-none",
           "transition-all duration-200",
           "group-hover/strat:opacity-100 group-hover/strat:translate-x-0"

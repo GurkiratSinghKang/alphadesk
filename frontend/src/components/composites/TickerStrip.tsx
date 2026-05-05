@@ -109,7 +109,7 @@ export default function TickerStrip({
             >
               <span>{t.symbol}</span>
               <b className="text-fg font-medium">{t.price}</b>
-              <span className={isDown ? "text-down-500" : "text-up-500"}>
+              <span className={isDown ? "text-down-500" : "text-profit"}>
                 {sign}
                 {absStr}%
               </span>

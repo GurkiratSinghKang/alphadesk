@@ -14,7 +14,7 @@ import * as React from "react";
  */
 export function EditorialBullet({ children }: { children: React.ReactNode }) {
   return (
-    <li className="relative pl-5 font-sans text-body leading-relaxed text-fg-dim before:absolute before:left-0 before:top-[1px] before:font-display before:text-body before:italic before:text-brand before:content-['+']">
+    <li className="relative pl-5 font-sans text-body leading-relaxed text-fg-dim before:absolute before:left-0 before:top-[1px] before:font-display before:text-body before:italic before:text-primary before:content-['+']">
       {children}
     </li>
   );
@@ -27,7 +27,7 @@ export function MailA({ address }: { address: string }) {
   return (
     <a
       href={`mailto:${address}`}
-      className="text-brand underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
+      className="text-primary underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
     >
       {address}
     </a>
@@ -49,7 +49,7 @@ export function ExternalA({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-brand underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
+      className="text-primary underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
     >
       {children}
     </a>

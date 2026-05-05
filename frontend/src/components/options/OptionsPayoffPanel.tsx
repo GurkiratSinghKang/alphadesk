@@ -40,7 +40,7 @@ export default function OptionsPayoffPanel({
     >
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border-hair px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-brand/10 text-brand">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
             <ChartLine className="size-4" aria-hidden />
           </span>
           <div className="min-w-0">
@@ -54,7 +54,7 @@ export default function OptionsPayoffPanel({
           <button
             type="button"
             onClick={onOpenBuilder}
-            className="inline-flex min-h-9 items-center rounded-sm border border-border bg-bg px-3 text-label font-semibold text-fg-muted transition hover:border-brand hover:text-fg active:translate-y-px"
+            className="inline-flex min-h-9 items-center rounded-sm border border-border bg-bg px-3 text-label font-semibold text-fg-muted transition hover:border-primary hover:text-fg active:translate-y-px"
           >
             Build strategy
           </button>

@@ -42,7 +42,7 @@ export default function NotFound() {
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <Link
               href="/"
-              className="inline-flex min-h-11 items-center gap-2 rounded-sm bg-brand px-4 py-2 font-sans text-body-sm font-semibold text-ink-1000 transition-colors hover:bg-gold-300"
+              className="inline-flex min-h-11 items-center gap-2 rounded-sm bg-primary px-4 py-2 font-sans text-body-sm font-semibold text-ink-1000 transition-colors hover:bg-gold-300"
               style={{ letterSpacing: 0 }}
             >
               Back to AlphaDesk

@@ -90,7 +90,7 @@ export default function AuthProductFrame({
     : { href: "/login", label: "Sign in" };
 
   return (
-    <main id="main" className="alpha-auth-shell min-h-[100dvh] overflow-x-clip text-[#12281f]">
+    <main id="main" className="alpha-auth-shell min-h-[100dvh] overflow-x-clip text-[var(--auth-fg)]">
       <a
         className="sr-only focus:not-sr-only fixed top-2 left-2 z-50 px-3 py-2 bg-primary text-primary-foreground"
         href="#main"
@@ -120,28 +120,28 @@ export default function AuthProductFrame({
         <header className="relative z-[1] mb-5 flex flex-wrap items-center justify-between gap-3">
           <Link
             href="/login"
-            className="group inline-flex min-w-0 items-center gap-3 rounded-[8px] text-[#12281f] outline-none transition-transform active:scale-[0.98]"
+            className="group inline-flex min-w-0 items-center gap-3 rounded-[8px] text-[var(--auth-fg)] outline-none transition-transform active:scale-[0.98]"
             aria-label="AlphaDesk sign in"
           >
-            <span className="grid size-11 shrink-0 place-items-center rounded-[8px] bg-[#12281f] font-mono text-body-sm font-semibold text-[#f8f7ef] shadow-[0_14px_34px_-20px_rgba(18,40,31,0.85)]">
+            <span className="grid size-11 shrink-0 place-items-center rounded-[8px] bg-[var(--auth-fg)] font-mono text-body-sm font-semibold text-[var(--auth-bg)] shadow-[0_14px_34px_-20px_rgba(18,40,31,0.85)]">
               AD
             </span>
             <span className="min-w-0">
               <span className="block truncate font-sans text-body font-semibold tracking-tight">AlphaDesk</span>
-              <span className="hidden truncate font-mono text-eyebrow uppercase tracking-[0.16em] text-[#5d7268] sm:block">
+              <span className="hidden truncate font-mono text-eyebrow uppercase tracking-[0.16em] text-[var(--auth-fg-muted)] sm:block">
                 AI trading terminal
               </span>
             </span>
           </Link>
 
-          <nav className="flex shrink-0 items-center rounded-[8px] border border-[#d6e2d8] bg-white/75 p-1 text-body-sm shadow-[0_18px_48px_-38px_rgba(18,40,31,0.45)] backdrop-blur-xl">
+          <nav className="flex shrink-0 items-center rounded-[8px] border border-[var(--auth-border)] bg-white/75 p-1 text-body-sm shadow-[0_18px_48px_-38px_rgba(18,40,31,0.45)] backdrop-blur-xl">
             <Link
               href="/login"
               className={
                 "inline-flex min-h-11 items-center rounded-[6px] px-3 py-2 font-sans transition-colors active:scale-[0.98] " +
                 (activeLink === "login"
-                  ? "bg-[#12281f] text-[#f8f7ef]"
-                  : "text-[#5d7268] hover:bg-[#ecf4ed] hover:text-[#12281f]")
+                  ? "bg-[var(--auth-fg)] text-[var(--auth-bg)]"
+                  : "text-[var(--auth-fg-muted)] hover:bg-[var(--auth-bg-hover)] hover:text-[var(--auth-fg)]")
               }
             >
               Sign in
@@ -151,8 +151,8 @@ export default function AuthProductFrame({
               className={
                 "inline-flex min-h-11 items-center rounded-[6px] px-3 py-2 font-sans transition-colors active:scale-[0.98] " +
                 (activeLink === "request"
-                  ? "bg-[#12281f] text-[#f8f7ef]"
-                  : "text-[#5d7268] hover:bg-[#ecf4ed] hover:text-[#12281f]")
+                  ? "bg-[var(--auth-fg)] text-[var(--auth-bg)]"
+                  : "text-[var(--auth-fg-muted)] hover:bg-[var(--auth-bg-hover)] hover:text-[var(--auth-fg)]")
               }
             >
               Request access
@@ -160,7 +160,7 @@ export default function AuthProductFrame({
           </nav>
         </header>
 
-        <section className="auth-motion relative overflow-hidden rounded-[8px] border border-white/80 bg-[#f8f7ef]/[0.84] shadow-[0_30px_90px_-52px_rgba(18,40,31,0.42)] backdrop-blur-xl">
+        <section className="auth-motion relative overflow-hidden rounded-[8px] border border-white/80 bg-[var(--auth-bg)]/[0.84] shadow-[0_30px_90px_-52px_rgba(18,40,31,0.42)] backdrop-blur-xl">
           <div className="pointer-events-none absolute inset-0">
             <div className="absolute inset-x-[-20%] top-[-18%] h-[420px] bg-[linear-gradient(112deg,rgba(24,143,105,0.18),rgba(212,235,220,0.24)_38%,rgba(248,247,239,0)_70%)] blur-2xl [animation:auth-page-band_13s_cubic-bezier(0.22,1,0.36,1)_infinite]" />
             <div className="absolute inset-x-[-18%] bottom-[-24%] h-[360px] bg-[linear-gradient(28deg,rgba(18,40,31,0.12),rgba(24,143,105,0.12)_46%,rgba(248,247,239,0)_76%)] blur-2xl [animation:auth-page-band_16s_cubic-bezier(0.22,1,0.36,1)_infinite_reverse]" />
@@ -170,14 +170,14 @@ export default function AuthProductFrame({
           <div className="relative grid gap-7 p-4 sm:p-6 lg:p-8 xl:grid-cols-[minmax(0,1fr)_minmax(360px,430px)] xl:items-stretch xl:gap-8">
             <section className="order-1 flex min-w-0 flex-col gap-5 xl:col-start-1 xl:row-start-1 xl:h-full">
               <div className="max-w-[760px] pt-2 sm:pt-5">
-                <p className="font-mono text-eyebrow font-semibold uppercase tracking-[0.22em] text-[#0f7a5d]">
+                <p className="font-mono text-eyebrow font-semibold uppercase tracking-[0.22em] text-[var(--auth-primary)]">
                   {eyebrow}
                 </p>
                 {/* design-intentional: leading-[0.95] on marketing hero — extreme tight leading for visual impact at large display size */}
-                <h1 className="mt-5 max-w-[12ch] font-sans text-4xl font-semibold leading-[0.95] tracking-tight text-[#12281f] sm:text-5xl lg:text-6xl">
+                <h1 className="mt-5 max-w-[12ch] font-sans text-4xl font-semibold leading-[0.95] tracking-tight text-[var(--auth-fg)] sm:text-5xl lg:text-6xl">
                   {title}
                 </h1>
-                <p className="mt-5 max-w-[650px] font-sans text-numeric-md leading-loose text-[#40574c]">
+                <p className="mt-5 max-w-[650px] font-sans text-numeric-md leading-loose text-[var(--auth-fg-dim)]">
                   {lead}
                 </p>
 
@@ -191,19 +191,19 @@ export default function AuthProductFrame({
                   </Link>
                   <Link
                     href={secondaryCta.href}
-                    className="inline-flex min-h-12 items-center justify-center rounded-[8px] border border-[#c9d9ce] bg-white/70 px-5 font-sans text-body-sm font-semibold text-[#12281f] shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] transition-colors hover:border-[#0f7a5d]/35 hover:bg-white active:scale-[0.98]"
+                    className="inline-flex min-h-12 items-center justify-center rounded-[8px] border border-[var(--auth-border)] bg-white/70 px-5 font-sans text-body-sm font-semibold text-[var(--auth-fg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] transition-colors hover:border-[var(--auth-primary)]/35 hover:bg-white active:scale-[0.98]"
                   >
                     {secondaryCta.label}
                   </Link>
                 </div>
               </div>
 
-              <div className="rounded-[8px] border border-[#d7e4d9] bg-white/55 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.74)]">
+              <div className="rounded-[8px] border border-[var(--auth-border)] bg-white/55 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.74)]">
                 <div className="flex flex-wrap gap-2">
                   {proofRail.map((item) => (
                     <span
                       key={item}
-                      className="rounded-[8px] border border-[#d7e4d9] bg-[#f7fbf4] px-3 py-2 font-sans text-label font-medium text-[#40574c]"
+                      className="rounded-[8px] border border-[var(--auth-border)] bg-[var(--auth-bg-soft)] px-3 py-2 font-sans text-label font-medium text-[var(--auth-fg-dim)]"
                     >
                       {item}
                     </span>
@@ -217,33 +217,33 @@ export default function AuthProductFrame({
             </section>
 
             <aside id="auth-panel" className="order-2 flex min-w-0 flex-col gap-4 scroll-mt-6 xl:col-start-2 xl:row-start-1">
-              <div className="rounded-[8px] border border-[#d7e4d9] bg-white/[0.78] p-4 shadow-[0_28px_70px_-46px_rgba(18,40,31,0.5)] backdrop-blur-xl sm:p-5">
+              <div className="rounded-[8px] border border-[var(--auth-border)] bg-white/[0.78] p-4 shadow-[0_28px_70px_-46px_rgba(18,40,31,0.5)] backdrop-blur-xl sm:p-5">
                 {children}
               </div>
 
-              <section className="rounded-[8px] border border-[#d7e4d9] bg-[#f7fbf4]/[0.72] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)] backdrop-blur-xl">
-                <div className="flex items-start justify-between gap-4 border-b border-[#d7e4d9] pb-3">
+              <section className="rounded-[8px] border border-[var(--auth-border)] bg-[var(--auth-bg-soft)]/[0.72] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)] backdrop-blur-xl">
+                <div className="flex items-start justify-between gap-4 border-b border-[var(--auth-border)] pb-3">
                   <div>
-                    <p className="font-sans text-body font-semibold tracking-tight text-[#12281f]">
+                    <p className="font-sans text-body font-semibold tracking-tight text-[var(--auth-fg)]">
                       {panelTitle}
                     </p>
-                    <p className="mt-1 font-sans text-label leading-relaxed text-[#5d7268]">
+                    <p className="mt-1 font-sans text-label leading-relaxed text-[var(--auth-fg-muted)]">
                       {panelSubtitle}
                     </p>
                   </div>
-                  <span className="rounded-[6px] border border-[#0f7a5d]/20 bg-white/70 px-2 py-1 font-mono text-eyebrow uppercase tracking-[0.14em] text-[#0f7a5d]">
+                  <span className="rounded-[6px] border border-[var(--auth-primary)]/20 bg-white/70 px-2 py-1 font-mono text-eyebrow uppercase tracking-[0.14em] text-[var(--auth-primary)]">
                     Trust
                   </span>
                 </div>
 
-                <div className="mt-3 divide-y divide-[#d7e4d9]">
+                <div className="mt-3 divide-y divide-[var(--auth-border)]">
                   {proofPoints.map((point) => (
                     <div key={point.label} className="grid gap-1 py-3 first:pt-0 last:pb-0">
                       <div className="flex items-baseline justify-between gap-3">
-                        <span className="font-sans text-body-sm font-semibold text-[#12281f]">{point.label}</span>
-                        <span className="font-mono text-label text-[#0f7a5d]">{point.value}</span>
+                        <span className="font-sans text-body-sm font-semibold text-[var(--auth-fg)]">{point.label}</span>
+                        <span className="font-mono text-label text-[var(--auth-primary)]">{point.value}</span>
                       </div>
-                      <p className="font-sans text-label leading-relaxed text-[#5d7268]">{point.detail}</p>
+                      <p className="font-sans text-label leading-relaxed text-[var(--auth-fg-muted)]">{point.detail}</p>
                     </div>
                   ))}
                 </div>
@@ -278,23 +278,23 @@ export default function AuthProductFrame({
           className="mt-2 [&_summary]:list-none"
         >
           <summary
-            className="block cursor-pointer rounded-[8px] border border-[#d7e4d9] bg-white/70 px-4 py-3 font-sans text-body-sm font-semibold text-[#12281f] shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] transition-colors hover:bg-white sm:hidden"
+            className="block cursor-pointer rounded-[8px] border border-[var(--auth-border)] bg-white/70 px-4 py-3 font-sans text-body-sm font-semibold text-[var(--auth-fg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] transition-colors hover:bg-white sm:hidden"
           >
             <span className="flex items-center justify-between">
               Learn more about AlphaDesk
-              <span aria-hidden="true" className="font-mono text-label text-[#0f7a5d]">→</span>
+              <span aria-hidden="true" className="font-mono text-label text-[var(--auth-primary)]">→</span>
             </span>
           </summary>
 
           <section className="mt-6 grid gap-5 lg:grid-cols-[minmax(260px,0.55fr)_minmax(0,1fr)] lg:items-start">
-            <div className="rounded-[8px] border border-[#d7e4d9] bg-white/60 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
-              <p className="font-mono text-eyebrow font-semibold uppercase tracking-[0.18em] text-[#0f7a5d]">
+            <div className="rounded-[8px] border border-[var(--auth-border)] bg-white/60 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
+              <p className="font-mono text-eyebrow font-semibold uppercase tracking-[0.18em] text-[var(--auth-primary)]">
                 Product rhythm
               </p>
-              <h2 className="mt-3 max-w-[14ch] font-sans text-h1 font-semibold leading-none tracking-tight text-[#12281f]">
+              <h2 className="mt-3 max-w-[14ch] font-sans text-h1 font-semibold leading-none tracking-tight text-[var(--auth-fg)]">
                 From hunch to habit, without losing the thread.
               </h2>
-              <p className="mt-4 font-sans text-body-sm leading-relaxed text-[#40574c]">
+              <p className="mt-4 font-sans text-body-sm leading-relaxed text-[var(--auth-fg-dim)]">
                 The marketing promise is simple: AlphaDesk gives serious traders a calmer loop for deciding, challenging, routing, and learning.
               </p>
             </div>
@@ -304,38 +304,38 @@ export default function AuthProductFrame({
                 return (
                   <article
                     key={item.label}
-                    className="group rounded-[8px] border border-[#d7e4d9] bg-white/62 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.78)] transition-transform duration-300 hover:-translate-y-0.5"
+                    className="group rounded-[8px] border border-[var(--auth-border)] bg-white/62 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.78)] transition-transform duration-300 hover:-translate-y-0.5"
                     style={{
                       animation: "auth-page-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both",
                       animationDelay: `${index * 90}ms`,
                     }}
                   >
                     <div className="flex items-start justify-between gap-4">
-                      <span className="grid size-10 place-items-center rounded-[8px] bg-[#ecf4ed] text-[#0f7a5d]">
+                      <span className="grid size-10 place-items-center rounded-[8px] bg-[var(--auth-bg-hover)] text-[var(--auth-primary)]">
                         <AuthFrameIcon kind={item.icon} className="size-5" />
                       </span>
-                      <span className="font-mono text-eyebrow text-[#819188]">{String(index + 1).padStart(2, "0")}</span>
+                      <span className="font-mono text-eyebrow text-[var(--auth-fg-soft)]">{String(index + 1).padStart(2, "0")}</span>
                     </div>
-                    <p className="mt-5 font-mono text-eyebrow font-semibold uppercase tracking-[0.16em] text-[#0f7a5d]">
+                    <p className="mt-5 font-mono text-eyebrow font-semibold uppercase tracking-[0.16em] text-[var(--auth-primary)]">
                       {item.label}
                     </p>
-                    <h3 className="mt-2 font-sans text-h3 font-semibold tracking-tight text-[#12281f]">{item.title}</h3>
-                    <p className="mt-2 font-sans text-body-sm leading-relaxed text-[#5d7268]">{item.detail}</p>
+                    <h3 className="mt-2 font-sans text-h3 font-semibold tracking-tight text-[var(--auth-fg)]">{item.title}</h3>
+                    <p className="mt-2 font-sans text-body-sm leading-relaxed text-[var(--auth-fg-muted)]">{item.detail}</p>
                   </article>
                 );
               })}
             </div>
           </section>
 
-          <section className="mt-5 grid gap-4 rounded-[8px] border border-[#d7e4d9] bg-[#12281f] p-5 text-[#f8f7ef] shadow-[0_30px_80px_-56px_rgba(18,40,31,0.65)] lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.55fr)]">
+          <section className="mt-5 grid gap-4 rounded-[8px] border border-[var(--auth-border)] bg-[var(--auth-fg)] p-5 text-[var(--auth-bg)] shadow-[0_30px_80px_-56px_rgba(18,40,31,0.65)] lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.55fr)]">
             <div>
-              <p className="font-mono text-eyebrow uppercase tracking-[0.18em] text-[#75d9af]">
+              <p className="font-mono text-eyebrow uppercase tracking-[0.18em] text-[var(--auth-primary-soft)]">
                 Evidence, with the caveats in view
               </p>
               <h2 className="mt-3 max-w-[18ch] font-sans text-h1 font-semibold leading-tight tracking-tight">
                 The numbers support the story; they do not replace judgment.
               </h2>
-              <p className="mt-3 max-w-[66ch] font-sans text-body-sm leading-relaxed text-[#c7d6ce]">
+              <p className="mt-3 max-w-[66ch] font-sans text-body-sm leading-relaxed text-[var(--auth-border-soft)]">
                 Performance examples stay below the fold and remain framed as research artifacts. The first promise is workflow quality: clearer thinking, deliberate controls, and a usable record.
               </p>
             </div>
@@ -343,7 +343,7 @@ export default function AuthProductFrame({
               {credibilityNotes.map((item) => (
                 <div key={item.label} className="flex items-baseline justify-between gap-4 border-t border-white/12 pt-2 first:border-t-0 first:pt-0">
                   <span className="font-mono text-numeric-lg text-white">{item.value}</span>
-                  <span className="text-right font-sans text-label text-[#c7d6ce]">{item.label}</span>
+                  <span className="text-right font-sans text-label text-[var(--auth-border-soft)]">{item.label}</span>
                 </div>
               ))}
             </div>

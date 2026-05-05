@@ -61,13 +61,28 @@
   --wine-500: #8a3a4a;          /* critical / circuit-breaker */
 
   /* Decomposed warn/state palette — each intent gets its own token so we
-     stop overloading --amber-500 (QA r4-2). Migrate consumers to these. */
+     stop overloading --amber-500 (QA r4-2 + P2-16).
+     Migration status (P2-16): tokens are DEFINED below; ~113 consumer sites
+     still reach for --amber-500 directly. Fixed in this batch: 5-10 high-impact
+     sites (StatusStrip, StatusBar, NotificationCenter, MarketContext, RiskGates).
+     Remaining ~100 sites are intentionally LEFT for a future codemod batch —
+     do not bulk-rewrite without route-by-route intent classification, since
+     each site has to pick the right semantic token (warning vs stale vs
+     info-time vs mode). */
   --state-warning:        #d9a441; /* PRIMARY warning — legitimate amber */
   --state-warning-bg:     #21190d; /* dark warning surface (banners) */
   --state-warning-border: #6f541f; /* warning border */
   --state-warning-fg:     #f8d590; /* warning foreground (text on warning bg) */
   --state-warning-fg-muted: #d9b165; /* warning foreground muted (separators, secondary) */
   --state-info-time:      #c9a17a; /* slightly more neutral mustard for stale/time indicators */
+  /* P2-16: --state-stale is the dashed-border data-aged-out indicator. Keep
+     it slightly darker than warn so the two read distinctly when both surface
+     simultaneously (e.g. WS-stale banner over a warning toast). */
+  --state-stale-color:    #c9a17a; /* alias for --state-info-time; semantically named */
+  /* P2-16: --state-mode is the paper/live trading mode indicator. Same hue as
+     warning by design (it's a "be careful, you're in mode X" signal) but
+     consumed via the mode token so future palette tweaks can split them. */
+  --state-mode:           #d9a441;
 
   /* ─── SEMANTIC TOKENS ────────────────────────────────────────── */
 
@@ -484,13 +499,18 @@ html, body {
 .t-body { font-family: var(--font-ui); font-size: var(--fs-body); line-height: var(--lh-body); color: var(--fg-dim); }
 .t-body-sm { font-family: var(--font-ui); font-size: var(--fs-body-sm); line-height: var(--lh-body); color: var(--fg-dim); }
 
-/* Label — THE signature all-caps tracked hint. Used everywhere for metadata. */
+/* Label — small tracked metadata hint.
+ * P2-18: REMOVED `text-transform: uppercase`. The macro previously force-cased
+ * any text passed in, breaking voice-control / SR output (aria-label said
+ * "Submit order" but visible text was "SUBMIT ORDER" tracked-caps). Sites that
+ * GENUINELY need uppercase tracked caps must now opt in explicitly with
+ * `uppercase tracking-wider` on the element. The `.t-label` macro now only
+ * controls size/weight/letter-spacing/color and respects the source casing. */
 .t-label {
   font-family: var(--font-ui);
   font-size: var(--fs-label);
   font-weight: 600;
   letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
   color: var(--fg-muted);
   line-height: 1;
 }
