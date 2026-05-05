@@ -236,7 +236,15 @@ export default function TradePage() {
       const legs: ActiveLeg[] = [];
       for (const raw of legsParam.split(",")) {
         const parts = raw.split(":");
-        if (parts.length < 1) continue;
+        // Audit MF-P0-2 (2026-05-05): the prior guard ``parts.length < 1``
+        // was vacuously false — String.split always returns ≥1 element
+        // (an empty string yields ``[""]``). The intended minimum is the
+        // three mandatory fields OCC:side:qty. Without this guard, a
+        // deep-link with a truncated leg (copy-paste that clipped a
+        // colon, URL-shortener mangle) silently dropped that leg via
+        // ``parseOccSymbol("")`` returning null, submitting a different-
+        // risk combo than the user staged with no warning.
+        if (parts.length < 3) continue;
         const [occ, rawSide, rawQty, rawLimit] = parts;
         const parsed = parseOccSymbol(occ);
         if (!parsed) continue;
@@ -866,7 +874,20 @@ export default function TradePage() {
     if (ts == null) return null;
     return Math.max(0, Date.now() / 1000 - ts);
   }, [executionQuote.timestamp]);
-  const marketOpen = useMemo(() => isMarketOpen(), []);
+  // Audit MF-P0-1 (2026-05-05): the prior ``useMemo(() => isMarketOpen(), [])``
+  // cached the boolean from the FIRST render and never recomputed it. A
+  // user opening /trade pre-market saw ``marketOpen=false`` for the rest
+  // of the session — the execution-readiness pill stayed locked at
+  // "Market closed · awaiting next session open" even after 09:30 ET,
+  // and the submit button stayed disabled until a navigation away/back.
+  // The submit-path itself called ``isMarketOpen()`` directly so the
+  // server-side gate was correct; only the UI lied. Tick a state
+  // variable every 30s so the pill state tracks reality.
+  const [marketOpen, setMarketOpen] = useState(() => isMarketOpen());
+  useEffect(() => {
+    const id = setInterval(() => setMarketOpen(isMarketOpen()), 30_000);
+    return () => clearInterval(id);
+  }, []);
   // R6-5: derive the leg-quote readiness state once and reuse it for both
   // the live-render readiness pill and the on-submit readiness re-check.
   // `deriveLegReadiness` is pure — see lib/legQuoteReadiness.ts.

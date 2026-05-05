@@ -435,10 +435,20 @@ export default function OrderBar({
   // re-entry until the parent's ``submitting`` prop comes back true.
   const submittingRef = React.useRef(false);
   React.useEffect(() => {
-    // Parent has acknowledged the submission and is now showing the
-    // submitting state — clear the local guard so subsequent legit
-    // submissions (after this one resolves) can proceed.
-    if (submitting) submittingRef.current = false;
+    // Audit MF-P1-6 (2026-05-05): the prior version cleared the local
+    // guard on ``submitting === true`` (i.e. the moment the in-flight
+    // state began), which is the WRONG transition. A second rapid tap
+    // on "Place order" within the same React tick where the parent
+    // had just flipped submitting=true would pass the guard
+    // ``submittingRef.current`` (now false) and re-enter ``stage()`` —
+    // firing a second POST against the same staged draft.
+    //
+    // Guard semantics: clear when the parent's async round-trip has
+    // RESOLVED (submitting transitions back from true → false), not
+    // when the in-flight begins. The Promise-chain in ``stage()`` also
+    // clears on resolved-false / rejection, so the guard is multiply
+    // protected; this just closes the in-flight overlap window.
+    if (!submitting) submittingRef.current = false;
   }, [submitting]);
 
   const stage = () => {
