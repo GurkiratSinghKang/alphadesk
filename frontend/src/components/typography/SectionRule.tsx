@@ -9,22 +9,29 @@ import { cn } from "@/lib/utils";
  * tracked-caps tag above it (e.g. "§ 01 · Principles"). Used to open
  * chapters in marketing, docs, and the design preview page.
  *
- * QA r1 B1: the tag is now a real heading element (defaults to `h2`).
- * Previously it rendered as a `<span>`, which was invisible to screen-reader
- * heading navigation across all docs/legal pages. Pass `tagAs="div"` for
- * non-section uses where a heading would create a skipped level.
+ * QA r1 B1: the tag was promoted to a real heading element to fix
+ * screen-reader navigation. However, defaulting to `h2` caused a WCAG
+ * 1.3.1 hierarchy bug across docs/legal/about/privacy/terms/risk: every
+ * visual eyebrow rendered as `<h2>`, polluting the heading outline.
+ *
+ * Batch F (P1-12): default is now `div` (visual eyebrow only). Pass
+ * `tagAs="h2"` explicitly at top-level section opens where the eyebrow
+ * IS the section's semantic heading. Use `className="t-h2"` on the
+ * SectionRule to upgrade visual styling when promoting to a real h2 —
+ * the wrapper passes className through to the outer flex container.
  */
 export interface SectionRuleProps
   extends React.HTMLAttributes<HTMLDivElement> {
   /** Optional tracked-caps tag above the hairline. */
   tag?: string;
-  /** Element to render the tag as. Default `h2` (for proper heading nav). */
+  /** Element to render the tag as. Default `div` — pass `"h2"` for
+   *  semantic page-section opens (top-level chapter headings). */
   tagAs?: "h2" | "h3" | "h4" | "div";
 }
 
 export default function SectionRule({
   tag,
-  tagAs = "h2",
+  tagAs = "div",
   className,
   ...rest
 }: SectionRuleProps) {

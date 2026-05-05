@@ -235,7 +235,7 @@ export function StressTest() {
         onClick={() => setOpen(true)}
         className={cn(
           "w-full flex items-center justify-center gap-2 rounded-lg border border-border",
-          "bg-[var(--surface)] px-4 py-2.5 text-label font-medium",
+          "bg-[var(--bg-card)] px-4 py-2.5 text-label font-medium",
           "text-muted-foreground hover:text-foreground hover:border-[var(--chart-4)]/50",
           "transition-all duration-200"
         )}
@@ -275,7 +275,7 @@ export function StressTest() {
                 "flex items-center gap-1 rounded-md border px-2 py-1 text-label font-medium transition-all",
                 selectedScenario === s.id
                   ? "border-[var(--chart-4)]/50 bg-[var(--chart-4)]/10 text-foreground"
-                  : "border-border bg-[var(--surface)] text-muted-foreground hover:text-foreground"
+                  : "border-border bg-[var(--bg-card)] text-muted-foreground hover:text-foreground"
               )}
             >
               {s.icon}
@@ -288,7 +288,7 @@ export function StressTest() {
               "flex items-center gap-1 rounded-md border px-2 py-1 text-label font-medium transition-all",
               selectedScenario === "custom"
                 ? "border-[var(--chart-4)]/50 bg-[var(--chart-4)]/10 text-foreground"
-                : "border-border bg-[var(--surface)] text-muted-foreground hover:text-foreground"
+                : "border-border bg-[var(--bg-card)] text-muted-foreground hover:text-foreground"
             )}
           >
             Custom
@@ -305,7 +305,7 @@ export function StressTest() {
               type="number"
               value={customPct}
               onChange={(e) => setCustomPct(e.target.value)}
-              className="w-20 rounded border border-border bg-[var(--surface)] px-2 py-1 text-label tabular-nums text-foreground outline-none focus:border-[var(--chart-4)]/50"
+              className="w-20 rounded border border-border bg-[var(--bg-card)] px-2 py-1 text-label tabular-nums text-foreground outline-none focus:border-[var(--chart-4)]/50"
               step="1"
             />
             <span className="text-label text-muted-foreground">%</span>
@@ -329,7 +329,7 @@ export function StressTest() {
           <div className="space-y-3">
             {/* Impact summary */}
             <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-lg border border-border bg-[var(--surface)] px-3 py-2">
+              <div className="rounded-lg border border-border bg-[var(--bg-card)] px-3 py-2">
                 <span className="text-label uppercase tracking-wider text-muted-foreground">
                   Projected Value
                 </span>
@@ -337,7 +337,7 @@ export function StressTest() {
                   {formatCurrency(result.totalStressedValue)}
                 </p>
               </div>
-              <div className="rounded-lg border border-border bg-[var(--surface)] px-3 py-2">
+              <div className="rounded-lg border border-border bg-[var(--bg-card)] px-3 py-2">
                 <span className="text-label uppercase tracking-wider text-muted-foreground">
                   Impact
                 </span>
@@ -404,7 +404,7 @@ export function StressTest() {
                   {result.positions.slice(0, 8).map((p) => (
                     <div
                       key={p.symbol}
-                      className="flex items-center justify-between rounded bg-[var(--surface)] px-2 py-1"
+                      className="flex items-center justify-between rounded bg-[var(--bg-card)] px-2 py-1"
                     >
                       <span className="text-label font-medium text-foreground">
                         {p.symbol}

@@ -407,7 +407,7 @@ export function OnboardingTour() {
           320px on desk but clamps to the viewport minus 32px on mobile. */}
       <div
         ref={tooltipRef}
-        className="absolute z-10 w-[calc(100vw-2rem)] max-w-80 rounded-xl border border-primary/30 bg-[var(--surface)] p-5 shadow-2xl transition-all duration-300"
+        className="absolute z-10 w-[calc(100vw-2rem)] max-w-80 rounded-xl border border-primary/30 bg-[var(--bg-card)] p-5 shadow-2xl transition-all duration-300"
         style={getTooltipStyle()}
       >
         {/* Step counter */}

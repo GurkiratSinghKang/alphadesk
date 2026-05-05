@@ -585,7 +585,7 @@ export function ShareTradeButton({ symbol: symbolProp, analysis, pnl, pnlPct }: 
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-[480px] bg-[var(--surface)] border-border p-0 overflow-hidden">
+        <DialogContent className="max-w-[480px] bg-[var(--bg-card)] border-border p-0 overflow-hidden">
           <DialogHeader className="px-5 pt-5 pb-0">
             <DialogTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Share2 className="h-4 w-4 text-primary" />

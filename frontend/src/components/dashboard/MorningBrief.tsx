@@ -199,7 +199,7 @@ function MorningBriefContent({
         {/* Main grid: Portfolio | Movers | Market */}
         <div className={cn("grid gap-4 mb-4", rail ? "grid-cols-1" : "grid-cols-1 md:grid-cols-3")}>
           {/* Portfolio Overnight Change */}
-          <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
+          <div className="rounded-lg border border-border/50 bg-[var(--bg-card)] p-3">
             <div className="flex items-center gap-1.5 mb-2">
               {isUp ? (
                 <TrendingUp className="h-3.5 w-3.5 text-profit" />
@@ -236,7 +236,7 @@ function MorningBriefContent({
           </div>
 
           {/* Top Movers */}
-          <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
+          <div className="rounded-lg border border-border/50 bg-[var(--bg-card)] p-3">
             <div className="flex items-center gap-1.5 mb-2">
               <BarChart3 className="h-3.5 w-3.5 text-ice" />
               <span className="text-eyebrow font-semibold text-muted-foreground uppercase tracking-[0.12em]">
@@ -282,7 +282,7 @@ function MorningBriefContent({
           </div>
 
           {/* Market Snapshot */}
-          <div className="rounded-lg border border-border/50 bg-[var(--surface)] p-3">
+          <div className="rounded-lg border border-border/50 bg-[var(--bg-card)] p-3">
             <div className="flex items-center gap-1.5 mb-2">
               <Zap className="h-3.5 w-3.5 text-amber" />
               <span className="text-eyebrow font-semibold text-muted-foreground uppercase tracking-[0.12em]">
@@ -355,7 +355,7 @@ function MorningBriefContent({
             {data.catalysts.map((c) => (
               <span
                 key={c}
-                className="inline-flex items-center rounded-full border border-border/50 bg-[var(--surface)] px-2 py-0.5 text-body-sm text-muted-foreground"
+                className="inline-flex items-center rounded-full border border-border/50 bg-[var(--bg-card)] px-2 py-0.5 text-body-sm text-muted-foreground"
               >
                 {c}
               </span>

@@ -436,7 +436,7 @@ export function LiveSignalFeed({ pipelineLog }: LiveSignalFeedProps) {
           )}
           <button
             onClick={() => buildSignals()}
-            className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-[var(--surface)] transition-colors"
+            className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-[var(--bg-card)] transition-colors"
             title="Refresh signals"
             aria-label="Refresh signals"
           >

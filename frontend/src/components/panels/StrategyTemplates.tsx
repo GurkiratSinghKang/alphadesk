@@ -143,7 +143,7 @@ function TemplateCard({
   return (
     <div
       className={cn(
-        "rounded-xl border bg-[var(--surface)] p-4 transition-all",
+        "rounded-xl border bg-[var(--bg-card)] p-4 transition-all",
         isActive
           ? "border-primary/50 ring-1 ring-primary/20"
           : "border-border hover:border-border/80"

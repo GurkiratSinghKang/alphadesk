@@ -53,7 +53,7 @@ export default function AboutPage() {
         <div className="mt-section flex flex-col gap-section-sm">
           {ABOUT_CLAUSES.map((c) => (
             <section key={c.index} className="space-y-prose">
-              <SectionRule tag={`§ ${c.index} · ${c.title}`} />
+              <SectionRule tag={`§ ${c.index} · ${c.title}`} tagAs="h2" className="t-h2" />
               {c.body}
             </section>
           ))}

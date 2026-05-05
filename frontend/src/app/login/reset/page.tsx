@@ -61,7 +61,7 @@ export default function LoginResetPage() {
         </p>
       </header>
 
-      <SectionRule tag="§ 02 · How to reset" />
+      <SectionRule tag="§ 02 · How to reset" tagAs="h2" className="t-h2" />
 
       <section className="flex flex-col gap-4 font-sans text-body leading-relaxed text-fg-dim">
         <p>

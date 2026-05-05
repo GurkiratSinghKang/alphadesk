@@ -372,7 +372,7 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
         {/* Hover tooltip */}
         {hoveredRect && tooltipPos && (
           <div
-            className="pointer-events-none absolute z-30 rounded-md border border-border bg-[var(--surface)]/95 px-2.5 py-1.5 shadow-lg backdrop-blur-sm"
+            className="pointer-events-none absolute z-30 rounded-md border border-border bg-[var(--bg-card)]/95 px-2.5 py-1.5 shadow-lg backdrop-blur-sm"
             style={{
               left: Math.min(tooltipPos.x + 12, width - 160),
               top: Math.max(tooltipPos.y - 60, 0),

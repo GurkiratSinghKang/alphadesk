@@ -393,7 +393,7 @@ export function AICopilot() {
       {open && (
       <div
         ref={panelRef}
-        className="fixed top-0 right-0 z-50 flex h-full w-full max-w-[400px] sm:w-[400px] flex-col border-l border-[var(--border)] bg-[var(--surface)] shadow-2xl transition-transform duration-300 ease-in-out"
+        className="fixed top-0 right-0 z-50 flex h-full w-full max-w-[400px] sm:w-[400px] flex-col border-l border-[var(--border)] bg-[var(--bg-card)] shadow-2xl transition-transform duration-300 ease-in-out"
         role="dialog"
         aria-modal="true"
         aria-labelledby="ai-copilot-title"
@@ -480,7 +480,7 @@ export function AICopilot() {
                     )}
                     <div className="whitespace-pre-wrap">{msg.content}</div>
                     {msg.role === "assistant" && msg.provenance ? (
-                      <div className="mt-2 rounded-sm border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 font-mono text-label leading-snug text-muted-foreground">
+                      <div className="mt-2 rounded-sm border border-[var(--border)] bg-[var(--bg-card)] px-2 py-1.5 font-mono text-label leading-snug text-muted-foreground">
                         {msg.provenance}
                       </div>
                     ) : null}
@@ -556,7 +556,7 @@ export function AICopilot() {
             </button>
           </div>
           <div className="mt-2 text-center text-label text-muted-foreground">
-            <kbd className="rounded border border-[var(--border)] bg-[var(--surface)] px-1 py-0.5 font-mono text-label">
+            <kbd className="rounded border border-[var(--border)] bg-[var(--bg-card)] px-1 py-0.5 font-mono text-label">
               Cmd+J
             </kbd>{" "}
             to toggle

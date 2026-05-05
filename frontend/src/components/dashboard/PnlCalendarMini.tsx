@@ -124,7 +124,7 @@ export function PnlCalendarMini() {
                   isToday && "ring-1 ring-primary/50",
                   hasPnl && positive && "bg-[var(--profit)]",
                   hasPnl && !positive && "bg-[var(--loss)]",
-                  !hasPnl && "bg-[var(--surface)]"
+                  !hasPnl && "bg-[var(--bg-card)]"
                 )}
                 style={hasPnl ? { opacity: 0.3 + intensity * 0.7 } : undefined}
                 onMouseEnter={(e) => {
@@ -155,7 +155,7 @@ export function PnlCalendarMini() {
         </div>
         {hovered && (
           <div
-            className="absolute z-10 rounded-lg border border-border bg-[var(--surface)] px-3 py-2.5 shadow-lg pointer-events-none"
+            className="absolute z-10 rounded-lg border border-border bg-[var(--bg-card)] px-3 py-2.5 shadow-lg pointer-events-none"
             style={{
               left: Math.max(0, Math.min(hovered.x - 80, (containerRef.current?.offsetWidth ?? 320) - 160)),
               top: Math.max(0, hovered.y - 95),

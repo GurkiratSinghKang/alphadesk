@@ -46,7 +46,7 @@ const StrategyCard = React.memo(function StrategyCard({
 
   return (
     <Card
-      className="cursor-pointer border-border bg-[var(--surface)] card-glow hover:bg-[var(--surface)]/80 card-stagger"
+      className="cursor-pointer border-border bg-[var(--bg-card)] card-glow hover:bg-[var(--bg-card)]/80 card-stagger"
       style={{ animationDelay: `${index * 50}ms` }}
       onClick={onClick}
       role="button"

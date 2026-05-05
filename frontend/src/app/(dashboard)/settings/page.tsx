@@ -1147,7 +1147,7 @@ export default function SettingsPage() {
           There is no /auth/switch-mode endpoint today, so confirming toasts
           the real state of affairs instead of silently flipping UI state. */}
       <Dialog open={liveConfirmOpen} onOpenChange={setLiveConfirmOpen}>
-        <DialogContent className="bg-[var(--surface)] border-border">
+        <DialogContent className="bg-[var(--bg-card)] border-border">
           <DialogHeader>
             <DialogTitle>Live trading requires admin enablement</DialogTitle>
             <DialogDescription>
@@ -1182,7 +1182,7 @@ export default function SettingsPage() {
 
       {/* Persona-8 #6: confirm before nuking saved preferences. */}
       <Dialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
-        <DialogContent className="bg-[var(--surface)] border-border">
+        <DialogContent className="bg-[var(--bg-card)] border-border">
           <DialogHeader>
             <DialogTitle>Reset preferences to defaults?</DialogTitle>
             <DialogDescription>

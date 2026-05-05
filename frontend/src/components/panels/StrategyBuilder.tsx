@@ -268,7 +268,7 @@ export function StrategyBuilder() {
 
           {/* Improvements */}
           {aiResult.improvements.length > 0 && (
-            <div className="rounded-lg border border-border bg-[var(--surface)] p-3">
+            <div className="rounded-lg border border-border bg-[var(--bg-card)] p-3">
               <div className="flex items-center gap-2 mb-2">
                 <Lightbulb className="h-3.5 w-3.5 text-state-warning shrink-0" />
                 <p className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Suggested Improvements</p>
@@ -304,7 +304,7 @@ export function StrategyBuilder() {
 
           {/* Backtest Parameters */}
           {aiResult.backtest_params && Object.keys(aiResult.backtest_params).length > 0 && (
-            <div className="rounded-lg border border-border bg-[var(--surface)] p-3">
+            <div className="rounded-lg border border-border bg-[var(--bg-card)] p-3">
               <div className="flex items-center gap-2 mb-2">
                 <BarChart3 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <p className="text-label uppercase tracking-wider text-muted-foreground font-semibold">Recommended Backtest Parameters</p>

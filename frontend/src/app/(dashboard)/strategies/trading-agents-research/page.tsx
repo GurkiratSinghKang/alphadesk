@@ -812,7 +812,7 @@ function ResearchBrief({
               </span>
             </div>
             <div className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2">
-              <h2 className="min-w-0 font-sans text-display-md font-semibold leading-none tracking-tight text-fg md:text-[54px]">
+              <h2 className="min-w-0 font-sans text-display-md font-semibold leading-none tracking-tight text-fg md:text-display-lg">
                 {runSymbol}
               </h2>
               <span className="mb-1 whitespace-nowrap rounded-pill border border-border bg-bg-elev-1 px-3 py-1.5 font-mono text-body-sm text-fg-muted md:text-numeric-md">
@@ -879,7 +879,7 @@ function ResearchBrief({
           <ArtifactPanel files={artifactFiles} />
           <div className="rounded-lg border border-border-hair bg-bg-elev-1 p-4">
             <p className="t-label text-fg-muted">Research guardrail</p>
-            <p className="mt-2 text-[12.5px] leading-relaxed text-fg-muted">
+            <p className="mt-2 text-body-sm leading-relaxed text-fg-muted">
               {run.advisory_disclaimer || "Research is informational and requires human review before trading."}
             </p>
           </div>
@@ -932,7 +932,7 @@ function MemoNavigator({ sections }: { sections: MemoSection[] }) {
             href={`#${memoSectionId(section.title, index)}`}
             className="group flex items-start justify-between gap-3 rounded-md border border-transparent px-2 py-2 transition duration-200 hover:border-border-hair hover:bg-bg-card"
           >
-            <span className="break-words text-[12.5px] leading-relaxed text-fg group-hover:text-brand">{section.title}</span>
+            <span className="break-words text-body-sm leading-relaxed text-fg group-hover:text-brand">{section.title}</span>
             <span className="shrink-0 font-mono text-eyebrow text-fg-hint">
               {memoSectionLineCount(section.body)} lines
             </span>
@@ -1023,7 +1023,7 @@ function TickerFactPanel({ context }: { context: TickerContext | null }) {
             key={label}
             className="flex items-center justify-between gap-3 rounded-md border border-border-hair bg-bg-card px-3 py-2"
           >
-            <span className="font-sans text-[12.5px] text-fg">{label}</span>
+            <span className="font-sans text-body-sm text-fg">{label}</span>
             {fact ? (
               <span className="text-right font-mono text-eyebrow text-fg-muted">
                 <span className={tickerFactQualityClass(fact.freshness.quality)}>
@@ -1074,7 +1074,7 @@ function ReadableMemo({ body }: { body: string }) {
           return (
             <div key={`${index}-${line}`} className="flex gap-3">
               <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand/70" />
-              <p className="min-w-0 break-words text-[13.5px] leading-7 text-fg">
+              <p className="min-w-0 break-words text-body leading-7 text-fg">
                 {stripMarkdown(bullet[1])}
               </p>
             </div>
@@ -1085,7 +1085,7 @@ function ReadableMemo({ body }: { body: string }) {
           return (
             <div key={`${index}-${line}`} className="flex gap-3">
               <span className="mt-0.5 w-6 shrink-0 font-mono text-label text-brand">{numbered[1]}.</span>
-              <p className="min-w-0 break-words text-[13.5px] leading-7 text-fg">
+              <p className="min-w-0 break-words text-body leading-7 text-fg">
                 {stripMarkdown(numbered[2])}
               </p>
             </div>
@@ -1099,7 +1099,7 @@ function ReadableMemo({ body }: { body: string }) {
           );
         }
         return (
-          <p key={`${index}-${line}`} className="break-words text-[13.5px] leading-7 text-fg">
+          <p key={`${index}-${line}`} className="break-words text-body leading-7 text-fg">
             {clean}
           </p>
         );

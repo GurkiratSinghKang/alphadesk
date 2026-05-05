@@ -73,9 +73,9 @@ export default function GlobalError({
             }}
           >
             <span
+              className="text-eyebrow"
               style={{
                 color: "#7d7665",
-                fontSize: 10.5,
                 fontWeight: 600,
                 textTransform: "uppercase",
                 letterSpacing: "0.16em",
@@ -112,11 +112,11 @@ export default function GlobalError({
             </p>
             {error.digest ? (
               <p
+                className="text-eyebrow"
                 style={{
                   margin: 0,
                   fontFamily:
                     '"JetBrains Mono", "SF Mono", Menlo, monospace',
-                  fontSize: 9.5,
                   color: "#5b5547",
                   textTransform: "uppercase",
                   letterSpacing: "0.02em",

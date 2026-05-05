@@ -150,7 +150,7 @@ export function PortfolioHero({
   return (
     <>
       <h1 className="sr-only">AlphaDesk Dashboard</h1>
-    <div data-tour="portfolio-hero" className="rounded-xl border border-border bg-gradient-to-r from-[var(--surface)] via-[var(--panel)]/30 to-[var(--surface)] overflow-hidden">
+    <div data-tour="portfolio-hero" className="rounded-xl border border-border bg-gradient-to-r from-[var(--bg-card)] via-[var(--panel)]/30 to-[var(--bg-card)] overflow-hidden">
       {/* Text content */}
       <div className="flex items-center justify-between px-5 pt-4 pb-2">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3">

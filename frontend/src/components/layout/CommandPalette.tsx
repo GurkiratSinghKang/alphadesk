@@ -436,7 +436,7 @@ export function CommandPalette() {
     <Dialog open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen}>
       <DialogContent
         data-testid="command-palette"
-        className="overflow-hidden p-0 max-w-xl bg-[var(--surface)] border-border shadow-2xl [&>button]:hidden"
+        className="overflow-hidden p-0 max-w-xl bg-[var(--bg-card)] border-border shadow-2xl [&>button]:hidden"
       >
         {/* a11y audit r3 — WCAG 4.1.2 / 2.4.6: Dialog needs an accessible name.
             The command palette is visually headerless, so use sr-only title +
@@ -712,7 +712,7 @@ export function CommandPalette() {
     <Dialog open={confirmLiveOpen} onOpenChange={setConfirmLiveOpen}>
       <DialogContent
         data-testid="confirm-live-modal"
-        className="max-w-md bg-[var(--surface)] border-border"
+        className="max-w-md bg-[var(--bg-card)] border-border"
       >
         <DialogHeader>
           <DialogTitle className="text-foreground">
@@ -759,7 +759,7 @@ export function CommandPalette() {
       {destructiveCopy && (
         <DialogContent
           data-testid={`${destructiveCopy.testId}-dialog`}
-          className="max-w-md bg-[var(--surface)] border-border"
+          className="max-w-md bg-[var(--bg-card)] border-border"
         >
           <DialogHeader>
             <DialogTitle className="text-foreground">

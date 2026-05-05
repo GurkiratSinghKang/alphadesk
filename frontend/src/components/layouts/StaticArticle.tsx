@@ -58,7 +58,7 @@ export default function StaticArticle({
         <div className="mt-16 flex flex-col gap-14">
           {clauses.map((c) => (
             <section key={c.index}>
-              <SectionRule tag={`§ ${c.index} · ${c.title}`} />
+              <SectionRule tag={`§ ${c.index} · ${c.title}`} tagAs="h2" className="t-h2" />
               <div className="mt-5">{c.body}</div>
             </section>
           ))}

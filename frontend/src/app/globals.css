@@ -174,7 +174,13 @@
   --text-label: var(--fs-label);
   --text-eyebrow: var(--fs-eyebrow);
 
-  /* QA r6a — Spacing scale wired from design-tokens, with half-step extras */
+  /* QA r6a — Spacing scale wired from design-tokens, with half-step extras.
+   * Batch F (P1-04 / P1-12): explicitly wire EVERY --space-N defined in
+   * design-tokens.css through the --spacing-N namespace so Tailwind v4
+   * generates utilities directly from the semantic tokens — without these
+   * mappings, Tailwind's defaults (4px/8px/12px ladder) silently shadow the
+   * design system, making `gap-3`, `p-4`, `m-6` etc. resolve to default
+   * Tailwind values instead of AlphaDesk tokens. */
   --spacing-0_5: 2px;
   --spacing-1: var(--space-1);
   --spacing-1_5: 6px;
