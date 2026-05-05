@@ -30,6 +30,7 @@ import re
 import time
 from datetime import date, datetime, timedelta, timezone
 from enum import Enum
+from typing import Literal
 
 import httpx
 from pydantic import BaseModel, Field
@@ -65,6 +66,17 @@ class OptionContract(BaseModel):
     theta: float
     vega: float
     rho: float = 0.0
+    # Batch EH-2 (2026-05-05): extended-hours fields per contract.
+    # ---------------------------------------------------------------
+    # Most options have ZERO trades pre/post. When that's the case
+    # ``extended_price`` is None — the frontend shows a "no extended
+    # trades" state rather than rendering a fake number. ``last`` and
+    # ``bid``/``ask`` continue to carry the regular-session values so
+    # leg-estimation math doesn't break.
+    extended_price: float | None = None
+    extended_change: float | None = None
+    extended_session: Literal["pre", "post"] | None = None
+    last_trade_time: datetime | None = None
 
 
 class OptionChain(BaseModel):
@@ -699,6 +711,35 @@ async def _fetch_real_chain(
                     )
                     iv = snap.get("impliedVolatility", 0) or greeks_data.get("iv", 0) or 0
 
+                    # EH-2: derive per-contract extended-hours fields.
+                    # Alpaca options snapshots emit ``latestTrade.t`` as
+                    # RFC3339. Most options never trade pre/post so we
+                    # leave ``extended_price`` as None — fabricating a
+                    # value would mislead the leg-estimation UI.
+                    trade_ts_str = trade.get("t") if isinstance(trade, dict) else None
+                    eh_session: Literal["pre", "post"] | None = None
+                    eh_price: float | None = None
+                    eh_change: float | None = None
+                    last_trade_dt: datetime | None = None
+                    if trade_ts_str:
+                        try:
+                            last_trade_dt = datetime.fromisoformat(
+                                str(trade_ts_str).replace("Z", "+00:00")
+                            )
+                        except ValueError:
+                            last_trade_dt = None
+                    if last_trade_dt is not None:
+                        from core.time import classify_trade_session
+
+                        s = classify_trade_session(last_trade_dt)
+                        if s in ("pre", "post"):
+                            eh_session = s  # type: ignore[assignment]
+                            if last_price:
+                                eh_price = round(float(last_price), 2)
+                                prev_c = prev_daily_bar.get("c", 0) or 0
+                                if prev_c:
+                                    eh_change = round(eh_price - float(prev_c), 4)
+
                     contracts.append(OptionContract(
                         symbol=occ_sym,
                         underlying=parsed["underlying"],
@@ -716,6 +757,10 @@ async def _fetch_real_chain(
                         theta=round(greeks_data.get("theta", 0) or 0, 4),
                         vega=round(greeks_data.get("vega", 0) or 0, 4),
                         rho=round(greeks_data.get("rho", 0) or 0, 4),
+                        extended_price=eh_price,
+                        extended_change=eh_change,
+                        extended_session=eh_session,
+                        last_trade_time=last_trade_dt,
                     ))
                     expirations.add(expiry_date)
 

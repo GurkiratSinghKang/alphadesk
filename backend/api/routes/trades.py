@@ -704,6 +704,21 @@ class PositionResponse(BaseModel):
     # most recent open Trade row for the position's symbol. Null when no
     # Trade row exists (manually opened position, pre-tagging history).
     strategy: str | None = None
+    # Batch EH-3 (2026-05-05): extended-hours live value.
+    # ---------------------------------------------------------------
+    # Broker positions reflect last regular-session marks. After AMD
+    # gapped to ~$403 post-print the broker still showed $356 marks.
+    # We layer the live extended-hours quote on top, only when an
+    # extended trade actually printed for the position's symbol.
+    #   * ``extended_price`` — pre/post mark for this symbol, if any.
+    #   * ``extended_market_value`` — qty * extended_price * multiplier.
+    #     None when ``extended_price`` is None.
+    #   * ``value_session`` — "regular" / "extended" / "stale". The
+    #     frontend uses this for badging. "stale" means the most
+    #     recent quote is older than 5 minutes from now.
+    extended_price: float | None = None
+    extended_market_value: float | None = None
+    value_session: str = "regular"
 
 
 class TradeHistoryEntry(BaseModel):
@@ -2101,21 +2116,79 @@ async def list_positions(username: str = Depends(require_auth)) -> list[Position
                 exc_info=True,
             )
 
-        return [
-            PositionResponse(
-                symbol=p["symbol"],
-                quantity=float(p["qty"]),
-                side=p["side"],
-                avg_cost=float(p["avg_entry_price"]),
-                current_price=float(p["current_price"]),
-                market_value=float(p["market_value"]),
-                unrealized_pnl=float(p["unrealized_pl"]),
-                unrealized_pnl_pct=float(p["unrealized_plpc"]) * 100,
-                asset_class=p.get("asset_class", "us_equity"),
-                strategy=symbol_to_strategy.get(p["symbol"]),
+        # Batch EH-3 (2026-05-05): augment each position with the
+        # latest extended-hours quote (when available). The fetch is
+        # best-effort — if the quote endpoint 404s or times out we
+        # fall through to the broker mark unchanged. We resolve each
+        # symbol once via ``services.market.fetch_quote`` (which is
+        # already cached for 5s in Redis); if a watchlist call has
+        # warmed the cache the round-trip is free.
+        from services.market import fetch_quote as _eh_fetch_quote
+        from core.time import current_session as _eh_current_session
+
+        symbols = sorted({str(p.get("symbol", "")) for p in data if p.get("symbol")})
+
+        async def _fetch_one(sym: str) -> tuple[str, "object | None"]:
+            try:
+                return sym, await _eh_fetch_quote(sym)
+            except Exception:
+                return sym, None
+
+        eh_quotes: dict[str, "object | None"] = {}
+        if symbols:
+            try:
+                results = await asyncio.gather(
+                    *[_fetch_one(s) for s in symbols], return_exceptions=False
+                )
+                eh_quotes = dict(results)
+            except Exception:
+                logger.debug("EH-3 quote fan-out failed, falling back to broker marks", exc_info=True)
+
+        STALE_SECS = 300  # >5min old => "stale"
+        now_utc = datetime.now(timezone.utc)
+        responses: list[PositionResponse] = []
+        for p in data:
+            sym = p["symbol"]
+            qty = float(p["qty"])
+            asset_class = p.get("asset_class", "us_equity")
+            mult = 100.0 if asset_class == "us_option" else 1.0
+            q = eh_quotes.get(sym)
+
+            ext_price: float | None = None
+            ext_mv: float | None = None
+            value_session = "regular"
+            if q is not None:
+                ext_price = getattr(q, "extended_price", None)
+                last_trade_time = getattr(q, "last_trade_time", None)
+                cur_session = _eh_current_session()
+                if ext_price is not None and ext_price > 0:
+                    ext_mv = round(ext_price * qty * mult, 2)
+                    value_session = "extended"
+                elif (
+                    last_trade_time is not None
+                    and (now_utc - last_trade_time).total_seconds() > STALE_SECS
+                    and cur_session == "closed"
+                ):
+                    value_session = "stale"
+
+            responses.append(
+                PositionResponse(
+                    symbol=sym,
+                    quantity=qty,
+                    side=p["side"],
+                    avg_cost=float(p["avg_entry_price"]),
+                    current_price=float(p["current_price"]),
+                    market_value=float(p["market_value"]),
+                    unrealized_pnl=float(p["unrealized_pl"]),
+                    unrealized_pnl_pct=float(p["unrealized_plpc"]) * 100,
+                    asset_class=asset_class,
+                    strategy=symbol_to_strategy.get(sym),
+                    extended_price=ext_price,
+                    extended_market_value=ext_mv,
+                    value_session=value_session,
+                )
             )
-            for p in data
-        ]
+        return responses
     except HTTPException:
         raise
     except Exception:

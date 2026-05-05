@@ -429,6 +429,30 @@ async def _fetch_snapshot_impl(symbol: str) -> Snapshot:
                     prev = data.get("prevDay", {})
                     mn = data.get("min", {})
                     lq = data.get("lastQuote", {})
+                    lt = data.get("lastTrade", {})
+
+                    # EH-4: derive extended-hours block from snapshot.
+                    from services.market import _compute_extended_fields
+
+                    trade_ts_ns = lt.get("t")
+                    last_trade_dt: datetime | None = None
+                    if trade_ts_ns:
+                        try:
+                            last_trade_dt = datetime.fromtimestamp(
+                                int(trade_ts_ns) / 1_000_000_000,
+                                tz=timezone.utc,
+                            )
+                        except (ValueError, OverflowError):
+                            last_trade_dt = None
+                    last_price = lt.get("p", 0) or 0
+                    day_close = day.get("c") or None
+                    prev_close = prev.get("c") or None
+                    regular_close = day_close if day_close not in (None, 0) else prev_close
+                    eh = _compute_extended_fields(
+                        last_trade_price=last_price if last_price else None,
+                        last_trade_dt=last_trade_dt,
+                        regular_close=regular_close,
+                    )
 
                     return Snapshot(
                         symbol=symbol.upper(),
@@ -439,9 +463,10 @@ async def _fetch_snapshot_impl(symbol: str) -> Snapshot:
                             askSize=int(lq.get("S") or lq.get("ask_size") or 0),
                             bidExchange=str(lq.get("x") or lq.get("bid_exchange") or "") or None,
                             askExchange=str(lq.get("X") or lq.get("ask_exchange") or "") or None,
-                            last=data.get("lastTrade", {}).get("p", 0),
+                            last=last_price,
                             volume=day.get("v", 0),
-                            timestamp=datetime.now(timezone.utc),
+                            timestamp=last_trade_dt or datetime.now(timezone.utc),
+                            **eh,
                         ),
                         day_bar=_bar(day),
                         prev_day_bar=_bar(prev),
@@ -461,6 +486,7 @@ async def _fetch_snapshot_impl(symbol: str) -> Snapshot:
                 resp = await client.get(
                     f"{ALPACA_DATA_URL}/v2/stocks/{symbol.upper()}/snapshot",
                     headers=headers,
+                    params={"feed": "sip"},
                 )
                 if resp.status_code == 200:
                     data = resp.json()
@@ -484,6 +510,33 @@ async def _fetch_snapshot_impl(symbol: str) -> Snapshot:
                     prev_close = prev.get("c", 0)
                     change_pct = round(((day_close - prev_close) / prev_close) * 100, 2) if prev_close else 0
 
+                    # EH-4: derive extended-hours block.
+                    from services.market import (
+                        _compute_extended_fields,
+                        _classify_session,
+                    )
+
+                    trade_ts_str = lt.get("t")
+                    last_trade_dt: datetime | None = None
+                    if trade_ts_str:
+                        try:
+                            last_trade_dt = datetime.fromisoformat(
+                                str(trade_ts_str).replace("Z", "+00:00")
+                            )
+                        except ValueError:
+                            last_trade_dt = None
+                    last_price = lt.get("p", 0) or 0
+                    cur_session = _classify_session()
+                    if cur_session == "post" and day_close not in (None, 0):
+                        regular_close = day_close
+                    else:
+                        regular_close = prev_close if prev_close not in (None, 0) else day_close
+                    eh = _compute_extended_fields(
+                        last_trade_price=last_price if last_price else None,
+                        last_trade_dt=last_trade_dt,
+                        regular_close=regular_close if regular_close else None,
+                    )
+
                     return Snapshot(
                         symbol=symbol.upper(),
                         quote=Quote(
@@ -494,9 +547,10 @@ async def _fetch_snapshot_impl(symbol: str) -> Snapshot:
                             askSize=int(lq.get("as") or 0),
                             bidExchange=lq.get("bx"),
                             askExchange=lq.get("ax"),
-                            last=lt.get("p", 0),
+                            last=last_price,
                             volume=int(daily.get("v", 0)),
-                            timestamp=now,
+                            timestamp=last_trade_dt or now,
+                            **eh,
                         ),
                         day_bar=_alpaca_bar(daily),
                         prev_day_bar=_alpaca_bar(prev),
@@ -659,6 +713,31 @@ def _alpaca_snapshot_to_model(symbol: str, data: dict) -> Snapshot | None:
     prev_close = prev.get("c", 0) or 0
     change_pct = round(((day_close - prev_close) / prev_close) * 100, 2) if prev_close else 0
 
+    # Batch EH-4 (2026-05-05): derive extended-hours block for each
+    # snapshot in the batch reply. ``feed=sip`` (set on the upstream
+    # request below) carries pre/post trades; the trade timestamp
+    # decides the session classifier.
+    from services.market import _compute_extended_fields, _classify_session
+
+    trade_ts_str = lt.get("t")
+    last_trade_dt: datetime | None = None
+    if trade_ts_str:
+        try:
+            last_trade_dt = datetime.fromisoformat(str(trade_ts_str).replace("Z", "+00:00"))
+        except (ValueError, AttributeError, TypeError):
+            last_trade_dt = None
+    last_price = lt.get("p", 0) or 0
+    cur_session = _classify_session()
+    if cur_session == "post" and day_close not in (None, 0):
+        regular_close = day_close
+    else:
+        regular_close = prev_close if prev_close not in (None, 0) else day_close
+    eh = _compute_extended_fields(
+        last_trade_price=last_price if last_price else None,
+        last_trade_dt=last_trade_dt,
+        regular_close=regular_close if regular_close else None,
+    )
+
     return Snapshot(
         symbol=symbol,
         quote=Quote(
@@ -669,15 +748,16 @@ def _alpaca_snapshot_to_model(symbol: str, data: dict) -> Snapshot | None:
             askSize=int(lq.get("as") or 0),
             bidExchange=lq.get("bx"),
             askExchange=lq.get("ax"),
-            last=lt.get("p", 0) or 0,
+            last=last_price,
             volume=int(daily.get("v", 0) or 0),
-            timestamp=now,
+            timestamp=last_trade_dt or now,
             change=round(day_close - prev_close, 2) if prev_close else 0,
             changePct=change_pct,
             high=daily.get("h", 0) or 0,
             low=daily.get("l", 0) or 0,
             open=daily.get("o", 0) or 0,
             close=prev_close,
+            **eh,
         ),
         day_bar=_parse_bar(daily),
         prev_day_bar=_parse_bar(prev),
