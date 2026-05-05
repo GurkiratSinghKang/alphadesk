@@ -184,7 +184,7 @@ export default function AuthProductFrame({
                 <div className="mt-7 flex flex-wrap gap-3">
                   <Link
                     href={primaryCta.href}
-                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[8px] bg-brand px-5 font-sans text-body-sm font-semibold text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_1px_2px_rgba(0,0,0,0.08)] transition-colors hover:bg-gold-300 active:scale-[0.98]"
+                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[8px] bg-primary px-5 font-sans text-body-sm font-semibold text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_1px_2px_rgba(0,0,0,0.08)] transition-colors hover:bg-gold-300 active:scale-[0.98]"
                   >
                     {primaryCta.label}
                     <AuthFrameIcon kind="arrow" className="size-4" />
@@ -256,68 +256,99 @@ export default function AuthProductFrame({
           </div>
         </section>
 
-        <section className="mt-6 grid gap-5 lg:grid-cols-[minmax(260px,0.55fr)_minmax(0,1fr)] lg:items-start">
-          <div className="rounded-[8px] border border-[#d7e4d9] bg-white/60 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
-            <p className="font-mono text-eyebrow font-semibold uppercase tracking-[0.18em] text-[#0f7a5d]">
-              Product rhythm
-            </p>
-            <h2 className="mt-3 max-w-[14ch] font-sans text-h1 font-semibold leading-none tracking-tight text-[#12281f]">
-              From hunch to habit, without losing the thread.
-            </h2>
-            <p className="mt-4 font-sans text-body-sm leading-relaxed text-[#40574c]">
-              The marketing promise is simple: AlphaDesk gives serious traders a calmer loop for deciding, challenging, routing, and learning.
-            </p>
-          </div>
+        {/* P2-29 (mobile fix wave-3): below sm: the auth marketing pane
+            previously stacked 4+ screens deep under the form, forcing every
+            mobile user to thumb-scroll past brand copy to reach the signup
+            link. Wrap the long-form sections with a `<details>` collapsible
+            so phones see only a "Learn more about AlphaDesk →" link by
+            default; the disclosure summary is hidden at sm+ and the parent
+            is force-open via the global `auth-marketing-pane.css` rule below
+            so desktop renders identically to before. Mobile users tapping
+            the link expand all marketing in place. */}
+        <style>{`
+          /* sm+ (>= 640px): force the disclosure open and hide the summary so
+             desktop visitors keep the original always-visible marketing pane. */
+          @media (min-width: 640px) {
+            details[data-slot="auth-marketing-pane"] > summary { display: none; }
+            details[data-slot="auth-marketing-pane"] > :not(summary) { display: revert; }
+          }
+        `}</style>
+        <details
+          data-slot="auth-marketing-pane"
+          className="mt-2 [&_summary]:list-none"
+        >
+          <summary
+            className="block cursor-pointer rounded-[8px] border border-[#d7e4d9] bg-white/70 px-4 py-3 font-sans text-body-sm font-semibold text-[#12281f] shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] transition-colors hover:bg-white sm:hidden"
+          >
+            <span className="flex items-center justify-between">
+              Learn more about AlphaDesk
+              <span aria-hidden="true" className="font-mono text-label text-[#0f7a5d]">→</span>
+            </span>
+          </summary>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            {journey.map((item, index) => {
-              return (
-                <article
-                  key={item.label}
-                  className="group rounded-[8px] border border-[#d7e4d9] bg-white/62 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.78)] transition-transform duration-300 hover:-translate-y-0.5"
-                  style={{
-                    animation: "auth-page-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both",
-                    animationDelay: `${index * 90}ms`,
-                  }}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <span className="grid size-10 place-items-center rounded-[8px] bg-[#ecf4ed] text-[#0f7a5d]">
-                      <AuthFrameIcon kind={item.icon} className="size-5" />
-                    </span>
-                    <span className="font-mono text-eyebrow text-[#819188]">{String(index + 1).padStart(2, "0")}</span>
-                  </div>
-                  <p className="mt-5 font-mono text-eyebrow font-semibold uppercase tracking-[0.16em] text-[#0f7a5d]">
-                    {item.label}
-                  </p>
-                  <h3 className="mt-2 font-sans text-h3 font-semibold tracking-tight text-[#12281f]">{item.title}</h3>
-                  <p className="mt-2 font-sans text-body-sm leading-relaxed text-[#5d7268]">{item.detail}</p>
-                </article>
-              );
-            })}
-          </div>
-        </section>
+          <section className="mt-6 grid gap-5 lg:grid-cols-[minmax(260px,0.55fr)_minmax(0,1fr)] lg:items-start">
+            <div className="rounded-[8px] border border-[#d7e4d9] bg-white/60 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
+              <p className="font-mono text-eyebrow font-semibold uppercase tracking-[0.18em] text-[#0f7a5d]">
+                Product rhythm
+              </p>
+              <h2 className="mt-3 max-w-[14ch] font-sans text-h1 font-semibold leading-none tracking-tight text-[#12281f]">
+                From hunch to habit, without losing the thread.
+              </h2>
+              <p className="mt-4 font-sans text-body-sm leading-relaxed text-[#40574c]">
+                The marketing promise is simple: AlphaDesk gives serious traders a calmer loop for deciding, challenging, routing, and learning.
+              </p>
+            </div>
 
-        <section className="mt-5 grid gap-4 rounded-[8px] border border-[#d7e4d9] bg-[#12281f] p-5 text-[#f8f7ef] shadow-[0_30px_80px_-56px_rgba(18,40,31,0.65)] lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.55fr)]">
-          <div>
-            <p className="font-mono text-eyebrow uppercase tracking-[0.18em] text-[#75d9af]">
-              Evidence, with the caveats in view
-            </p>
-            <h2 className="mt-3 max-w-[18ch] font-sans text-h1 font-semibold leading-tight tracking-tight">
-              The numbers support the story; they do not replace judgment.
-            </h2>
-            <p className="mt-3 max-w-[66ch] font-sans text-body-sm leading-relaxed text-[#c7d6ce]">
-              Performance examples stay below the fold and remain framed as research artifacts. The first promise is workflow quality: clearer thinking, deliberate controls, and a usable record.
-            </p>
-          </div>
-          <div className="grid gap-2">
-            {credibilityNotes.map((item) => (
-              <div key={item.label} className="flex items-baseline justify-between gap-4 border-t border-white/12 pt-2 first:border-t-0 first:pt-0">
-                <span className="font-mono text-numeric-lg text-white">{item.value}</span>
-                <span className="text-right font-sans text-label text-[#c7d6ce]">{item.label}</span>
-              </div>
-            ))}
-          </div>
-        </section>
+            <div className="grid gap-3 md:grid-cols-2">
+              {journey.map((item, index) => {
+                return (
+                  <article
+                    key={item.label}
+                    className="group rounded-[8px] border border-[#d7e4d9] bg-white/62 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.78)] transition-transform duration-300 hover:-translate-y-0.5"
+                    style={{
+                      animation: "auth-page-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both",
+                      animationDelay: `${index * 90}ms`,
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <span className="grid size-10 place-items-center rounded-[8px] bg-[#ecf4ed] text-[#0f7a5d]">
+                        <AuthFrameIcon kind={item.icon} className="size-5" />
+                      </span>
+                      <span className="font-mono text-eyebrow text-[#819188]">{String(index + 1).padStart(2, "0")}</span>
+                    </div>
+                    <p className="mt-5 font-mono text-eyebrow font-semibold uppercase tracking-[0.16em] text-[#0f7a5d]">
+                      {item.label}
+                    </p>
+                    <h3 className="mt-2 font-sans text-h3 font-semibold tracking-tight text-[#12281f]">{item.title}</h3>
+                    <p className="mt-2 font-sans text-body-sm leading-relaxed text-[#5d7268]">{item.detail}</p>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="mt-5 grid gap-4 rounded-[8px] border border-[#d7e4d9] bg-[#12281f] p-5 text-[#f8f7ef] shadow-[0_30px_80px_-56px_rgba(18,40,31,0.65)] lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.55fr)]">
+            <div>
+              <p className="font-mono text-eyebrow uppercase tracking-[0.18em] text-[#75d9af]">
+                Evidence, with the caveats in view
+              </p>
+              <h2 className="mt-3 max-w-[18ch] font-sans text-h1 font-semibold leading-tight tracking-tight">
+                The numbers support the story; they do not replace judgment.
+              </h2>
+              <p className="mt-3 max-w-[66ch] font-sans text-body-sm leading-relaxed text-[#c7d6ce]">
+                Performance examples stay below the fold and remain framed as research artifacts. The first promise is workflow quality: clearer thinking, deliberate controls, and a usable record.
+              </p>
+            </div>
+            <div className="grid gap-2">
+              {credibilityNotes.map((item) => (
+                <div key={item.label} className="flex items-baseline justify-between gap-4 border-t border-white/12 pt-2 first:border-t-0 first:pt-0">
+                  <span className="font-mono text-numeric-lg text-white">{item.value}</span>
+                  <span className="text-right font-sans text-label text-[#c7d6ce]">{item.label}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </details>
       </div>
     </main>
   );

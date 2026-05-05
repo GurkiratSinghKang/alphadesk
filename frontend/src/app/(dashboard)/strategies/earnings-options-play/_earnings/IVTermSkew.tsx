@@ -30,7 +30,13 @@ export default function IVTermSkew({ term, skew }: IVTermSkewProps) {
       <div>
         <h3 className="t-section-cap italic">Put/call skew</h3>
         {skew ? (
-          <div className="mt-1 t-mono text-label space-y-0.5">
+          /* P2-30 (mobile fix wave-3): bump body text from text-label
+             (12px) to text-body-sm (13px) so the skew table reads above
+             the iOS Safari sub-pixel-shimmer threshold at 390×844. The
+             prior 12px sat on the readability floor and combined with
+             tabular-nums + monospace gave the visual impression of
+             8-10px text per the persona-mobile-only.md audit. */
+          <div className="mt-1 t-mono text-body-sm space-y-0.5">
             <div>
               25Δ put IV:{" "}
               <span className="tabular-nums">
@@ -107,7 +113,10 @@ function TermStrip({ points }: { points: IVTermPoint[] }) {
           );
         })}
       </div>
-      <p className="mt-1 t-mono text-label u-muted">
+      {/* P2-30 (mobile fix wave-3): bump caption from text-label (12px)
+          to text-body-sm (13px) so the IV range + front/back values stay
+          above the iOS sub-pixel readability floor at 390px width. */}
+      <p className="mt-1 t-mono text-body-sm u-muted">
         <span className="tabular-nums">{fmtPct(min, 0)}</span>
         <span aria-hidden="true"> – </span>
         <span className="tabular-nums">{fmtPct(max, 0)}</span>
