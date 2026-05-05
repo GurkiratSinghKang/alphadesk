@@ -2769,3 +2769,64 @@ async def run_position_check(
         result["errors"].append(str(e))
 
     return result
+
+
+# =====================================================================
+# Earnings pre-warm hook (Batch R)
+# =====================================================================
+# Lives alongside ``run_position_check`` so the scheduler in
+# ``pipeline_runner.py`` can dispatch to a single canonical entry point.
+# The actual logic is in :mod:`services.earnings_prewarm` — this is the
+# thin trading-day-aware wrapper that the cron-style scheduler calls.
+
+async def run_earnings_prewarm() -> dict[str, Any]:
+    """Pre-warm the earnings cache for top-50 tickers reporting today /
+    tomorrow.
+
+    Skips on non-trading days so the prewarm doesn't fire against a
+    closed market on weekends / US holidays — Batch R's whole point is
+    "first user lands on today's report card and gets <500 ms"; on a
+    holiday there's no such user. Returns the ``PrewarmRunResult``
+    payload as a dict so callers (scheduler, /pipeline/prewarm route)
+    can log / audit it without having to import the dataclass.
+    """
+    logger.info("Running earnings prewarm")
+    try:
+        from data.calendar import is_trading_day as _is_trading_day
+
+        if not _is_trading_day(_now_et().date()):
+            logger.info("Earnings prewarm skipped — not a trading day")
+            return {
+                "skipped": True,
+                "reason": "not_a_trading_day",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+    except Exception:
+        # Calendar lookup failure is non-fatal — continue and let the
+        # FMP calendar inside the prewarm decide whether there are rows.
+        logger.debug(
+            "Earnings prewarm: trading-day check failed, continuing",
+            exc_info=True,
+        )
+
+    try:
+        from services.earnings_prewarm import prewarm_earnings
+
+        result = await prewarm_earnings()
+    except Exception as exc:
+        logger.exception("Earnings prewarm failed")
+        return {
+            "error": f"{type(exc).__name__}: {exc}",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    return {
+        "started_at": result.started_at.isoformat(),
+        "finished_at": result.finished_at.isoformat(),
+        "duration_ms": result.duration_ms,
+        "symbols_attempted": result.symbols_attempted,
+        "symbols_succeeded": result.symbols_succeeded,
+        "claude_calls": result.claude_calls,
+        "estimated_cost_usd": round(result.estimated_cost_usd, 2),
+        "skipped_reason": result.skipped_reason,
+    }

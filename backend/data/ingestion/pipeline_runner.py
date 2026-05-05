@@ -33,6 +33,7 @@ from zoneinfo import ZoneInfo
 from data.calendar import USMarketCalendar
 from data.ingestion.daily_pipeline import (
     run_daily_pipeline,
+    run_earnings_prewarm,
     run_position_check,
     get_pipeline_status,
 )
@@ -121,6 +122,15 @@ WEEKLY_STRATEGIES = [
 
 WINDOWS = {
     "premarket":     dt_time(6, 0),
+    # Batch R: 07:00 ET earnings pre-warm. Runs after FMP's overnight
+    # calendar refresh has settled (~06:30 ET) and before users start
+    # opening the dashboard at the bell. Fans out chain + IV + Claude
+    # thesis prompts for every top-50 reporter today/tomorrow so the
+    # earnings-options-play cards render <500 ms instead of paying the
+    # ~30 s cold-cache cost on first hit (see
+    # ``services.earnings_prewarm`` for the full rationale and per-stage
+    # cost ceiling).
+    "earnings_prewarm": dt_time(7, 0),
     # Wave 6α Fix 7: 09:30 is the true open; MOO strategies fire here so
     # the submission lands before Alpaca's 09:28 ET cutoff. The
     # ``_in_window`` helper already has a 5-minute tolerance, so the
@@ -398,6 +408,56 @@ async def _run_window(
         await cache_set("pipeline:scheduler_state", state, ttl_seconds=172800)
 
 
+async def _run_earnings_prewarm_window(state: dict, cache_set) -> None:
+    """Run the earnings pre-warm at most once per trading day.
+
+    Mirrors :func:`_run_window`'s state contract so a duplicate scheduler
+    tick (the loop polls every 30 s, the prewarm window is 5 min wide) does
+    not re-spawn the prewarm. Failures don't mark ``last_earnings_prewarm``
+    complete, so a later tick the same day will retry.
+    """
+    today = datetime.now(ET).strftime("%Y-%m-%d")
+    state_key = "last_earnings_prewarm"
+    in_progress_key = f"{state_key}_in_progress"
+
+    if state.get(state_key) == today or state.get(in_progress_key) == today:
+        return
+
+    logger.info("=== EARNINGS_PREWARM window === Pre-warming top-50 reporters")
+    state[in_progress_key] = today
+    await cache_set("pipeline:scheduler_state", state, ttl_seconds=172800)
+
+    try:
+        result = await run_earnings_prewarm()
+        if isinstance(result, dict) and result.get("error"):
+            # Surface the failure but do not mark complete — the next
+            # scheduler tick (or a manual /pipeline/prewarm) can retry.
+            state.pop(in_progress_key, None)
+            state[f"{state_key}_failed_at"] = datetime.now(timezone.utc).isoformat()
+            state[f"{state_key}_error"] = result["error"]
+            await cache_set("pipeline:scheduler_state", state, ttl_seconds=172800)
+            logger.warning(
+                "Earnings prewarm failed: %s", result["error"],
+            )
+            return
+        logger.info(
+            "Earnings prewarm complete: %d/%d symbols, %d Claude calls, ~$%.2f",
+            len(result.get("symbols_succeeded", [])),
+            len(result.get("symbols_attempted", [])),
+            result.get("claude_calls", 0),
+            result.get("estimated_cost_usd", 0.0),
+        )
+        state[state_key] = today
+        state.pop(in_progress_key, None)
+        state.pop(f"{state_key}_error", None)
+        await cache_set("pipeline:scheduler_state", state, ttl_seconds=172800)
+    except Exception:
+        logger.exception("Earnings prewarm window failed")
+        state.pop(in_progress_key, None)
+        state[f"{state_key}_failed_at"] = datetime.now(timezone.utc).isoformat()
+        await cache_set("pipeline:scheduler_state", state, ttl_seconds=172800)
+
+
 async def _scheduler_loop() -> None:
     """Multi-window scheduler loop — checks every 30s for due windows."""
     global _should_stop
@@ -405,6 +465,7 @@ async def _scheduler_loop() -> None:
     logger.info(
         "Pipeline scheduler started (multi-window mode)\n"
         "  6:00 AM  — Pre-market: PEAD, Regime\n"
+        "  7:00 AM  — Earnings pre-warm: chain/IV/Claude for top-50 reporters (Batch R)\n"
         "  9:30 AM  — Open: PEAD T+1 MOO executions (Wave 6α Fix 7)\n"
         "  9:35 AM  — Open +5m: (reserved — currently empty)\n"
         " 10:05 AM  — Post-OR: ORB, VWAP\n"
@@ -427,6 +488,15 @@ async def _scheduler_loop() -> None:
             # ── Pre-market (6:00 AM) ──
             if _in_window(WINDOWS["premarket"]):
                 await _run_window("premarket", PREMARKET_STRATEGIES, state, cache_set)
+
+            # ── Earnings pre-warm (7:00 AM, Batch R) ──
+            # Decoupled from the strategy windows: this fires once per
+            # trading day, populates chain + IV + historical-reactions +
+            # Claude thesis caches for every top-50 ticker reporting today
+            # or tomorrow, so the first user to land on the earnings page
+            # gets <500 ms instead of paying ~30 s for a cold Opus call.
+            if _in_window(WINDOWS["earnings_prewarm"]):
+                await _run_earnings_prewarm_window(state, cache_set)
 
             # ── Market open (9:30 AM) — MOO strategies fire here so the
             #    submission lands before Alpaca's 09:28 ET cutoff (Wave 6α

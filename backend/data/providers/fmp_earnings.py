@@ -174,6 +174,15 @@ class FMPEarningsProvider:
 
     # ---- consensus ----------------------------------------------------------
     def consensus(self, symbol: str, asof: date | datetime | str) -> dict:
+        # Batch P / P-5: ``> asof_d`` was a strict-future filter, which
+        # excluded today's reports. The detail-page fallback path
+        # (:func:`services.earnings_screener._fetch_next_earnings_date`)
+        # therefore returned ``None`` whenever the symbol was reporting
+        # later today — exactly the case where the user most expects the
+        # detail page to render. Switch to ``>= asof_d`` so an event
+        # printing AMC today or BMO this morning is still surfaced as
+        # the "next" earnings date. The downstream consumer treats the
+        # date as a planning anchor, not a strictly-future projection.
         asof_d = _to_date(asof)
         data = self._http.get("/earnings", {"symbol": symbol.upper(), "limit": 20})
         none_result = {
@@ -184,7 +193,7 @@ class FMPEarningsProvider:
         }
         if not data:
             return none_result
-        future = [r for r in data if _to_date(r.get("date")) > asof_d]
+        future = [r for r in data if (_to_date(r.get("date")) or date.min) >= asof_d]
         future.sort(key=lambda r: _to_date(r.get("date")))
         if not future:
             return none_result

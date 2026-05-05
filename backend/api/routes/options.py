@@ -40,23 +40,63 @@ _SYMBOL_RE = re.compile(r"^[A-Z]{1,6}(?:\.[A-Z])?$")
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.get("/chain/{symbol}", response_model=OptionChain)
+@router.get(
+    "/chain/{symbol}",
+    response_model=OptionChain,
+    summary="Options chain for an underlying (Batch T T-2/T-3/T-4)",
+    description=(
+        "Returns the options chain for ``symbol`` with a stable shape "
+        "regardless of which filters are applied:\n\n"
+        "* ``expirations`` always lists every expiry the provider knows "
+        "about (use it to iterate per-expiry).\n"
+        "* ``contracts`` is restricted to the **nearest expiry** when "
+        "``expiry`` is omitted; pass ``expiry=YYYY-MM-DD`` to pin a "
+        "specific date.\n"
+        "* ``volume`` reflects cumulative session volume (falls back to "
+        "the previous session if the request lands pre-open).\n"
+        "* ``open_interest`` is the EOD-settlement OI from Alpaca.\n"
+        "* Greeks (``delta``, ``gamma``, ``theta``, ``vega``, ``rho``) "
+        "are pre-computed via Black-Scholes when the upstream snapshot "
+        "doesn't carry them — eliminating the N+1 ``/greeks`` round-trip.\n"
+        "* ``limit`` defaults to 200 (max 500). The previous silent "
+        "100-row cap is gone.\n\n"
+        "Response shape is identical for real and demo chains; the "
+        "``is_demo`` flag tells callers which side answered."
+    ),
+)
 async def get_options_chain(
     symbol: str,
-    expiry: Annotated[date | None, Query(description="Filter to a specific expiration")] = None,
-    strike_min: Annotated[float | None, Query()] = None,
-    strike_max: Annotated[float | None, Query()] = None,
-    option_type: Annotated[OptionType | None, Query()] = None,
+    expiry: Annotated[date | None, Query(description="Filter to a specific expiration (YYYY-MM-DD). When omitted, the response is restricted to the nearest expiry but ``expirations`` still lists all available dates.")] = None,
+    strike_min: Annotated[float | None, Query(description="Minimum strike (inclusive)")] = None,
+    strike_max: Annotated[float | None, Query(description="Maximum strike (inclusive)")] = None,
+    option_type: Annotated[OptionType | None, Query(description="Filter to ``call`` or ``put`` (omit to return both legs).")] = None,
+    limit: Annotated[int, Query(ge=1, le=500, description="Maximum contracts to return. Default 200, hard ceiling 500. Replaces the silent 100-row cap that callers used to hit.")] = 200,
 ) -> OptionChain:
     """Fetch the full options chain for an underlying symbol.
 
     Thin HTTP wrapper: delegates to :func:`services.options.fetch_chain`,
-    which owns the Alpaca OPRA → demo waterfall (B-62).
+    which owns the Alpaca OPRA → demo waterfall (B-62) and the Batch T
+    chain-shape contract.
     """
-    return await fetch_chain(symbol, expiry, strike_min, strike_max, option_type)
+    return await fetch_chain(
+        symbol, expiry, strike_min, strike_max, option_type, chain_limit=limit,
+    )
 
 
-@router.get("/iv/{symbol}", response_model=IVData)
+@router.get(
+    "/iv/{symbol}",
+    response_model=IVData,
+    summary="IV rank, percentile, skew and term structure",
+    description=(
+        "Computes ATM IV, IV rank/percentile (when ≥ 60 daily samples have "
+        "accumulated under the ``iv_history:{symbol}`` rolling key), HV "
+        "20/50/100, the per-strike IV smile around ATM, and the per-expiry "
+        "term structure. Real and demo paths populate the same shape; "
+        "``is_demo`` tells callers which side answered. ``iv_rank`` and "
+        "``iv_percentile`` may be null on real responses while history "
+        "warms up — they are NOT synthesized from the live chain."
+    ),
+)
 async def get_iv_analysis(symbol: str) -> IVData:
     """Compute IV rank, percentile, and skew analysis for a symbol.
 
@@ -66,7 +106,17 @@ async def get_iv_analysis(symbol: str) -> IVData:
     return await fetch_iv_analysis(symbol)
 
 
-@router.get("/greeks/{symbol}/{strike}/{expiry}", response_model=Greeks)
+@router.get(
+    "/greeks/{symbol}/{strike}/{expiry}",
+    response_model=Greeks,
+    summary="Black-Scholes greeks for a single contract",
+    description=(
+        "Computes greeks for a single contract via the Hull (9e) BSM "
+        "closed forms. For batch use, prefer ``/chain/{symbol}`` — the "
+        "chain response now carries pre-computed greeks per contract "
+        "(Batch T T-3) so callers don't need to fan out to this endpoint."
+    ),
+)
 async def get_greeks(
     symbol: str,
     strike: float,
