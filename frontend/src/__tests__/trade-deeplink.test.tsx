@@ -84,8 +84,8 @@ describe("Trade page deep-link pre-fill", () => {
 
     await waitFor(() => {
       expect((getByLabelText("Symbol") as HTMLInputElement).value).toBe("AAPL");
-      expect((getByLabelText("Quantity") as HTMLInputElement).value).toBe("3");
-      expect((getByLabelText("Order type") as HTMLSelectElement).value).toBe("limit");
+      expect((getByLabelText("Qty") as HTMLInputElement).value).toBe("3");
+      expect((getByLabelText("Type") as HTMLSelectElement).value).toBe("limit");
       expect((getByLabelText("Price") as HTMLInputElement).value).toBe("123.45");
       expect((getByLabelText("Strategy") as HTMLSelectElement).value).toBe("earnings-options-play");
       // r6b: BUY/SELL segmented control uses uppercase labels per design-system contract.
@@ -124,8 +124,8 @@ describe("Trade page deep-link pre-fill", () => {
 
       await waitFor(() => {
         expect(getByLabelText("Symbol")).toBeDisabled();
-        expect(getByLabelText("Quantity")).toBeDisabled();
-        expect(getByLabelText("Order type")).toBeDisabled();
+        expect(getByLabelText("Qty")).toBeDisabled();
+        expect(getByLabelText("Type")).toBeDisabled();
       });
     });
   });

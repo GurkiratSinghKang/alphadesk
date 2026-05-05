@@ -155,7 +155,7 @@ describe("Trade page parses Round-5 deep-link contract", () => {
     setSearch(
       "?symbol=NVDA&contract=NVDA260424P00200000&side=sell&qty=2&limit=1.42&strategy=earnings-options-play"
     );
-    const { container } = render(<TradePage />, { wrapper: makeWrapper() });
+    const { container, getByLabelText } = render(<TradePage />, { wrapper: makeWrapper() });
 
     await waitFor(() => {
       // OrderBar's symbol input must carry the OCC, NOT the underlying.
@@ -174,7 +174,7 @@ describe("Trade page parses Round-5 deep-link contract", () => {
       const stratChip = container.querySelector("[data-slot='trade-strategy-tag']");
       expect(stratChip).not.toBeNull();
       expect(stratChip!.textContent).toContain("earnings-options-play");
-      expect((container.querySelector("[aria-label='Strategy']") as HTMLSelectElement | null)?.value)
+      expect((getByLabelText("Strategy") as HTMLSelectElement).value)
         .toBe("earnings-options-play");
 
       // The visual trade context should follow the URL underlying, not
@@ -239,15 +239,15 @@ describe("Trade page parses Round-5 deep-link contract", () => {
 
   it("forwards the selected /trade strategy for manual ticket submissions", async () => {
     setSearch("?symbol=SPY");
-    const { container } = render(<TradePage />, { wrapper: makeWrapper() });
+    const { container, getByLabelText } = render(<TradePage />, { wrapper: makeWrapper() });
 
     await waitFor(() => {
-      const select = container.querySelector("[aria-label='Strategy']") as HTMLSelectElement | null;
+      const select = getByLabelText("Strategy") as HTMLSelectElement;
       expect(select).not.toBeNull();
-      expect([...select!.options].some((o) => o.value === "earnings-options-play")).toBe(true);
+      expect([...select.options].some((o) => o.value === "earnings-options-play")).toBe(true);
     });
 
-    fireEvent.change(container.querySelector("[aria-label='Strategy']") as HTMLSelectElement, {
+    fireEvent.change(getByLabelText("Strategy") as HTMLSelectElement, {
       target: { value: "earnings-options-play" },
     });
     fireEvent.click(container.querySelector("[data-testid='order-bar-submit']") as HTMLButtonElement);
