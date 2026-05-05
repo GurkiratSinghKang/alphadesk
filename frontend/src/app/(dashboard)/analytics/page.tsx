@@ -66,12 +66,22 @@ type TradeHistoryCompat = TradeHistoryEntry & {
 
 function computeDailyReturns(curve: EquityPoint[], baseEquity: number): { date: string; ret: number }[] {
   if (curve.length < 2) return [];
+  // P2-08: filter to weekdays before differencing. Adjacent equity points
+  // across a weekend span 3 calendar days but the rolling Sharpe annualizes
+  // by sqrt(252) assuming each step is one trading day. Dropping Sat/Sun
+  // points keeps the per-step interval homogeneous (~1 trading day) so the
+  // sqrt(252) factor is correct without rewriting the annualizer.
+  const weekday = curve.filter((p) => {
+    const d = new Date(p.date).getDay();
+    return d !== 0 && d !== 6;
+  });
+  if (weekday.length < 2) return [];
   const results: { date: string; ret: number }[] = [];
-  for (let i = 1; i < curve.length; i++) {
-    const prevEq = equityAtPoint(curve[i - 1], baseEquity);
-    const currEq = equityAtPoint(curve[i], baseEquity);
+  for (let i = 1; i < weekday.length; i++) {
+    const prevEq = equityAtPoint(weekday[i - 1], baseEquity);
+    const currEq = equityAtPoint(weekday[i], baseEquity);
     const ret = prevEq > 0 ? (currEq - prevEq) / prevEq : 0;
-    results.push({ date: curve[i].date, ret });
+    results.push({ date: weekday[i].date, ret });
   }
   return results;
 }

@@ -222,7 +222,11 @@ interface FullResearchTriggerProps {
  */
 function FullResearchTrigger({ running, error, onRunFull, symbol }: FullResearchTriggerProps) {
   const isRateLimit = error instanceof RateLimitError;
-  const initialRetry = isRateLimit ? error.retryAfter ?? 0 : 0;
+  // P2-04: when rate-limited, default to a 5s minimum cooldown if the
+  // backend omitted retryAfter. Previously `?? 0` made the countdown
+  // effect return early so the button briefly enabled before the next
+  // 429 came back — a flicker the user could click through.
+  const initialRetry = isRateLimit ? (error.retryAfter ?? 5) : 0;
   const [retrySec, setRetrySec] = useState(initialRetry);
 
   // Reset countdown whenever a new error / retry duration arrives, then

@@ -78,11 +78,15 @@ function ColumnSelector({
 
   useEffect(() => {
     if (!open) return;
-    function handleClick(e: MouseEvent) {
+    // P2-07: switched from `mousedown` to `pointerdown` so screen-reader /
+    // keyboard activation paths and touch input close the dropdown
+    // consistently — `mousedown` raced AT-driven activations on some
+    // assistive stacks (the popover would close before the click landed).
+    function handleClick(e: PointerEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("pointerdown", handleClick);
+    return () => document.removeEventListener("pointerdown", handleClick);
   }, [open]);
 
   return (
@@ -90,6 +94,8 @@ function ColumnSelector({
       <button
         onClick={() => setOpen((v) => !v)}
         aria-label="Configure watchlist columns"
+        aria-expanded={open}
+        aria-haspopup="listbox"
         className={cn(
           "flex h-9 w-9 sm:h-5 sm:w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors",
           open && "text-primary bg-primary/10"
@@ -99,7 +105,11 @@ function ColumnSelector({
         <Settings className="h-3.5 w-3.5 sm:h-3 sm:w-3" />
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 min-w-[140px] rounded-md border border-border bg-[var(--panel)] p-1.5 shadow-lg shadow-black/20">
+        <div
+          role="group"
+          aria-label="Watchlist columns"
+          className="absolute right-0 top-full mt-1 z-50 min-w-[140px] rounded-md border border-border bg-[var(--panel)] p-1.5 shadow-lg shadow-black/20"
+        >
           <div className="text-label uppercase tracking-wider text-muted-foreground px-2 py-1 mb-0.5">
             Columns
           </div>

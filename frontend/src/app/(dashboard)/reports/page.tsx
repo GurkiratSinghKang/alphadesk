@@ -66,9 +66,17 @@ function downloadCsv(filename: string, csvContent: string) {
   link.setAttribute("href", url);
   link.setAttribute("download", filename);
   document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  // P2-09: wrap click in try/finally so a synchronous handler throw
+  // (e.g. browser blocks the download in headless / CSP contexts) still
+  // unmounts the temp <a> and revokes the object URL. Otherwise the
+  // blob URL would leak and accumulate across exports in long-lived
+  // sessions.
+  try {
+    link.click();
+  } finally {
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
 }
 
 // CSV-injection hardening: Excel/Sheets/Numbers interpret any cell whose
