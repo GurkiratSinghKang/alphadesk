@@ -15,7 +15,12 @@ import httpx
 from sqlalchemy import select
 
 from core.config import settings
-from core.crypto import EncryptionKeyUnavailable, decrypt_secret, encrypt_secret
+from core.crypto import (
+    CURRENT_CRYPTO_VERSION,
+    EncryptionKeyUnavailable,
+    decrypt_secret,
+    encrypt_secret,
+)
 
 
 class BrokerCredentialError(RuntimeError):
@@ -465,6 +470,7 @@ async def upsert_broker_connection(
                 account_env=account_env,
                 api_key_ciphertext=encrypted_primary,
                 secret_key_ciphertext=encrypted_bundle,
+                crypto_version=CURRENT_CRYPTO_VERSION,
                 key_last4=_last4(primary_id),
                 display_name=display_name,
                 status="active",
@@ -474,6 +480,7 @@ async def upsert_broker_connection(
         else:
             row.api_key_ciphertext = encrypted_primary
             row.secret_key_ciphertext = encrypted_bundle
+            row.crypto_version = CURRENT_CRYPTO_VERSION
             row.key_last4 = _last4(primary_id)
             row.display_name = display_name
             row.status = "active"
