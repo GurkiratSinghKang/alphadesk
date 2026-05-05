@@ -3,8 +3,29 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import PnLNumber from "@/components/primitives/PnLNumber";
 import Sparkline from "@/components/primitives/Sparkline";
+import { ExtendedHoursBadge } from "@/components/primitives/ExtendedHoursBadge";
 import { isWorkingOrderStatus } from "@/lib/orders";
 import type { PositionRow, PositionTab } from "./types";
+
+// EH-3b: format the optional `lastTradeTime` ISO into "HH:mm ET" for
+// the AH / PM / STALE pill tooltip. Returns null when the input is
+// missing/invalid so the caller can drop the tooltip altogether. ET
+// formatting matches the design copy in the EH brief.
+function formatPositionEtTime(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(d) + " ET";
+  } catch {
+    return null;
+  }
+}
 
 // A lightweight shape for Orders tab rows. Kept narrow on purpose — the
 // Book panel only needs side/symbol/type/qty/status/price. Callers shape
@@ -236,12 +257,54 @@ export default function PositionsList({
           </thead>
           <tbody>
             {positions.map((p) => {
-              const isLoss = p.pnl < 0;
+              // EH-3b: when the backend reports an extended-session
+              // mark, prefer the live value + change pair. ``stale`` is
+              // a separate state (data > 5min old): we keep showing the
+              // last live figures but flag the row with a STALE pill so
+              // the trader knows not to rely on the number for fresh
+              // execution decisions. All defensive: if any field is
+              // missing the regular ``pnl`` / ``pnlPct`` path runs
+              // unchanged, matching pre-EH behaviour byte-for-byte.
+              const liveActive = p.valueSession === "extended";
+              const liveStale = p.valueSession === "stale";
+              const liveOrStale = liveActive || liveStale;
+              const displayChange =
+                liveOrStale && typeof p.liveValueChange === "number"
+                  ? p.liveValueChange
+                  : p.pnl;
+              const displayChangePct =
+                liveOrStale && typeof p.liveValueChangePct === "number"
+                  ? p.liveValueChangePct
+                  : p.pnlPct;
+              const isLoss = displayChange < 0;
               const pct = Math.min(100, Math.max(0, Math.abs(p.progress) * 100));
+              // Badge tone: STALE wins over PRE/POST (a stale post-mark
+              // is functionally a stale mark). Only render when the
+              // session token is one of the canonical values.
+              const badgeTone: "pre" | "post" | "stale" | null = liveStale
+                ? "stale"
+                : liveActive
+                  ? p.extendedSession ?? "post"
+                  : null;
+              const tooltipTime = formatPositionEtTime(p.lastTradeTime);
+              const badgeTooltip = liveStale
+                ? `Stale: last update ${tooltipTime ?? "\u2014"}`
+                : liveActive
+                  ? `${
+                      p.extendedSession === "pre"
+                        ? "Pre-market"
+                        : "After-hours"
+                    } live value${
+                      typeof p.liveValue === "number"
+                        ? `: ${p.liveValue >= 0 ? "+" : ""}$${p.liveValue.toFixed(2)}`
+                        : ""
+                    }${tooltipTime ? ` at ${tooltipTime}` : ""}`
+                  : undefined;
               return (
                 <tr
                   key={p.id}
                   className="border-b border-border-hair"
+                  data-value-session={p.valueSession ?? undefined}
                 >
                   <td className="w-[60px] align-middle px-[18px] py-2.5">
                     <button
@@ -250,7 +313,19 @@ export default function PositionsList({
                       className="text-left font-sans font-medium text-body-sm text-ink-1000 hover:text-primary"
                       style={{ letterSpacing: 0 }}
                     >
-                      {p.symbol}
+                      <span className="inline-flex items-center gap-1">
+                        {p.symbol}
+                        {/* EH-3b: AH / PM / STALE pill rendered next to
+                            the symbol. Renders nothing when the badge
+                            tone is null (regular session) \u2014 pre-EH
+                            display is unchanged. */}
+                        {badgeTone && (
+                          <ExtendedHoursBadge
+                            tone={badgeTone}
+                            title={badgeTooltip}
+                          />
+                        )}
+                      </span>
                       <span className="block t-meta mt-[1px]">
                         {p.quantity} @ {Number.isFinite(p.entryPrice) ? p.entryPrice.toFixed(2) : "\u2014"}
                       </span>
@@ -296,11 +371,24 @@ export default function PositionsList({
                         wrap in aria-live polite + atomic so SR users hear
                         the new figure as ticks arrive. React's
                         useDeferredValue is applied at the value level via
-                        ``DeferredPnL`` to avoid an announcement storm. */}
-                    <div className="text-right flex flex-col" aria-live="polite" aria-atomic="true">
-                      <DeferredPnL value={p.pnl} format="currency" className="text-numeric-lg font-medium" />
+                        ``DeferredPnL`` to avoid an announcement storm.
+
+                        EH-3b: when an extended-session live mark is
+                        available we show ``live_value_change`` (the $
+                        change vs last regular close) instead of the
+                        regular ``pnl``. Sign + tone follow the live
+                        figure so a position +AH, -RTH renders green at
+                        night. STALE rows still show the last live
+                        change (paired with the STALE badge above). */}
+                    <div
+                      className="text-right flex flex-col"
+                      aria-live="polite"
+                      aria-atomic="true"
+                      data-slot={liveActive ? "position-live-value" : liveStale ? "position-live-stale" : undefined}
+                    >
+                      <DeferredPnL value={displayChange} format="currency" className="text-numeric-lg font-medium" />
                       <DeferredPnL
-                        value={p.pnlPct}
+                        value={displayChangePct}
                         format="percent"
                         className="text-base font-medium mt-[1px]"
                         tone={isLoss ? "loss" : undefined}

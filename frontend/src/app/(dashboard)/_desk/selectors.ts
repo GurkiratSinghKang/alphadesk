@@ -320,6 +320,13 @@ export function toMarketSymbol(ticker: string): MarketSymbol {
 
 export function toQuote(q: MarketQuote | undefined): Quote {
   if (!q) return { last: 0, change: 0, changePct: 0 };
+  // EH-3e: pass extended-hours fields through unmodified. The
+  // ``MarketQuote`` source already permits the optional snake_case
+  // wire fields (Quote in @/types) — we just thread them onto the
+  // composite-level Quote so consumers like ExecutionQuotePanel and
+  // WatchlistRow can read them. The Quote we emit here intentionally
+  // matches the backend wire shape (snake_case) so the field names
+  // line up with the rest of the codebase's pass-through philosophy.
   return {
     last: q.last ?? q.close ?? 0,
     change: q.change ?? 0,
@@ -331,6 +338,14 @@ export function toQuote(q: MarketQuote | undefined): Quote {
     bidExchange: q.bidExchange,
     askExchange: q.askExchange,
     timestamp: q.timestamp,
+    regular_close_price: q.regular_close_price ?? null,
+    extended_price: q.extended_price ?? null,
+    extended_change: q.extended_change ?? null,
+    extended_change_pct: q.extended_change_pct ?? null,
+    extended_session: q.extended_session ?? null,
+    extended_volume: q.extended_volume ?? null,
+    last_trade_time: q.last_trade_time ?? null,
+    session: q.session ?? null,
   };
 }
 
@@ -385,6 +400,17 @@ export function toPositionRows(positions: Position[]): PositionRow[] {
     const pnl = p.unrealizedPnl ?? 0;
     const basis = Math.max(Math.abs(mv - pnl), 1);
     const pnlPct = (pnl / basis) * 100;
+    // EH-3e: thread the optional EH-2 backend fields through to the
+    // PositionRow shape so the PositionsList composite can render an
+    // AH/PM/STALE pill + live value when the backend reports them.
+    // Null when the field is absent — the composite falls back to
+    // the regular pnl / pnlPct path in that case (regular hours).
+    // ``extended_session`` is read from the backend's value-session
+    // mark; we pass through "post" by default for `extended` rows,
+    // since a position priced after the close is typically AH. The
+    // composite still respects an explicit pre/post when the backend
+    // surfaces it via a dedicated field on the Position payload.
+    const valueSession = p.value_session ?? null;
     return {
       id: `${p.symbol}-${i}`,
       symbol: p.symbol,
@@ -396,6 +422,13 @@ export function toPositionRows(positions: Position[]): PositionRow[] {
       progress: Math.max(-1, Math.min(1, pnlPct / 10)),
       pnl,
       pnlPct,
+      liveValue: p.live_value ?? null,
+      liveValueChange: p.live_value_change ?? null,
+      liveValueChangePct: p.live_value_change_pct ?? null,
+      valueSession,
+      extendedSession:
+        valueSession === "extended" ? "post" : null,
+      lastTradeTime: null,
     };
   });
 }

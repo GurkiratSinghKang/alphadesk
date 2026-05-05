@@ -71,6 +71,18 @@ export interface Quote {
   bidExchange?: string | null;
   askExchange?: string | null;
   timestamp?: number;
+  // ─── Extended-hours pricing (EH-1 backend contract) ────────
+  // Mirrored from `@/types` Quote so composite consumers can read
+  // extended-hours fields without importing the full domain Quote.
+  // All optional and pass-through; UI must not crash when omitted.
+  regular_close_price?: number | null;
+  extended_price?: number | null;
+  extended_change?: number | null;
+  extended_change_pct?: number | null;
+  extended_session?: "pre" | "post" | null;
+  extended_volume?: number | null;
+  last_trade_time?: string | null;
+  session?: "pre" | "regular" | "post" | "closed" | null;
 }
 
 export interface MetaCells {
@@ -154,6 +166,19 @@ export interface PositionRow {
    * fetch and the Sparkline once data lands.
    */
   spark30d?: number[];
+  // ─── Extended-hours live valuation (EH-2 backend contract) ─
+  // When the backend emits a non-"regular" `value_session` the row
+  // shows live_value / live_value_change instead of `pnl` and renders
+  // an "AH" / "PM" / "STALE" badge. All optional — the regular display
+  // (`pnl`, `pnlPct`) is the fallback when extended fields are absent.
+  liveValue?: number | null;
+  liveValueChange?: number | null;
+  liveValueChangePct?: number | null;
+  valueSession?: "regular" | "extended" | "stale" | null;
+  /** "pre" | "post" — drives AH vs PM badge label when valueSession === "extended". */
+  extendedSession?: "pre" | "post" | null;
+  /** ISO timestamp of the last extended-hours mark — surfaced in tooltips / STALE pill. */
+  lastTradeTime?: string | null;
 }
 
 /* ─── AI memo ──────────────────────────────────────────────── */
