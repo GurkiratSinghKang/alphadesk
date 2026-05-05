@@ -90,7 +90,13 @@ export default function AuthProductFrame({
     : { href: "/login", label: "Sign in" };
 
   return (
-    <main className="alpha-auth-shell min-h-[100dvh] overflow-x-clip text-[#12281f]">
+    <main id="main" className="alpha-auth-shell min-h-[100dvh] overflow-x-clip text-[#12281f]">
+      <a
+        className="sr-only focus:not-sr-only fixed top-2 left-2 z-50 px-3 py-2 bg-primary text-primary-foreground"
+        href="#main"
+      >
+        Skip to content
+      </a>
       <style>{`
         @keyframes auth-page-band {
           0%, 100% { transform: translate3d(-2%, 0, 0) rotate(-1deg); opacity: 0.7; }

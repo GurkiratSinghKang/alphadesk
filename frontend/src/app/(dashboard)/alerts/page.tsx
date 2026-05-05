@@ -210,7 +210,7 @@ function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void
   };
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-lg border border-border bg-[var(--surface)] p-4">
+    <form onSubmit={handleSubmit} className="rounded-lg border border-border bg-[var(--bg-card)] p-4">
       <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
         <Plus className="h-4 w-4 text-primary" />
         Create Alert
@@ -239,7 +239,7 @@ function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void
             // triggers iOS Safari's auto-zoom on focus. Use text-base on
             // mobile and drop back to text-sm at md+ where the desk lives.
             // `h-10 md:h-9` keeps the 40px minimum tap target on phones.
-            className="mt-1 w-full h-10 md:h-9 rounded-md border border-border bg-background px-3 text-base md:text-sm font-mono text-foreground placeholder:text-muted-foreground/50"
+            className="mt-1 w-full h-10 md:h-9 rounded-md border border-border bg-background px-3 text-base md:text-sm font-mono text-foreground placeholder:text-muted-foreground"
           />
         </div>
         <div>
@@ -283,7 +283,7 @@ function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void
             aria-invalid={fieldError != null || undefined}
             // Wave 29 mobile a11y: see symbol input above — text-base on
             // mobile prevents iOS focus-zoom; h-10 keeps the 40px tap target.
-            className="mt-1 w-full h-10 md:h-9 rounded-md border border-border bg-background px-3 text-base md:text-sm tabular-nums text-foreground placeholder:text-muted-foreground/50"
+            className="mt-1 w-full h-10 md:h-9 rounded-md border border-border bg-background px-3 text-base md:text-sm tabular-nums text-foreground placeholder:text-muted-foreground"
           />
         </div>
         <div className="flex items-end">
@@ -334,7 +334,7 @@ function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void
                 step={0.01}
                 min={0.01}
                 max={ALERT_PRICE_MAX}
-                className="mt-1 w-full h-10 md:h-9 rounded-md border border-border bg-background px-3 text-base md:text-sm tabular-nums text-foreground placeholder:text-muted-foreground/50"
+                className="mt-1 w-full h-10 md:h-9 rounded-md border border-border bg-background px-3 text-base md:text-sm tabular-nums text-foreground placeholder:text-muted-foreground"
               />
             </div>
           )}
@@ -385,7 +385,7 @@ function CreateAlertForm({ onCreated }: { onCreated: (alert: PriceAlert) => void
                 inputMode="decimal"
                 aria-label="Second alert threshold"
                 placeholder="Second threshold"
-                className="h-10 rounded-md border border-border bg-background px-3 text-base text-foreground placeholder:text-muted-foreground/50 md:h-9 md:text-sm"
+                className="h-10 rounded-md border border-border bg-background px-3 text-base text-foreground placeholder:text-muted-foreground md:h-9 md:text-sm"
               />
             </div>
           ) : null}
@@ -963,7 +963,7 @@ export default function AlertsPage() {
 
       {/* Active Alerts */}
       {!loading && (
-        <div className="rounded-lg border border-border bg-[var(--surface)] overflow-hidden">
+        <div className="rounded-lg border border-border bg-[var(--bg-card)] overflow-hidden">
           {activeAlerts.length === 0 ? (
             <EmptyState
               title="No alerts set"
@@ -1026,7 +1026,7 @@ export default function AlertsPage() {
           control the chevron animation. Sort order is newest-first
           (see triggeredAlerts sort above). */}
       {!loading && triggeredAlerts.length > 0 && (
-        <div className="rounded-lg border border-border bg-[var(--surface)] overflow-hidden">
+        <div className="rounded-lg border border-border bg-[var(--bg-card)] overflow-hidden">
           <button
             type="button"
             onClick={() => setTriggeredOpen((v) => !v)}

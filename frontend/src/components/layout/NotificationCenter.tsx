@@ -146,7 +146,7 @@ export function NotificationCenter() {
         </Button>
         }
       />
-      <PopoverContent side="bottom" align="end" sideOffset={4} className="w-[calc(100vw-2rem)] max-w-96 sm:w-96 bg-[var(--surface)] border-border p-0">
+      <PopoverContent side="bottom" align="end" sideOffset={4} className="w-[calc(100vw-2rem)] max-w-96 sm:w-96 bg-[var(--bg-card)] border-border p-0">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
           <span className="text-label font-semibold text-foreground">Notifications</span>
@@ -166,6 +166,7 @@ export function NotificationCenter() {
                 onClick={clearAll}
                 className="flex items-center gap-1 text-label text-muted-foreground hover:text-foreground transition-colors"
                 title="Clear all"
+                aria-label="Clear all notifications"
               >
                 <Trash2 className="h-3 w-3" />
               </button>

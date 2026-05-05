@@ -576,7 +576,6 @@ export default function OrderBar({
       ) : null}
       <Field label="Strategy">
         <select
-          aria-label="Strategy"
           value={strategyId}
           onChange={(e) => handleStrategyChange(e.target.value)}
           disabled={noStrategies}
@@ -669,7 +668,6 @@ export default function OrderBar({
 
       <Field label="Symbol">
         <Input
-          aria-label="Symbol"
           name="symbol"
           data-testid="order-bar-symbol"
           value={symbolValue}
@@ -684,7 +682,6 @@ export default function OrderBar({
 
       <Field label="Qty">
         <Input
-          aria-label="Quantity"
           name="qty"
           data-testid="order-bar-qty"
           // BUG-002 — HTML-level guards: `type="number"` rejects
@@ -709,7 +706,6 @@ export default function OrderBar({
 
       <Field label="Type">
         <select
-          aria-label="Order type"
           value={type}
           onChange={(e) => setType(e.target.value as OrderTypeOption)}
           disabled={ticketLocked}
@@ -732,7 +728,6 @@ export default function OrderBar({
 
       <Field label="Price">
         <Input
-          aria-label="Price"
           value={priceRequired ? price : ""}
           onChange={(e) => setPrice(e.target.value)}
           inputMode="decimal"
@@ -747,7 +742,6 @@ export default function OrderBar({
 
       <Field label="Stop">
         <Input
-          aria-label="Stop"
           value={stopRequired ? stop : ""}
           onChange={(e) => setStop(e.target.value)}
           inputMode="decimal"
@@ -955,20 +949,30 @@ function Field({
   children,
 }: {
   label: string;
-  children: React.ReactNode;
+  children: React.ReactElement;
 }) {
-  // WCAG / persona 71-4 — render a real <label> wrapping both caption and
-  // input so voice control ("select Strategy") and screen readers can bind
-  // the visible caption to the associated form control. Previously the
-  // caption rendered as a <span> and the input carried only an
-  // `aria-label`, which some AT announced correctly but desktop voice-
-  // control drivers did not associate with the field.
+  // WCAG 1.3.1 / 4.1.2 / persona 71-4 — emit an explicit ``<label
+  // htmlFor>`` instead of an implicit wrapping <label>. The visible
+  // caption is the accessible name; ``React.cloneElement`` injects a
+  // ``React.useId``-generated id into the child input/select. Voice
+  // control ("focus Strategy") and screen readers both bind on the
+  // explicit ``htmlFor`` association — implicit wrapping was unreliable
+  // on desktop voice-control drivers.
+  const id = React.useId();
+  // Only inject the id if the child doesn't already provide one. This
+  // keeps the helper compatible with controls that already own their
+  // id (e.g. the Symbol input, which also exposes ``name``/``data-testid``
+  // for tests).
+  const childWithId = React.isValidElement<{ id?: string }>(children) && !children.props.id
+    ? React.cloneElement(children, { id })
+    : children;
+  const associatedId = React.isValidElement<{ id?: string }>(childWithId) ? childWithId.props.id ?? id : id;
   return (
-    <label className="flex flex-col gap-1 min-w-0">
-      <span className="t-label">
+    <div className="flex flex-col gap-1 min-w-0">
+      <label htmlFor={associatedId} className="t-label">
         {label}
-      </span>
-      {children}
-    </label>
+      </label>
+      {childWithId}
+    </div>
   );
 }

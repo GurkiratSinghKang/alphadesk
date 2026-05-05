@@ -117,9 +117,11 @@ export function ProfileMenu() {
     });
   }
 
-  // Wave 29 persona-1 #7 (option C): "Got it" closes the dialog without
-  // flipping state. No /auth/switch-mode endpoint exists, so we never
-  // pretend to have switched — the toast reinforces the admin ask.
+  // Wave 29 persona-1 #7 (option C) / chrome-batch-D P1-09: the dialog
+  // is the live-mode confirmation flow, so the button reads "Confirm
+  // and continue". It closes the dialog without flipping state — no
+  // /auth/switch-mode endpoint exists, so we never pretend to have
+  // switched. The toast reinforces the admin ask.
   async function handleConfirmLive() {
     setModeConfirmOpen(false);
     toast({
@@ -134,7 +136,7 @@ export function ProfileMenu() {
         <DropdownMenuTrigger data-tour="profile-menu" className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/15 text-label font-bold text-primary hover:bg-primary/25 transition-colors sm:h-8 sm:w-8" aria-label="User menu">
           {avatarInitial}
         </DropdownMenuTrigger>
-        <DropdownMenuContent side="bottom" align="end" className="w-56 bg-[var(--surface)] border-border">
+        <DropdownMenuContent side="bottom" align="end" className="w-56 bg-[var(--bg-card)] border-border">
           <div className="px-3 py-2 space-y-1">
             <p className="text-label font-medium text-foreground truncate" title={displayName}>{displayName}</p>
             <div className="flex items-center justify-between text-label">
@@ -145,9 +147,9 @@ export function ProfileMenu() {
           <DropdownMenuSeparator />
           <div className="px-3 py-1.5">
             <p className="text-label uppercase tracking-wider text-muted-foreground mb-1.5">Trading Mode</p>
-            <div className="flex gap-1.5">
-              <button onClick={handlePaperClick} className={cn("rounded px-2.5 py-1 text-label font-medium transition-colors", tradingMode === "paper" ? "bg-[var(--profit)]/15 text-[var(--profit)] ring-1 ring-[var(--profit)]/30" : "bg-[var(--panel)] text-muted-foreground")}>Paper</button>
-              <button onClick={handleLiveClick} className={cn("rounded px-2.5 py-1 text-label font-medium transition-colors", tradingMode === "live" ? "bg-[var(--loss)]/15 text-[var(--loss)] ring-1 ring-[var(--loss)]/30" : "bg-[var(--panel)] text-muted-foreground")}>Live</button>
+            <div role="radiogroup" aria-label="Trading mode" className="flex gap-1.5">
+              <button role="radio" aria-checked={tradingMode === "paper"} onClick={handlePaperClick} className={cn("rounded px-2.5 py-1 text-label font-medium transition-colors", tradingMode === "paper" ? "bg-[var(--profit)]/15 text-[var(--profit)] ring-1 ring-[var(--profit)]/30" : "bg-[var(--panel)] text-muted-foreground")}>Paper</button>
+              <button role="radio" aria-checked={tradingMode === "live"} onClick={handleLiveClick} className={cn("rounded px-2.5 py-1 text-label font-medium transition-colors", tradingMode === "live" ? "bg-[var(--loss)]/15 text-[var(--loss)] ring-1 ring-[var(--loss)]/30" : "bg-[var(--panel)] text-muted-foreground")}>Live</button>
             </div>
           </div>
           <DropdownMenuSeparator />
@@ -160,7 +162,7 @@ export function ProfileMenu() {
       </DropdownMenu>
 
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <SheetContent side="right" className="bg-[var(--surface)] border-border">
+        <SheetContent side="right" className="bg-[var(--bg-card)] border-border">
           <SheetHeader><SheetTitle>Settings</SheetTitle><SheetDescription>Configure your trading environment.</SheetDescription></SheetHeader>
           <div className="space-y-6 px-4 py-6">
             {/* Theme section */}
@@ -208,7 +210,7 @@ export function ProfileMenu() {
       </Sheet>
 
       <Dialog open={modeConfirmOpen} onOpenChange={setModeConfirmOpen}>
-        <DialogContent className="bg-[var(--surface)] border-border">
+        <DialogContent className="bg-[var(--bg-card)] border-border">
           <DialogHeader>
             <DialogTitle>Live trading requires admin enablement</DialogTitle>
             <DialogDescription>
@@ -218,7 +220,7 @@ export function ProfileMenu() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button onClick={handleConfirmLive} className="text-label">Understood</Button>
+            <Button onClick={handleConfirmLive} className="text-label">Confirm and continue</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

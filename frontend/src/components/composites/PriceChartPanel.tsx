@@ -124,6 +124,12 @@ export default function PriceChartPanel({
   const change = numberOrNull(quote.change);
   const changePct = numberOrNull(quote.changePct);
   const regimeFit = numberOrNull(meta.regimeFit);
+  // a11y: SR-friendly debounced last price (every 2s) so screen readers
+  // are not flooded by ticker updates while still hearing meaningful
+  // changes via the aria-live wrapper below.
+  const debouncedLast = React.useDeferredValue(last);
+  const debouncedChange = React.useDeferredValue(change);
+  const debouncedChangePct = React.useDeferredValue(changePct);
   const marketDepth = useMarketDepth(symbol.ticker, quote);
   const handleRangeShortcut = React.useCallback((action: string) => {
     const range = action.slice("chart:set-range:".length) as ChartRange;
@@ -133,8 +139,8 @@ export default function PriceChartPanel({
   }, [onRangeChange]);
   useShortcutHandler("chart:set-range", handleRangeShortcut);
 
-  const deltaSign = (change ?? 0) >= 0 ? "+" : "\u2212";
-  const deltaTone = (change ?? 0) >= 0 ? "text-up-500" : "text-down-500";
+  const deltaSign = (debouncedChange ?? 0) >= 0 ? "+" : "\u2212";
+  const deltaTone = (debouncedChange ?? 0) >= 0 ? "text-up-500" : "text-down-500";
 
   // Round-15 / persona-10 P0: the ``data`` prop was being recomputed
   // from a fresh ``series.map(...)`` literal inline in JSX every parent
@@ -190,19 +196,19 @@ export default function PriceChartPanel({
           >{symbol.ticker}{symbol.venue ? ` · ${symbol.venue}` : ""}</span>
         </div>
 
-        <div className="flex items-baseline gap-2">
+        <div className="flex items-baseline gap-2" aria-live="polite" aria-atomic="true">
           <span
             className="font-mono tabular-nums text-h2 md:text-display-sm font-light text-ink-1000"
             style={{ letterSpacing: 0, lineHeight: 1 }}
           >
-            {last == null ? <DashSpan size={32} /> : last.toFixed(2)}
+            {debouncedLast == null ? <DashSpan size={32} /> : debouncedLast.toFixed(2)}
           </span>
-          <span className={cn("font-mono tabular-nums text-body md:text-body", change == null ? "text-fg-hint" : deltaTone)}>
-            {change == null || changePct == null ? (
+          <span className={cn("font-mono tabular-nums text-body md:text-body", debouncedChange == null ? "text-fg-hint" : deltaTone)}>
+            {debouncedChange == null || debouncedChangePct == null ? (
               <DashSpan size={14} />
             ) : (
               <>
-                {deltaSign}{Math.abs(change).toFixed(2)} · {deltaSign}{Math.abs(changePct).toFixed(2)}%
+                {deltaSign}{Math.abs(debouncedChange).toFixed(2)} · {deltaSign}{Math.abs(debouncedChangePct).toFixed(2)}%
               </>
             )}
           </span>
@@ -307,9 +313,12 @@ export default function PriceChartPanel({
           </div>
         ) : isLoading ? (
           <div
-            aria-hidden="true"
+            role="status"
+            aria-label="Loading chart data"
             className={cn("h-[200px] w-full animate-pulse rounded-md", executionDensity ? "bg-bg-elev-2" : "bg-bg-elev-1")}
-          />
+          >
+            <span className="sr-only">Loading chart data…</span>
+          </div>
         ) : series.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-1 text-center h-full min-h-[200px]">
             <span

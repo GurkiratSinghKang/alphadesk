@@ -615,7 +615,7 @@ function ScreenerTab() {
 
       {/* Filter panel */}
       {showFilters && (
-        <div className="px-3 py-2 border-b border-border bg-[var(--surface)]">
+        <div className="px-3 py-2 border-b border-border bg-[var(--bg-card)]">
           <div className="grid grid-cols-2 gap-1.5">
             <select
               value={filters.marketCap}
@@ -685,7 +685,7 @@ function ScreenerTab() {
       )}
 
       {/* Sortable column headers */}
-      <div className="flex items-center gap-2 px-3 py-1 text-label uppercase tracking-wider text-muted-foreground border-b border-border bg-[var(--surface)]">
+      <div className="flex items-center gap-2 px-3 py-1 text-label uppercase tracking-wider text-muted-foreground border-b border-border bg-[var(--bg-card)]">
         <button onClick={() => handleSort("symbol")} className="flex-1 text-left hover:text-foreground transition-colors">
           Symbol <SortIcon col="symbol" />
         </button>
@@ -913,7 +913,7 @@ export function WatchlistPanel() {
           </form>
 
           {/* Keyboard hint */}
-          <div className="flex items-center gap-1.5 px-3 py-1 text-label text-muted-foreground/60 bg-[var(--surface)] border-b border-border">
+          <div className="flex items-center gap-1.5 px-3 py-1 text-label text-muted-foreground/60 bg-[var(--bg-card)] border-b border-border">
             <span>Click to select</span>
             <span className="text-muted-foreground/30">|</span>
             <span>
@@ -922,7 +922,7 @@ export function WatchlistPanel() {
           </div>
 
           {/* Column headers */}
-          <div className="flex items-center gap-2 px-3 py-1 text-label uppercase tracking-wider text-muted-foreground border-b border-border bg-[var(--surface)]">
+          <div className="flex items-center gap-2 px-3 py-1 text-label uppercase tracking-wider text-muted-foreground border-b border-border bg-[var(--bg-card)]">
             <button aria-label="Sort by symbol" onClick={() => handleSort("symbol")} className="flex-1 text-left hover:text-foreground transition-colors flex items-center gap-0.5">
               Symbol {sortKey === "symbol" && <span>{sortDir === "asc" ? "▲" : "▼"}</span>}
             </button>

@@ -233,14 +233,22 @@ Nine audit-fix commits delivered on `feature/deployment`:
 | `012659bd` | fix(kill-switch): thread-pool bridge for sync facade | B-F4, R-F2 — Postgres repo no longer crashes inside async context |
 | `6da98c22` | fix(broker): per-user rate-limits on write endpoints | B-F12 — credential write + reconciliation throttled |
 | `f127d92e` | fix(trading_gate): retain audit Task ref + log failures | P3-5 — compliance audit writes no longer silently dropped |
+| `850feccd` | fix(pipeline): per-user Alpaca creds in daily_pipeline | MB-P0-1 — automated orders now route to caller's account, not env's |
+| `7584dba8` | fix(api/trades): per-user Alpaca creds in risk-gate helpers | MB-P0-2 — gross-notional + equity gates measure caller's account |
+| `732ea44c` | fix(ticker_context): bound _LOCAL_FACT_LOCKS dict | B-F9, R-F8 — module-level lock dict bounded at 4096 with LRU |
 
 **Verification:** 451+ backend tests pass after each round (1 pre-existing
 failure in `test_trades_surveillance.py::test_halt_trading_writes_audit_log`
 — unrelated to these changes). Frontend `npm run typecheck` clean.
 
-**16 audit-fix commits delivered** across three rounds in this cycle. The
-remaining work is summarised below — multi-user Alpaca routing has a
-fix-agent in flight (uncommitted changes visible in working tree).
+**19 audit-fix commits delivered** across four rounds in this cycle:
+- Round 1 (7): multi-tenant data isolation, scanner race, readyz lock,
+  auth atomic, strategy gate, a11y modal focus
+- Round 2 (2): kill-switch layer-3 wire-up, multi-leg fill monotonicity
+- Round 3 (7): response-leak fix, atomic INCR, KillSwitch a11y, PBKDF2,
+  sync-facade async-bridge, broker rate limits, audit task retention
+- Round 4 (3): per-user Alpaca routing (MB-P0-1, MB-P0-2), bounded
+  ticker_context lock dict
 
 ### Still open — not yet fixed
 

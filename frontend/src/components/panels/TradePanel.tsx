@@ -603,7 +603,7 @@ function TradeBuilderTab() {
                 "font-medium",
                 tradingMode === "paper"
                   ? "bg-[var(--profit)] hover:bg-[var(--profit)]/90 text-black"
-                  : "bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-white"
+                  : "bg-[var(--loss)] hover:bg-[var(--loss)]/90 text-loss-foreground"
               )}
             >
               {submitting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
@@ -638,7 +638,10 @@ function PositionRow({ p, onSelect }: { p: Position; onSelect: (sym: string) => 
       tabIndex={0}
       onClick={() => onSelect(p.symbol.split(" ")[0])}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") onSelect(p.symbol.split(" ")[0]);
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(p.symbol.split(" ")[0]);
+        }
       }}
       className="flex items-center text-label px-2 py-1.5 rounded hover:bg-accent/30 transition-colors cursor-pointer"
     >
@@ -1004,7 +1007,10 @@ function OrdersTab() {
             tabIndex={0}
             onClick={() => setSelectedSymbol(o.symbol.split(" ")[0])}
             onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") setSelectedSymbol(o.symbol.split(" ")[0]);
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setSelectedSymbol(o.symbol.split(" ")[0]);
+              }
             }}
             className="flex items-center text-label px-2 py-1.5 rounded hover:bg-accent/30 transition-colors cursor-pointer"
           >
@@ -1394,7 +1400,7 @@ function JournalTab() {
         ) : (
           <div className="space-y-1">
             {filteredEntries.map((entry) => (
-              <div key={entry.id} className="rounded-lg border border-border bg-[var(--surface)] p-2.5">
+              <div key={entry.id} className="rounded-lg border border-border bg-[var(--bg-card)] p-2.5">
                 {/* Header row */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">

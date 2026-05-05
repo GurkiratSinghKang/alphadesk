@@ -78,6 +78,12 @@ export default function MarketingShell({
       data-slot="marketing-shell"
       className={cn("min-h-screen bg-bg text-fg", className)}
     >
+      <a
+        className="sr-only focus:not-sr-only fixed top-2 left-2 z-50 px-3 py-2 bg-primary text-primary-foreground"
+        href="#main"
+      >
+        Skip to content
+      </a>
       <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12">
         <nav
           aria-label="Primary"
@@ -129,7 +135,7 @@ export default function MarketingShell({
           </div>
         </nav>
 
-        <main>{children}</main>
+        <main id="main">{children}</main>
 
         <footer className="grid grid-cols-1 gap-10 border-t border-border pt-20 pb-10 sm:grid-cols-[2fr_1fr_1fr_1fr]">
           <div>

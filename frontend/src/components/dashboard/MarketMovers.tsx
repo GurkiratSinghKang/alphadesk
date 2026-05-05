@@ -164,7 +164,10 @@ export function MarketMovers({ onSelectSymbol }: MarketMoversProps) {
                 tabIndex={0}
                 onClick={() => onSelectSymbol?.(row.symbol)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") onSelectSymbol?.(row.symbol);
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSelectSymbol?.(row.symbol);
+                  }
                 }}
                 className="flex items-center text-label px-2 py-1.5 rounded-md hover:bg-accent/30 transition-colors cursor-pointer group"
               >
