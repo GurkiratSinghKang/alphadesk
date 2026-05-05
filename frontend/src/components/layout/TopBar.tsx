@@ -8,6 +8,7 @@ import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from "@/co
 import { useUIStore } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 import { ProfileMenu } from "./ProfileMenu";
+import HaltTradingButton from "./HaltTradingButton";
 import { NotificationCenter } from "./NotificationCenter";
 import { ThemeToggle } from "./ThemeToggle";
 import StatusPills from "./StatusPills";
@@ -140,6 +141,12 @@ export function TopBar() {
 
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">
         <StatusPills />
+        {/* Audit Persona F4.2 (2026-05-05): system-wide halt-trading
+         * button. Admin-only — backend returns 403 for non-admin and
+         * the component hides itself. Hidden on the smallest mobile
+         * viewport so the chrome doesn't crowd; emergencies on mobile
+         * route through /strategies/{id} per-strategy switches. */}
+        <HaltTradingButton className="hidden sm:inline-flex" />
         <ThemeToggle className="h-11 w-11 sm:h-8 sm:w-8" />
         <NotificationCenter />
         <ProfileMenu />

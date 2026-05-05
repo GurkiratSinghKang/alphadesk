@@ -4513,6 +4513,55 @@ async def halt_trading(
     return resp
 
 
+@router.get("/halt-status")
+async def get_halt_status(
+    username: str = Depends(require_auth),
+) -> dict[str, Any]:
+    """Return the current global halt-trading state.
+
+    Audit Persona F4.2 (2026-05-05): the dashboard's emergency
+    halt-trading button needs a read endpoint to render the
+    current state (so the UI shows "Halt trading" vs
+    "Resume trading" correctly without requiring a probe-via-POST).
+
+    Cheap query — reads the cached ``trading:halted`` Redis key
+    first; falls back to Postgres ``halt_state`` table on cache miss.
+    """
+    halted = await _is_trading_halted()
+    # Best-effort augmentation: pull halt metadata (reason, halted_by,
+    # halted_at) from the singleton row when halted so the UI can
+    # show context. Read-only; if the DB is degraded we still return
+    # the boolean.
+    halted_by: str | None = None
+    halted_at: str | None = None
+    reason: str | None = None
+    if halted:
+        try:
+            from data.storage.models import HaltState
+            from core.database import _get_session_factory
+            from sqlalchemy import select as _sa_select
+
+            factory = _get_session_factory()
+            async with factory() as session:
+                row = (
+                    await session.execute(_sa_select(HaltState).where(HaltState.id == 1))
+                ).scalars().first()
+                if row is not None:
+                    halted_by = getattr(row, "halted_by", None)
+                    reason = getattr(row, "reason", None)
+                    halted_at_dt = getattr(row, "halted_at", None)
+                    if halted_at_dt is not None:
+                        halted_at = halted_at_dt.isoformat()
+        except Exception:
+            logger.debug("halt-status: HaltState lookup failed", exc_info=True)
+    return {
+        "halted": halted,
+        "halted_by": halted_by,
+        "halted_at": halted_at,
+        "reason": reason,
+    }
+
+
 @router.post("/flatten_all")
 async def flatten_all_positions(
     req: Request,

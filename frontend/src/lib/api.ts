@@ -1774,6 +1774,41 @@ export function cancelOrder(orderId: string) {
   });
 }
 
+// Audit Persona F4.2 (2026-05-05): system-level halt-trading controls.
+// The dashboard renders a halt-trading button as the primary emergency
+// stop — operator clicks it, /halt cancels open orders + flattens
+// positions. ``getHaltStatus`` powers the button's "Halt" vs "Resume"
+// state and shows the trigger metadata when halted.
+
+export interface HaltStatus {
+  halted: boolean;
+  halted_by: string | null;
+  halted_at: string | null;
+  reason: string | null;
+}
+
+export async function getHaltStatus(): Promise<HaltStatus> {
+  return apiFetch<HaltStatus>(`/api/v1/trades/halt-status`);
+}
+
+export async function haltTrading(opts?: { flatten?: boolean; reason?: string }): Promise<{
+  halted: boolean;
+  message: string;
+  flatten?: Record<string, unknown>;
+  flatten_indeterminate?: boolean;
+  flatten_queued_for_next_open?: boolean;
+}> {
+  const params = new URLSearchParams();
+  if (opts?.flatten !== undefined) params.set("flatten", String(opts.flatten));
+  if (opts?.reason) params.set("reason", opts.reason);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch(`/api/v1/trades/halt${qs}`, { method: "POST" });
+}
+
+export async function resumeTrading(): Promise<{ halted: boolean; message: string }> {
+  return apiFetch(`/api/v1/trades/resume`, { method: "POST" });
+}
+
 export async function getOrders(status?: string): Promise<Order[]> {
   const qs = status ? `?status=${status}` : "";
   const raw = await apiFetch<Record<string, unknown>[]>(`/api/v1/trades/orders${qs}`);
