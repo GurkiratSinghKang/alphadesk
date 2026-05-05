@@ -524,24 +524,44 @@ def _chain_cache_key(
     return "|".join(parts)
 
 
+# Batch T T-2: explicit cap on chain payload size. The Alpaca OPRA
+# snapshots endpoint defaults to 100 contracts per page, which produced
+# silent truncation in the old fetcher. We now request `_ALPACA_PAGE_SIZE`
+# contracts per page and walk Alpaca's ``next_page_token`` until we've
+# collected `chain_limit` rows. The hard ceiling protects worker memory
+# and serialisation time on liquid tickers (SPY has thousands of strikes
+# across LEAPS).
+_ALPACA_PAGE_SIZE = 200
+_DEFAULT_CHAIN_LIMIT = 200
+_MAX_CHAIN_LIMIT = 500
+
+
 async def _fetch_real_chain(
     symbol: str,
     expiry_filter: date | None,
     strike_min: float | None,
     strike_max: float | None,
     option_type_filter: OptionType | None,
+    chain_limit: int = _DEFAULT_CHAIN_LIMIT,
 ) -> OptionChain | None:
     """Fetch a real options chain from the Alpaca OPRA API.
 
     Returns None on any failure so the caller can fall back to demo data.
+
+    Batch T T-2: explicit ``chain_limit`` (default 200, ceiling 500) lifts
+    the silent 100-row cap. We page through Alpaca's snapshot endpoint via
+    ``next_page_token`` until either the limit or the upstream end-of-data
+    is reached.
     """
     if _alpaca_keys_empty():
         return None
 
     s = symbol.upper()
+    chain_limit = max(1, min(int(chain_limit), _MAX_CHAIN_LIMIT))
 
-    # Check cache
-    ckey = _chain_cache_key(s, expiry_filter, strike_min, strike_max, option_type_filter)
+    # Check cache (limit is part of the key so the 200-cap chain isn't
+    # served from a 50-cap cache entry).
+    ckey = _chain_cache_key(s, expiry_filter, strike_min, strike_max, option_type_filter, chain_limit)
     cached = _chain_cache.get(ckey)
     if cached:
         chain, ts = cached
@@ -555,108 +575,161 @@ async def _fetch_real_chain(
             return None
 
         headers = _alpaca_headers()
-        params: dict[str, str] = {"feed": "opra"}
+        base_params: dict[str, str] = {
+            "feed": "opra",
+            "limit": str(min(_ALPACA_PAGE_SIZE, chain_limit)),
+        }
         if expiry_filter:
-            params["expiration_date"] = expiry_filter.isoformat()
+            base_params["expiration_date"] = expiry_filter.isoformat()
         if strike_min is not None:
-            params["strike_price_gte"] = str(strike_min)
+            base_params["strike_price_gte"] = str(strike_min)
         if strike_max is not None:
-            params["strike_price_lte"] = str(strike_max)
+            base_params["strike_price_lte"] = str(strike_max)
         if option_type_filter:
-            params["type"] = option_type_filter.value
-
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(
-                f"{_ALPACA_OPTIONS_BASE}/snapshots/{s}",
-                headers=headers,
-                params=params,
-            )
-
-        if resp.status_code in (401, 403):
-            log.warning("Alpaca options auth failed (%s) for %s — falling back", resp.status_code, s)
-            return None
-        if resp.status_code == 429:
-            log.warning("Alpaca options rate-limited for %s", s)
-            return None
-        if resp.status_code != 200:
-            log.warning("Alpaca options HTTP %s for %s: %s", resp.status_code, s, resp.text[:200])
-            return None
-
-        data = resp.json()
-        if not data or not isinstance(data, dict):
-            log.warning("Alpaca options returned empty/unexpected payload for %s", s)
-            return None
+            base_params["type"] = option_type_filter.value
 
         contracts: list[OptionContract] = []
         expirations: set[date] = set()
+        page_token: str | None = None
+        # Hard pagination cap — also defensive against an Alpaca contract
+        # change that returns infinite tokens.
+        max_pages = max(1, (chain_limit + _ALPACA_PAGE_SIZE - 1) // _ALPACA_PAGE_SIZE) + 2
 
-        # The snapshots endpoint returns: { "AAPL250418C00250000": { ... }, ... }
-        for occ_sym, snap in data.get("snapshots", data).items():
-            parsed = _parse_alpaca_option_symbol(occ_sym)
-            if not parsed:
-                continue
+        async with httpx.AsyncClient(timeout=15) as client:
+            for _page in range(max_pages):
+                params = dict(base_params)
+                if page_token:
+                    params["page_token"] = page_token
 
-            expiry_date = parsed["expiry"]
-            strike = parsed["strike"]
-            otype = parsed["option_type"]
+                resp = await client.get(
+                    f"{_ALPACA_OPTIONS_BASE}/snapshots/{s}",
+                    headers=headers,
+                    params=params,
+                )
 
-            # Apply filters that the API might not have fully enforced
-            if expiry_filter and expiry_date != expiry_filter:
-                continue
-            if strike_min is not None and strike < strike_min:
-                continue
-            if strike_max is not None and strike > strike_max:
-                continue
-            if option_type_filter and otype != option_type_filter:
-                continue
+                if resp.status_code in (401, 403):
+                    log.warning("Alpaca options auth failed (%s) for %s — falling back", resp.status_code, s)
+                    return None
+                if resp.status_code == 429:
+                    log.warning("Alpaca options rate-limited for %s", s)
+                    return None
+                if resp.status_code != 200:
+                    log.warning("Alpaca options HTTP %s for %s: %s", resp.status_code, s, resp.text[:200])
+                    return None
 
-            expirations.add(expiry_date)
+                data = resp.json()
+                if not data or not isinstance(data, dict):
+                    log.warning("Alpaca options returned empty/unexpected payload for %s", s)
+                    return None
 
-            # Extract quote / trade / greeks from snapshot
-            quote = snap.get("latestQuote", {})
-            trade = snap.get("latestTrade", {})
-            greeks_data = snap.get("greeks", {})
+                snapshots = data.get("snapshots") or {}
+                if not isinstance(snapshots, dict):
+                    snapshots = {}
 
-            bid_price = quote.get("bp", 0) or 0
-            ask_price = quote.get("ap", 0) or 0
-            # Round-4 CLUSTER 5 #20: drop contracts with no real two-sided
-            # market. A zero-bid AND zero-ask contract is either an
-            # illiquid OTM strike that nobody quotes or a stale snapshot —
-            # rendering it in the strike ladder produces fake "yield" rows
-            # that aren't tradeable and pollute mid-price computations.
-            if bid_price == 0 and ask_price == 0:
-                continue
-            last_price = trade.get("p", 0) or 0
-            if not last_price and bid_price and ask_price:
-                last_price = round((bid_price + ask_price) / 2, 2)
+                # The snapshots endpoint returns: { "AAPL250418C00250000": { ... }, ... }
+                for occ_sym, snap in snapshots.items():
+                    parsed = _parse_alpaca_option_symbol(occ_sym)
+                    if not parsed:
+                        continue
 
-            volume = trade.get("s", 0) or snap.get("dailyBar", {}).get("v", 0) or 0
-            oi = snap.get("openInterest", 0) or 0
-            iv = snap.get("impliedVolatility", 0) or greeks_data.get("iv", 0) or 0
+                    expiry_date = parsed["expiry"]
+                    strike = parsed["strike"]
+                    otype = parsed["option_type"]
 
-            contracts.append(OptionContract(
-                symbol=occ_sym,
-                underlying=parsed["underlying"],
-                expiry=expiry_date,
-                strike=strike,
-                option_type=otype,
-                bid=round(bid_price, 2),
-                ask=round(ask_price, 2),
-                last=round(last_price, 2),
-                volume=int(volume),
-                open_interest=int(oi),
-                iv=round(iv, 4),
-                delta=round(greeks_data.get("delta", 0) or 0, 4),
-                gamma=round(greeks_data.get("gamma", 0) or 0, 6),
-                theta=round(greeks_data.get("theta", 0) or 0, 4),
-                vega=round(greeks_data.get("vega", 0) or 0, 4),
-                rho=round(greeks_data.get("rho", 0) or 0, 4),
-            ))
+                    # Apply filters that the API might not have fully enforced
+                    if expiry_filter and expiry_date != expiry_filter:
+                        continue
+                    if strike_min is not None and strike < strike_min:
+                        continue
+                    if strike_max is not None and strike > strike_max:
+                        continue
+                    if option_type_filter and otype != option_type_filter:
+                        continue
+
+                    # Extract quote / trade / day-bar / greeks from snapshot.
+                    quote = snap.get("latestQuote", {}) or {}
+                    trade = snap.get("latestTrade", {}) or {}
+                    greeks_data = snap.get("greeks", {}) or {}
+                    # Batch T T-4: Alpaca's snapshot carries ``dailyBar`` /
+                    # ``minuteBar`` / ``prevDailyBar``. ``dailyBar.v`` is the
+                    # cumulative session volume; ``prevDailyBar.v`` is the
+                    # previous session's total. The old code read
+                    # ``trade.s`` (latest-tick size = often 1) which is why
+                    # callers saw ``volume=1`` universally.
+                    daily_bar = snap.get("dailyBar", {}) or {}
+                    prev_daily_bar = snap.get("prevDailyBar", {}) or {}
+
+                    bid_price = quote.get("bp", 0) or 0
+                    ask_price = quote.get("ap", 0) or 0
+                    # Round-4 CLUSTER 5 #20: drop contracts with no real two-sided
+                    # market. A zero-bid AND zero-ask contract is either an
+                    # illiquid OTM strike that nobody quotes or a stale snapshot —
+                    # rendering it in the strike ladder produces fake "yield" rows
+                    # that aren't tradeable and pollute mid-price computations.
+                    if bid_price == 0 and ask_price == 0:
+                        continue
+                    last_price = trade.get("p", 0) or 0
+                    if not last_price and bid_price and ask_price:
+                        last_price = round((bid_price + ask_price) / 2, 2)
+
+                    # Volume: prefer cumulative session bar, fall back to
+                    # prior-session bar (when the chain is requested before
+                    # market open), then to latest-tick size as a last resort.
+                    volume = (
+                        daily_bar.get("v", 0)
+                        or prev_daily_bar.get("v", 0)
+                        or trade.get("s", 0)
+                        or 0
+                    )
+                    # Open interest: snapshot's top-level ``openInterest``
+                    # is the previous session's settlement OI (Alpaca only
+                    # publishes EOD OI). Some payloads nest it under
+                    # ``open_interest`` (rare) — accept either spelling.
+                    oi = (
+                        snap.get("openInterest", 0)
+                        or snap.get("open_interest", 0)
+                        or 0
+                    )
+                    iv = snap.get("impliedVolatility", 0) or greeks_data.get("iv", 0) or 0
+
+                    contracts.append(OptionContract(
+                        symbol=occ_sym,
+                        underlying=parsed["underlying"],
+                        expiry=expiry_date,
+                        strike=strike,
+                        option_type=otype,
+                        bid=round(bid_price, 2),
+                        ask=round(ask_price, 2),
+                        last=round(last_price, 2),
+                        volume=int(volume),
+                        open_interest=int(oi),
+                        iv=round(iv, 4),
+                        delta=round(greeks_data.get("delta", 0) or 0, 4),
+                        gamma=round(greeks_data.get("gamma", 0) or 0, 6),
+                        theta=round(greeks_data.get("theta", 0) or 0, 4),
+                        vega=round(greeks_data.get("vega", 0) or 0, 4),
+                        rho=round(greeks_data.get("rho", 0) or 0, 4),
+                    ))
+                    expirations.add(expiry_date)
+
+                # Stop conditions: limit reached or no more pages.
+                if len(contracts) >= chain_limit:
+                    contracts = contracts[:chain_limit]
+                    break
+                page_token = data.get("next_page_token")
+                if not page_token:
+                    break
 
         if not contracts:
             # Symbol may not be optionable or no data returned
             log.info("Alpaca returned 0 contracts for %s — falling back to demo", s)
             return None
+
+        # Batch T T-3: pre-compute greeks for any contract whose IV is
+        # known but whose greeks came back as zero (the upstream snapshot
+        # frequently returns empty greeks dicts). Saves callers the N+1
+        # /greeks/... round-trip.
+        _fill_missing_greeks(contracts, spot_price)
 
         chain = OptionChain(
             underlying=s,
@@ -677,6 +750,66 @@ async def _fetch_real_chain(
     except Exception:
         log.warning("Alpaca options fetch failed for %s", s, exc_info=True)
         return None
+
+
+def _fill_missing_greeks(
+    contracts: list[OptionContract],
+    spot: float,
+    risk_free_rate: float = 0.05,
+    today: date | None = None,
+) -> None:
+    """Batch T T-3: populate zero-valued greeks in-place using BSM.
+
+    Greeks are computed only when ``iv > 0`` and ``delta == gamma == theta
+    == vega == rho == 0`` (the canonical "missing greeks" signature on the
+    Alpaca snapshot). Contracts that already carry real greeks are left
+    untouched. Failures on a single contract are logged but never abort
+    the batch — partial enrichment is better than dropping the whole chain.
+
+    Performance: ~200 contracts compute in single-digit ms (scipy.norm
+    overhead dominates). Runs synchronously inside the async fetcher with
+    no measurable wait.
+    """
+    if not contracts or spot <= 0:
+        return
+    today = today or date.today()
+    try:
+        from indicators.options import bs_greeks
+    except Exception:
+        log.debug("indicators.options unavailable — skipping greeks fill", exc_info=True)
+        return
+
+    for c in contracts:
+        # Only fill when IV is real AND every greek is zero (the canonical
+        # "Alpaca didn't compute greeks for this contract" signature).
+        if c.iv <= 0:
+            continue
+        if c.delta or c.gamma or c.theta or c.vega or c.rho:
+            continue
+        try:
+            days = (c.expiry - today).days
+            tau = max(days / 365.0, 1.0 / 365.0)
+            g = bs_greeks(
+                spot=spot,
+                strike=c.strike,
+                tau=tau,
+                r=risk_free_rate,
+                q=0.0,
+                sigma=c.iv,
+                call_put=c.option_type.value,
+            )
+            c.delta = round(float(g["delta"]), 4)
+            c.gamma = round(float(g["gamma"]), 6)
+            # bs_greeks returns theta per year — match the per-day
+            # convention used by the standalone /greeks endpoint.
+            c.theta = round(float(g["theta"]) / 365.0, 4)
+            # vega per 1.0 vol; the /greeks endpoint reports per 1% (vega/100).
+            c.vega = round(float(g["vega"]) / 100.0, 4)
+            # rho per 1.0 rate; report per 1% to match /greeks endpoint.
+            c.rho = round(float(g["rho"]) / 100.0, 4)
+        except Exception:
+            log.debug("greeks fill failed for %s", c.symbol, exc_info=True)
+            continue
 
 
 # ---------------------------------------------------------------------------
@@ -810,8 +943,10 @@ async def _fetch_real_iv(symbol: str) -> IVData | None:
         if time.time() - ts < _IV_CACHE_TTL:
             return iv_data
 
-    # Fetch chain across all expirations — no filters
-    chain = await _fetch_real_chain(s, None, None, None, None)
+    # Fetch chain across all expirations — no filters. Use the higher
+    # ceiling (Batch T T-2) so the IV-rank computation sees the full
+    # term-structure, not just the nearest expiry's worth of contracts.
+    chain = await _fetch_real_chain(s, None, None, None, None, chain_limit=_MAX_CHAIN_LIMIT)
     if chain is None or not chain.contracts:
         return None
 
@@ -943,12 +1078,34 @@ async def fetch_chain(
     strike_max: float | None = None,
     option_type: OptionType | None = None,
     client_host: str | None = None,
+    chain_limit: int = _DEFAULT_CHAIN_LIMIT,
 ) -> OptionChain:
     """Fetch the full options chain for ``symbol`` via Alpaca OPRA → demo.
 
     Mirrors the body of the old ``api.routes.options.get_options_chain``.
     ``client_host`` is accepted for parity with the B-33 service contract
     but not consulted — the Alpaca OPRA endpoint is not client-IP aware.
+
+    Batch T T-2: ``chain_limit`` (default ``_DEFAULT_CHAIN_LIMIT``=200,
+    ceiling ``_MAX_CHAIN_LIMIT``=500) lifts the silent 100-row cap that
+    confused downstream callers. The same limit applies to demo and real
+    chains so the response shape is identical regardless of which
+    provider answered.
+
+    Batch T T-3: greeks are pre-computed for any contract whose IV is
+    known but whose greeks came back as zero (covered inside
+    ``_fetch_real_chain`` via ``_fill_missing_greeks``).
+
+    Response shape (Batch T T-2 contract):
+      * ``underlying``: input symbol (uppercased).
+      * ``spot_price``: float, latest underlying price.
+      * ``expirations``: ALL available expiries the provider knows about
+        (sorted, ISO date list). Use this to iterate per-expiry.
+      * ``contracts``: filtered list of contracts. When ``expiry`` is None
+        the response is restricted to the nearest expiry only — the
+        ``expirations`` field tells callers which others exist.
+      * ``fetched_at``: UTC fetch time.
+      * ``is_demo``: True iff the chain came from the demo fallback.
 
     Raises ``fastapi.HTTPException(404)`` when no provider has data and
     the symbol is not in the demo allowlist.
@@ -959,15 +1116,77 @@ async def fetch_chain(
     symbol = symbol.upper()
 
     # 1. Try Alpaca OPRA (real data).
-    real_chain = await _fetch_real_chain(symbol, expiry, strike_min, strike_max, option_type)
+    real_chain = await _fetch_real_chain(
+        symbol, expiry, strike_min, strike_max, option_type, chain_limit=chain_limit,
+    )
     if real_chain is not None:
-        return real_chain
+        return _normalise_chain_shape(real_chain, expiry_filter=expiry)
 
     # 2. Fallback to demo data.
     if not _is_valid_demo_symbol(symbol):
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol.upper()}' not found")
     log.info("Using demo options chain for %s (Alpaca OPRA unavailable)", symbol)
-    return await _demo_chain(symbol, expiry, strike_min, strike_max, option_type)
+    demo = await _demo_chain(symbol, expiry, strike_min, strike_max, option_type)
+    # Trim demo to chain_limit for shape parity with real chains.
+    if len(demo.contracts) > chain_limit:
+        demo = OptionChain(
+            underlying=demo.underlying,
+            spot_price=demo.spot_price,
+            expirations=demo.expirations,
+            contracts=demo.contracts[:chain_limit],
+            fetched_at=demo.fetched_at,
+            is_demo=demo.is_demo,
+        )
+    return _normalise_chain_shape(demo, expiry_filter=expiry)
+
+
+def _normalise_chain_shape(chain: OptionChain, expiry_filter: date | None) -> OptionChain:
+    """Batch T T-2: enforce stable response shape across providers.
+
+    Behaviour:
+      * If ``expiry_filter`` is set, the contracts list is already pinned
+        to that expiry. Pass through but ensure ``expirations`` reflects
+        the requested filter rather than the full provider list (so
+        callers iterating ``expirations`` don't try to fetch contracts we
+        haven't returned).
+      * If ``expiry_filter`` is None, restrict ``contracts`` to the
+        NEAREST expiry while preserving ALL expiries in ``expirations``.
+        This gives callers a deterministic top-of-chain view plus the
+        full expiry ladder so they can fetch follow-up months without
+        the silent default-expiry surprise.
+    """
+    if not chain.contracts:
+        return chain
+    if expiry_filter is not None:
+        # Trust the filter — provider already pinned the expiry. Keep the
+        # ``expirations`` field at the requested expiry to match the
+        # narrowed view of contracts.
+        return OptionChain(
+            underlying=chain.underlying,
+            spot_price=chain.spot_price,
+            expirations=[expiry_filter],
+            contracts=chain.contracts,
+            fetched_at=chain.fetched_at,
+            is_demo=chain.is_demo,
+        )
+
+    # No expiry filter — pin contracts to the nearest expiry and keep
+    # the full expirations ladder so callers know what else is available.
+    nearest = min((c.expiry for c in chain.contracts), default=None)
+    if nearest is None:
+        return chain
+    pinned = [c for c in chain.contracts if c.expiry == nearest]
+    # Always include the nearest expiry in the ladder, even if the
+    # provider's expirations list was empty.
+    expirations = sorted(set(chain.expirations) | {nearest})
+    return OptionChain(
+        underlying=chain.underlying,
+        spot_price=chain.spot_price,
+        expirations=expirations,
+        contracts=pinned,
+        fetched_at=chain.fetched_at,
+        is_demo=chain.is_demo,
+    )
 
 
 async def fetch_iv_analysis(symbol: str, client_host: str | None = None) -> IVData:
