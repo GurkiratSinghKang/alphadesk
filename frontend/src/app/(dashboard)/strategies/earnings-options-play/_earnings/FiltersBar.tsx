@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { EarningsCalendarFilters } from "@/types";
 import { cn } from "@/lib/utils";
+import { handleRadioGroupKeyDown } from "@/lib/radioGroupKeyboard";
 
 export interface FiltersBarProps {
   filters: EarningsCalendarFilters;
@@ -104,6 +105,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
         role="radiogroup"
         aria-label="Earnings calendar window"
         className="flex items-center gap-1"
+        onKeyDown={handleRadioGroupKeyDown}
       >
         <span className="t-label mr-2 text-[color:var(--fg-muted)]" aria-hidden="true">
           WINDOW
@@ -180,6 +182,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
         role="radiogroup"
         aria-label="Time of day"
         className="flex items-center gap-1"
+        onKeyDown={handleRadioGroupKeyDown}
       >
         <span className="t-label mr-2 text-[color:var(--fg-muted)]" aria-hidden="true">
           TIME

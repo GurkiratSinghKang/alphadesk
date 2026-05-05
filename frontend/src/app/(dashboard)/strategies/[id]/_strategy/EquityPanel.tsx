@@ -8,6 +8,7 @@ import Eyebrow from "@/components/typography/Eyebrow";
 import Mono from "@/components/typography/Mono";
 import EmptyState from "@/components/primitives/EmptyState";
 import { cn } from "@/lib/utils";
+import { handleRadioGroupKeyDown } from "@/lib/radioGroupKeyboard";
 
 export type EquityRange = "1M" | "3M" | "YTD" | "1Y" | "ALL";
 
@@ -134,6 +135,7 @@ export default function EquityPanel({
           role="radiogroup"
           aria-label="Equity curve range"
           className="flex items-center gap-1 rounded-md border border-border bg-bg p-0.5"
+          onKeyDown={handleRadioGroupKeyDown}
         >
           {RANGES.map((r) => {
             const active = r === activeRange;

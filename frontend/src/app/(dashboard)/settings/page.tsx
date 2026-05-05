@@ -45,6 +45,7 @@ import {
 } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
+import { handleRadioGroupKeyDown } from "@/lib/radioGroupKeyboard";
 
 type BrokerEnv = "paper" | "live";
 type BrokerCredentialField = {
@@ -232,6 +233,7 @@ function IntervalSlider({
         role="radiogroup"
         aria-labelledby="interval-label"
         className="flex rounded-lg border border-border overflow-hidden"
+        onKeyDown={handleRadioGroupKeyDown}
       >
         {options.map((opt) => (
           <button
@@ -610,6 +612,7 @@ export default function SettingsPage() {
                 role="radiogroup"
                 aria-labelledby="trading-mode-label"
                 className="flex max-w-full overflow-hidden rounded-md border border-border"
+                onKeyDown={handleRadioGroupKeyDown}
               >
                 {(["paper", "live"] as const).map((opt) => {
                   const active = tradingMode === opt;
@@ -688,6 +691,7 @@ export default function SettingsPage() {
                   role="radiogroup"
                   aria-label="Broker provider"
                   className="grid grid-cols-2 overflow-hidden rounded-sm border border-border sm:flex"
+                  onKeyDown={handleRadioGroupKeyDown}
                 >
                   {(Object.keys(BROKER_FORMS) as BrokerProvider[]).map((provider) => (
                     <button
@@ -729,6 +733,7 @@ export default function SettingsPage() {
                   role="radiogroup"
                   aria-label="Broker environment"
                   className="flex h-9 overflow-hidden rounded-sm border border-border"
+                  onKeyDown={handleRadioGroupKeyDown}
                 >
                   {brokerForm.envs.map((env) => (
                     <button
@@ -1006,6 +1011,7 @@ export default function SettingsPage() {
                 role="radiogroup"
                 aria-label="Theme preference"
                 className="flex max-w-full overflow-hidden rounded-md border border-border"
+                onKeyDown={handleRadioGroupKeyDown}
               >
                 {(["system", "dark", "light"] as const).map((opt) => (
                   <button
