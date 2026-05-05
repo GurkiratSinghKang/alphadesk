@@ -359,15 +359,33 @@ class DailyPipelineRunner:
             seed=seed,
             rng=np.random.default_rng(seed),
         )
-        # TODO(kill-switch-wire-up): replace this call with
-        # invoke_strategy_with_kill_switch(strategy=self._strategy, input=input,
-        # params=params, kill_switch=self._kill_switch,
-        # kill_switch_context=KillSwitchContext(peak_nav=..., current_nav=...,
-        # alloc_capital=..., realized_today=...)). Deferred from Task 9 because
-        # peak_nav/alloc_capital/realized_today require plumbing through
-        # master_agent + trade_ledger; the wrapper itself is unit-tested in
-        # test_kill_switch_pipeline.py.
-        result = self._strategy.run(input, params)
+        # Audit B-F3 / R-F1 (2026-05-05): partial kill-switch wire-up.
+        # The previous TODO deferred ALL three layers because layers 1+2
+        # (peak_nav drawdown, daily-PnL ratio) require plumbing through
+        # master_agent + trade_ledger. Layer 3 (manual emergency disable)
+        # needs only the strategy name + the repo and works today.
+        #
+        # By passing zeros for the layer-1/2 metrics, both short-circuit
+        # via the "no DD/ratio definable" paths in is_enabled, but layer 3
+        # still consults the repo. Result: an operator clicking "emergency
+        # disable" on /strategies/{id} now actually stops the next pipeline
+        # tick from dispatching that strategy, matching the UI promise.
+        # Layers 1+2 remain dormant pending the master_agent plumbing
+        # (tracked separately).
+        from strategies._core.kill_switch import KillSwitchContext as _KSCtx
+        ks_ctx = _KSCtx(
+            peak_nav=0.0,
+            current_nav=float(equity_value or 0.0),
+            alloc_capital=0.0,
+            realized_today=0.0,
+        )
+        result = invoke_strategy_with_kill_switch(
+            strategy=self._strategy,
+            input=input,
+            params=params,
+            kill_switch=self._kill_switch,
+            kill_switch_context=ks_ctx,
+        )
         if fetch_warnings:
             result.warnings = [*fetch_warnings, *(result.warnings or [])]
 
