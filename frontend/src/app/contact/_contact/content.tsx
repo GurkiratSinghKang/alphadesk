@@ -82,16 +82,18 @@ export const CONTACT_CLAUSES: StaticClause[] = [
     body: (
       <>
         <EditorialP>
-          For account or trading emergencies, please also halt trading via
-          the kill-switch in{" "}
+          For account or trading emergencies, halt trading via the
+          per-strategy emergency-disable button on{" "}
           <a
-            href="/settings"
+            href="/strategies"
             className="text-primary underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
           >
-            /settings
+            /strategies
           </a>
-          . Email is slower than the switch, and the switch is the
-          authoritative off-ramp.
+          {" "}— open the strategy you need to stop and click "Emergency
+          disable" in the kill-switch panel. The pipeline runner consults
+          this on the next tick and halts the strategy. Email is slower
+          than the switch, and the switch is the authoritative off-ramp.
         </EditorialP>
         <div className="mt-3">
           <EditorialP>
