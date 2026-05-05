@@ -26,6 +26,7 @@ import {
 import { usePortfolioStore } from "@/stores/portfolio";
 import type { Position, PortfolioSummary } from "@/types";
 import { cn, formatCurrency } from "@/lib/utils";
+import { handleRadioGroupKeyDown } from "@/lib/radioGroupKeyboard";
 
 // 2026-04-21 polish — reports page lifted onto the editorial token ladder
 // matching /analytics + the dashboard hero:
@@ -1403,6 +1404,7 @@ export default function ReportsPage() {
       role="radiogroup"
       aria-label="Reports range"
       className="flex items-center gap-1 rounded-md border border-border bg-bg p-0.5"
+      onKeyDown={handleRadioGroupKeyDown}
     >
       {REPORTS_RANGES.map((r) => {
         const active = r === range;

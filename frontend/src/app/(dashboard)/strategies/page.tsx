@@ -6,6 +6,7 @@ import { ArrowRight } from "lucide-react";
 
 import DashboardPageLayout from "@/components/layouts/DashboardPageLayout";
 import Mono from "@/components/typography/Mono";
+import { handleRadioGroupKeyDown } from "@/lib/radioGroupKeyboard";
 import RegimePill from "@/components/primitives/RegimePill";
 import StatusDot from "@/components/primitives/StatusDot";
 import type {
@@ -462,12 +463,18 @@ function StrategyReadinessWorkbench({
           <ReadinessDatum label="Blocked" value={counts.blocked} tone="loss" />
         </div>
       </div>
-      <div className="mt-4 flex gap-2 overflow-x-auto pb-1" role="radiogroup" aria-label="Filter strategies by readiness">
+      <div
+        className="mt-4 flex gap-2 overflow-x-auto pb-1"
+        role="radiogroup"
+        aria-label="Filter strategies by readiness"
+        onKeyDown={handleRadioGroupKeyDown}
+      >
         {READINESS_FILTERS.map((filter) => (
           <button
             key={filter.value}
             type="button"
             role="radio"
+            tabIndex={activeFilter === filter.value ? 0 : -1}
             aria-checked={activeFilter === filter.value}
             onClick={() => onFilterChange(filter.value)}
             className={cn(
