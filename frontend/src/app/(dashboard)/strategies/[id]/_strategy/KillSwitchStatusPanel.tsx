@@ -141,14 +141,34 @@ export default function KillSwitchStatusPanel({
     <section className={cn("rounded border border-line p-4 space-y-3", className)}>
       <header className="flex items-center justify-between">
         <Eyebrow>Kill-switch status</Eyebrow>
+        {/* Audit A-F6 (2026-05-05): the indicator dot was a bare ``<span>``
+         * with ``aria-label`` only — no role + no live region. Screen-
+         * reader users got no announcement when the strategy state
+         * transitioned (e.g. an admin emergency-disabled a strategy
+         * mid-session). ``role="status"`` + ``aria-live="polite"``
+         * announces the new state without interrupting the user, and
+         * the visible text inside the span gives SR users the same
+         * label sighted users get from the colour. */}
         <span
           className={cn(
-            "inline-block w-2.5 h-2.5 rounded-full",
-            activeEvent ? "bg-loss" : "bg-profit",
+            "inline-flex items-center gap-1.5 text-label",
+            activeEvent ? "text-loss" : "text-profit",
           )}
-          aria-label={activeEvent ? "disabled" : "enabled"}
-          title={activeEvent ? "Disabled" : "Enabled"}
-        />
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <span
+            className={cn(
+              "inline-block w-2.5 h-2.5 rounded-full",
+              activeEvent ? "bg-loss" : "bg-profit",
+            )}
+            aria-hidden="true"
+          />
+          <span className="sr-only md:not-sr-only">
+            {activeEvent ? "Disabled" : "Enabled"}
+          </span>
+        </span>
       </header>
 
       {error && (
