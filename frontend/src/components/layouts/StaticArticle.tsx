@@ -42,24 +42,48 @@ export default function StaticArticle({
 }: StaticArticleProps) {
   return (
     <MarketingShell route={route}>
-      <article className="mx-auto max-w-[780px] py-16">
-        <Display size="lg" as="h1">
-          {title}
-        </Display>
-        <p
-          className="mt-4 font-mono text-label uppercase text-fg-hint"
-          style={{ letterSpacing: "0.18em" }}
-        >
-          Last updated &middot; {lastUpdated}
-        </p>
+      {/*
+       * Marketing rhythm tokens (R6-3, propagating R4-4's /about pattern):
+       *  - ``py-section`` (64px) on the article frame replaces the ad-hoc
+       *    ``py-16`` so the long-form vertical breathing room stays in
+       *    lockstep with the rest of the marketing surfaces.
+       *  - ``space-y-prose`` (24px) inside the header keeps the title and
+       *    its mono last-updated line cohesively grouped — was ``mt-4``.
+       *  - ``mt-section`` (64px) gates the clause list; ``mt-section-sm``
+       *    (40px) gates the optional note panel — were ``mt-16`` / ``mt-10``.
+       *  - ``gap-section-sm`` (40px) between sibling clauses; each clause
+       *    body is ``space-y-prose`` for its own SectionRule → body break.
+       *    Were ``gap-14`` / ``mt-5``.
+       *  Single-component edit propagates to /privacy /terms /risk /contact.
+       */}
+      <article className="mx-auto max-w-[780px] py-section">
+        <header className="space-y-prose">
+          <Display size="lg" as="h1">
+            {title}
+          </Display>
+          <p
+            className="font-mono text-label uppercase text-fg-hint"
+            style={{ letterSpacing: "0.18em" }}
+          >
+            Last updated &middot; {lastUpdated}
+          </p>
+        </header>
 
-        {note ? <div className="mt-10">{note}</div> : null}
+        {note ? <div className="mt-section-sm">{note}</div> : null}
 
-        <div className="mt-16 flex flex-col gap-14">
+        <div className="mt-section flex flex-col gap-section-sm">
           {clauses.map((c) => (
-            <section key={c.index}>
+            // Merge resolution (PR #45 ↔ origin #43): combine R6-3's
+            // ``space-y-prose`` rhythm token (24px between SectionRule
+            // and body) with batch-F's explicit ``tagAs="h2"`` +
+            // ``className="t-h2"``. Batch F changed SectionRule's
+            // default ``tagAs`` from h2→div, so editorial pages must
+            // pass tagAs explicitly to keep semantic h2s. The
+            // ``mt-5`` body wrapper from HEAD is redundant once
+            // ``space-y-prose`` is on the section.
+            <section key={c.index} className="space-y-prose">
               <SectionRule tag={`§ ${c.index} · ${c.title}`} tagAs="h2" className="t-h2" />
-              <div className="mt-5">{c.body}</div>
+              {c.body}
             </section>
           ))}
         </div>

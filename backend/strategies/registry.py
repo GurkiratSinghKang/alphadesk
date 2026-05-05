@@ -154,17 +154,19 @@ IMPLEMENTED_STRATEGY_ROUTE_IDS: frozenset[str] = frozenset({
     "orb",
     "vwap-strategy",
     "earnings-options-play",
+    "dividend-capture",
     "sector-rotation",
+    "mean-reversion",
+    "gap-fill",
+    "claude-alpha",
+    "vcp-breakout",
 })
 
 #: Strategies advertised in the catalogue but not yet implemented.
-PLANNED_STRATEGY_ROUTE_IDS: frozenset[str] = frozenset({
-    "claude-alpha",
-    "dividend-capture",
-    "gap-fill",
-    "mean-reversion",
-    "vcp-breakout",
-})
+#: All strategies in the milestone catalogue have been implemented;
+#: this set is preserved for future use (e.g., new strategies queued
+#: for a future milestone before their backend ships).
+PLANNED_STRATEGY_ROUTE_IDS: frozenset[str] = frozenset()
 
 
 def implementation_stage(route_id: str) -> str:

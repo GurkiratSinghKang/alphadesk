@@ -303,11 +303,10 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "claude-alpha": {
         "name": "Claude Alpha",
-        "description": "Planned Claude-assisted stock-picking concept. No backend implementation or live orders yet; requires a point-in-time prompt contract, replay harness, and risk gates before activation.",
-        # Wave 6γ (persona-109 P2): listed in ``PLANNED_STRATEGY_ROUTE_IDS``
-        # (see ``backend/strategies/registry.py``) — no backend package yet.
-        # Surfacing ``ACTIVE`` misrepresented state; ``PLANNED`` is the
-        # honest signal and matches ``implementation_stage()``.
+        "description": "LLM-driven equity selection (research-mode v0). The replay-cache infrastructure + scoring abstraction + risk filters are in place; the live Claude prompt path is gated until the OOS replay validates. v0 uses a deterministic fallback scorer (momentum × log-liquidity composite) — NOT alpha — so the rest of the pipeline is exercisable without per-trial LLM cost. See backend/strategies/claude_alpha/spec.md for the v1 path.",
+        # Plan C.1: backend strategy package landed; kind='research' so the
+        # engine excludes from the autonomous run loop. Status reflects the
+        # fact that it's registered but won't trade autonomously.
         "status": StrategyStatus.PLANNED,
         "invested_amount": 0,
         "total_return_pct": 0,
@@ -320,9 +319,9 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "mean-reversion": {
         "name": "Mean Reversion",
-        "description": "Planned quality-conditioned mean-reversion concept. No backend implementation or live orders yet; use rsi2-reversal for the implemented Connors RSI(2) strategy.",
-        # Wave 6γ (persona-109 P2): planned-only catalogue entry.
-        "status": StrategyStatus.PLANNED,
+        "description": "Long-only weekly-cadence reversal on US large-caps trading > 2σ below their 60-day MA, gated on Piotroski F-score ≥ 5 (quality) and a 7-session pre-earnings skip. Distinct from rsi2-reversal (which is 2-3 session Connors RSI(2)); this is the slower, fundamentally aware book documented by De Bondt-Thaler (1985) + Piotroski (2000). 30-day time-stop or MA-cross exit, whichever first.",
+        # Plan C.4: backend strategy package landed; status is now ACTIVE.
+        "status": StrategyStatus.ACTIVE,
         "invested_amount": 0,
         "total_return_pct": 0,
         "sharpe_ratio": 0,
@@ -334,9 +333,11 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "vcp-breakout": {
         "name": "VCP Breakout",
-        "description": "Planned Volatility Contraction Pattern breakout concept. No backend implementation or live orders yet; needs a pattern detector, intraday breakout confirmation, and a replayed OOS artifact.",
-        # Wave 6γ (persona-109 P2): planned-only catalogue entry.
-        "status": StrategyStatus.PLANNED,
+        "description": "Mark Minervini's Volatility Contraction Pattern: Stage-2 uptrend stocks forming progressively tighter consolidation bases on declining volume; entry on breakout above final pivot with volume ≥ 1.5× average. 8% risk-stop + 20% profit-take + 60-session time-stop. Russell-1000 growth universe; weekly screen + (future) realtime intraday breakout detection. Paper-only until live evidence graduates the strategy.",
+        # Plan C.6: backend strategy package landed; status is now ACTIVE.
+        # paper_only=True on the StrategyMeta gates DailyPipelineRunner from
+        # routing this to live mode until the operator explicitly flips it.
+        "status": StrategyStatus.ACTIVE,
         "invested_amount": 0,
         "total_return_pct": 0,
         "sharpe_ratio": 0,
@@ -361,8 +362,9 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "dividend-capture": {
         "name": "Dividend Capture",
-        "description": "Planned dividend-capture concept. No backend implementation or live orders yet; requires ex-dividend calendar, dividend-adjusted pricing, tax-aware cost model, and point-in-time quality data.",
-        "status": StrategyStatus.PLANNED,
+        "description": "Long-only ex-dividend-day pricing-anomaly book (Elton-Gruber 1970). Enter MOC T-3 sessions before ex-date on liquid large-caps with ≥0.5% per-event yield + no earnings overlap; exit MOC T+1. Driven by the FMP /dividends-calendar feed via FMPDividendsProvider (Plan C.2). Tax caveat: short-term holding period — best in tax-deferred accounts.",
+        # Plan C.2: backend strategy package landed; status is now ACTIVE.
+        "status": StrategyStatus.ACTIVE,
         "invested_amount": 0,
         "total_return_pct": 0,
         "sharpe_ratio": 0,
@@ -391,8 +393,10 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
     },
     "gap-fill": {
         "name": "Gap Fill",
-        "description": "Planned intraday gap-fill concept. No backend implementation or live orders yet; requires premarket/intraday bars, catalyst filtering, and open-auction slippage modeling.",
-        "status": StrategyStatus.PLANNED,
+        "description": "Branch-Ma (2012) overnight-gap mean-reversion fade on liquid US large-caps. Enter MKT at open+5min on names with 1-4% non-catalyst gaps; exit MKT by 11:00 ET. Long-only on down-gaps by default (fade_down_only); 1-min Alpaca bars, paper-only until live intraday paper evidence graduates the strategy.",
+        # Plan C.3: backend strategy package landed; status is now ACTIVE.
+        # paper_only=True so DailyPipelineRunner still gates live mode.
+        "status": StrategyStatus.ACTIVE,
         "invested_amount": 0,
         "total_return_pct": 0,
         "sharpe_ratio": 0,

@@ -67,7 +67,7 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
     parameters: {
       rebalanceFrequency: "Event-driven (day after each earnings release, MOO entry)",
       universe:
-        "~200 curated S&P 500 mid/large-cap names with $20M ADV, $10 price floor, and >=4 quarters of prior surprise history",
+        "Point-in-time S&P 500 constituents (~504 names as of 2024) via the FMP historical-constituent loader (Plan B.2), filtered to $20M ADV, $10 price floor, and >=4 quarters of prior surprise history. Pre-B.2 builds used a 170-name static seed — survivorship bias is now closed.",
       positionSizing:
         "Equal-weight ~10% of equity per name; signed long/short based on SUE sign; book capped at max_concurrent_positions",
       entryCriteria:
@@ -89,6 +89,7 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
       "Earnings surprise data uses FMP's eventually-revised EPS, not a true point-in-time I/B/E/S snapshot; small look-ahead bias possible.",
       "40-day holding ride a second-quarter earnings event if the calendar filter misses it; overlapping-earnings filter is a best-effort gate.",
       "Single-split walk-forward — 134 round trips gives wide Sharpe CIs. Published post-2005 PEAD band is 0.3-0.7 (Chu et al. 2020); 1.32 is at the top.",
+      "Realistic forward Sharpe band is 0.6-0.9 even after the Plan-B.2 universe fix; the 1.32 in the checked-in OOS JSON predates the post-Wave-5 retune. Treat as upside evidence pending the next CI tune batch.",
     ],
   },
 
@@ -124,8 +125,9 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
       "Best in stable, moderately-elevated VIX regimes (18-30) with contango term structure — the paying-for-insurance regime where realized vol consistently underruns implied. The kill switch is designed to stand aside in Feb-2018 / Mar-2020 / Aug-2024 events; expect extended flat-book periods during sustained backwardation.",
     risks: [
       "Tail events where VIX gaps 17->37 intraday: the kill switch triggers on the next daily close, so a single-session gap can still produce a 5-10% mark-to-market loss.",
-      "Tuner may select tail_hedge_ratio=0 on a train window without a true tail event; the spec flags this as the 2018/2020/2024 failure mode and the default keeps the hedge on.",
+      "Tuner may select tail_hedge_ratio=0 on a train window without a true tail event; the spec flags this as the 2018/2020/2024 failure mode and the default keeps the hedge on. Plan-B.4 enforced a tail_hedge_ratio>=5 invariant in code so this can no longer regress silently.",
       "Polygon Developer tier lacks historical bid/ask — synthetic ~5% spread is conservative but may under-price real-world execution friction.",
+      "Kill-switch exit paths (VIX spike >35%, IV-rank > 0.95) are empirically untested — every OOS exit was a DTE-roll on a regime-favourable 2023-24 window. Do NOT pass this strategy live capital until at least one OOS window contains a genuine tail event AND the kill-switch path has been replayed end-to-end.",
     ],
   },
 
@@ -545,6 +547,7 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
       "ETF tracking error on commodity / FX legs (DBC, GLD, UUP) costs ~0.3-0.5 Sharpe vs a true futures TSMOM per Hurst/Ooi/Pedersen 2013.",
       "Borrow costs on shorts (when enabled) use a generic 1% p.a. flat rate; symbol-specific borrow modelling is deferred to a future wave.",
       "Rebalance-day data availability: if a single ETF has no bar that day, its signal is dropped and the rest of the book is normalized without it — no makeup trade is queued.",
+      "Currently long-only by tuner choice on the 2023-24 bull window. Moskowitz-Ooi-Pedersen 2012's headline crisis-alpha claim REQUIRES the short leg active during equity drawdowns; until shorts_enabled is re-enabled and re-tuned on a window including 2008/2022 bears, treat this as long-only trend diversification — not crash convexity.",
     ],
   },
 

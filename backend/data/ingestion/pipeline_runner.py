@@ -54,7 +54,7 @@ ET = ZoneInfo("America/New_York")
 # ─── Strategy Groups by Optimal Run Time ────────────────────
 
 # Pre-market analysis (6:00 AM) — scan overnight events
-PREMARKET_STRATEGIES = ["pead", "regime_adaptive"]
+PREMARKET_STRATEGIES = ["pead", "regime_adaptive", "dividend_capture"]
 
 # ─── Wave 6α Fix 7 (persona-124 P1): 09:30 MOO window for PEAD ───
 # Bernard & Thomas (1989) specifies PEAD T+1 entries at the OPEN price,
@@ -81,7 +81,10 @@ PREMARKET_STRATEGIES = ["pead", "regime_adaptive"]
 #     news-reactive ORB-lite strategies added in future waves). Empty
 #     for now to preserve existing behaviour.
 OPEN_STRATEGIES = ["pead"]
-OPEN_PLUS_5M_STRATEGIES: list[str] = []
+# Plan C.3: gap-fill fires at 09:35 ET (open + 5min) per its spec —
+# the 5-minute settle gives the opening auction time to clear so the
+# 09:30 open used as today_open isn't an auction artefact.
+OPEN_PLUS_5M_STRATEGIES: list[str] = ["gap_fill"]
 
 # Post-opening range (10:05 AM) — intraday breakout strategies
 POST_OR_STRATEGIES = ["orb", "vwap"]
@@ -90,9 +93,10 @@ POST_OR_STRATEGIES = ["orb", "vwap"]
 MIDDAY_STRATEGIES = ["pairs_trading", "kama_breakout"]
 
 # Close window (3:30 PM) — MOC entry strategies + VRP scan
+# Plan C.4: removed `mean_reversion` from this list — its real scheduling
+# is weekly (Friday 3:30 PM), per its spec; it now lives in WEEKLY_STRATEGIES.
 CLOSE_STRATEGIES = [
     "rsi2_reversal",    # Connors: enter at close
-    "mean_reversion",   # End-of-day scan for oversold
     "vrp_harvest",      # IV surface established by 3 PM
     "earnings_vol",     # T-1 entries for upcoming earnings
 ]
@@ -105,8 +109,13 @@ MONTHLY_STRATEGIES = [
     "sector_rotation",  # 11-GICS-sector top-N rotation with bond fallback (Plan C.5)
 ]
 
-# Weekly (Friday 3:30 PM) — regime and cointegration refresh
-WEEKLY_STRATEGIES = ["regime_adaptive", "pairs_trading"]
+# Weekly (Friday 3:30 PM) — regime + cointegration + slow mean-reversion
+WEEKLY_STRATEGIES = [
+    "regime_adaptive",
+    "pairs_trading",
+    "mean_reversion",  # Slow / quality-conditioned reversal book (Plan C.4)
+    "vcp_breakout",    # Minervini VCP breakout — paper-only (Plan C.6)
+]
 
 # ─── Schedule Windows ───────────────────────────────────────
 
