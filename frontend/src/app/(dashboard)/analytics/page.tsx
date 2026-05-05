@@ -664,12 +664,20 @@ function MonthlyHeatmap({ monthlyReturns }: { monthlyReturns: Map<string, number
 function AnalyticsEmptyPanel({ label }: { label: string }) {
   // Italic serif + warm muted matches the editorial voice used across the
   // app so partial-empty states (some charts populated, some not) still
-  // read consistently.
+  // read consistently. P2-22: previously dead-ended; add a small recovery
+  // link routing to /pipeline so the analyst can queue a run that will
+  // populate the missing data instead of staring at a void.
   return (
-    <div className="flex h-32 items-center justify-center px-4 text-center">
+    <div className="flex h-32 flex-col items-center justify-center gap-2 px-4 text-center">
       <p className="font-display italic text-body-sm text-fg-muted leading-snug">
         {label}
       </p>
+      <Link
+        href="/pipeline"
+        className="rounded-sm font-mono text-label uppercase tracking-[0.14em] text-fg-muted transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+      >
+        Run pipeline →
+      </Link>
     </div>
   );
 }
@@ -1026,7 +1034,7 @@ export default function AnalyticsPage() {
                   className={cn(
                     "inline-flex items-center gap-1.5 rounded-sm border border-border-strong",
                     "bg-transparent px-4 py-2 font-sans text-body-sm font-medium",
-                    "text-fg hover:bg-bg-elev-1 hover:border-brand transition-colors",
+                    "text-fg hover:bg-bg-elev-1 hover:border-primary transition-colors",
                     "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
                   )}
                 >
@@ -1038,7 +1046,7 @@ export default function AnalyticsPage() {
                   className={cn(
                     "inline-flex min-h-10 items-center gap-1.5 rounded-sm border border-border-hair",
                     "bg-bg px-4 font-sans text-body-sm font-medium text-fg-muted",
-                    "transition-colors hover:border-brand hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
+                    "transition-colors hover:border-primary hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
                   )}
                 >
                   Run backtest
@@ -1048,7 +1056,7 @@ export default function AnalyticsPage() {
                   className={cn(
                     "inline-flex min-h-10 items-center gap-1.5 rounded-sm border border-border-hair",
                     "bg-bg px-4 font-sans text-body-sm font-medium text-fg-muted",
-                    "transition-colors hover:border-brand hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
+                    "transition-colors hover:border-primary hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
                   )}
                 >
                   View reports

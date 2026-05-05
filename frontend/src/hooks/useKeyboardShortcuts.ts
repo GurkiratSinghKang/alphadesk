@@ -39,6 +39,12 @@ export const DEFAULT_BINDINGS: Record<string, string> = {
   "k": "watchlist:prev",
   "b": "chart:quick-buy",
   "s": "chart:quick-sell",
+  // P2-27: cancel the most recent open order. Looks for the first
+  // visible cancel/x button inside any open-order row and clicks it; if
+  // an order modal is open, dispatching `order:cancel` lets that modal
+  // own its own confirmation flow. Esc separately closes any open modal
+  // via the existing `dismiss` action.
+  "c": "order:cancel",
 };
 
 /** Shortcuts added after 2026-04-01 are flagged as new */
@@ -52,6 +58,9 @@ export const NEW_SHORTCUTS = new Set([
   "g a",
   "g l",
   "g r",
+  // P2-27: cancel-order key joins the new-shortcut set so the overlay
+  // surfaces a "new" pip until enough operators have used it.
+  "c",
 ]);
 
 export type ShortcutGroup = {
@@ -70,7 +79,10 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { key: "/", action: "focus:search", description: "Focus symbol search" },
       { key: "f", action: "focus:search", description: "Focus search / command palette", isNew: true },
       { key: "Escape", action: "dismiss", description: "Close any modal / overlay" },
-      { key: "r", action: "refresh:page", description: "Refresh current page data", isNew: true },
+      // P2-27: `r` was advertised as global but only the dashboard
+      // listens for `alphadesk:refresh`. Re-scoped to dashboard-only in
+      // the overlay copy so the shortcut card stops over-promising.
+      { key: "r", action: "refresh:page", description: "Refresh dashboard data (dashboard only)", isNew: true },
     ],
   },
   {
@@ -117,6 +129,10 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     items: [
       { key: "b", action: "chart:quick-buy", description: "Focus Order Bar with Buy preset" },
       { key: "s", action: "chart:quick-sell", description: "Focus Order Bar with Sell preset" },
+      // P2-27: cancel-order shortcut. `c` focuses the most recent open
+      // order's cancel button; Escape dismisses any open order modal via
+      // the existing `dismiss` action.
+      { key: "c", action: "order:cancel", description: "Cancel most recent open order", isNew: true },
     ],
   },
   {
@@ -323,6 +339,26 @@ export function useKeyboardShortcuts() {
           const qty = root.querySelector<HTMLInputElement>("[data-testid='order-bar-qty']");
           qty?.focus();
           qty?.select();
+          break;
+        }
+        /* ─── P2-27 cancel-order — focus the cancel button on the most recent
+         * open order. Looks for the first element with `data-testid` matching
+         * `order-cancel-*` (rendered by the order panel for each open order)
+         * and clicks it; falls back to dispatching `alphadesk:shortcut` so
+         * pages that wire their own cancel UI can pick it up.
+         */
+        case "order:cancel": {
+          const cancelBtn = document.querySelector<HTMLButtonElement>(
+            "[data-testid^='order-cancel-']:not([disabled])",
+          );
+          if (cancelBtn) {
+            cancelBtn.focus();
+            cancelBtn.click();
+            break;
+          }
+          window.dispatchEvent(
+            new CustomEvent("alphadesk:shortcut", { detail: actionId }),
+          );
           break;
         }
         /* ─── Chart timeframe / positions / copilot — still event-driven ─── */
