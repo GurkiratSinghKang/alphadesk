@@ -196,6 +196,11 @@
     handle /health {
         reverse_proxy backend:8000
     }
+    # /healthz (K8s convention) — backend/main.py adds this as an alias to
+    # /livez. Caddy needs an explicit route or the default handler swallows it.
+    handle /healthz {
+        reverse_proxy backend:8000
+    }
     # /status/* handler removed 2026-04-18 — it pointed at uptime-kuma:3001,
     # which was deleted from docker-compose.prod.yml on 2026-04-17. Caddy was
     # returning 502s (with a basic-auth prompt first, which made it look like
