@@ -311,6 +311,15 @@ class Settings(BaseSettings):
     RESTRICTED_SYMBOLS: str = ""  # e.g. "GME,AMC,BBBY"
     RESTRICTED_SYMBOLS_FILE: str = ""  # path to YAML/JSON list (optional)
 
+    # Audit Persona F4.2 / Layer-2 follow-up (2026-05-05): per-strategy
+    # capital allocation for the kill-switch daily-PnL gate. JSON map
+    # of canonical strategy name → dollar floor. Override via env:
+    #   STRATEGY_ALLOC_CAPITAL='{"momentum_quality": 50000, "pead": 25000}'
+    # Or via PATCH /api/v1/admin/strategy-alloc-capital at runtime.
+    # Strategies absent from the map use STRATEGY_ALLOC_CAPITAL_DEFAULT
+    # ($100k). 0 disables Layer 2 for that strategy.
+    STRATEGY_ALLOC_CAPITAL: dict[str, float] = {}
+
     # --- Derived helpers ---
     @property
     def is_production(self) -> bool:
@@ -423,6 +432,80 @@ STRATEGY_PAPER_ONLY: set[str] = {
     "earnings_options_play",
     "trading_agents_research",
 }
+
+
+# Audit Persona F4.2 / kill-switch Layer-2 follow-up (2026-05-05):
+# Per-strategy capital allocation, used by the Layer-2 daily-PnL gate.
+# When realized_today / alloc_capital <= -2% (default) the kill-switch
+# auto-disables the strategy for the rest of the session.
+#
+# User-configurable via the ``STRATEGY_ALLOC_CAPITAL`` env var (JSON
+# map, e.g. ``{"momentum_quality": 50000, "pead": 25000}``) and the
+# ``GET/PATCH /api/v1/admin/strategy-alloc-capital`` endpoint (admin
+# only; persists to Redis with a Postgres fallback).
+#
+# A value of 0 (or missing entry) disables Layer 2 for that strategy
+# — the gate's existing "no ratio definable" short-circuit takes over.
+# Sensible default: every strategy gets $100k allocated, matching the
+# paper-account default capital.
+STRATEGY_ALLOC_CAPITAL_DEFAULT: float = 100_000.0
+
+
+# Process-local in-memory overlay map populated by the
+# admin/strategy-alloc-capital PATCH endpoint. Wins over env config so
+# operators can tune Layer-2 thresholds at runtime without a deploy.
+# A separate Redis-backed read in the resolver below would survive
+# process restarts; the in-memory overlay covers the common case
+# (single-worker gunicorn, fast iteration during incident response).
+_STRATEGY_ALLOC_CAPITAL_OVERLAY: dict[str, float] = {}
+
+
+def set_strategy_alloc_capital_overlay(strategy: str, value: float) -> None:
+    """Set or clear an in-memory alloc-capital override for ``strategy``.
+
+    Pass ``value < 0`` to clear the overlay and fall back to env config.
+    The kill-switch reads the overlay first via
+    :func:`get_strategy_alloc_capital`, so changes take effect on the
+    next pipeline tick.
+    """
+    if value < 0:
+        _STRATEGY_ALLOC_CAPITAL_OVERLAY.pop(strategy, None)
+        return
+    _STRATEGY_ALLOC_CAPITAL_OVERLAY[strategy] = float(value)
+
+
+def get_strategy_alloc_capital_overlay() -> dict[str, float]:
+    """Return a snapshot of the active in-memory overlay (for /GET)."""
+    return dict(_STRATEGY_ALLOC_CAPITAL_OVERLAY)
+
+
+def get_strategy_alloc_capital(strategy: str) -> float:
+    """Return the alloc-capital floor for ``strategy`` (canonical name).
+
+    Resolution order:
+      1. In-memory overlay set via the admin endpoint.
+      2. ``settings.STRATEGY_ALLOC_CAPITAL`` (JSON env var).
+      3. ``STRATEGY_ALLOC_CAPITAL_DEFAULT`` ($100k).
+
+    Returns 0.0 when the operator has explicitly set the strategy's
+    alloc to 0 — the kill-switch's ``alloc_capital <= 0`` short-circuit
+    then disables Layer 2.
+    """
+    if strategy in _STRATEGY_ALLOC_CAPITAL_OVERLAY:
+        return float(_STRATEGY_ALLOC_CAPITAL_OVERLAY[strategy])
+    try:
+        raw = settings.STRATEGY_ALLOC_CAPITAL or {}
+    except Exception:
+        return STRATEGY_ALLOC_CAPITAL_DEFAULT
+    if not isinstance(raw, dict):
+        return STRATEGY_ALLOC_CAPITAL_DEFAULT
+    val = raw.get(strategy)
+    if val is None:
+        return STRATEGY_ALLOC_CAPITAL_DEFAULT
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return STRATEGY_ALLOC_CAPITAL_DEFAULT
 
 
 def is_live_alpaca_base_url(url: str | None = None) -> bool:

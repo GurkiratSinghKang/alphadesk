@@ -418,10 +418,27 @@ class UnifiedStrategyRunner(BaseStrategyRunner):
         session_cm = await _open_kill_switch_session()
         try:
             kill_switch = _build_kill_switch(session_cm.session if session_cm else None)
+            # Audit Persona F4.2 / Layer-1 wire-up (2026-05-05): expose
+            # MasterAgent's per-strategy peak/current NAV through a closure
+            # so the kill-switch's drawdown gate can fire on the next tick
+            # when a strategy is in catastrophic drawdown. ``strategy_peaks``
+            # and ``strategy_current`` are dicts the master agent already
+            # maintains; missing entries (e.g. brand-new strategy) fall
+            # back to (0.0, 0.0) which short-circuits Layer 1 via the
+            # "no DD definable" path until the master agent has observed
+            # at least one NAV update.
+            def _nav_provider(name: str) -> tuple[float, float]:
+                peaks = getattr(master, "strategy_peaks", {}) or {}
+                currents = getattr(master, "strategy_current", {}) or {}
+                peak = float(peaks.get(name, 0.0) or 0.0)
+                current = float(currents.get(name, 0.0) or 0.0)
+                return peak, current
+
             runner = DailyPipelineRunner(
                 strategy, providers, _get_state_store(),
                 positions_provider=_live_positions_for,
                 kill_switch=kill_switch,
+                nav_provider=_nav_provider,
             )
             try:
                 result = await runner.run_today(

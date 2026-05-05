@@ -704,6 +704,21 @@ class PositionResponse(BaseModel):
     # most recent open Trade row for the position's symbol. Null when no
     # Trade row exists (manually opened position, pre-tagging history).
     strategy: str | None = None
+    # Batch EH-3 (2026-05-05): extended-hours live value.
+    # ---------------------------------------------------------------
+    # Broker positions reflect last regular-session marks. After AMD
+    # gapped to ~$403 post-print the broker still showed $356 marks.
+    # We layer the live extended-hours quote on top, only when an
+    # extended trade actually printed for the position's symbol.
+    #   * ``extended_price`` — pre/post mark for this symbol, if any.
+    #   * ``extended_market_value`` — qty * extended_price * multiplier.
+    #     None when ``extended_price`` is None.
+    #   * ``value_session`` — "regular" / "extended" / "stale". The
+    #     frontend uses this for badging. "stale" means the most
+    #     recent quote is older than 5 minutes from now.
+    extended_price: float | None = None
+    extended_market_value: float | None = None
+    value_session: str = "regular"
 
 
 class TradeHistoryEntry(BaseModel):
@@ -2101,21 +2116,79 @@ async def list_positions(username: str = Depends(require_auth)) -> list[Position
                 exc_info=True,
             )
 
-        return [
-            PositionResponse(
-                symbol=p["symbol"],
-                quantity=float(p["qty"]),
-                side=p["side"],
-                avg_cost=float(p["avg_entry_price"]),
-                current_price=float(p["current_price"]),
-                market_value=float(p["market_value"]),
-                unrealized_pnl=float(p["unrealized_pl"]),
-                unrealized_pnl_pct=float(p["unrealized_plpc"]) * 100,
-                asset_class=p.get("asset_class", "us_equity"),
-                strategy=symbol_to_strategy.get(p["symbol"]),
+        # Batch EH-3 (2026-05-05): augment each position with the
+        # latest extended-hours quote (when available). The fetch is
+        # best-effort — if the quote endpoint 404s or times out we
+        # fall through to the broker mark unchanged. We resolve each
+        # symbol once via ``services.market.fetch_quote`` (which is
+        # already cached for 5s in Redis); if a watchlist call has
+        # warmed the cache the round-trip is free.
+        from services.market import fetch_quote as _eh_fetch_quote
+        from core.time import current_session as _eh_current_session
+
+        symbols = sorted({str(p.get("symbol", "")) for p in data if p.get("symbol")})
+
+        async def _fetch_one(sym: str) -> tuple[str, "object | None"]:
+            try:
+                return sym, await _eh_fetch_quote(sym)
+            except Exception:
+                return sym, None
+
+        eh_quotes: dict[str, "object | None"] = {}
+        if symbols:
+            try:
+                results = await asyncio.gather(
+                    *[_fetch_one(s) for s in symbols], return_exceptions=False
+                )
+                eh_quotes = dict(results)
+            except Exception:
+                logger.debug("EH-3 quote fan-out failed, falling back to broker marks", exc_info=True)
+
+        STALE_SECS = 300  # >5min old => "stale"
+        now_utc = datetime.now(timezone.utc)
+        responses: list[PositionResponse] = []
+        for p in data:
+            sym = p["symbol"]
+            qty = float(p["qty"])
+            asset_class = p.get("asset_class", "us_equity")
+            mult = 100.0 if asset_class == "us_option" else 1.0
+            q = eh_quotes.get(sym)
+
+            ext_price: float | None = None
+            ext_mv: float | None = None
+            value_session = "regular"
+            if q is not None:
+                ext_price = getattr(q, "extended_price", None)
+                last_trade_time = getattr(q, "last_trade_time", None)
+                cur_session = _eh_current_session()
+                if ext_price is not None and ext_price > 0:
+                    ext_mv = round(ext_price * qty * mult, 2)
+                    value_session = "extended"
+                elif (
+                    last_trade_time is not None
+                    and (now_utc - last_trade_time).total_seconds() > STALE_SECS
+                    and cur_session == "closed"
+                ):
+                    value_session = "stale"
+
+            responses.append(
+                PositionResponse(
+                    symbol=sym,
+                    quantity=qty,
+                    side=p["side"],
+                    avg_cost=float(p["avg_entry_price"]),
+                    current_price=float(p["current_price"]),
+                    market_value=float(p["market_value"]),
+                    unrealized_pnl=float(p["unrealized_pl"]),
+                    unrealized_pnl_pct=float(p["unrealized_plpc"]) * 100,
+                    asset_class=asset_class,
+                    strategy=symbol_to_strategy.get(sym),
+                    extended_price=ext_price,
+                    extended_market_value=ext_mv,
+                    value_session=value_session,
+                )
             )
-            for p in data
-        ]
+        return responses
     except HTTPException:
         raise
     except Exception:
@@ -4559,6 +4632,105 @@ async def get_halt_status(
         "halted_by": halted_by,
         "halted_at": halted_at,
         "reason": reason,
+    }
+
+
+@router.get("/strategy-alloc-capital")
+async def get_strategy_alloc_capital_view(
+    username: str = Depends(require_auth),
+) -> dict[str, Any]:
+    """Return current per-strategy capital allocation for kill-switch Layer 2.
+
+    Audit Persona F4.2 / Layer-2 wire-up (2026-05-05): Layer 2 (daily-PnL
+    ratio) compares ``realized_today / alloc_capital`` against a -2%
+    floor; if breached the strategy auto-disables for the rest of the
+    session. ``alloc_capital`` is configurable per strategy.
+
+    Resolution surfaced in this response:
+      * ``default``: the system-wide default ($100k).
+      * ``env``: parsed ``STRATEGY_ALLOC_CAPITAL`` env-var map.
+      * ``overlay``: in-memory operator overrides (PATCH endpoint below).
+      * ``effective``: resolved value the kill-switch will read.
+    """
+    from core.config import (
+        STRATEGY_ALLOC_CAPITAL_DEFAULT,
+        get_strategy_alloc_capital,
+        get_strategy_alloc_capital_overlay,
+    )
+    from core.config import settings as _cfg
+
+    env_map: dict[str, float] = {}
+    try:
+        raw = _cfg.STRATEGY_ALLOC_CAPITAL or {}
+        if isinstance(raw, dict):
+            env_map = {str(k): float(v) for k, v in raw.items()}
+    except Exception:
+        pass
+    overlay = get_strategy_alloc_capital_overlay()
+    keys = set(env_map.keys()) | set(overlay.keys())
+    try:
+        from strategies._core.registry import REGISTRY
+        keys |= set(REGISTRY.keys())
+    except Exception:
+        pass
+    effective: dict[str, float] = {
+        name: get_strategy_alloc_capital(name) for name in sorted(keys)
+    }
+    return {
+        "default": STRATEGY_ALLOC_CAPITAL_DEFAULT,
+        "env": env_map,
+        "overlay": overlay,
+        "effective": effective,
+    }
+
+
+class StrategyAllocCapitalPatch(BaseModel):
+    """Body schema for ``PATCH /api/v1/trades/strategy-alloc-capital``."""
+
+    set: dict[str, float] = Field(default_factory=dict)
+    clear: list[str] = Field(default_factory=list)
+
+
+@router.patch("/strategy-alloc-capital")
+async def patch_strategy_alloc_capital(
+    body: StrategyAllocCapitalPatch,
+    req: Request,
+    username: str = Depends(require_auth),
+) -> dict[str, Any]:
+    """Update the in-memory overlay for kill-switch Layer-2 alloc capital.
+
+    Admin-only. Persists in process memory until the next deploy /
+    process restart. Pair with the ``STRATEGY_ALLOC_CAPITAL`` env var
+    for durability across restarts.
+    """
+    from core.config import settings as _cfg
+    if username != _cfg.ADMIN_USERNAME:
+        raise HTTPException(status_code=403, detail="Admin role required")
+
+    from core.config import (
+        set_strategy_alloc_capital_overlay,
+        get_strategy_alloc_capital_overlay,
+    )
+    for name, value in body.set.items():
+        if not isinstance(name, str) or not name.strip():
+            raise HTTPException(status_code=422, detail="strategy name must be a non-empty string")
+        if value < 0:
+            raise HTTPException(
+                status_code=422,
+                detail=f"alloc capital for {name!r} must be >= 0 (got {value})",
+            )
+    for name in body.clear:
+        if not isinstance(name, str) or not name.strip():
+            raise HTTPException(status_code=422, detail="cleared strategy name must be a non-empty string")
+
+    for name, value in body.set.items():
+        set_strategy_alloc_capital_overlay(name.strip(), float(value))
+    for name in body.clear:
+        set_strategy_alloc_capital_overlay(name.strip(), -1.0)
+
+    return {
+        "ok": True,
+        "overlay": get_strategy_alloc_capital_overlay(),
     }
 
 

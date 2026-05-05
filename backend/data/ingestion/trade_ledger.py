@@ -698,6 +698,50 @@ class TradeLedger:
             logger.error("TradeLedger.update: %s", exc)
             return False
 
+    def realized_today_for_strategy(self, strategy: str) -> float:
+        """Sum realized P&L for ``strategy`` over the current calendar day.
+
+        Used by the kill-switch Layer-2 (daily-PnL) gate per Audit
+        Persona F4.2 follow-up. Counts only trades whose ``exit_time``
+        falls within today (UTC). Returns 0.0 when the DB is degraded
+        — Layer 2 fails OPEN (treats no realized loss → enabled) so a
+        broken ledger doesn't block trading; the per-order risk gate +
+        operator halt button still apply as defence in depth.
+
+        SQL aggregate: ``SELECT COALESCE(SUM(pnl), 0)
+        FROM trade_ledger WHERE strategy = :s AND DATE(exit_time) = CURRENT_DATE``.
+
+        Sync to match the ``KillSwitch.is_enabled`` sync caller; the
+        per-tick read cost is one indexed query so the event-loop
+        impact (when called from pipeline_runner via the
+        ``_run_async_from_sync`` bridge) is sub-millisecond.
+        """
+        engine = _get_sync_engine()
+        if engine is None:
+            return 0.0
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(
+                    _text(
+                        "SELECT COALESCE(SUM(pnl), 0) FROM trade_ledger "
+                        "WHERE strategy = :s "
+                        "AND exit_time IS NOT NULL "
+                        "AND exit_time::date = (NOW() AT TIME ZONE 'UTC')::date"
+                    ),
+                    {"s": strategy},
+                ).first()
+                if row is None:
+                    return 0.0
+                value = row[0]
+                return float(value) if value is not None else 0.0
+        except Exception as exc:
+            logger.warning(
+                "TradeLedger.realized_today_for_strategy(%s) failed: %s — "
+                "Layer-2 kill-switch fails open",
+                strategy, exc,
+            )
+            return 0.0
+
     def list(self, filter: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """Return trades matching an optional ``{column: value}`` filter.
 
