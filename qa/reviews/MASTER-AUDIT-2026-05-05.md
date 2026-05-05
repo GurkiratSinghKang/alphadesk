@@ -213,8 +213,7 @@ These touch files locked by parallel R6 worktree work. **Defer until R6 PRs merg
 
 ## Dispatch Status — 2026-05-05 commits
 
-Seven audit-fix commits delivered on `feature/deployment` (HEAD updated as
-each commit landed; see `git log`):
+Nine audit-fix commits delivered on `feature/deployment`:
 
 | SHA | Commit | Fixes |
 |---|---|---|
@@ -225,25 +224,26 @@ each commit landed; see `git log`):
 | `fef7274f` | fix(auth): atomic Lua-EVAL for counter bumps | P0-4 — token reuse after pwd change |
 | `359ad4d3` | fix(trading_gate): register sector_rotation + 5 newer strategies | P2-1 — orders silently 400-rejected |
 | `a84b2154` | fix(a11y): autoFocus Cancel in DestructiveConfirmModal | A-F4 — initial focus on safe action |
+| `671c84c7` | fix(pipeline): wire kill-switch layer 3 | B-F3, R-F1 — manual emergency disable now works |
+| `9e188f1a` | fix(fill_reconciler): monotonic filled_qty guard | R-F4 — multi-leg fill backward |
 
-**Verification:** 296 backend tests pass (1 pre-existing failure in
+**Verification:** 451 backend tests pass (1 pre-existing failure in
 `test_trades_surveillance.py::test_halt_trading_writes_audit_log` —
 unrelated to these changes). Frontend `npm run typecheck` clean.
 
 ### Still open — not yet fixed
 
 **Backend P0s deferred (require larger refactor):**
-- B-F3 / R-F1 — Kill-switch wire-up in `pipeline_runner.py:362-370`. The
-  TODO is well-documented; wiring requires plumbing peak_nav,
-  alloc_capital, realized_today through master_agent + trade_ledger.
-  At minimum, layer-3 (manual disable check) is a single SQL read
-  with no plumbing — that's a candidate for the next round.
-- R-F4 — Multi-leg `Trade.filled_qty` can move backward. Requires
-  finding the writer and adding a monotonic guard.
 - MB-P0-1 — `daily_pipeline.py` global Alpaca creds. Needs
   per-user lookup wired through `_place_order(..., username=...)`.
+  Currently single-admin deployment masks this; non-admin user
+  creation would expose the wrong-account routing.
 - MB-P0-2 — `_get_todays_gross_notional` queries env account.
   Same fix as MB-P0-1: thread `username`.
+- B-F3 / R-F1 layers 1+2 (drawdown + daily-PnL ratio) — only
+  layer 3 (manual disable) is wired this cycle; full plumbing of
+  peak_nav + alloc_capital + realized_today requires changes to
+  master_agent and trade_ledger.
 
 **Frontend P0s — all on R6-locked files:**
 - MF-P0-1, P0-2, P0-3 (trade/page.tsx) — locked by parallel R6 worktrees
