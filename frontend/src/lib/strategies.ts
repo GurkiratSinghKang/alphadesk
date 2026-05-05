@@ -133,12 +133,17 @@ export const STRATEGY_META: Record<string, StrategyMetaEntry> = {
     stage: "planned",
   },
   "sector-rotation": {
+    // Round-6 / R6-6: PR #32 shipped a real backend package
+    // (`backend/strategies/sector_rotation/`) with `StrategyStatus.ACTIVE`
+    // wired through the registry. Keeping `stage:"planned"` here would have
+    // bucketed the card into "Coming soon" on /strategies even though the
+    // monthly EOM rebalance runs in production. Default ("live") matches
+    // every other registered backend (e.g., momentum-quality, pead).
     name: "Sector Rotation Model",
     shortName: "Sector Rotation",
     icon: PieChart,
-    regimeNote: "Trend-following across sectors",
+    regimeNote: "Monthly GICS sector rotation with bond risk-off",
     group: "fundamental",
-    stage: "planned",
   },
 
   // ─── Technical Analysis Strategies ─────────────────────────

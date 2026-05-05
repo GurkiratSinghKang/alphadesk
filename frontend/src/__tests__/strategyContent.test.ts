@@ -93,13 +93,33 @@ describe('Strategy Content', () => {
   });
 
   it('planned catalogue strategies are explicit about no backend implementation', () => {
-    for (const id of ['vcp-breakout', 'dividend-capture', 'sector-rotation', 'gap-fill']) {
+    // R6-6: sector-rotation removed from this list — PR #32 shipped a real
+    // backend package (`backend/strategies/sector_rotation/`) with
+    // `StrategyStatus.ACTIVE`. Its frontend copy was rewritten to describe
+    // the actual rotation logic (see the dedicated spec below).
+    for (const id of ['vcp-breakout', 'dividend-capture', 'gap-fill']) {
       const c = STRATEGY_CONTENT[id];
       expect(c.thesis, id).toContain('not an implemented AlphaDesk backend strategy yet');
       expect(c.parameters.maxPositions, id).toContain('0 live');
       expect(c.howItWorks![0], id).toContain('Do not emit live orders today');
       expect(c.risks![0], id).toContain('No backend implementation');
     }
+  });
+
+  it('sector-rotation copy reflects the live backend package (R6-6 / PR #32)', () => {
+    const c = STRATEGY_CONTENT['sector-rotation'];
+    // No longer a "planned catalogue concept" — the package ships real signals.
+    expect(c.thesis).not.toContain('planned catalogue concept');
+    expect(c.thesis).not.toContain('not an implemented AlphaDesk backend strategy');
+    // Names the actual GICS sector universe and the bond-fallback risk-off rule.
+    expect(c.thesis).toContain('11 GICS sector SPDR ETFs');
+    expect(c.thesis).toContain('XLK');
+    expect(c.thesis).toContain('AGG');
+    expect(c.thesis).toContain('SPY');
+    // Live position sizing — no "0 live" caveat.
+    expect(c.parameters.maxPositions).toBe('3 (configurable via `top_n`, range 1-11)');
+    expect(c.howItWorks![0]).toContain('last NYSE trading session');
+    expect(c.risks![0]).toContain('Concentration risk');
   });
 
   it('mean-reversion has Medium risk', () => {

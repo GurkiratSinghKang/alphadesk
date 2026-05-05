@@ -398,37 +398,42 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
 
   "sector-rotation": {
     thesis:
-      "Sector Rotation is a planned catalogue concept, not an implemented AlphaDesk backend strategy yet. No backend package ranks sector ETFs, maintains monthly rebalance state, emits orders, or ships a checked-in OOS artifact. The intended design is a liquid ETF sleeve that rotates among GICS sector funds using intermediate-term relative strength, but it still needs implementation and replay before it should be shown as active.\n\nThe academic foundation rests on sector and industry momentum. Stangl, Jacobsen & Visaltanachoti (2009) link sector returns to business-cycle regimes, while Moskowitz & Grinblatt (1999) document industry momentum that can persist beyond individual-stock noise. A production strategy would need to decide whether it is a pure relative-strength model, a macro-cycle model, or a hybrid, because those choices materially change turnover and drawdown behavior.\n\nExecution would likely use sector ETFs (XLK, XLV, XLF, etc.) for liquid, low-cost implementation, but the current app has no monthly sector-rotation engine. Before activation, the strategy needs a fixed ETF universe, adjusted total-return histories, a rebalance calendar, transaction costs, and a hold-cash/risk-off rule tested in a replayable artifact.",
+      "A long-only macro / tactical-asset-allocation strategy that rotates monthly across the 11 GICS sector SPDR ETFs (XLK, XLV, XLF, XLY, XLP, XLE, XLI, XLB, XLRE, XLU, XLC), ranking each sector by an equal-weighted composite of 6-month + 12-month total return and holding the top 3 at equal weight. On the last NYSE trading session of each calendar month the backend package (`backend/strategies/sector_rotation/`) probes SPY's trailing 6-month return: if it is negative, the entire book flips to the bond fallback (AGG by default); otherwise the top-3 sector basket is rebuilt at MOO on the next open.\n\nThe two ideas the strategy stacks are well-documented. Stangl, Jacobsen & Visaltanachoti (2009) and Moskowitz & Grinblatt (1999) show that sector- and industry-level momentum is a robust signal beyond stock-level momentum, with sector relative-strength persisting over 3-12 month horizons. Faber (2013) shows that a simple bond-fallback rule (when broad-market trailing return < 0, hold bonds) materially compresses drawdowns in 1973-74, 2000-02, 2008, and 2020-Q1 without sacrificing long-run CAGR. Combining the two on the SPDR sector universe gives the cleanest expression — membership is fixed, liquidity is deep, and monthly rebalance turnover is structurally cheap.\n\nNo intraday logic, no per-name stops, no take-profits. The signal is monthly; per-trade stops destroy monthly-horizon momentum signals. Entries and exits use OrderType.MOO with DAY time-in-force at the next session's open. The published Stangl-Jacobsen-Visaltanachoti band is 1.5-3% annualized excess return for 6m+12m sector momentum after costs; the Faber bond-fallback rule cuts max drawdown by ~30-50% in equity-bear regimes. A plausible forward Sharpe band on the 2019-2024 OOS window is 0.4-0.8 — the 2023-24 sub-window favoured XLK heavily, so any backtest restricted to those 2 years will look inflated.",
     edge:
-      "Future edge would come from persistent sector leadership and institutional flow inertia. Today the edge is unproven inside AlphaDesk because there is no backend implementation or OOS artifact.",
+      "Stacks two independent, well-documented signals: sector-level cross-sectional momentum (Stangl-Jacobsen-Visaltanachoti, Moskowitz-Grinblatt) and a Faber-style time-series-momentum risk-off rule that flips the book to bonds when SPY's 6-month return is negative. Sector ETFs deliver the cleanest expression — fixed membership, deep liquidity, structurally cheap monthly turnover.",
     riskProfile: {
       level: "Medium",
       description:
-        "Planned ETF rotation strategy. Concentrated sector bets, whipsaw, and risk-off handling are unresolved until the replay harness and state contract exist.",
+        "Long-only ETF rotation, top-3 sectors held equal-weight (33% each). Concentration risk is real — a sharp single-sector reversal moves the book materially. The bond-fallback overlay caps equity-bear drawdowns but can underperform in V-shaped recoveries when defensives lag the bounce.",
     },
     parameters: {
-      rebalanceFrequency: "Not live. Target design: monthly rebalance on a fixed calendar",
-      universe: "Not live. Target design: 11 GICS sector ETFs with adjusted total-return histories",
-      positionSizing: "Not live. Target design: equal-weight selected sectors with optional cash/risk-off sleeve",
-      entryCriteria: "Not live. Target design: top sectors by composite relative strength and optional macro/regime gate",
-      exitCriteria: "Not live. Target design: monthly replacement by stronger sector or risk-off/cash rule",
-      maxPositions: "0 live; target 3 after implementation",
+      rebalanceFrequency:
+        "Monthly (last NYSE trading session; MOO fill next open). `rebalance_freq=\"bimonthly\"` halves the cadence to alternate months only.",
+      universe:
+        "11 GICS sector SPDR ETFs (XLK, XLV, XLF, XLY, XLP, XLE, XLI, XLB, XLRE, XLU, XLC) plus AGG/IEF/TLT/BIL bond-fallback choices and SPY (risk-off probe). XLRE pre-Oct-2015 and XLC pre-Jun-2018 are absent; the strategy ranks whatever's available and falls back to bonds if top_n can't be filled.",
+      positionSizing:
+        "Equal-weight 1/top_n across the selected sectors (default 33% each). 100% bond fallback when risk-off triggers.",
+      entryCriteria:
+        "Top-N sectors by composite_score = 0.5 × R_6m + 0.5 × R_12m (total return; tunable via `short_weight`). Risk-off gate: SPY trailing 6m return must be ≥ 0; below that, hold 100% AGG.",
+      exitCriteria:
+        "Replaced at next monthly rebalance — anything not in the new top-N is closed MOO, new entrants are sized to 1/top_n. No per-name stops, no take-profits.",
+      maxPositions: "3 (configurable via `top_n`, range 1-11)",
     },
     howItWorks: [
-      "Do not emit live orders today; this is a planned catalogue entry with no backend implementation.",
-      "Before implementation, define the ETF universe, adjusted total-return data source, monthly rebalance calendar, and risk-off sleeve.",
-      "Build a deterministic ranking model and state contract so replacements are idempotent across retries.",
-      "Replay the strategy with transaction costs, dividend adjustment, and crisis-period whipsaw analysis before publishing performance claims.",
-      "Graduate to paper trading only after the backend package, OOS artifact, and UI order gating are checked in.",
+      "On the last NYSE trading session of each calendar month, build a wide close panel for the 11 sector ETFs + SPY + bond-fallback choices, truncated to asof to prevent right-edge look-ahead leakage.",
+      "Risk-off probe first: compute SPY's trailing 6-month total return. If negative, flip the entire book to AGG (the bond fallback) at MOO and skip the sector ranking.",
+      "Otherwise, compute composite_score = short_weight × R_6m + (1 − short_weight) × R_12m for every sector ETF with sufficient history; sectors missing data (XLRE pre-2015, XLC pre-2018) are skipped, not zero-filled.",
+      "Rank the scored sectors descending; pick the top 3 (or top_n). If fewer than top_n sectors clear the data check, fall back to bonds rather than overweight a thin basket.",
+      "Emit MOO entries at 1/top_n equal-weight for every target; close any existing position not in the new target set at MOO. DAY-TIF orders that don't print expire and re-emerge on the next monthly rebalance.",
     ],
     whenToUse:
-      "Future use case: sustained economic trends where sector leadership persists for multiple months and macro themes are clear. Not active today; the rebalance engine, risk-off rule, and OOS evidence must be built first.",
+      "Designed as a tactical macro sleeve that participates in trending bull regimes through whichever sectors are leading, then steps out of equities entirely when SPY's intermediate-term return turns negative. Strongest when sector leadership persists for multiple months (clear macro themes); weakest in choppy, leadership-rotating regimes where the monthly composite ranking lags the rotation.",
     risks: [
-      "No backend implementation, no OOS artifact, and no paper/live track record yet.",
-      "Whipsaw: monthly rebalancing can lag rapid sector rotations driven by macro shocks, causing the strategy to overweight lagging sectors after a sudden regime change.",
-      "Concentration risk: 33% per sector is aggressive; a sharp reversal in a single sector can cause outsized portfolio-level drawdowns.",
-      "Momentum crash: during market stress, the highest-momentum sectors can reverse violently (e.g., Technology in Q4 2018), and the strategy will be fully invested at the pivot.",
-      "Missing the bottom: during bear market recoveries, the strategy will still be in defensive sectors while recovery sectors rally, potentially missing the initial bounce.",
+      "Concentration risk — top-3 at equal weight means 33% per sector; a sharp single-sector reversal (Technology Q4 2018, Energy 2014-15) drives outsized portfolio-level drawdowns.",
+      "Whipsaw — monthly cadence is structurally cheap but lags fast macro pivots; the strategy can overweight lagging sectors for one full month after a regime change.",
+      "Momentum crash — during market stress, the highest-momentum sectors can reverse violently; the bond-fallback gate softens but does not eliminate the left tail because SPY's 6m return takes time to flip negative.",
+      "Recovery lag — at bear-market bottoms the strategy may still be in AGG (or in defensive sectors that led the down-leg) while leading recovery sectors rally, missing the initial bounce.",
+      "Sector-ETF availability — pre-Oct-2015 backtests only see 9 sectors (no XLRE) and pre-Jun-2018 only 10 (no XLC); historical OOS comparisons must caveat this.",
     ],
   },
 
