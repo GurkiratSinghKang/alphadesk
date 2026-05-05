@@ -44,10 +44,24 @@ _BUCKET_WINDOW_S: float = 600.0
 _DETAIL_BUCKET_MAX: int = 30
 _DETAIL_BUCKET_WINDOW_S: float = 600.0
 
+# Batch S: /earnings/{symbol}/analysis triggers a Claude lookup if the
+# pre-warm cache is cold ($0.30 per uncached call) and orchestrates 6
+# upstream services. Cap at 30 / minute per IP — generous enough for an
+# analyst rapid-cycling symbols, tight enough to bound the cost of a
+# stuck client. The 100/min global cap below protects the daily budget.
+_ANALYSIS_BUCKET_MAX: int = 30
+_ANALYSIS_BUCKET_WINDOW_S: float = 60.0
+_ANALYSIS_GLOBAL_MAX: int = 100
+_ANALYSIS_GLOBAL_WINDOW_S: float = 60.0
+
 _history: Dict[str, Deque[float]] = defaultdict(deque)
 _detail_history: Dict[str, Deque[float]] = defaultdict(deque)
+_analysis_history: Dict[str, Deque[float]] = defaultdict(deque)
+_analysis_global_history: Deque[float] = deque()
 _lock: asyncio.Lock = asyncio.Lock()
 _detail_lock: asyncio.Lock = asyncio.Lock()
+_analysis_lock: asyncio.Lock = asyncio.Lock()
+_analysis_global_lock: asyncio.Lock = asyncio.Lock()
 
 
 async def check_full_research_rate(client_host: str) -> None:
@@ -89,6 +103,48 @@ async def check_detail_rate(client_host: str) -> None:
         _DETAIL_BUCKET_WINDOW_S,
         bucket_label="detail",
     )
+
+
+async def check_analysis_rate(client_host: str) -> None:
+    """Batch S: per-IP + global rate limit on the /analysis endpoint.
+
+    The analysis endpoint orchestrates 6 upstream services and triggers
+    a Claude lookup on cache miss ($0.30 per uncached call). Cap each IP
+    at 30/min to prevent any single client from burning the daily budget
+    while leaving plenty of headroom for an analyst exploring symbols.
+    The global 100/min cap protects the shared Claude budget when
+    multiple analysts hit the endpoint simultaneously.
+    """
+    # Per-IP bucket first — cheaper to reject before touching the global
+    # bucket lock, and keeps the per-IP error message specific.
+    await _check_bucket(
+        client_host,
+        _analysis_history,
+        _analysis_lock,
+        _ANALYSIS_BUCKET_MAX,
+        _ANALYSIS_BUCKET_WINDOW_S,
+        bucket_label="analysis",
+    )
+    # Global bucket — single shared deque, no per-key dict.
+    now = time.monotonic()
+    cutoff = now - _ANALYSIS_GLOBAL_WINDOW_S
+    async with _analysis_global_lock:
+        while _analysis_global_history and _analysis_global_history[0] < cutoff:
+            _analysis_global_history.popleft()
+        if len(_analysis_global_history) >= _ANALYSIS_GLOBAL_MAX:
+            retry_after = max(
+                1, int(_analysis_global_history[0] + _ANALYSIS_GLOBAL_WINDOW_S - now) + 1
+            )
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    f"Global analysis rate limit hit ({_ANALYSIS_GLOBAL_MAX}/"
+                    f"{int(_ANALYSIS_GLOBAL_WINDOW_S)}s) — protecting Claude "
+                    f"daily budget. Retry in {retry_after}s."
+                ),
+                headers={"Retry-After": str(retry_after)},
+            )
+        _analysis_global_history.append(now)
 
 
 async def _check_bucket(
@@ -236,3 +292,5 @@ def _reset_for_tests() -> None:
     don't bleed state into each other. NOT exposed as a public API."""
     _history.clear()
     _detail_history.clear()
+    _analysis_history.clear()
+    _analysis_global_history.clear()

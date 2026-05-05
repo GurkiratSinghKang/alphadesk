@@ -414,3 +414,91 @@ class EarningsDetail(BaseModel):
     #   "hv_unavailable"       — historical-vol time series missing
     error_codes: list[str] = Field(default_factory=list)
     generated_at: datetime
+
+
+# ─── Earnings Analysis (Batch S) ─────────────────────────────
+# Wave 4 / Batch S: a single endpoint returning EVERYTHING an
+# earnings-options-play caller needs in one round-trip. Replaces the
+# 9 round-trips (calendar + detail + chain + iv + news + per-expiry
+# chain) the earlier flow required. Fan-outs to quote, IV, calendar,
+# chain, news, history, and the recommender in parallel; partial
+# failures are tolerated (any single upstream may flake without the
+# whole response 500ing).
+
+class EarningsAnalysis(BaseModel):
+    """Single-round-trip earnings analysis for a symbol.
+
+    All fields nullable except ``symbol``, ``fetched_at``, ``is_demo``,
+    and ``claude_pending`` so that any single upstream flake degrades
+    gracefully rather than 500ing the entire response.
+    """
+    symbol: str
+    fetched_at: datetime
+    is_demo: bool
+
+    # Spot + market
+    spot: float | None = None
+    spot_change_pct: float | None = None
+    day_volume: int | None = None
+    day_high: float | None = None
+    day_low: float | None = None
+
+    # Earnings event
+    next_report_date: date | None = None
+    when: str | None = None  # "bmo" | "amc" | None
+    days_until: int | None = None
+    sector: str | None = None
+    company: str | None = None
+
+    # Vol structure (from Batch P)
+    current_iv: float | None = None
+    iv_rank: float | None = None
+    iv_percentile: float | None = None
+    hv_20: float | None = None
+    hv_50: float | None = None
+    iv_to_hv_ratio: float | None = None  # current_iv / hv_20
+    iv_term: dict[str, float] | None = None  # {expiry_iso: iv}
+    iv_skew: dict[str, float] | None = None  # {strike: iv} for the front month
+
+    # Implied move (from Batch P)
+    expected_move_pct: float | None = None  # from front-month ATM straddle
+    expected_move_dollars: float | None = None
+    implied_breakevens: tuple[float, float] | None = None  # (lower, upper)
+    historical_avg_abs_move_pct: float | None = None
+    implied_vs_historical_ratio: float | None = None  # expected_move / hist_avg
+
+    # Premium yields
+    premium_yield_call_atm: float | None = None
+    premium_yield_put_atm: float | None = None
+
+    # Prior earnings (from Batch P)
+    prior_moves: list[dict] | None = None  # [{date, move_pct, surprise_pct?}, ...]
+
+    # Claude thesis (from Batch R pre-warm)
+    claude_verdict: Verdict | None = None
+    claude_confidence: float | None = None
+    claude_thesis: str | None = None  # full text if available
+    claude_thesis_at: datetime | None = None
+    claude_pending: bool = False  # true if not yet generated
+
+    # Recommendation engine (from Batch Q)
+    edge_score: float | None = None
+    edge_score_components: dict[str, float] | None = None
+    top_setups: list[EarningsSetup] | None = None  # ranked top-N
+
+    # News (from Batch T alias)
+    news: list[NewsArticle] | None = None  # last N=5 articles
+
+    # Chain summary (from Batch T)
+    chain_expirations: list[date] | None = None
+    front_month_chain_summary: dict | None = None  # {atm_call_mid, atm_put_mid, ...}
+
+    # Structured warnings the FE can render as honest data-availability
+    # badges. Subset of EarningsDetail.error_codes plus analysis-specific:
+    #   "no_calendar_entry"  — symbol has no upcoming earnings report
+    #   "no_chain"           — symbol not optionable / chain unavailable
+    #   "quote_unavailable"  — quote upstream flaked
+    #   "iv_unavailable"     — IV analysis upstream flaked
+    #   "news_unavailable"   — news upstream flaked
+    #   "history_unavailable"— prior-moves fetch flaked
+    error_codes: list[str] = Field(default_factory=list)
