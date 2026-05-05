@@ -405,21 +405,47 @@ class PostgresDisabledEventsRepo:
         )
         await self.session.commit()
 
-    # Sync facade: KillSwitch is sync; bridge by running the loop.
+    # Sync facade: KillSwitch is sync but the underlying SQLAlchemy
+    # session is async. Audit B-F4 / R-F2 (2026-05-05): the previous
+    # implementation called ``asyncio.get_event_loop().run_until_complete(...)``
+    # which raises ``RuntimeError: This event loop is already running``
+    # when the caller is itself in an async context (e.g. the kill-switch
+    # layer-3 check now wired into pipeline_runner.run_for_strategy is
+    # async). The bridge below detects whether a loop is running and
+    # routes the async coro through a thread-pool executor in that case
+    # so we never re-enter a running loop.
     def insert(self, event: DisabledEvent) -> DisabledEvent:
-        import asyncio
-        return asyncio.get_event_loop().run_until_complete(self.insert_async(event))
+        return _run_async_from_sync(self.insert_async(event))
 
     def latest_unresolved_for_strategy(
         self, strategy: str, layer: int | None = None
     ) -> DisabledEvent | None:
-        import asyncio
-        return asyncio.get_event_loop().run_until_complete(
+        return _run_async_from_sync(
             self.latest_unresolved_for_strategy_async(strategy, layer)
         )
 
     def resolve(self, event_id: int, resolved_by: str) -> None:
-        import asyncio
-        asyncio.get_event_loop().run_until_complete(
-            self.resolve_async(event_id, resolved_by)
-        )
+        _run_async_from_sync(self.resolve_async(event_id, resolved_by))
+
+
+def _run_async_from_sync(coro: Any) -> Any:
+    """Run an async coroutine from a sync context.
+
+    Audit B-F4 / R-F2 fix: works both inside and outside a running
+    event loop. When called from an async context (the typical case
+    now that the kill-switch is consulted from the async pipeline
+    runner), schedules the coroutine on a fresh event loop in a
+    worker thread — the calling event loop is never blocked or
+    re-entered. Outside an event loop (e.g. ad-hoc CLI scripts),
+    runs the coro directly via ``asyncio.run``.
+    """
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    # Inside a running loop — bounce to a thread with its own loop.
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        return executor.submit(asyncio.run, coro).result()
