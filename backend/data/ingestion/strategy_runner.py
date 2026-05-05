@@ -69,6 +69,82 @@ def _get_state_store() -> StateStore:
     return _STATE_STORE
 
 
+# --------------------------------------------------------------------------- #
+# Kill-switch session helpers (audit B-F3 / R-F1, 2026-05-05)                 #
+# --------------------------------------------------------------------------- #
+class _KillSwitchSession:
+    """Wraps an open AsyncSession + the async-context-manager that owns it.
+
+    Held by ``UnifiedStrategyRunner.run`` for the duration of one
+    ``DailyPipelineRunner.run_today`` call so the session stays open while
+    the kill-switch repo issues its SELECT. Manually entered/exited
+    instead of using ``async with`` so the call site can fall back to
+    ``None`` cleanly when the factory raises.
+    """
+
+    def __init__(self, factory_cm: Any, session: Any) -> None:
+        self.factory_cm = factory_cm
+        self.session = session
+
+    async def close(self) -> None:
+        try:
+            await self.factory_cm.__aexit__(None, None, None)
+        except Exception:
+            logger.warning(
+                "strategy_runner: kill-switch session close failed",
+                exc_info=True,
+            )
+
+
+async def _open_kill_switch_session() -> _KillSwitchSession | None:
+    """Open one AsyncSession for kill-switch repo reads.
+
+    Returns ``None`` if the session factory can't be constructed (no
+    ``DATABASE_URL``, Postgres unreachable, etc). Caller falls back to
+    ``kill_switch=None`` so the pipeline still runs — see the fail-open
+    rationale at the call site in :meth:`UnifiedStrategyRunner.run`.
+    """
+    try:
+        from core.database import _get_session_factory
+
+        factory = _get_session_factory()
+        cm = factory()
+        session = await cm.__aenter__()
+        return _KillSwitchSession(factory_cm=cm, session=session)
+    except Exception:
+        logger.warning(
+            "strategy_runner: kill-switch session unavailable — "
+            "falling back to no-op kill-switch for this tick",
+            exc_info=True,
+        )
+        return None
+
+
+def _build_kill_switch(session: Any) -> Any:
+    """Return a ``KillSwitch`` bound to the Postgres repo, or ``None``.
+
+    ``session is None`` means the factory open above failed — emit a
+    no-op kill-switch (the runner wrapper short-circuits when
+    ``kill_switch is None``) so the pipeline still ticks.
+    """
+    if session is None:
+        return None
+    try:
+        from strategies._core.kill_switch import (
+            KillSwitch,
+            PostgresDisabledEventsRepo,
+        )
+
+        return KillSwitch(repo=PostgresDisabledEventsRepo(session))
+    except Exception:
+        logger.warning(
+            "strategy_runner: KillSwitch construction failed — "
+            "falling back to no-op kill-switch for this tick",
+            exc_info=True,
+        )
+        return None
+
+
 def _broker_mode() -> str:
     """Return the strategy-shell execution mode for the configured broker.
 
@@ -321,20 +397,45 @@ class UnifiedStrategyRunner(BaseStrategyRunner):
             )
             return empty
 
-        runner = DailyPipelineRunner(
-            strategy, providers, _get_state_store(),
-            positions_provider=_live_positions_for,
-        )
+        # Audit B-F3 / R-F1 follow-up (2026-05-05): wire the three-layer
+        # kill-switch into the live pipeline. The /strategies UI button
+        # writes a row to ``strategy_disabled_events`` via
+        # ``POST /api/v1/strategies/{id}/emergency-disable``; before this
+        # change ``DailyPipelineRunner`` was constructed with
+        # ``kill_switch=None`` so the wrapper short-circuited to a bare
+        # ``strategy.run()`` and the row was ignored — i.e. Emergency
+        # Disable was a UI placebo. Now we open an async session for the
+        # duration of ``run_today`` and inject a real ``KillSwitch`` so
+        # the layer-3 SELECT runs against Postgres on every pipeline tick.
+        #
+        # Fail-open: if the session factory can't be built (e.g. tests
+        # with no DATABASE_URL, a Postgres outage during the open), we
+        # log a warning and fall back to ``kill_switch=None``. The
+        # operator-pause Redis gate (above in daily_pipeline) and the
+        # MasterAgent halt-set still provide separate safety nets, and
+        # failing closed here would mean a single DB blip silently halts
+        # all trading — worse than the missing layer for the tick.
+        session_cm = await _open_kill_switch_session()
         try:
-            result = await runner.run_today(
-                params,
-                mode=_broker_mode(),
-                cash=getattr(master, "cash", None),
-                equity=getattr(master, "equity", None),
+            kill_switch = _build_kill_switch(session_cm.session if session_cm else None)
+            runner = DailyPipelineRunner(
+                strategy, providers, _get_state_store(),
+                positions_provider=_live_positions_for,
+                kill_switch=kill_switch,
             )
-        except Exception:
-            logger.exception("strategy_runner: %s run_today() failed", self.name)
-            return empty
+            try:
+                result = await runner.run_today(
+                    params,
+                    mode=_broker_mode(),
+                    cash=getattr(master, "cash", None),
+                    equity=getattr(master, "equity", None),
+                )
+            except Exception:
+                logger.exception("strategy_runner: %s run_today() failed", self.name)
+                return empty
+        finally:
+            if session_cm is not None:
+                await session_cm.close()
 
         signals = list(result.signals or [])
         logger.info(

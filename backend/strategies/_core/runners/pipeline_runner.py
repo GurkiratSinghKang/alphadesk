@@ -53,19 +53,56 @@ def invoke_strategy_with_kill_switch(
 
     decision = kill_switch.is_enabled(strategy.name, kill_switch_context)
     if not decision.enabled:
-        return StrategyResult(
-            signals=[],
-            diagnostics={
-                "kill_switch_disabled": True,
-                "kill_switch_layer": decision.layer,
-                "kill_switch_reason": decision.reason,
-                **decision.metrics,
-            },
-            warnings=[
-                f"Strategy {strategy.name} disabled by kill-switch layer {decision.layer}: {decision.reason}"
-            ],
-        )
+        return _kill_switch_blocked_result(strategy.name, decision)
     return strategy.run(input, params)
+
+
+async def invoke_strategy_with_kill_switch_async(
+    strategy: Any,
+    input: Any,
+    params: Any,
+    kill_switch: Any,
+    kill_switch_context: Any,
+) -> Any:
+    """Async variant of :func:`invoke_strategy_with_kill_switch`.
+
+    Used by :class:`DailyPipelineRunner.run_today` so the layer-3 repo
+    query happens on the native async path (`is_enabled_async`) instead of
+    bouncing through the sync facade's thread-pool bridge per pipeline
+    tick.
+
+    The strategy itself is still invoked synchronously — strategies are
+    sync today; if/when a strategy adopts an async ``run`` it can be
+    detected here with ``hasattr(maybe_result, "__await__")`` and awaited.
+    """
+    if kill_switch is None:
+        return strategy.run(input, params)
+
+    decision = await kill_switch.is_enabled_async(strategy.name, kill_switch_context)
+    if not decision.enabled:
+        return _kill_switch_blocked_result(strategy.name, decision)
+    return strategy.run(input, params)
+
+
+def _kill_switch_blocked_result(strategy_name: str, decision: Any) -> StrategyResult:
+    """Construct the no-op result returned when the kill-switch is tripped.
+
+    Centralised so the sync and async wrapper paths emit byte-identical
+    diagnostics — keeps the audit trail and the integration test stable
+    across both call sites.
+    """
+    return StrategyResult(
+        signals=[],
+        diagnostics={
+            "kill_switch_disabled": True,
+            "kill_switch_layer": decision.layer,
+            "kill_switch_reason": decision.reason,
+            **decision.metrics,
+        },
+        warnings=[
+            f"Strategy {strategy_name} disabled by kill-switch layer {decision.layer}: {decision.reason}"
+        ],
+    )
 
 
 class StateStore:
@@ -391,7 +428,7 @@ class DailyPipelineRunner:
             alloc_capital=0.0,
             realized_today=0.0,
         )
-        result = invoke_strategy_with_kill_switch(
+        result = await invoke_strategy_with_kill_switch_async(
             strategy=self._strategy,
             input=input,
             params=params,
