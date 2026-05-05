@@ -621,7 +621,13 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install dependencies
+      - name: Install root-level deps (playwright lives here)
+        # qa/harness/visual-regression.mjs imports `playwright` resolved from
+        # the repo-root node_modules. The frontend npm ci below does not put
+        # playwright on the resolution path for files outside frontend/.
+        run: npm ci
+
+      - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
 

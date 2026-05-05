@@ -535,15 +535,17 @@ export default function TradePage() {
     const id = setInterval(fetchRecent, 20_000);
     return () => { cancelled = true; clearInterval(id); };
   }, [orderFilter]);
-	  const filteredRecentOrders = useMemo(() => {
-	    const filtered =
-	      orderFilter === "all"
-	        ? recentOrders
-	        : orderFilter === "working"
-	          ? recentOrders.filter((o) => isWorkingOrderStatus(o.status))
-	          : recentOrders.filter((o) => o.status === orderFilter);
-	    return filtered.slice(0, 10);
-	  }, [orderFilter, recentOrders]);
+	  // Audit MF-P1-3 (2026-05-05): the prior memo re-filtered ``recentOrders``
+	  // even though the fetch path already requested only the matching status
+	  // from the backend (``orderFilter === "working"`` → ``status=open``).
+	  // Worse, when toggling to ``"all"``, the stored 50-order slice was still
+	  // whatever the previous filtered fetch returned — history truncated
+	  // silently. Now: trust the backend filter, slice once for display.
+	  // ``isWorkingOrderStatus`` is no longer needed at this layer.
+	  const filteredRecentOrders = useMemo(
+	    () => recentOrders.slice(0, 10),
+	    [recentOrders],
+	  );
 
   /* ─── Submit handler ───────────────────────────────────── */
   const [submitting, setSubmitting] = useState(false);

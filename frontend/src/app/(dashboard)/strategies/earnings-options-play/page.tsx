@@ -603,18 +603,18 @@ function isAbortError(err: unknown): boolean {
  * working across the full target browser matrix.
  */
 function useIsWideViewport(): boolean {
-  // Round-8 / MO-01: SSR default = false (mobile-first). The earlier
-  // ``useState(true)`` was an SSR-optimism tradeoff that broke
-  // deeplinked phone users: the scroll-to-detail effect's
-  // ``if (isWideViewport) return`` short-circuited on first paint
-  // and the panel never auto-scrolled into view when the calendar
-  // hydrated. Defaulting false means desktop pays one re-render on
-  // hydration to flip back to true (negligible) but mobile gets a
-  // correct first paint.
-  const [wide, setWide] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.matchMedia?.("(min-width: 1024px)")?.matches ?? false;
-  });
+  // Round-8 / MO-01: SSR default = false (mobile-first).
+  //
+  // Audit MF-P1-4 (2026-05-05): the prior initializer read
+  // ``window.matchMedia(...)`` on the FIRST client render — server
+  // rendered ``false`` but a wide-viewport client immediately rendered
+  // ``true``, producing a React hydration mismatch warning + a visible
+  // layout jump on /strategies/earnings-options-play. Fix: always
+  // start ``false`` (matches SSR), then update via useEffect after
+  // mount. The desktop user pays one cheap re-render on hydration —
+  // same cost as the prior code already accepted for matchMedia change
+  // events — but the SSR/CSR render trees agree on first paint.
+  const [wide, setWide] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia?.("(min-width: 1024px)");
