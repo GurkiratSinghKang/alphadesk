@@ -352,12 +352,21 @@ app.add_middleware(
 # trust surface to any LAN client and made per-IP rate limits forgable
 # from inside the container's effective routing scope (k8s NodePort
 # IPs land on those ranges too).
+#
+# Audit P2-01 (2026-05-05): tightened to loopback-only on the assumption
+# that the backend sits behind a single Caddy proxy on the SAME host. In
+# the docker-compose deployment (infrastructure/docker-compose.prod.yml)
+# Caddy and the backend share a user bridge network — operators using
+# that topology MUST either (a) switch to ``network_mode: host`` for both
+# services, or (b) re-add the bridge subnet here and pin trust to the
+# narrowest range Docker actually assigns (typically a single 172.x.0.0/16).
+# Single-proxy assumption matters: every additional trusted host in the
+# list expands the IPs that may legitimately set X-Forwarded-For, which
+# is the bucket key per-IP rate limits hash on. ``["*"]`` was a free
+# spoof of any rate-limit bucket; loopback-only closes that.
 _TRUSTED_PROXY_HOSTS = [
     "127.0.0.1",
     "::1",
-    # Docker default bridge + user-defined bridges. 172.16.0.0/12 covers
-    # 172.16-31, which spans every Docker / Compose user network we use.
-    "172.16.0.0/12",
 ]
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=_TRUSTED_PROXY_HOSTS)
 
