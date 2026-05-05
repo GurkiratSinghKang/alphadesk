@@ -86,19 +86,23 @@
         orders all flow through the broker over the network. Reconnect
         and refresh, and the desk picks up where it left off.
       </p>
-      <a id="retry-link" href="/" onclick="location.href=this.href; return false;">Try again</a>
+      <a id="retry-link" href="/dashboard" onclick="location.href=this.href; return false;">Try again</a>
       <small>If you keep seeing this page, check your network or VPN.</small>
     </main>
     <!--FROM_URL_PLACEHOLDER-->
     <script>
       // QA r3 BUG-05: preserve the original deep-link the user was trying
       // to reach. The SW injects window.__originalUrl before serving this
-      // page. If present, point the retry link there instead of "/".
-      try {
-        if (window.__originalUrl) {
-          document.getElementById("retry-link").href = window.__originalUrl;
-        }
-      } catch (_) { /* gracefully fall through to "/" */ }
+      // page. If present, point the retry link there; otherwise fall
+      // through to the default /dashboard href.
+      document.addEventListener("DOMContentLoaded", function () {
+        try {
+          var link = document.getElementById("retry-link");
+          if (link && window.__originalUrl) {
+            link.href = window.__originalUrl;
+          }
+        } catch (_) { /* fall through to /dashboard default */ }
+      });
     </script>
   </body>
 </html>
