@@ -39,7 +39,7 @@ function NotificationIcon({ category, iconHint }: { category: NotificationCatego
   if (iconHint === "check" || iconHint === "filled") return <CheckCircle2 className={cn(cls, "text-[var(--profit)]")} />;
   if (iconHint === "rejected" || iconHint === "alert-triangle") return <AlertTriangle className={cn(cls, "text-[var(--loss)]")} />;
   if (iconHint === "bot") return <Bot className={cn(cls, "text-[var(--chart-5)]")} />;
-  if (iconHint === "shield") return <Shield className={cn(cls, "text-amber-400")} />;
+  if (iconHint === "shield") return <Shield className={cn(cls, "text-state-warning")} />;
   if (iconHint === "login") return <LogIn className={cn(cls, "text-[var(--chart-4)]")} />;
   if (iconHint === "clock") return <Clock className={cn(cls, "text-muted-foreground")} />;
 

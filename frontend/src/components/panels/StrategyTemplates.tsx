@@ -105,10 +105,14 @@ const ALL_STRATEGY_IDS = [
   "manual-discretionary",
 ];
 
+// QA r6-2 — risk tier chip palette migrated off raw Tailwind palettes
+// (emerald/amber/red) to AlphaDesk semantic tokens. low=profit (chartreuse),
+// medium=state-warning (mustard), high=loss (coral). Stays consistent with
+// the rest of the risk-color story in DepthHeatStripe / StressTest.
 const RISK_COLORS: Record<string, string> = {
-  low: "border-emerald-500/40 text-emerald-400 bg-emerald-500/10",
-  medium: "border-amber-500/40 text-amber-400 bg-amber-500/10",
-  high: "border-red-500/40 text-red-400 bg-red-500/10",
+  low: "border-[var(--profit)]/40 text-[var(--profit)] bg-[var(--profit)]/10",
+  medium: "border-state-warning/40 text-state-warning bg-state-warning/10",
+  high: "border-[var(--loss)]/40 text-[var(--loss)] bg-[var(--loss)]/10",
 };
 
 // ─── Template Card ──────────────────────────────────────────

@@ -70,8 +70,8 @@ const StrategyCard = React.memo(function StrategyCard({
             className={cn(
               "shrink-0 text-label",
               strategy.status === "active"
-                ? "border-emerald-500/30 text-emerald-400"
-                : "border-amber-500/30 text-amber-400"
+                ? "border-[var(--profit)]/30 text-[var(--profit)]"
+                : "border-state-warning/30 text-state-warning"
             )}
           >
             {strategy.status === "active" ? "Active" : "Paused"}
@@ -172,8 +172,8 @@ const CompactStrategyRow = React.memo(function CompactStrategyRow({
         className={cn(
           "shrink-0 text-label px-1.5 py-0",
           strategy.status === "active"
-            ? "border-emerald-500/30 text-emerald-400"
-            : "border-amber-500/30 text-amber-400"
+            ? "border-[var(--profit)]/30 text-[var(--profit)]"
+            : "border-state-warning/30 text-state-warning"
         )}
       >
         {strategy.status === "active" ? "On" : "Off"}

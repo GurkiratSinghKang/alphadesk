@@ -106,6 +106,23 @@
      --amber-500. Differentiates the chart palette from the warning palette
      so a warning state isn't visually confused with a chart series. */
   --chart-5: var(--rust-500);
+
+  /* QA r6-2 — Chart structure chrome. Distinct from --up/--down (P/L semantic)
+     and --chart-{1..5} (categorical series). Used by ChartPane STRUCTURE_COLORS
+     to render support/resistance/demand/supply/POC overlays. Token-ized so the
+     chart palette swaps cleanly under light mode. */
+  --chart-structure-support:    rgba(168, 208, 77, 0.20);  /* up-500 @ 20% */
+  --chart-structure-resistance: rgba(224, 120, 86, 0.20);  /* down-500 @ 20% */
+  --chart-structure-demand:     rgba(141, 179, 196, 0.18); /* ice cool @ 18% */
+  --chart-structure-supply:     rgba(217, 164, 65, 0.18);  /* warm sand @ 18% */
+  --chart-structure-poc:        rgba(201, 166, 107, 0.30); /* gold-500 @ 30% */
+
+  /* QA r6-2 — Order book quote chrome. Distinct from P/L; this is "side of book"
+     not "direction of trade". Slightly heavier alpha than structure overlays
+     because book ladder rows need to read at-a-glance. */
+  --chart-book-bid: rgba(168, 208, 77, 0.30);   /* up-500 @ 30% */
+  --chart-book-ask: rgba(224, 120, 86, 0.30);   /* down-500 @ 30% */
+
   --neutral: var(--fg-muted);
   --fg-base: var(--fg);
   --fg-strong: var(--ink-1000);
@@ -382,6 +399,19 @@
   --primary-foreground: #101611;
   --profit-foreground: #fffdf8;
   --loss-foreground: #050503;
+
+  /* QA r6-2 — chart structure / book chrome (light variants).
+     Built off the light-mode --up-500 (#12845f) and --down-500 (#b14225)
+     so structure overlays carry the same green/coral semantic but read
+     correctly on porcelain surfaces. */
+  --chart-structure-support:    rgba(18, 132, 95, 0.18);
+  --chart-structure-resistance: rgba(177, 66, 37, 0.18);
+  --chart-structure-demand:     rgba(67, 111, 134, 0.16);
+  --chart-structure-supply:     rgba(155, 115, 48, 0.16);
+  --chart-structure-poc:        rgba(118, 83, 25, 0.26);
+
+  --chart-book-bid: rgba(18, 132, 95, 0.26);
+  --chart-book-ask: rgba(177, 66, 37, 0.26);
 
   --shadow-hair: 0 0 0 1px var(--border-hair);
   --shadow-1: 0 1px 2px rgba(41, 48, 39, 0.08), 0 0 0 1px var(--border-hair);

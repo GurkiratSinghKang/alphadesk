@@ -72,6 +72,30 @@ const eslintConfig = defineConfig([
           selector: "TemplateElement[value.raw=/--amber-500/]",
           message: "Use --state-warning (semantic warn), --state-info-time (stale/time indicators), or --state-stale per intent. Direct --amber-500 is deprecated and will be removed once all consumers migrate.",
         },
+        // QA r6-2 — ban off-system Tailwind palette utilities. The R5
+        // audit found that the prior --amber-500 guard (above) only caught
+        // the CSS-var form; Tailwind utility forms like ``text-amber-100``,
+        // ``bg-emerald-500/10``, ``border-red-500/40`` were sneaking in
+        // because they bypass the design-token resolver entirely. The
+        // selector matches both bare class names and class-string fragments
+        // (start-of-string OR whitespace boundary).
+        //
+        // Allowed: slate / zinc / neutral / stone (Tailwind grays — these
+        // are legitimate utility chrome and don't carry chroma intent).
+        // Banned: amber, emerald, red, blue, green, purple, pink, cyan,
+        // teal, indigo, violet, orange, fuchsia, rose, lime, sky, yellow.
+        // Use AlphaDesk semantic tokens instead: state-warning / state-warning-fg
+        // (warn), state-info-time (stale), profit / loss (P&L), brand
+        // (gold accent), ink-* (warm grays), gold-* (brand), up-* / down-*
+        // (P&L variants).
+        {
+          selector: "Literal[value=/(^|\\s)(text|bg|border|ring|fill|stroke|from|to|via|divide|outline|placeholder|caret|accent|decoration|shadow)-(amber|emerald|red|blue|green|purple|pink|cyan|teal|indigo|violet|orange|fuchsia|rose|lime|sky|yellow)-(50|100|200|300|400|500|600|700|800|900|950)/]",
+          message: "Off-system Tailwind palette banned. Use AlphaDesk semantic tokens: state-warning, state-info-time, profit, loss, brand, ink-*, gold-*, up-*, down-*. (R6-2)",
+        },
+        {
+          selector: "TemplateElement[value.raw=/(^|\\s)(text|bg|border|ring|fill|stroke|from|to|via|divide|outline|placeholder|caret|accent|decoration|shadow)-(amber|emerald|red|blue|green|purple|pink|cyan|teal|indigo|violet|orange|fuchsia|rose|lime|sky|yellow)-(50|100|200|300|400|500|600|700|800|900|950)/]",
+          message: "Off-system Tailwind palette banned. Use AlphaDesk semantic tokens: state-warning, state-info-time, profit, loss, brand, ink-*, gold-*, up-*, down-*. (R6-2)",
+        },
       ],
     },
   },

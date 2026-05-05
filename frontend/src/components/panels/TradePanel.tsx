@@ -1498,14 +1498,14 @@ export function TradePanel() {
   const { activePanels, setActiveTab } = useUIStore();
 
   return (
-    <div className="flex h-full flex-col bg-[var(--panel)] border-t border-l border-[#2a2a3e]">
+    <div className="flex h-full flex-col bg-[var(--panel)] border-t border-l border-[var(--bg-elev-2)]">
       <Tabs
         value={activePanels.bottom}
         onValueChange={(v) => setActiveTab("bottom", v)}
         className="flex flex-col h-full"
       >
         <div className="flex items-center justify-between mx-2 mt-2 shrink-0">
-          <TabsList className="h-7 bg-[#12121a] p-0.5 flex-1 min-w-0 border border-[#2a2a3e]">
+          <TabsList className="h-7 bg-[var(--bg-card)] p-0.5 flex-1 min-w-0 border border-[var(--bg-elev-2)]">
             <TabsTrigger value="trade" className="text-label h-6 px-1.5" title="Trade Builder">
               Trade
             </TabsTrigger>

@@ -84,8 +84,10 @@ export default function StrategyDisclosure({
   // on a ``bg-amber/[0.04]`` surface. Against the near-black card
   // (effectively still dark after the 4% amber tint) the mid-tone amber
   // squeaked to ~4.0:1, which fails the 4.5:1 AA threshold for text below
-  // 18pt. Lifting to ``text-amber-100`` (Tailwind default near-white pale
-  // yellow #fef3c7) puts us comfortably over 12:1 on the same surface.
+  // 18pt. Lifting to the pale warning foreground (``text-state-warning-fg``,
+  // #f8d590) puts us comfortably over 12:1 on the same surface.
+  // QA r6-2: migrated from raw ``text-amber-100`` (Tailwind palette) to the
+  // semantic ``text-state-warning-fg`` token so light-mode renders correctly.
   const pillAriaLabel = liveDisabled
     ? "Live trading disabled"
     : paperOnly
@@ -116,7 +118,7 @@ export default function StrategyDisclosure({
       )}
     >
       <div className="flex flex-wrap items-center gap-3">
-        <Eyebrow as="span" className="text-amber-100">
+        <Eyebrow as="span" className="text-state-warning-fg">
           Disclosure
         </Eyebrow>
         {pillLabel ? (
@@ -130,7 +132,7 @@ export default function StrategyDisclosure({
             aria-label={pillAriaLabel}
             className={cn(
               "inline-flex items-center rounded-pill border border-amber/60 px-2.5 py-0.5",
-              "font-sans text-label font-semibold uppercase tracking-[0.14em] text-amber-100"
+              "font-sans text-label font-semibold uppercase tracking-[0.14em] text-state-warning-fg"
             )}
           >
             {pillLabel}

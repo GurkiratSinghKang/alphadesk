@@ -220,7 +220,7 @@ function StrategyCatalogCard({
   // A3#2 (Wave 8) — routing-flag pill. Shows "NOT READY FOR LIVE" for
   // live-denied strategies (e.g. ``orb``) and "PAPER-ONLY" for thin-OOS
   // strategies (e.g. ``kama-breakout``). ``aria-label`` keeps the text
-  // screen-reader-friendly; ``text-amber-100`` mirrors the
+  // screen-reader-friendly; ``text-state-warning-fg`` mirrors the
   // StrategyDisclosure component's WCAG contrast fix (A3#5).
   const pillLabel = s.liveDisabled
     ? "Not ready for live"
@@ -265,7 +265,7 @@ function StrategyCatalogCard({
               aria-label={pillAriaLabel}
               className={cn(
                 "mt-1 inline-flex w-fit items-center rounded-pill border border-amber/60 px-2 py-0.5",
-                "font-sans text-label font-semibold uppercase tracking-normal text-amber-100"
+                "font-sans text-label font-semibold uppercase tracking-normal text-state-warning-fg"
               )}
             >
               {pillLabel}

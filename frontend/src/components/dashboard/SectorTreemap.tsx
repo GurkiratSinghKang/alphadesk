@@ -417,7 +417,7 @@ export function SectorTreemap({ sectors, width: propWidth, height = 160, isDemo 
         )}
       </div>
       {isDemo && (
-        <div className="text-label text-blue-400/70 mt-1">Connect Alpaca API for live data</div>
+        <div className="text-label text-[var(--ice-500)]/70 mt-1">Connect Alpaca API for live data</div>
       )}
     </div>
   );

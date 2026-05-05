@@ -747,7 +747,7 @@ function ScreenerTab() {
                   <span className={cn(
                     "text-label font-bold rounded px-1 py-0.5",
                     r.compositeScore >= 70 ? "bg-[var(--profit)]/15 text-[var(--profit)]" :
-                    r.compositeScore >= 40 ? "bg-amber-500/15 text-amber-400" :
+                    r.compositeScore >= 40 ? "bg-state-warning/15 text-state-warning" :
                     "bg-[var(--loss)]/15 text-[var(--loss)]"
                   )}>
                     {r.compositeScore}

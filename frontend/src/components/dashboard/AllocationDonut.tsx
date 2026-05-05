@@ -117,7 +117,7 @@ export function AllocationDonut({ cash, invested, equity, buyingPower, unrealize
         </div>
       </div>
       {isDemo && (
-        <div className="text-label text-blue-400/70 mt-1">Connect Alpaca API for live data</div>
+        <div className="text-label text-[var(--ice-500)]/70 mt-1">Connect Alpaca API for live data</div>
       )}
     </div>
   );

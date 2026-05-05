@@ -101,7 +101,7 @@ const SCENARIOS: StressScenario[] = [
       if (isDefensivePosition(pos)) return 0.05;
       return -0.03;
     },
-    color: "text-amber-400",
+    color: "text-state-warning",
   },
   {
     id: "rate-hike",
@@ -113,7 +113,7 @@ const SCENARIOS: StressScenario[] = [
       if (isValuePosition(pos)) return 0.03;
       return -0.02;
     },
-    color: "text-amber-400",
+    color: "text-state-warning",
   },
   {
     id: "black-swan",
