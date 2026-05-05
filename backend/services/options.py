@@ -508,6 +508,7 @@ def _chain_cache_key(
     strike_min: float | None,
     strike_max: float | None,
     option_type: OptionType | None,
+    limit: int | None = None,
 ) -> str:
     parts = [symbol.upper()]
     if expiry:
@@ -518,6 +519,8 @@ def _chain_cache_key(
         parts.append(f"smax{strike_max}")
     if option_type is not None:
         parts.append(option_type.value)
+    if limit is not None:
+        parts.append(f"lim{limit}")
     return "|".join(parts)
 
 
@@ -676,6 +679,121 @@ async def _fetch_real_chain(
         return None
 
 
+# ---------------------------------------------------------------------------
+# IV history (Batch P / P-1)
+# ---------------------------------------------------------------------------
+#
+# A real ``iv_rank`` / ``iv_percentile`` requires a per-symbol time series of
+# ATM IV. The historical-vol pipeline used to be aspirational ("once we wire
+# the time series the values will fill in"); Batch P actually wires it.
+#
+# Storage shape: a single Redis hash per symbol, keyed by ISO-8601 date,
+# value = ATM IV (rounded to 4 dp). The hash can hold ~365 entries cheaply
+# (each entry is a ~14 byte ASCII pair). Rolling 252-trading-day window is
+# computed by sorting hash keys lexicographically and slicing the last 252.
+#
+# Why not Postgres / TimescaleDB? Adding a hypertable + alembic migration is
+# heavier than the scope warrants and Redis already has the required shape
+# (small, single-key history with cheap append). If the dataset grows beyond
+# ~6 months the storage backend can be upgraded — none of the consumer-side
+# code below assumes a Redis-specific API beyond ``cache_get`` / ``cache_set``.
+
+_IV_HISTORY_KEY_PREFIX = "iv_history_daily"
+_IV_HISTORY_RETENTION_DAYS = 365  # keep a buffer over the rolling 252 window
+_IV_HISTORY_MIN_DAYS_FOR_RANK = 30  # below this, return None — too few obs
+
+
+async def _persist_iv_history(symbol: str, atm_iv: float) -> None:
+    """Append today's ATM IV to the per-symbol daily history.
+
+    Idempotent w.r.t. the day: re-writing the same date overwrites the
+    prior value, which is fine — the last value of the day before close
+    is the most representative sample we'll have for the day.
+
+    Best-effort: a Redis outage is logged at DEBUG and silently ignored.
+    The IV-rank / percentile computation gracefully treats missing
+    history as "warming up — return None".
+    """
+    if atm_iv is None or not (atm_iv > 0):
+        return
+    s = symbol.upper()
+    try:
+        from core.redis import cache_get, cache_set
+
+        key = f"{_IV_HISTORY_KEY_PREFIX}:{s}"
+        existing = await cache_get(key) or {}
+        if not isinstance(existing, dict):
+            existing = {}
+        today_iso = market_today().isoformat()
+        existing[today_iso] = round(float(atm_iv), 4)
+
+        # Trim oldest entries beyond the retention window. Lexicographic
+        # sort is correct for ISO-8601 date strings.
+        if len(existing) > _IV_HISTORY_RETENTION_DAYS:
+            keep_keys = sorted(existing.keys())[-_IV_HISTORY_RETENTION_DAYS:]
+            existing = {k: existing[k] for k in keep_keys}
+
+        # 7-day TTL so a multi-week outage doesn't leave a stale read
+        # path forever — but normal usage refreshes it every weekday.
+        await cache_set(key, existing, ttl_seconds=7 * 24 * 3600)
+    except Exception:
+        log.debug("IV history persist failed for %s", s, exc_info=True)
+
+
+async def _read_iv_history_series(symbol: str) -> list[float]:
+    """Return the daily ATM-IV series for ``symbol`` in chronological order.
+
+    Returns at most the last 252 trading-day samples (we don't filter for
+    market days — daily writes naturally skip weekends/holidays so the
+    raw-date series is a 252-trading-day window after retention trimming).
+    Returns ``[]`` on missing history or any read error.
+    """
+    s = symbol.upper()
+    try:
+        from core.redis import cache_get
+
+        raw = await cache_get(f"{_IV_HISTORY_KEY_PREFIX}:{s}")
+        if not isinstance(raw, dict) or not raw:
+            return []
+        # Lexicographic sort is chronological for ISO dates.
+        ordered_keys = sorted(raw.keys())[-252:]
+        return [float(raw[k]) for k in ordered_keys if raw.get(k) is not None]
+    except Exception:
+        log.debug("IV history read failed for %s", s, exc_info=True)
+        return []
+
+
+def _compute_iv_rank_percentile(
+    current_iv: float, history: list[float]
+) -> tuple[float | None, float | None]:
+    """Return (iv_rank, iv_percentile) over ``history``.
+
+    ``iv_rank``       = (current - min) / (max - min) * 100, clamped [0, 100]
+    ``iv_percentile`` = fraction of historical samples with IV <= current * 100
+
+    Returns (None, None) until the history reaches
+    ``_IV_HISTORY_MIN_DAYS_FOR_RANK`` samples (warm-up window so an
+    early reading doesn't masquerade as a 100% IV rank). The current
+    sample itself is included in ``history`` (the caller persists
+    before reading) — the calculation tolerates that.
+    """
+    if current_iv is None or not (current_iv > 0):
+        return (None, None)
+    if not history or len(history) < _IV_HISTORY_MIN_DAYS_FOR_RANK:
+        return (None, None)
+
+    lo = min(history)
+    hi = max(history)
+    if hi <= lo:
+        # Flat series — degenerate. Report 50 (mid) for percentile, None
+        # for rank since there's no spread to normalize against.
+        return (None, 50.0)
+    rank = (current_iv - lo) / (hi - lo) * 100.0
+    rank = max(0.0, min(100.0, rank))
+    pct = sum(1 for v in history if v <= current_iv) / len(history) * 100.0
+    return (round(rank, 1), round(pct, 1))
+
+
 async def _fetch_real_iv(symbol: str) -> IVData | None:
     """Derive IV analytics from the real Alpaca options chain.
 
@@ -717,9 +835,12 @@ async def _fetch_real_iv(symbol: str) -> IVData | None:
         # tripping the partial-data warning even when chain + Greeks
         # were fine. This wires HV inline using log-returns × sqrt(252).
         #
-        # IV rank requires a real 252-day IV time series. Do not backfill
-        # it from the same option-chain snapshot: that is only smile
-        # dispersion, not historical richness, and it can distort ranking.
+        # Batch P / P-1: IV rank + IV percentile are now wired off the
+        # rolling daily-IV history persisted under
+        # ``_IV_HISTORY_KEY_PREFIX``. Each call to ``_fetch_real_iv``
+        # appends today's ATM IV; the rank/percentile pair is computed
+        # over the last ≤252 daily samples once history exceeds the
+        # warm-up threshold (``_IV_HISTORY_MIN_DAYS_FOR_RANK``).
         iv_rank: float | None = None
         iv_percentile: float | None = None
         hv_20: float | None = None
@@ -755,6 +876,16 @@ async def _fetch_real_iv(symbol: str) -> IVData | None:
                     hv_100 = round(float(np.std(returns[-100:]) * np.sqrt(252)), 4)
         except Exception:
             log.debug("HV/IV-rank inline computation failed for %s", s, exc_info=True)
+
+        # Batch P / P-1: persist today's ATM IV and compute rank/percentile
+        # over the rolling history. The persistence step is best-effort —
+        # a Redis blip just keeps the rank null for one day.
+        try:
+            await _persist_iv_history(s, current_iv)
+            history = await _read_iv_history_series(s)
+            iv_rank, iv_percentile = _compute_iv_rank_percentile(current_iv, history)
+        except Exception:
+            log.debug("IV rank/percentile pipeline failed for %s", s, exc_info=True)
 
         # IV skew: calls closest to nearest expiry, grouped by strike
         nearest_exp = chain.expirations[0] if chain.expirations else None

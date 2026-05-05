@@ -2245,3 +2245,195 @@ async def test_list_upcoming_sorts_by_yield_claude_confidence_and_edge_score():
     assert [r.symbol for r in by_yield.earnings] == ["TSLA", "NVDA"]
     assert [r.symbol for r in by_claude.earnings] == ["TSLA", "NVDA"]
     assert [r.symbol for r in by_edge.earnings] == ["TSLA", "NVDA"]
+
+
+# ─── Batch P additions ─────────────────────────────────────────────────────
+
+def test_resolve_report_time_prefers_fmp_value():
+    """FMP-supplied AMC/BMO must always win over the curated overlay."""
+    from services.earnings_screener import _resolve_report_time
+
+    # FMP says BMO; the curated overlay would say AMC for AAPL — FMP wins.
+    assert _resolve_report_time("AAPL", "BMO") == "BMO"
+    assert _resolve_report_time("aapl", "amc") == "AMC"
+
+
+def test_resolve_report_time_overlay_kicks_in_for_dmt_unknown():
+    """Batch P / P-4: when FMP returns unknown/DMT/None, the curated map
+    should resolve AMC/BMO for stable patterns (AMD AMC, JPM BMO)."""
+    from services.earnings_screener import _resolve_report_time
+
+    assert _resolve_report_time("AMD", "DMT") == "AMC"
+    assert _resolve_report_time("AMD", None) == "AMC"
+    assert _resolve_report_time("JPM", "DMT") == "BMO"
+    assert _resolve_report_time("JPM", "") == "BMO"
+
+
+def test_resolve_report_time_falls_through_to_dmt_for_unknown_symbol():
+    """An unmapped symbol with no FMP signal stays DMT — schema literal
+    requires a non-None classification."""
+    from services.earnings_screener import _resolve_report_time
+
+    assert _resolve_report_time("XYZQQ", "DMT") == "DMT"
+    assert _resolve_report_time("XYZQQ", None) == "DMT"
+
+
+def test_historical_block_from_metrics_accepts_dedicated_shape():
+    """Batch P / P-6: ``_historical_block_from_metrics`` must accept the
+    nested ``{quarters, stats}`` shape returned by
+    ``_load_historical_earnings`` AS WELL AS the flat metrics shape."""
+    from services.earnings_screener import _historical_block_from_metrics
+
+    nested = {
+        "quarters": [
+            {
+                "report_date": "2026-01-30",
+                "surprise_pct": 0.06,
+                "next_day_move_pct": 0.04,
+                "five_day_move_pct": 0.05,
+            },
+        ],
+        "stats": {
+            "avg_abs_move_pct": 0.04,
+            "wins": 1,
+            "losses": 0,
+            "surprise_beat_rate": 1.0,
+        },
+    }
+    block = _historical_block_from_metrics(nested)
+    assert block is not None
+    assert len(block.quarters) == 1
+    assert block.stats.wins == 1
+    assert block.stats.avg_abs_move_pct == 0.04
+
+
+def test_historical_block_from_metrics_returns_none_for_empty_quarters():
+    from services.earnings_screener import _historical_block_from_metrics
+
+    assert _historical_block_from_metrics(None) is None
+    assert _historical_block_from_metrics({}) is None
+    assert _historical_block_from_metrics({"historical_quarters": []}) is None
+    assert _historical_block_from_metrics({"quarters": []}) is None
+
+
+def test_compute_iv_rank_percentile_warmup_returns_none():
+    """Below the warm-up threshold the rank must be None — refusing to
+    fabricate a misleading value before history is meaningful."""
+    from services.options import _compute_iv_rank_percentile
+
+    rank, pct = _compute_iv_rank_percentile(0.45, [0.30, 0.32, 0.40])
+    assert rank is None
+    assert pct is None
+
+
+def test_compute_iv_rank_percentile_basic():
+    """With ≥30 samples, IV rank/percentile should reflect the position
+    of the current value within the historical [min, max] range and the
+    fraction of samples ≤ current."""
+    from services.options import _compute_iv_rank_percentile
+
+    history = [0.20 + 0.001 * i for i in range(50)]  # 0.20 → 0.249
+    rank, pct = _compute_iv_rank_percentile(0.225, history)
+    # Current 0.225 sits 51% of the way from 0.20 to 0.249 → rank ~51
+    assert rank is not None and 48.0 <= rank <= 55.0
+    # Percentile: 26 of 50 samples are ≤ 0.225 → 52%
+    assert pct is not None and 48.0 <= pct <= 56.0
+
+
+def test_compute_iv_rank_percentile_clamps_to_bounds():
+    """IV rank must clamp to [0, 100] even when the current sample sits
+    outside the historical [min, max] range (legitimate when persistence
+    is async and the latest sample hasn't been written yet)."""
+    from services.options import _compute_iv_rank_percentile
+
+    history = [0.20 + 0.001 * i for i in range(40)]
+    rank_low, _ = _compute_iv_rank_percentile(0.10, history)  # below min
+    rank_high, _ = _compute_iv_rank_percentile(0.50, history)  # above max
+    assert rank_low == 0.0
+    assert rank_high == 100.0
+
+
+def test_compute_iv_rank_percentile_handles_flat_series():
+    """A degenerate flat series (every sample identical) returns None for
+    rank and 50.0 for percentile."""
+    from services.options import _compute_iv_rank_percentile
+
+    rank, pct = _compute_iv_rank_percentile(0.30, [0.30] * 40)
+    assert rank is None
+    assert pct == 50.0
+
+
+@pytest.mark.asyncio
+async def test_get_detail_falls_back_to_dedicated_historical_when_metrics_blank():
+    """Batch P / P-6: when ``_load_metrics`` returns None (provider blip)
+    but ``_load_historical_earnings`` succeeds, the detail response must
+    still populate ``historical_earnings`` from the dedicated leg."""
+    from services import earnings_screener as svc
+
+    future_date = (date.today() + timedelta(days=1)).isoformat()
+    historical_payload = {
+        "quarters": [
+            {
+                "report_date": "2026-01-30",
+                "surprise_pct": 0.05,
+                "next_day_move_pct": 0.03,
+                "five_day_move_pct": 0.04,
+            },
+            {
+                "report_date": "2025-10-30",
+                "surprise_pct": -0.01,
+                "next_day_move_pct": -0.02,
+                "five_day_move_pct": -0.01,
+            },
+        ],
+        "stats": {
+            "avg_abs_move_pct": 0.025,
+            "wins": 1,
+            "losses": 1,
+            "surprise_beat_rate": 0.5,
+        },
+    }
+    with patch.object(
+        svc, "_load_quote",
+        AsyncMock(return_value={"last": 200.0, "change": 1.0, "change_pct": 0.5}),
+    ), patch.object(svc, "_load_metrics", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_strike_ladder", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_claude_structured", AsyncMock(return_value=None)), \
+         patch.object(svc, "_load_iv_term", AsyncMock(return_value=(None, False))), \
+         patch.object(svc, "_load_skew", AsyncMock(return_value=None)), \
+         patch.object(svc, "_news_payload",
+                      AsyncMock(return_value={"articles": [], "is_demo": False, "status": "ok"})), \
+         patch.object(svc, "_load_market_regime", AsyncMock(return_value="neutral")), \
+         patch.object(svc, "_load_historical_earnings",
+                      AsyncMock(return_value=historical_payload)), \
+         patch.object(svc, "_load_earnings_meta",
+                      AsyncMock(return_value={
+                          "company": "AMD", "sector": "Semis",
+                          "report_date": future_date, "report_time": "AMC",
+                      })):
+        detail = await svc.get_detail("AMD")
+
+    # Metrics is None (provider blip) — but historical_earnings still flows
+    # in from the dedicated leg, so prior_moves is populated.
+    assert detail.metrics is None
+    assert detail.historical_earnings is not None
+    assert len(detail.historical_earnings.quarters) == 2
+    assert detail.historical_earnings.stats.wins == 1
+
+
+def test_fmp_consensus_includes_today_reports():
+    """Batch P / P-5: ``consensus`` should treat today's earnings as the
+    next event so the detail-page fallback path doesn't return None on
+    report day. Pre-fix this used ``> asof_d`` (strict future) and the
+    AMD-on-report-day case returned ``next_earnings_date=None``."""
+    from data.providers.fmp_earnings import FMPEarningsProvider
+
+    today_iso = date.today().isoformat()
+    fake_data = [
+        {"symbol": "AMD", "date": today_iso, "epsEstimated": 0.95},
+        {"symbol": "AMD", "date": "2025-08-01", "epsEstimated": 0.80},
+    ]
+    provider = FMPEarningsProvider.__new__(FMPEarningsProvider)
+    provider._http = type("_H", (), {"get": lambda self, p, q: fake_data})()
+    out = provider.consensus("AMD", asof=date.today())
+    assert out["next_earnings_date"] == date.today()

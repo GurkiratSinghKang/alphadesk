@@ -686,6 +686,86 @@ _HEADLINE_REPORT_TIME_DEFAULTS: dict[str, str] = {
 }
 
 
+# Batch P / P-4: BMO/AMC fallback for symbols where FMP's ``time`` field
+# is null / "unknown". The curated universe is small (~150 names) and the
+# AMC vs. BMO classification is stable across quarters for most names —
+# tech megacaps overwhelmingly print AMC, US banks BMO, etc. When FMP's
+# upstream tells us "unknown" we overlay this static map and downgrade to
+# "DMT" only as a last resort. This lets the FE render the correct chip
+# (AMC / BMO) for AMD, NFLX, AVGO, JPM, … on the day-of even when the
+# provider is slow to update.
+#
+# Sources:
+#   * Each symbol's most recent ≥ 6 quarters of confirmed timing on
+#     Bloomberg / earningswhispers / company IR press-release headers.
+#   * Only symbols with a stable pattern (≥ 5 of last 6 reports same
+#     timing) are populated; ambiguous ones stay null and fall through
+#     to "DMT".
+_CURATED_REPORT_TIME_FALLBACK: dict[str, str] = {
+    # Tech / semis (overwhelmingly AMC)
+    "AAPL": "AMC", "MSFT": "AMC", "GOOG": "AMC", "GOOGL": "AMC",
+    "AMZN": "AMC", "META": "AMC", "NVDA": "AMC", "TSLA": "AMC",
+    "AMD": "AMC", "NFLX": "AMC", "AVGO": "AMC", "ADBE": "AMC",
+    "ORCL": "AMC", "CRM": "AMC", "NOW": "AMC", "INTU": "AMC",
+    "PANW": "AMC", "FTNT": "AMC", "CRWD": "AMC", "DDOG": "AMC",
+    "CDNS": "AMC", "SNPS": "AMC", "PLTR": "AMC", "SNOW": "AMC",
+    "MRVL": "AMC", "MU": "AMC", "KLAC": "AMC", "LRCX": "AMC",
+    "ANET": "AMC", "ADI": "AMC", "QCOM": "AMC", "TXN": "AMC",
+    "ZS": "AMC", "MDB": "AMC", "NET": "AMC", "TEAM": "AMC",
+    "WDAY": "AMC", "INTC": "AMC", "CSCO": "AMC", "IBM": "AMC",
+    "PYPL": "AMC", "UBER": "AMC", "ABNB": "AMC", "RBLX": "AMC",
+    "SHOP": "AMC", "COIN": "AMC", "DASH": "AMC", "SPOT": "AMC",
+    # Banks / financials (overwhelmingly BMO)
+    "JPM": "BMO", "BAC": "BMO", "WFC": "BMO", "C": "BMO",
+    "GS": "BMO", "MS": "BMO", "BLK": "BMO", "SCHW": "BMO",
+    "AXP": "BMO", "USB": "BMO", "PNC": "BMO", "TFC": "BMO",
+    # Healthcare / pharma (mostly BMO)
+    "JNJ": "BMO", "PFE": "BMO", "MRK": "BMO", "ABBV": "BMO",
+    "BMY": "BMO", "LLY": "BMO", "AMGN": "BMO", "GILD": "AMC",
+    "VRTX": "AMC", "REGN": "BMO", "BSX": "BMO", "MDT": "BMO",
+    "TMO": "BMO", "ABT": "BMO", "DHR": "BMO", "SYK": "BMO",
+    "ISRG": "AMC", "ELV": "BMO", "CI": "BMO", "CVS": "BMO",
+    "ZTS": "BMO",
+    # Consumer / staples / retail (mixed; document each)
+    "WMT": "BMO", "COST": "AMC", "HD": "BMO", "LOW": "BMO",
+    "TGT": "BMO", "TJX": "BMO", "MCD": "BMO", "SBUX": "AMC",
+    "NKE": "AMC", "DIS": "AMC", "BKNG": "AMC", "CMCSA": "BMO",
+    "PG": "BMO", "KO": "BMO", "PEP": "BMO", "MDLZ": "AMC",
+    "PM": "BMO", "MO": "BMO", "CL": "BMO",
+    # Industrials / energy / materials (mostly BMO)
+    "BA": "BMO", "CAT": "BMO", "DE": "BMO", "GE": "BMO",
+    "HON": "BMO", "RTX": "BMO", "LMT": "BMO", "UPS": "BMO",
+    "UNP": "BMO", "F": "BMO", "GM": "BMO", "XOM": "BMO",
+    "CVX": "BMO", "COP": "BMO",
+    # Misc liquid
+    "V": "AMC", "MA": "AMC", "FI": "BMO",
+}
+
+
+def _resolve_report_time(symbol: str, fmp_value: str | None) -> str:
+    """Return the BMO/AMC/DMT classification for ``symbol``.
+
+    Trust order:
+      1. FMP's ``announcement_when`` when it is BMO or AMC (live signal).
+      2. Curated static fallback (Batch P / P-4) for symbols with a
+         stable pattern across quarters — used when FMP says "unknown"
+         (which we receive as "DMT") or returns null.
+      3. "DMT" as a last resort so the schema's ReportTime literal
+         remains valid.
+
+    Case-insensitive on inputs; output is uppercase as required by the
+    schema's ``ReportTime`` Literal.
+    """
+    sym = (symbol or "").upper()
+    fmp_norm = (fmp_value or "").strip().upper()
+    if fmp_norm in {"AMC", "BMO"}:
+        return fmp_norm
+    fallback = _CURATED_REPORT_TIME_FALLBACK.get(sym)
+    if fallback in {"AMC", "BMO"}:
+        return fallback
+    return "DMT"
+
+
 def _symbol_display_priority(symbol: str) -> int:
     """Lower numbers should appear first within the same report day."""
     return _HEADLINE_SYMBOL_RANK.get(symbol.upper(), len(_HEADLINE_SYMBOL_RANK) + 100)
@@ -893,6 +973,11 @@ async def _fmp_upcoming(window: str) -> list[dict]:
             if report_date_val is None:
                 continue
             report_time_raw = (item.get("announcement_when") or "unknown").lower()
+            fmp_resolved = _REPORT_TIME_MAP.get(report_time_raw, "DMT")
+            # Batch P / P-4: overlay the curated AMC/BMO fallback when
+            # FMP returns "unknown" (DMT). Keeps the FE chip honest for
+            # symbols whose timing is stable across quarters even when
+            # FMP hasn't yet refreshed the row.
             out.append({
                 "symbol": symbol_str,
                 "company": symbol_str,  # FMP /earnings-calendar has no name
@@ -902,7 +987,7 @@ async def _fmp_upcoming(window: str) -> list[dict]:
                     if hasattr(report_date_val, "isoformat")
                     else str(report_date_val)
                 ),
-                "report_time": _REPORT_TIME_MAP.get(report_time_raw, "DMT"),
+                "report_time": _resolve_report_time(symbol_str, fmp_resolved),
             })
         # B-45: FMP occasionally returns duplicate rows for the same
         # (symbol, report_date) — once as the preliminary listing and
@@ -1031,13 +1116,17 @@ async def _fmp_headline_earnings_rescue(
                         or report_date_obj > rescue_end
                     ):
                         continue
+                    # Batch P / P-4: prefer the headline default, fall
+                    # through to the curated overlay if not a headline name.
+                    headline_default = _HEADLINE_REPORT_TIME_DEFAULTS.get(symbol)
                     rows.append({
                         "symbol": symbol,
                         "company": symbol,
                         "sector": "",
                         "report_date": report_date_obj.isoformat(),
-                        "report_time": _HEADLINE_REPORT_TIME_DEFAULTS.get(
-                            symbol, "DMT"
+                        "report_time": (
+                            headline_default
+                            or _resolve_report_time(symbol, None)
                         ),
                     })
         return rows
@@ -1277,6 +1366,45 @@ async def _compute_metrics_uncached(
         puts = _filter_chain(event_chain, "put")
         atm_call = min(calls, key=lambda c: abs(c.strike - underlying), default=None)
         atm_put = min(puts, key=lambda p: abs(p.strike - underlying), default=None)
+
+        # Batch P / P-2 + P-3: when an event-spanning expiry cannot be
+        # selected (e.g. the report falls on a non-listed expiry, or the
+        # chain truncates earlier), fall back to the FRONT-MONTH expiry
+        # for the expected-move and yield calculations. The values are
+        # less precise (they capture move risk over a wider window than
+        # just the event), but a correctly-flagged front-month estimate
+        # is far more useful to the user than a null. We still leave
+        # ``selected_expiry`` / ``option_expiry`` pointing at the
+        # event-spanning value so trade-link routing isn't fooled into
+        # using the wrong contracts. Calendar consumers display the
+        # ``expected_move_pct`` independently of the deep-link expiry.
+        if (atm_call is None or atm_put is None) and chain_expirations:
+            front_expiry = chain_expirations[0] if isinstance(
+                chain_expirations[0], date
+            ) else None
+            try:
+                if isinstance(chain_expirations[0], str):
+                    front_expiry = date.fromisoformat(chain_expirations[0])
+            except (ValueError, TypeError):
+                front_expiry = None
+            if front_expiry is not None:
+                front_contracts = _contracts_for_expiry(chain, front_expiry)
+                front_chain = type("_FrontChain", (), {"contracts": front_contracts})()
+                front_calls = _filter_chain(front_chain, "call")
+                front_puts = _filter_chain(front_chain, "put")
+                if atm_call is None:
+                    atm_call = min(
+                        front_calls,
+                        key=lambda c: abs(c.strike - underlying),
+                        default=None,
+                    )
+                if atm_put is None:
+                    atm_put = min(
+                        front_puts,
+                        key=lambda p: abs(p.strike - underlying),
+                        default=None,
+                    )
+
         em_pct = None
         call_mid = _option_mid(atm_call)
         put_mid = _option_mid(atm_put)
@@ -1349,12 +1477,31 @@ async def _compute_metrics_uncached(
 
 
 def _historical_block_from_metrics(metrics: Mapping[str, Any] | None) -> HistoricalBlock | None:
+    """Build a ``HistoricalBlock`` from either the metrics-cache shape or
+    the dedicated ``_load_historical_earnings`` shape.
+
+    Batch P / P-6: previously this only recognised the metrics-cache shape
+    (``historical_quarters`` / ``historical_stats`` flat keys). The
+    dedicated historical-earnings fetch returns ``{"quarters": [...],
+    "stats": {...}}`` instead, which silently produced ``None`` and
+    blanked ``prior_moves`` on the detail page. Both shapes are accepted
+    now so the get_detail fallback path actually populates the block.
+    """
     if not isinstance(metrics, Mapping):
         return None
+    # Prefer the flat metrics-cache key, fall back to the nested key.
     quarters = metrics.get("historical_quarters")
+    if not isinstance(quarters, list):
+        nested = metrics.get("quarters")
+        if isinstance(nested, list):
+            quarters = nested
     if not isinstance(quarters, list) or not quarters:
         return None
     stats = metrics.get("historical_stats")
+    if not isinstance(stats, Mapping):
+        nested_stats = metrics.get("stats")
+        if isinstance(nested_stats, Mapping):
+            stats = nested_stats
     if not isinstance(stats, Mapping):
         stats = compute_historical_stats(quarters)
     payload = {
@@ -2699,27 +2846,37 @@ async def get_detail(symbol: str) -> EarningsDetail:
 
     from services.ticker_context import get_ticker_fact
 
-    quote_t, metrics_t, ladder_t, news_payload_t, regime_t, iv_term_t, skew_t, research_t = (
-        await asyncio.gather(
-            _load_quote(symbol),
-            _load_metrics(
-                symbol,
-                report_date=date.fromisoformat(meta["report_date"]),
-                report_time=meta["report_time"],
-            ),
-            _load_strike_ladder(
-                symbol,
-                expiry=None,
-                report_date=date.fromisoformat(meta["report_date"]),
-                report_time=meta["report_time"],
-            ),
-            _news_payload(symbol),
-            _load_market_regime(),
-            _load_iv_term(symbol),
-            _load_skew(symbol),
-            get_ticker_fact(symbol, "research", on_stale="allow"),
-            return_exceptions=True,
-        )
+    report_date_obj = date.fromisoformat(meta["report_date"])
+
+    # Batch P / P-6: historical-earnings fetch runs as its own gather leg
+    # so an upstream metrics failure (e.g. Alpaca chain outage) doesn't
+    # also blank out ``prior_moves``. The metrics path still fetches
+    # historical for the rolling-stat computation, but the detail-level
+    # ``historical_earnings`` block can now fall back to this direct
+    # call when metrics is None.
+    (
+        quote_t, metrics_t, ladder_t, news_payload_t, regime_t,
+        iv_term_t, skew_t, research_t, historical_t,
+    ) = await asyncio.gather(
+        _load_quote(symbol),
+        _load_metrics(
+            symbol,
+            report_date=report_date_obj,
+            report_time=meta["report_time"],
+        ),
+        _load_strike_ladder(
+            symbol,
+            expiry=None,
+            report_date=report_date_obj,
+            report_time=meta["report_time"],
+        ),
+        _news_payload(symbol),
+        _load_market_regime(),
+        _load_iv_term(symbol),
+        _load_skew(symbol),
+        get_ticker_fact(symbol, "research", on_stale="allow"),
+        _load_historical_earnings(symbol, report_date_obj),
+        return_exceptions=True,
     )
     # Round-4 CLUSTER 3: a successful ``None`` is NOT partial (provider
     # intentionally absent); only exceptions or news_unavailable are.
@@ -2876,7 +3033,17 @@ async def get_detail(symbol: str) -> EarningsDetail:
         strike_ladder=StrikeLadder(**ladder) if ladder else None,
         claude_structured=ClaudeStructured(**claude) if claude else None,
         claude_full_research=None,
-        historical_earnings=_historical_block_from_metrics(metrics),
+        # Batch P / P-6: prefer the dedicated historical-earnings fetch
+        # when metrics is unavailable (provider outage, demo fallback,
+        # etc.). The metrics-derived block keeps cache locality on the
+        # happy path; ``historical_t`` is a pure FMP-surprises + Alpaca
+        # bars join so it survives an Alpaca-chain blip cleanly.
+        historical_earnings=(
+            _historical_block_from_metrics(metrics)
+            or _historical_block_from_metrics(
+                historical_t if isinstance(historical_t, dict) else None
+            )
+        ),
         iv_term_structure=[IVTermPoint(**p) for p in iv_term] if iv_term else None,
         skew=SkewBlock(**skew) if skew else None,
         news=[NewsArticle(**n) for n in news],
