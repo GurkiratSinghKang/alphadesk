@@ -196,7 +196,7 @@ async def test_allowed_symbol_not_rejected_by_restricted_list(
     async def _zero_notional(_req: Any) -> float:
         return 0.0
 
-    async def _zero_gross() -> float:
+    async def _zero_gross(*args, **kwargs) -> float:
         return 0.0
 
     async def _no_positions() -> tuple[int, dict[str, float], float]:
@@ -465,7 +465,7 @@ async def test_closing_auction_throttle_blocks_large_order_after_1545(
 
     # Stub out unrelated gates so the test only exercises the auction
     # throttle path.
-    async def _zero_gross() -> float:
+    async def _zero_gross(*args, **kwargs) -> float:
         return 0.0
 
     async def _no_positions() -> tuple[int, dict[str, float], float]:
@@ -513,7 +513,7 @@ async def test_closing_auction_throttle_bypass_with_allow_flag(
 ) -> None:
     _force_et_time(monkeypatch, 15, 50)
 
-    async def _zero_gross() -> float:
+    async def _zero_gross(*args, **kwargs) -> float:
         return 0.0
 
     async def _no_positions() -> tuple[int, dict[str, float], float]:
@@ -718,7 +718,7 @@ async def test_closing_auction_throttle_inactive_before_1545(
 ) -> None:
     _force_et_time(monkeypatch, 14, 0)  # 14:00 ET — well before the cutoff
 
-    async def _zero_gross() -> float:
+    async def _zero_gross(*args, **kwargs) -> float:
         return 0.0
 
     async def _no_positions() -> tuple[int, dict[str, float], float]:
