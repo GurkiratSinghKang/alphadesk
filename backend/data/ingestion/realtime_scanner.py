@@ -188,7 +188,7 @@ _last_bar_fetch: float = 0
 BAR_FETCH_INTERVAL = 60.0
 
 
-def register_setup(setup: dict[str, Any]) -> None:
+async def register_setup(setup: dict[str, Any]) -> None:
     """Register a pending setup from a strategy scan.
 
     Setup dict must contain:
@@ -217,26 +217,41 @@ def register_setup(setup: dict[str, Any]) -> None:
     rebind: build ``next_map`` then assign to the module attribute in
     one statement. Concurrent readers retain a reference to the old
     dict and iterate it safely until they re-read the module attribute.
+
+    Audit 2026-05-05 (Bug C-2): function was previously sync ``def`` and
+    NEVER acquired ``_setups_lock``. The lock was only used inside
+    ``_evaluate_tick``, which under the lock does a snapshot → process →
+    rebuild cycle. A concurrent ``register_setup(symbol='AAPL', ...)``
+    landing between the snapshot read and the rebuild's atomic rebind
+    would have its addition silently overwritten — the rebuild's
+    ``next_map = dict(_pending_setups)`` captured the post-register
+    state, but the subsequent ``_pending_setups = next_map`` (with the
+    AAPL setup we just added wiped from the per-symbol list because it
+    triggered or didn't trigger relative to the snapshot) would clobber
+    it. Converting to async + acquiring the lock makes the addition
+    serialise with the rebuild so the new setup either lands fully
+    before or fully after.
     """
     global _pairs_setups, _pending_setups
     sym = setup.get("symbol", "")
     strategy = setup.get("type", "")
 
-    if strategy == "pairs_zscore":
-        # Copy-on-write so concurrent readers iterating the previous list
-        # don't see a mid-mutation append.
-        _pairs_setups = [*_pairs_setups, setup]
-        logger.info("Registered pairs setup: %s z-target=%.2f", sym, setup.get("trigger_zscore", 0))
-    else:
-        existing = _pending_setups.get(sym, [])
-        # Build the new map, then atomically rebind the module attribute.
-        next_map = dict(_pending_setups)
-        next_map[sym] = [*existing, setup]
-        _pending_setups = next_map
-        logger.info(
-            "Registered %s setup: %s trigger=$%.2f %s",
-            strategy, sym, setup.get("trigger_price", 0), setup.get("direction", ""),
-        )
+    async with _setups_lock:
+        if strategy == "pairs_zscore":
+            # Copy-on-write so concurrent readers iterating the previous list
+            # don't see a mid-mutation append.
+            _pairs_setups = [*_pairs_setups, setup]
+            logger.info("Registered pairs setup: %s z-target=%.2f", sym, setup.get("trigger_zscore", 0))
+        else:
+            existing = _pending_setups.get(sym, [])
+            # Build the new map, then atomically rebind the module attribute.
+            next_map = dict(_pending_setups)
+            next_map[sym] = [*existing, setup]
+            _pending_setups = next_map
+            logger.info(
+                "Registered %s setup: %s trigger=$%.2f %s",
+                strategy, sym, setup.get("trigger_price", 0), setup.get("direction", ""),
+            )
 
 
 def clear_expired_setups() -> None:
@@ -293,6 +308,7 @@ async def _evaluate_tick(symbol: str, price: float, volume: int, bid: float, ask
     ``register_setup`` / HTTP read can't race the iteration
     (concurrency-audit-r4 P0 #2).
     """
+    global _pending_setups
     # Quick non-locked existence check — dict reads are atomic under GIL,
     # so this is safe for the early-out case.
     if symbol not in _pending_setups:
@@ -360,17 +376,36 @@ async def _evaluate_tick(symbol: str, price: float, volume: int, bid: float, ask
 
     # Update the live dict atomically under the lock — no awaits between
     # the read and the write.
+    #
+    # Audit 2026-05-05 (Bug C-2 follow-up): the prior implementation did
+    # ``next_map = dict(_pending_setups); _pending_setups.clear();
+    # _pending_setups.update(next_map)``. Even under the lock, concurrent
+    # READERS that don't take the lock (the HTTP route at
+    # api/routes/pipeline.py:649 and ``get_active_setups``) iterate
+    # ``_pending_setups`` directly and would observe an empty dict
+    # between ``clear()`` and ``update()``. Replaced with the same
+    # atomic rebind pattern used by ``register_setup`` and
+    # ``clear_expired_setups``: build ``next_map``, then ``_pending_setups
+    # = next_map`` in a single assignment. Readers either see the prior
+    # snapshot or the new one, never an intermediate empty.
+    #
+    # We also merge in any setups for ``symbol`` that were added by a
+    # concurrent ``register_setup`` AFTER our snapshot — those are not
+    # in ``setups_for_sym`` so they were never evaluated, and we must
+    # not drop them. We identify them by ``id()`` equality against
+    # ``setups_for_sym``: anything in the live list whose id is NOT in
+    # the snapshot is brand new and must survive.
+    snapshot_ids = {id(s) for s in setups_for_sym}
     async with _setups_lock:
-        if remaining:
-            next_map = dict(_pending_setups)
-            next_map[symbol] = remaining
-            _pending_setups.clear()
-            _pending_setups.update(next_map)
+        live_for_sym = list(_pending_setups.get(symbol, []))
+        added_concurrently = [s for s in live_for_sym if id(s) not in snapshot_ids]
+        merged = remaining + added_concurrently
+        next_map = dict(_pending_setups)
+        if merged:
+            next_map[symbol] = merged
         else:
-            next_map = dict(_pending_setups)
             next_map.pop(symbol, None)
-            _pending_setups.clear()
-            _pending_setups.update(next_map)
+        _pending_setups = next_map
 
     # Execute triggered setups (outside the lock — these may await on broker
     # HTTP calls and we don't want to hold the lock across network IO).
