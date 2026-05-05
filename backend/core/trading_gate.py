@@ -72,6 +72,15 @@ _STRATEGY_ID_TO_CANONICAL: dict[str, str] = {
     # is the canonical label for operator-submitted trades outside any
     # systematic strategy. Never in DENY/PAPER_ONLY sets.
     "manual": "manual",
+    # Audit P2-1 (2026-05-05): newer strategies were missing from this
+    # allowlist, so any order tagged with their hyphen-id was rejected
+    # with a 400 ``unknown strategy`` response from ``canonical_strategy_name``.
+    "sector-rotation": "sector_rotation",
+    "claude-alpha": "claude_alpha",
+    "vcp-breakout": "vcp_breakout",
+    "gap-fill": "gap_fill",
+    "dividend-capture": "dividend_capture",
+    "mean-reversion": "mean_reversion",
 }
 
 
