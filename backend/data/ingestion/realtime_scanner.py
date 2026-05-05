@@ -206,8 +206,19 @@ def register_setup(setup: dict[str, Any]) -> None:
     Note: mutations rebind the module-level lists/dicts atomically (rather
     than mutating in place) so any reader that already holds a reference to
     the previous list won't see a torn iteration. concurrency-audit-r4 P0 #2.
+
+    Audit R-F7 / B-P1-7 (2026-05-05): the previous implementation used
+    ``_pending_setups.clear()`` followed by ``_pending_setups.update(...)``.
+    Those are two non-atomic statements on the SAME dict object, so any
+    concurrent reader (the scanner loop's ``_evaluate_tick``, the HTTP
+    handler ``get_realtime_setups``, the cleanup pass) reaches in
+    between and sees an empty dict. Strategies whose triggers fire
+    during that window were silently lost. Replaced with a global
+    rebind: build ``next_map`` then assign to the module attribute in
+    one statement. Concurrent readers retain a reference to the old
+    dict and iterate it safely until they re-read the module attribute.
     """
-    global _pairs_setups
+    global _pairs_setups, _pending_setups
     sym = setup.get("symbol", "")
     strategy = setup.get("type", "")
 
@@ -218,12 +229,10 @@ def register_setup(setup: dict[str, Any]) -> None:
         logger.info("Registered pairs setup: %s z-target=%.2f", sym, setup.get("trigger_zscore", 0))
     else:
         existing = _pending_setups.get(sym, [])
-        # Rebuild the per-symbol list and reassign the dict slot — readers
-        # iterating the old list see a stable snapshot.
+        # Build the new map, then atomically rebind the module attribute.
         next_map = dict(_pending_setups)
         next_map[sym] = [*existing, setup]
-        _pending_setups.clear()
-        _pending_setups.update(next_map)
+        _pending_setups = next_map
         logger.info(
             "Registered %s setup: %s trigger=$%.2f %s",
             strategy, sym, setup.get("trigger_price", 0), setup.get("direction", ""),
@@ -236,8 +245,12 @@ def clear_expired_setups() -> None:
     Uses copy-on-write semantics: builds the filtered map, then atomically
     swaps the module dict's contents. Concurrent readers iterating the old
     snapshot continue safely. concurrency-audit-r4 P0 #2.
+
+    Audit R-F7 / B-P1-7 (2026-05-05): same fix as ``register_setup`` —
+    rebind the module attribute instead of clear()+update(), so the
+    HTTP handler and scanner loop never see an empty dict mid-eviction.
     """
-    global _pairs_setups
+    global _pairs_setups, _pending_setups
     now = datetime.now(ET).isoformat()
 
     # Snapshot before iterating; never mutate the live dict mid-loop.
@@ -248,9 +261,9 @@ def clear_expired_setups() -> None:
         if kept:
             next_map[sym] = kept
 
-    # Atomic-ish swap: clear+update in a tight non-await section.
-    _pending_setups.clear()
-    _pending_setups.update(next_map)
+    # Atomic rebind — readers iterating the prior dict snapshot are
+    # unaffected; new readers see ``next_map``.
+    _pending_setups = next_map
 
     _pairs_setups = [s for s in list(_pairs_setups) if s.get("expires", "9999") > now]
 
