@@ -237,10 +237,35 @@ def _audit_reject(
             # above is still queryable in the aggregator.
             coro.close()
         else:
-            loop.create_task(coro)
+            # Audit P3-5 (2026-05-05): the previous code did
+            # ``loop.create_task(coro)`` and discarded the Task. Python's
+            # GC may collect the Task before it completes (per asyncio
+            # docs warning), and any exception raised inside the coro
+            # is silently absorbed. Retain the Task on the module-level
+            # set so the GC keeps it alive, and attach a done-callback
+            # that surfaces failures at ERROR level instead of swallowing.
+            task = loop.create_task(coro)
+            _AUDIT_PENDING_TASKS.add(task)
+            task.add_done_callback(_handle_audit_task_done)
     except Exception:
         # Never allow the audit path to mask the real rejection.
         logger.debug("live_gate audit persistence failed", exc_info=True)
+
+
+# Set of in-flight audit-write tasks. Prevents asyncio.Task GC and lets
+# the done-callback surface failures.
+_AUDIT_PENDING_TASKS: set[Any] = set()
+
+
+def _handle_audit_task_done(task: Any) -> None:
+    _AUDIT_PENDING_TASKS.discard(task)
+    exc = task.exception()
+    if exc is not None:
+        logger.error(
+            "live_gate audit DB write failed silently — "
+            "compliance row may be missing",
+            exc_info=exc,
+        )
 
 
 def reject_if_live_forbidden(
