@@ -32,10 +32,13 @@ import {
   ContextBar,
   PositionsList,
   StatusBar,
-  TopBar,
   type OrderRow,
   type PositionTab,
 } from "@/components/composites";
+// chrome-batch-D P1-02 — composites/TopBar was a duplicate of the
+// canonical layout/TopBar; it has been removed and the desk now renders
+// the same TopBar as every other dashboard route.
+import { TopBar } from "@/components/layout/TopBar";
 import { DashboardLayout } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
@@ -82,19 +85,10 @@ import {
 } from "./_desk/selectors";
 import { useDeskClock } from "./_desk/useDeskClock";
 
-// BUG-005: unify desk nav with the (dashboard)/layout TopBar nav so docs
-// references to "Dashboard" and "Trade" always resolve. The desk keeps its
-// serif "αAlphaDesk" wordmark (rendered in the composites/TopBar), but the
-// nav link set matches layout/TopBar.tsx exactly.
-const NAV_ROUTES = [
-  { label: "Dashboard", href: "/", active: true },
-  { label: "Strategies", href: "/strategies" },
-  { label: "Trade", href: "/trade" },
-  { label: "Analytics", href: "/analytics" },
-  { label: "Alerts", href: "/alerts" },
-  { label: "Pipeline", href: "/pipeline" },
-  { label: "Reports", href: "/reports" },
-];
+// chrome-batch-D P1-02: with the canonical layout/TopBar now used on the
+// desk, the desk no longer maintains its own NAV_ROUTES list — the nav
+// links live inside the canonical TopBar and are kept in lockstep with
+// every other dashboard route.
 
 // 2026-04-20 round 2 (REVERTED 2026-04-21): tried `export const dynamic
 // = "force-dynamic"` and `revalidate = 0` to bust a stale prerender.
@@ -687,16 +681,12 @@ export default function DeskPage() {
               Visually-hidden heading provides a landmark for AT and
               document-outline tooling without altering the visual design. */}
           <h1 className="sr-only">Trading dashboard</h1>
-          <TopBar
-            currentRoute="/"
-            routes={NAV_ROUTES}
-            regime={regime}
-            clockEt={clock}
-            avatarInitial="α"
-            // BUG-054 — surface the palette as a visible "Search ⌘K"
-            // chip so users discover it without memorising the shortcut.
-            onOpenSearch={() => useUIStore.getState().setCommandPaletteOpen(true)}
-          />
+          {/* chrome-batch-D P1-02 — canonical TopBar reads its own
+              regime/clock/nav state from the zustand stores, so the desk
+              no longer needs to thread NAV_ROUTES, regime, or clock as
+              props. The visible Search ⌘K affordance lives inside the
+              canonical TopBar via setCommandPaletteOpen. */}
+          <TopBar />
         </div>
       }
       contextBar={<ContextBar cells={contextCells} />}
@@ -1482,11 +1472,19 @@ function DecisionQueue({
   onTrade,
   onOpenOrders,
   onPipeline,
+  showDemoSeedCta,
+  onConnectBroker,
 }: {
   items: readonly ActionItem[];
   onTrade: () => void;
   onOpenOrders: () => void;
   onPipeline: () => void;
+  // Batch E P0-05: when set, render a prominent "Connect your broker"
+  // card above the operator items. The audit found new operators
+  // mistaking the demo book for their real one — the desk can't lead
+  // with momentum/order CTAs until a real broker is wired up.
+  showDemoSeedCta?: boolean;
+  onConnectBroker?: () => void;
 }) {
   return (
     <div className="min-w-0 bg-bg-elev-1 p-5 md:p-6">
@@ -1502,6 +1500,27 @@ function DecisionQueue({
         </div>
       </div>
       <div className="mt-5 grid gap-3">
+        {showDemoSeedCta && onConnectBroker ? (
+          <button
+            type="button"
+            data-slot="action-stack-demo-seed-cta"
+            onClick={onConnectBroker}
+            className="card-stagger group grid min-h-[104px] grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-md border border-amber/30 bg-amber/5 px-4 py-4 text-left transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-amber/50 hover:bg-amber/10"
+          >
+            <span className="flex size-9 items-center justify-center rounded-sm border border-amber/30 bg-amber/10 text-amber">
+              <Key className="size-4" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <p className="text-body font-semibold leading-tight text-ink-1000">
+                Connect your broker
+              </p>
+              <p className="mt-2 line-clamp-2 text-body-sm leading-snug text-fg-muted">
+                Your desk is showing demo data. Link a paper or live brokerage in Settings to start trading your real account.
+              </p>
+            </div>
+            <ArrowRight className="mt-1 size-4 shrink-0 text-amber transition-transform group-hover:translate-x-0.5" aria-hidden />
+          </button>
+        ) : null}
         {items.length > 0 ? items.map((item, index) => {
           const onClick =
             item.action === "orders" ? onOpenOrders : item.action === "pipeline" ? onPipeline : onTrade;

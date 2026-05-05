@@ -827,7 +827,7 @@ function StrategyPerformanceReport({
 
   const handleDownload = () => {
     const csv = arrayToCsv(
-      ["Strategy", "Status", "Return %", "Sharpe", "Max Drawdown %", "Trades", "Win Rate %", "Invested"],
+      ["Strategy", "Status", "Return %", "Sharpe", "Max drawdown %", "Trades", "Win rate %", "Invested"],
       strategyRows.map(s => [
         s.name,
         s.status,

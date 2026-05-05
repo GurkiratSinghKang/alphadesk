@@ -6,10 +6,16 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 /* Fonts are self-hosted via `next/font/google` in app/layout.tsx, which
-   injects --font-ui / --font-display / --font-mono as CSS vars on <html>.
-   We consume those vars here and keep the old family names as fallbacks so
-   anything rendered before hydration still gets the intended face. No
-   third-party @import — nothing for CSP to block. */
+   injects --font-geist / --font-mono as CSS vars on <html>. We consume
+   those vars here and keep the old family names as fallbacks so anything
+   rendered before hydration still gets the intended face. No third-party
+   @import — nothing for CSP to block.
+
+   chrome-batch-D P1-11: previously `app/layout.tsx` invoked Geist twice
+   so `--font-ui` and `--font-display` each had their own `@font-face`
+   pointing at the same payload. Collapsed to one Geist invocation that
+   exposes `--font-geist`; `--font-ui` and `--font-display` are now
+   aliases that cascade onto `--font-geist`. */
 
 :root {
   /* ─── COLORS ─────────────────────────────────────────────────── */
@@ -205,13 +211,21 @@
 
   /* ─── TYPE ───────────────────────────────────────────────────── */
 
-  /* --font-display / --font-ui / --font-mono are now owned by next/font,
-     which assigns them on <html> via its generated className. We do NOT
-     redeclare them at :root to avoid shadowing next/font's self-hosted
+  /* --font-geist / --font-mono are owned by next/font, which assigns
+     them on <html> via its generated className. We do NOT redeclare
+     `--font-geist` here to avoid shadowing next/font's self-hosted
      family and `adjustFontFallback` sibling. Any consumer that reads
-     var(--font-ui) / var(--font-display) / var(--font-mono) resolves
-     through the next/font CSS chain, which already includes an automatic
-     size-matched fallback. */
+     var(--font-geist) / var(--font-mono) resolves through the next/font
+     CSS chain, which already includes an automatic size-matched
+     fallback.
+
+     chrome-batch-D P1-11: `--font-ui` and `--font-display` are now
+     aliases that resolve to the single `--font-geist` variable. The
+     two-call pattern that emitted two preload tags for the same payload
+     is gone; consumers that still read `--font-ui` / `--font-display`
+     keep working unchanged. */
+  --font-ui: var(--font-geist);
+  --font-display: var(--font-geist);
 
   /* Type scale — editorial. Larger jumps than typical web.
    *

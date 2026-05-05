@@ -53,8 +53,10 @@ import {
   StrategyCard,
   StrategyRail,
   TickerStrip,
-  TopBar,
 } from "@/components/composites";
+// chrome-batch-D P1-02: composites/TopBar removed in favour of the
+// canonical layout/TopBar. The design showcase still demos the chrome.
+import { TopBar } from "@/components/layout/TopBar";
 import type {
   AIMemo,
   ContextCell,
@@ -518,23 +520,13 @@ export default function DesignPreviewPage() {
           <SectionRule tag="§ 10 · Composites" />
 
           <div className="mt-6 space-y-10">
-            {/* TopBar */}
+            {/* TopBar — canonical layout/TopBar reads its own state from
+                the zustand stores. The showcase frame just renders it; no
+                props needed. */}
             <div>
               <Eyebrow as="div" className="mb-3">TopBar</Eyebrow>
               <div className="rounded-md overflow-hidden border border-border">
-                <TopBar
-                  currentRoute="/desk"
-                  routes={[
-                    { label: "Overview", href: "/" },
-                    { label: "Desk", href: "/desk", active: true },
-                    { label: "Strategies", href: "/strategies" },
-                    { label: "Research", href: "/research" },
-                    { label: "Journal", href: "/journal" },
-                  ]}
-                  regime={{ regime: "bull", vol: "low" }}
-                  clockEt="14:32:08 ET · Tue Nov 4"
-                  avatarInitial="α"
-                />
+                <TopBar />
               </div>
             </div>
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import MarketingShell from "@/components/layouts/MarketingShell";
 import Display from "@/components/typography/Display";
 import Eyebrow from "@/components/typography/Eyebrow";
 
@@ -10,45 +11,51 @@ import Eyebrow from "@/components/typography/Eyebrow";
  * Uses the F0 token system (Newsreader italic Display, gold brand, warm
  * near-black `--bg`) rather than the legacy shadcn aliases so the desk
  * voice carries through even when the user is lost.
+ *
+ * Wrapped in `<MarketingShell>` so a lost visitor still gets the public
+ * site nav (Docs / Privacy / Terms / Risk) and footer rather than a bare
+ * editorial card with no escape hatch (P1-01).
  */
 export default function NotFound() {
   return (
-    <main className="min-h-screen bg-bg text-fg">
-      <div className="mx-auto flex min-h-screen max-w-[720px] flex-col justify-center gap-10 px-6 py-16">
-        <Eyebrow as="div">§ · Missing page</Eyebrow>
+    <MarketingShell>
+      <main className="min-h-[60vh]">
+        <div className="mx-auto flex max-w-[720px] flex-col justify-center gap-10 py-16">
+          <Eyebrow as="div">§ · Missing page</Eyebrow>
 
-        <div className="flex flex-col gap-5">
-          <span
-            className="font-mono text-body-sm uppercase text-fg-hint"
-            style={{ letterSpacing: 0 }}
-          >
-            404
-          </span>
-          <Display size="lg" as="h1" className="max-w-[14ch]">
-            Not on the tape.
-          </Display>
-          <p className="max-w-[520px] font-display italic text-numeric-md leading-snug text-fg-muted">
-            The page you requested is not in the desk&rsquo;s registry. It may
-            have moved, been retired, or never existed in the first place.
-          </p>
-        </div>
+          <div className="flex flex-col gap-5">
+            <span
+              className="font-mono text-body-sm uppercase text-fg-hint"
+              style={{ letterSpacing: 0 }}
+            >
+              404
+            </span>
+            <Display size="lg" as="h1" className="max-w-[14ch]">
+              Not on the tape.
+            </Display>
+            <p className="max-w-[520px] font-display italic text-numeric-md leading-snug text-fg-muted">
+              The page you requested is not in the desk&rsquo;s registry. It may
+              have moved, been retired, or never existed in the first place.
+            </p>
+          </div>
 
-        <div className="flex flex-wrap items-center gap-3 pt-2">
-          <Link
-            href="/"
-            className="inline-flex min-h-11 items-center gap-2 rounded-sm bg-brand px-4 py-2 font-sans text-body-sm font-semibold text-ink-1000 transition-colors hover:bg-gold-300"
-            style={{ letterSpacing: 0 }}
-          >
-            Back to AlphaDesk
-          </Link>
-          <Link
-            href="/docs"
-            className="inline-flex min-h-11 items-center gap-2 rounded-sm border border-border bg-bg-elev-1 px-4 py-2 font-sans text-body-sm font-semibold text-fg transition-colors hover:bg-bg-elev-2"
-          >
-            Read the docs
-          </Link>
+          <div className="flex flex-wrap items-center gap-3 pt-2">
+            <Link
+              href="/"
+              className="inline-flex min-h-11 items-center gap-2 rounded-sm bg-brand px-4 py-2 font-sans text-body-sm font-semibold text-ink-1000 transition-colors hover:bg-gold-300"
+              style={{ letterSpacing: 0 }}
+            >
+              Back to AlphaDesk
+            </Link>
+            <Link
+              href="/docs"
+              className="inline-flex min-h-11 items-center gap-2 rounded-sm border border-border bg-bg-elev-1 px-4 py-2 font-sans text-body-sm font-semibold text-fg transition-colors hover:bg-bg-elev-2"
+            >
+              Read the docs
+            </Link>
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </MarketingShell>
   );
 }

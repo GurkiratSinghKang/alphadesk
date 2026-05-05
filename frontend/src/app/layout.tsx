@@ -21,15 +21,17 @@ export const viewport: Viewport = {
 // Self-hosted via next/font — no runtime fetch to fonts.googleapis.com.
 // The dashboard/trading surfaces use Geist for both UI and display voice so
 // software screens stay clean, sans-serif, and numerically crisp.
-const geistUi = Geist({
-  variable: "--font-ui",
-  subsets: ["latin"],
-  display: "swap",
-  fallback: ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
-});
-
-const geistDisplay = Geist({
-  variable: "--font-display",
+//
+// chrome-batch-D P1-11 — previously this file invoked `Geist({ ... })`
+// twice (once for `--font-ui`, once for `--font-display`), which made
+// next/font emit two separate `@font-face` blocks pointing at the same
+// woff2 payload. Each variable became its own preload tag, so the
+// browser fetched Geist Regular (and every weight in the subset) twice
+// on first paint. Collapse to a single `geist` invocation that exposes
+// `--font-geist` and update design-tokens.css to point both `--font-ui`
+// and `--font-display` slots at the single variable.
+const geist = Geist({
+  variable: "--font-geist",
   subsets: ["latin"],
   display: "swap",
   fallback: ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
@@ -112,7 +114,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`dark ${geistUi.variable} ${geistDisplay.variable} ${geistMono.variable} h-full antialiased`}
+      className={`dark ${geist.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>
