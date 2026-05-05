@@ -677,7 +677,7 @@ export default function PipelinePage() {
     ? "Starting..."
     : isRunning
     ? "Running..."
-    : "Run Now";
+    : "Run now";
 
   const pipelineActions = (
     <>
@@ -873,28 +873,45 @@ export default function PipelinePage() {
                           slightly larger than meta — it's the actionable
                           number on this card. */}
                       <Mono className="t-num-md text-foreground">
-                        {scheduler.next_scheduled_run
-                          ? `${new Intl.DateTimeFormat("en-CA", {
-                              timeZone: "America/New_York",
-                              year: "numeric",
-                              month: "2-digit",
-                              day: "2-digit",
-                            }).format(new Date(scheduler.next_scheduled_run))} 09:30 ET`
-                          : "Unknown"}
+                        {(() => {
+                          // R6-8 / R5-B2 fix: same Invalid-Date guard used by
+                          // the heartbeat readout below — if the timestamp
+                          // string fails to parse we fall through to
+                          // "Unavailable" instead of "Invalid Date 09:30 ET".
+                          if (!scheduler.next_scheduled_run) return "Unknown";
+                          const d = new Date(scheduler.next_scheduled_run);
+                          if (isNaN(d.valueOf())) return "Unavailable";
+                          return `${new Intl.DateTimeFormat("en-CA", {
+                            timeZone: "America/New_York",
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                          }).format(d)} 09:30 ET`;
+                        })()}
                       </Mono>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="t-label">Heartbeat</span>
                       <Mono className="t-meta text-foreground">
-                        {scheduler.last_heartbeat
-                          ? new Date(scheduler.last_heartbeat).toLocaleString("en-US", {
+                        {(() => {
+                          // R6-8 / R5-B2 fix: a malformed/empty `last_heartbeat`
+                          // string used to render literally as "Invalid Date ET".
+                          // Validate the parsed Date so we fall through to a
+                          // graceful "Unavailable" instead of leaking the JS
+                          // error to the operator.
+                          if (!scheduler.last_heartbeat) return "Never";
+                          const d = new Date(scheduler.last_heartbeat);
+                          if (isNaN(d.valueOf())) return "Unavailable";
+                          return (
+                            d.toLocaleString("en-US", {
                               timeZone: "America/New_York",
                               month: "short",
                               day: "numeric",
                               hour: "2-digit",
                               minute: "2-digit",
                             }) + " ET"
-                          : "Never"}
+                          );
+                        })()}
                       </Mono>
                       {scheduler.missed_runs > 0 && (
                         <Badge

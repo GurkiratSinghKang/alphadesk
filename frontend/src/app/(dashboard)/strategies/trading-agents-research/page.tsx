@@ -260,16 +260,57 @@ function extractDollarLevels(text: string): LevelItem[] {
       if (seen.has(value)) continue;
       seen.add(value);
       const start = line.indexOf(match);
-      const context = start >= 0
-        ? line.slice(Math.max(0, start - 40), Math.min(line.length, start + match.length + 40))
-        : line;
-      const before = start >= 0 ? line.slice(Math.max(0, start - 44), start) : "";
-      const after = start >= 0 ? line.slice(start + match.length, Math.min(line.length, start + match.length + 44)) : "";
+      // R6-8 / R5-1 MAJOR (TradingAgents price-map labels): the original
+      // fixed-width 40/44-char window cut mid-word when the dollar value
+      // sat in the interior of a long sentence \u2014 producing render-time
+      // garbage like "d levels" (truncated "Demand levels") and
+      // "ion add zone" (truncated "Distribution add zone"). Snap each
+      // window to the nearest word boundary so the surrounding text
+      // either makes a complete word or starts cleanly after one.
+      const contextStart = start >= 0 ? snapToWordStart(line, Math.max(0, start - 40)) : 0;
+      const contextEnd = start >= 0
+        ? snapToWordEnd(line, Math.min(line.length, start + match.length + 40))
+        : line.length;
+      const context = line.slice(contextStart, contextEnd);
+      const beforeStart = start >= 0 ? snapToWordStart(line, Math.max(0, start - 44)) : 0;
+      const before = start >= 0 ? line.slice(beforeStart, start) : "";
+      const afterEnd = start >= 0
+        ? snapToWordEnd(line, Math.min(line.length, start + match.length + 44))
+        : line.length;
+      const after = start >= 0 ? line.slice(start + match.length, afterEnd) : "";
       levels.push({ value, label: levelLabel(context, value, before, after) });
       if (levels.length >= 6) return levels;
     }
   }
   return levels;
+}
+
+/**
+ * R6-8 / R5-1 MAJOR (TradingAgents price-map labels): walk a slice
+ * boundary backwards/forwards until it lands on whitespace (or a hard
+ * boundary like punctuation), so the resulting substring never starts
+ * or ends inside a word.
+ */
+function snapToWordStart(line: string, idx: number): number {
+  if (idx <= 0) return 0;
+  // If we're already at whitespace or sentence break, no work to do.
+  if (/[\s.,;:!?\-\u2013\u2014/]/.test(line[idx])) return idx;
+  // Walk backwards until we hit one. If we walk past a reasonable
+  // budget without finding one, fall back to the original index \u2014 we'd
+  // rather lose a few characters than blow past a long single token.
+  for (let i = idx; i > Math.max(0, idx - 20); i -= 1) {
+    if (/[\s.,;:!?\-\u2013\u2014/]/.test(line[i])) return i + 1;
+  }
+  return idx;
+}
+
+function snapToWordEnd(line: string, idx: number): number {
+  if (idx >= line.length) return line.length;
+  if (/[\s.,;:!?\-\u2013\u2014/]/.test(line[idx])) return idx;
+  for (let i = idx; i < Math.min(line.length, idx + 20); i += 1) {
+    if (/[\s.,;:!?\-\u2013\u2014/]/.test(line[i])) return i;
+  }
+  return idx;
 }
 
 function levelTone(label: string): LevelTone {

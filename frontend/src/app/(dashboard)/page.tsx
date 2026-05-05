@@ -966,10 +966,10 @@ function DashboardCommandCenter({
             </div>
 
             {/* BUG-11: Book equity removed — Capital Canvas below is the equity hero.
-                Keeping Day P/L, Clock, and Strategies for the Command Room scan. */}
+                Keeping Day P&L, Clock, and Strategies for the Command Room scan. */}
             <div className="hidden gap-px bg-border-hair sm:grid sm:grid-cols-3">
               <CommandMetric
-                label="Day P/L"
+                label="Day P&L"
                 value={account.ready ? `${pnlSign}${formatCurrency(account.dayPnl, true)}` : "Awaiting"}
                 detail={`${account.positionsCount} open line${account.positionsCount === 1 ? "" : "s"}`}
                 valueClassName={pnlTone}

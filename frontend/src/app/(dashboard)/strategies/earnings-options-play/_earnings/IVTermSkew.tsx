@@ -117,7 +117,7 @@ function TermStrip({ points }: { points: IVTermPoint[] }) {
       </p>
       <table className="sr-only">
         <caption>
-          Implied volatility by days to expiry — front-month {fmtPct(finite[0].atmIv, 1)}
+          Implied volatility by days to expiry — front-month {fmtPct(finite[0].atmIv, 1)}{" "}
           to back-month {fmtPct(finite[finite.length - 1].atmIv, 1)}.
         </caption>
         <thead>

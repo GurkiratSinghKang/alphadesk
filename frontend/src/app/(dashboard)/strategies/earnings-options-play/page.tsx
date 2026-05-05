@@ -566,7 +566,7 @@ function StrategyIntroCard() {
         }}
         className="mt-2 t-meta underline text-fg-muted hover:text-brand"
       >
-        Got it — don&apos;t show again
+        Don&apos;t show again
       </button>
     </aside>
   );

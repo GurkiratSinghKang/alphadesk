@@ -46,10 +46,15 @@ const geistMono = Geist_Mono({
 // (page title, og:description, twitter:description) collapsed to a single
 // pair of canonical copy — `TAGLINE_SHORT` for titles, `TAGLINE_LONG` for
 // descriptions. Change once, and every metadata field tracks it.
-const TAGLINE_SHORT = "AI-Powered Trading Terminal";
+//
+// R6-8 / R5-1 MAJOR: product name was split between
+// "AI Trading Terminal" (login) and "AI-Powered Trading Terminal"
+// (layout). Unify on sentence case "AI-powered trading terminal" so
+// every surface (title, og:image alt, login eyebrow) reads the same.
+const TAGLINE_SHORT = "AI-powered trading terminal";
 const TAGLINE_LONG =
   "Claude-powered trading platform with 12 systematic strategies, real-time analysis, and automated portfolio management.";
-const PAGE_TITLE = `AlphaDesk — ${TAGLINE_SHORT}`;
+const PAGE_TITLE = `AlphaDesk · ${TAGLINE_SHORT}`;
 // TODO(design): commission the real 1200×630 og card. For now we reference
 // `/og-image.png` so the tag is correct even if the file is the favicon
 // composited on a dark canvas placeholder. See `frontend/public/og-image.png`.
@@ -83,7 +88,7 @@ export const metadata: Metadata = {
         url: OG_IMAGE,
         width: 1200,
         height: 630,
-        alt: "AlphaDesk — AI-Powered Trading Terminal",
+        alt: "AlphaDesk · AI-powered trading terminal",
       },
     ],
   },

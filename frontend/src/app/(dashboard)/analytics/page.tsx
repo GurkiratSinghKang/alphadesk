@@ -758,17 +758,17 @@ function TradeStatsTable({ stats }: { stats: ReturnType<typeof computeTradeStats
   // times don't read as profit/loss.
   type Tone = "profit" | "loss" | "neutral";
   const rows: { label: string; value: string; tone: Tone }[] = [
-    { label: "Total Trades",    value: String(stats.totalTrades),                          tone: "neutral" },
-    { label: "Win Rate",        value: winRateLabel,                                       tone: "neutral" },
-    { label: "Profit Factor",   value: profitFactorLabel,                                  tone: "neutral" },
-    { label: "Avg Win",         value: avgWinLabel,                                        tone: stats.avgWin == null ? "neutral" : "profit" },
-    { label: "Avg Loss",        value: avgLossLabel,                                       tone: stats.avgLoss == null ? "neutral" : "loss" },
-    { label: "Largest Win",     value: `+$${(stats.largestWin ?? 0).toFixed(2)}`,          tone: stats.largestWin > 0 ? "profit" : "neutral" },
-    { label: "Largest Loss",    value: `-$${Math.abs(stats.largestLoss ?? 0).toFixed(2)}`, tone: stats.largestLoss < 0 ? "loss" : "neutral" },
-    { label: "Avg Hold Time",   value: formatDuration(stats.avgHoldMs),                    tone: "neutral" },
-    { label: "Max Hold Time",   value: formatDuration(stats.maxHoldMs),                    tone: "neutral" },
-    { label: "Max Consec. Wins",   value: String(stats.maxConsecWins),                     tone: stats.maxConsecWins > 0 ? "profit" : "neutral" },
-    { label: "Max Consec. Losses", value: String(stats.maxConsecLosses),                   tone: stats.maxConsecLosses > 0 ? "loss" : "neutral" },
+    { label: "Total trades",    value: String(stats.totalTrades),                          tone: "neutral" },
+    { label: "Win rate",        value: winRateLabel,                                       tone: "neutral" },
+    { label: "Profit factor",   value: profitFactorLabel,                                  tone: "neutral" },
+    { label: "Avg win",         value: avgWinLabel,                                        tone: stats.avgWin == null ? "neutral" : "profit" },
+    { label: "Avg loss",        value: avgLossLabel,                                       tone: stats.avgLoss == null ? "neutral" : "loss" },
+    { label: "Largest win",     value: `+$${(stats.largestWin ?? 0).toFixed(2)}`,          tone: stats.largestWin > 0 ? "profit" : "neutral" },
+    { label: "Largest loss",    value: `-$${Math.abs(stats.largestLoss ?? 0).toFixed(2)}`, tone: stats.largestLoss < 0 ? "loss" : "neutral" },
+    { label: "Avg hold time",   value: formatDuration(stats.avgHoldMs),                    tone: "neutral" },
+    { label: "Max hold time",   value: formatDuration(stats.maxHoldMs),                    tone: "neutral" },
+    { label: "Max consec. wins",   value: String(stats.maxConsecWins),                     tone: stats.maxConsecWins > 0 ? "profit" : "neutral" },
+    { label: "Max consec. losses", value: String(stats.maxConsecLosses),                   tone: stats.maxConsecLosses > 0 ? "loss" : "neutral" },
   ];
 
   return (
