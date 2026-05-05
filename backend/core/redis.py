@@ -268,6 +268,13 @@ async def cache_get(key: str) -> Any | None:
 
 
 async def cache_set(key: str, data: Any, ttl_seconds: int = 300) -> None:
+    """Best-effort cache write. Audit B-F10 (2026-05-05): the prior
+    ``except Exception: pass`` swallowed every error silently, including
+    OOM, connection pool exhaustion, and serialisation bugs. Now logs
+    at WARNING with the exception type so operators see chronic write
+    failures in the log aggregator. The fail-open behaviour is preserved
+    — cache writes are never load-bearing on the request path.
+    """
     try:
         r = await get_redis()
         if ttl_seconds <= 0:
@@ -275,8 +282,11 @@ async def cache_set(key: str, data: Any, ttl_seconds: int = 300) -> None:
             await r.set(key, orjson.dumps(data).decode())
         else:
             await r.set(key, orjson.dumps(data).decode(), ex=ttl_seconds)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "cache_set failed for key=%s (ttl=%ds): %s: %s",
+            key, ttl_seconds, type(exc).__name__, exc,
+        )
 
 
 async def cache_incr(key: str, *, ttl_seconds: int = 86_400) -> int | None:
