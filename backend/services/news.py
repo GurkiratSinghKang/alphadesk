@@ -25,7 +25,13 @@ from pydantic import BaseModel
 
 log = logging.getLogger("alphadesk.news")
 
-NEWSDATA_BASE = "https://newsdata.io/api/1/news"
+# Batch W (HARDCODING-SWEEP): host lives on
+# ``settings.NEWSDATA_BASE_URL``; the ``/news`` segment is appended
+# here so other Newsdata routes can reuse the same base if added later.
+from core.config import settings as _settings_w_news  # noqa: E402
+
+NEWSDATA_BASE = f"{_settings_w_news.NEWSDATA_BASE_URL}/news"
+del _settings_w_news
 NEWS_CACHE_TTL = 900  # 15 minutes (avoid newsdata.io rate limits)
 NEWSDATA_RATE_LIMIT_COOLDOWN = 900  # 15 minutes, matches NEWS_CACHE_TTL
 NEWSDATA_RATE_KEY = "rate:news:newsdata"

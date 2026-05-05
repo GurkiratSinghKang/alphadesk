@@ -2418,7 +2418,7 @@ async def _get_current_price(symbol: str) -> float:
         }
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(
-                f"https://data.alpaca.markets/v2/stocks/{symbol}/trades/latest",
+                f"{settings.ALPACA_DATA_BASE_URL}/v2/stocks/{symbol}/trades/latest",
                 headers=headers,
             )
             if resp.status_code == 200:
@@ -5078,7 +5078,7 @@ async def _resolve_reference_price(symbol: str, reference: str) -> float:
     async with httpx.AsyncClient(timeout=10.0) as client:
         if reference == "prev_close":
             r = await client.get(
-                f"https://data.alpaca.markets/v2/stocks/{symbol}/bars/latest",
+                f"{settings.ALPACA_DATA_BASE_URL}/v2/stocks/{symbol}/bars/latest",
                 headers=headers,
                 params={"feed": "iex"},
             )
@@ -5088,7 +5088,7 @@ async def _resolve_reference_price(symbol: str, reference: str) -> float:
             price = float(data.get("c") or 0)
         elif reference == "session_open":
             r = await client.get(
-                f"https://data.alpaca.markets/v2/stocks/{symbol}/snapshot",
+                f"{settings.ALPACA_DATA_BASE_URL}/v2/stocks/{symbol}/snapshot",
                 headers=headers,
             )
             if r.status_code != 200:

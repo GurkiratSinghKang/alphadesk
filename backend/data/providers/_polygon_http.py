@@ -17,7 +17,10 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-BASE = "https://api.polygon.io"
+# Batch W: source the Polygon REST host from Settings so an operator
+# can point at a sandbox / mock server via ``POLYGON_BASE_URL`` without
+# touching code. The constant remains for callers that imported it.
+BASE = settings.POLYGON_BASE_URL
 MAX_RETRIES = 5
 BACKOFF_BASE = 0.75
 

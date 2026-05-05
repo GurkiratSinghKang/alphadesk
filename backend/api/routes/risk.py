@@ -353,6 +353,7 @@ def _empty_exposure(cash: float = 0.0, equity: float = 0.0) -> ExposureResponse:
 async def _generate_var() -> VaRResponse:
     """Compute VaR from real Alpaca position data and recent bar volatilities."""
     import httpx
+    from core.config import settings as _settings_w
 
     headers = await _alpaca_headers()
     base = await _alpaca_base_url()
@@ -385,7 +386,7 @@ async def _generate_var() -> VaRResponse:
             bars_by_symbol: dict[str, list[dict]] = {}
             try:
                 bars_resp = await client.get(
-                    "https://data.alpaca.markets/v2/stocks/bars",
+                    f"{_settings_w.ALPACA_DATA_BASE_URL}/v2/stocks/bars",
                     headers=headers,
                     params={
                         "symbols": ",".join(symbols),

@@ -67,6 +67,12 @@ logger = logging.getLogger("alphadesk.earnings_prewarm")
 # — the actual budget kill-switch lives in ``agents.claude_client``.
 CLAUDE_THESIS_COST_USD = 0.30
 
+
+def _claude_thesis_cost_usd() -> float:
+    """Batch U (A-3): per-call cost from settings, env-overridable."""
+    from core.config import settings as _settings
+    return float(_settings.CLAUDE_OPUS_COST_PER_CALL_USD)
+
 # Per-symbol concurrency cap — same default as the on-demand earnings
 # screener (``settings.EARNINGS_HYDRATE_CONCURRENCY``). Each prewarmed
 # symbol fans out to Alpaca chain + Alpaca IV + FMP surprises + Anthropic
@@ -142,22 +148,34 @@ class PrewarmRunResult:
 # ---------------------------------------------------------------------------
 
 
+def _env_flag_is_falsy(env_var: str) -> bool | None:
+    """Batch U: short-circuit settings lookup so live env overrides
+    (monkeypatch.setenv) still take effect."""
+    raw = os.environ.get(env_var)
+    if raw is None:
+        return None
+    val = raw.strip().lower()
+    if val == "":
+        return None
+    return val in {"0", "false", "no", "off"}
+
+
 def _is_prewarm_enabled() -> bool:
-    """``ALPHADESK_PREWARM_ENABLED`` — default True (the prewarm is
-    cheap relative to the UX win), set to ``"false"`` / ``"0"`` /
-    ``"no"`` to disable in an emergency without redeploy.
-    """
-    raw = os.environ.get("ALPHADESK_PREWARM_ENABLED", "true").strip().lower()
-    return raw not in {"0", "false", "no", "off", ""}
+    """``settings.PREWARM_ENABLED`` — Batch U: settings with env fallback."""
+    is_falsy = _env_flag_is_falsy("ALPHADESK_PREWARM_ENABLED")
+    if is_falsy is not None:
+        return not is_falsy
+    from core.config import settings as _settings
+    return bool(_settings.PREWARM_ENABLED)
 
 
 def _is_claude_stage_enabled() -> bool:
-    """``ALPHADESK_PREWARM_CLAUDE_ENABLED`` — default True, but flipping
-    this off lets ops still warm chain + IV + history when the Claude
-    budget is exhausted (rather than disabling the whole prewarm).
-    """
-    raw = os.environ.get("ALPHADESK_PREWARM_CLAUDE_ENABLED", "true").strip().lower()
-    return raw not in {"0", "false", "no", "off", ""}
+    """``settings.PREWARM_CLAUDE_ENABLED`` — same env-then-settings pattern."""
+    is_falsy = _env_flag_is_falsy("ALPHADESK_PREWARM_CLAUDE_ENABLED")
+    if is_falsy is not None:
+        return not is_falsy
+    from core.config import settings as _settings
+    return bool(_settings.PREWARM_CLAUDE_ENABLED)
 
 
 # ---------------------------------------------------------------------------
@@ -351,7 +369,7 @@ async def _stage_claude_thesis(
             ok=True,
             duration_ms=int((time.monotonic() - started) * 1000),
         ),
-        CLAUDE_THESIS_COST_USD,
+        _claude_thesis_cost_usd(),
     )
 
 

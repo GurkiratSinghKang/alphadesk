@@ -28,7 +28,10 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-BASE = "https://financialmodelingprep.com/stable"
+# Batch W: derive the FMP ``/stable`` mount from Settings; the host
+# lives on ``settings.FMP_BASE_URL``. The ``/stable`` segment is
+# appended here because the rest of this module assumes a stable mount.
+BASE = f"{settings.FMP_BASE_URL}/stable"
 MAX_RETRIES = 5
 BACKOFF_BASE = 0.75
 

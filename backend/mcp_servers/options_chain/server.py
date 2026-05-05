@@ -40,7 +40,7 @@ class OptionsChainServer(BaseMCPServer):
             if expiry:
                 params["expiration_date"] = expiry
             resp = await client.get(
-                f"https://api.polygon.io/v3/snapshot/options/{symbol}",
+                f"{settings.POLYGON_BASE_URL}/v3/snapshot/options/{symbol}",
                 params=params,
             )
             data = resp.json()
@@ -75,7 +75,7 @@ class OptionsChainServer(BaseMCPServer):
         symbol = symbol.upper()
         async with httpx.AsyncClient() as client:
             resp = await client.get(
-                f"https://api.polygon.io/v3/reference/options/contracts",
+                f"{settings.POLYGON_BASE_URL}/v3/reference/options/contracts",
                 params={
                     "underlying_ticker": symbol,
                     "limit": 1000,

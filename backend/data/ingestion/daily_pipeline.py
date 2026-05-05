@@ -89,7 +89,7 @@ async def _get_vix_level(client: httpx.AsyncClient) -> float | None:
             polygon_key = settings.POLYGON_API_KEY.get_secret_value()
             if polygon_key:
                 resp = await client.get(
-                    f"https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/VIX",
+                    f"{settings.POLYGON_BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers/VIX",
                     params={"apiKey": polygon_key},
                 )
                 if resp.status_code == 200:
@@ -2418,7 +2418,7 @@ async def _run_pipeline_inner(
                     sym = stock["symbol"]
                     try:
                         resp = await client.get(
-                            f"https://data.alpaca.markets/v2/stocks/{sym}/bars",
+                            f"{settings.ALPACA_DATA_BASE_URL}/v2/stocks/{sym}/bars",
                             headers=_alpaca_headers(),
                             params={
                                 "timeframe": "1Day",
@@ -2449,7 +2449,7 @@ async def _run_pipeline_inner(
                     sym = stock["symbol"]
                     try:
                         resp = await client.get(
-                            f"https://data.alpaca.markets/v2/stocks/{sym}/bars",
+                            f"{settings.ALPACA_DATA_BASE_URL}/v2/stocks/{sym}/bars",
                             headers=_alpaca_headers(),
                             params={
                                 "timeframe": "1Day",

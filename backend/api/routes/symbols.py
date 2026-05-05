@@ -1884,8 +1884,9 @@ def _search_local(q: str, limit: int) -> SymbolSearchResponse:
 async def _search_polygon(q: str, limit: int, api_key: str) -> SymbolSearchResponse:
     """Search via Polygon.io reference tickers API."""
     import httpx
+    from core.config import settings as _settings_w
 
-    url = "https://api.polygon.io/v3/reference/tickers"
+    url = f"{_settings_w.POLYGON_BASE_URL}/v3/reference/tickers"
     params = {
         "search": q,
         "active": "true",

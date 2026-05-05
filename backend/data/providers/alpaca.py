@@ -34,7 +34,10 @@ from data.providers.cache import TTL_DAILY, TTL_INTRADAY, cached
 
 logger = logging.getLogger(__name__)
 
-_BASE = "https://data.alpaca.markets/v2"
+# Batch W: source the Alpaca data host from Settings so a sandbox /
+# proxy override propagates without code changes. The ``/v2`` segment
+# is appended here because this whole module targets the v2 mount.
+_BASE = f"{settings.ALPACA_DATA_BASE_URL}/v2"
 _TF_MAP = {
     "1D": "1Day",
     "1d": "1Day",

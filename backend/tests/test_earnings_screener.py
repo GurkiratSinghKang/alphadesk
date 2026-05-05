@@ -166,6 +166,8 @@ def test_earnings_edge_score_penalizes_expensive_debit_verticals():
 
 
 def test_earnings_edge_score_returns_null_without_evidence():
+    # Wave 4a / Batch Q (Q-8): edge_score_components is always present in
+    # the return shape; empty when no evidence was contributed.
     assert compute_earnings_edge_score(
         iv_rank=None,
         premium_yield_call_atm=None,
@@ -174,7 +176,11 @@ def test_earnings_edge_score_returns_null_without_evidence():
         hist_avg_abs_move_pct=None,
         claude_confidence=None,
         days_until=1,
-    ) == {"edge_score": None, "edge_score_reasons": []}
+    ) == {
+        "edge_score": None,
+        "edge_score_reasons": [],
+        "edge_score_components": {},
+    }
 
 
 from services.earnings_prompts import (

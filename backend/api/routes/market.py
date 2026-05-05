@@ -283,7 +283,7 @@ async def get_bars(
                 "apiKey": settings.POLYGON_API_KEY.get_secret_value(),
             }
             url = (
-                f"https://api.polygon.io/v2/aggs/ticker/{symbol.upper()}/range/"
+                f"{settings.POLYGON_BASE_URL}/v2/aggs/ticker/{symbol.upper()}/range/"
                 f"{mult}/{span}/{effective_start.isoformat()}/{effective_end.isoformat()}"
             )
 
@@ -408,7 +408,7 @@ async def _fetch_snapshot_impl(symbol: str) -> Snapshot:
 
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
-                    f"https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/{symbol.upper()}",
+                    f"{settings.POLYGON_BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers/{symbol.upper()}",
                     params={"apiKey": settings.POLYGON_API_KEY.get_secret_value()},
                 )
                 if resp.status_code == 200:
@@ -525,7 +525,7 @@ async def get_market_status() -> MarketStatus:
 
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
-                    "https://api.polygon.io/v1/marketstatus/now",
+                    f"{settings.POLYGON_BASE_URL}/v1/marketstatus/now",
                     params={"apiKey": settings.POLYGON_API_KEY.get_secret_value()},
                 )
                 if resp.status_code == 200:

@@ -240,25 +240,28 @@ async def _verify_password_reauth(username: str, submitted: str) -> bool:
 async def _collect_export_bundle(username: str) -> dict[str, Any]:
     """Assemble the Art. 20 export payload for ``username``.
 
-    Reads every user-addressable table and packages them into a single
-    dict.  Tables without a per-user column (positions, watchlists,
-    screener presets, alerts on the single-admin deployment) are
-    exported in full — they are owned by the sole user of the system.
-    Multi-tenant future work would add a ``user_id`` filter here and
-    gate PII of other users.
+    Reads every user-addressable table that carries a per-user column and
+    packages it into a single dict.
+
+    Audit 2026-05-05 (P0 multi-tenant leak): this helper previously did
+    ``select(Trade|Position|Watchlist|ScreenerPreset|Alert|StrategySignal)``
+    with NO per-user filter, so every user's rows landed in every other
+    user's export bundle. Of those six tables only ``Trade`` and
+    ``AuditLog`` actually carry a ``username`` column today; the other
+    five (Position, Watchlist, ScreenerPreset, Alert, StrategySignal) are
+    a separate data-isolation bug at the schema level and cannot be
+    safely exported per-user without first migrating in a key column.
+    Until that migration lands those tables are omitted from the export
+    bundle (empty lists) rather than re-introduced as a cross-tenant
+    leak. See TODO(P0-isolation) below.
 
     Returns a plain dict; the handler is responsible for JSON
     serialisation + the ``Content-Disposition`` header.
     """
     from core.database import _get_session_factory
     from data.storage.models import (
-        Alert,
         AuditLog,
-        Position,
-        ScreenerPreset,
-        StrategySignal,
         Trade,
-        Watchlist,
     )
 
     bundle: dict[str, Any] = {
@@ -270,10 +273,20 @@ async def _collect_export_bundle(username: str) -> dict[str, Any]:
                 "This bundle contains your personal data as held by "
                 "AlphaDesk on the generation timestamp above. Rows marked "
                 "retained_for_compliance=true have been kept past an "
-                "erasure request under SEC 17a-4 minimum retention."
+                "erasure request under SEC 17a-4 minimum retention. "
+                "positions/watchlists/screener_presets/alerts/"
+                "strategy_signals are present as empty lists pending the "
+                "multi-tenant key-column migration — see release notes."
             ),
         },
         "trades": [],
+        # TODO(P0-isolation): Position/Watchlist/ScreenerPreset/Alert/
+        # StrategySignal carry no username (or user_id) column today; we
+        # cannot include them in a per-user export without leaking every
+        # other user's rows. Schema migration to add ``username`` (or a
+        # FK to users.id) on these five tables is tracked separately.
+        # Leaving the keys present with empty lists so the export schema
+        # stays stable for downstream consumers.
         "positions": [],
         "watchlists": [],
         "screener_presets": [],
@@ -298,25 +311,14 @@ async def _collect_export_bundle(username: str) -> dict[str, Any]:
 
     factory = _get_session_factory()
     async with factory() as session:
-        # Trades — full row dump.  ``legs`` is already JSONB so it
+        # Trades — scoped to the calling user.  ``legs`` is JSONB so it
         # serialises naturally through dict(row).
-        rows = (await session.execute(select(Trade))).scalars().all()
+        rows = (
+            await session.execute(
+                select(Trade).where(Trade.username == username)
+            )
+        ).scalars().all()
         bundle["trades"] = [_row_to_dict(r) for r in rows]
-
-        rows = (await session.execute(select(Position))).scalars().all()
-        bundle["positions"] = [_row_to_dict(r) for r in rows]
-
-        rows = (await session.execute(select(Watchlist))).scalars().all()
-        bundle["watchlists"] = [_row_to_dict(r) for r in rows]
-
-        rows = (await session.execute(select(ScreenerPreset))).scalars().all()
-        bundle["screener_presets"] = [_row_to_dict(r) for r in rows]
-
-        rows = (await session.execute(select(Alert))).scalars().all()
-        bundle["alerts"] = [_row_to_dict(r) for r in rows]
-
-        rows = (await session.execute(select(StrategySignal))).scalars().all()
-        bundle["strategy_signals"] = [_row_to_dict(r) for r in rows]
 
         # Audit log — scope to this username OR to retained-compliance rows.
         # A row with ``username IS NULL`` is a pre-auth event (failed login
@@ -647,13 +649,8 @@ async def erase_user_data(
     if not settings.SKIP_DB_INIT:
         from core.database import _get_session_factory
         from data.storage.models import (
-            Alert,
             AuditLog,
-            Position,
-            ScreenerPreset,
-            StrategySignal,
             Trade,
-            Watchlist,
         )
 
         factory = _get_session_factory()
@@ -664,19 +661,30 @@ async def erase_user_data(
             # collection-level deletes so the operation is a single
             # server-side DELETE per table (no N+1 round trips).
             #
-            # Single-admin deployment: we delete every row.  A multi-
-            # tenant extension would add ``where(col.user_id ==
-            # user_id)`` filters here.
-            for model, key in (
-                (Trade, "trades"),
-                (Position, "positions"),
-                (Watchlist, "watchlists"),
-                (ScreenerPreset, "screener_presets"),
-                (Alert, "alerts"),
-                (StrategySignal, "strategy_signals"),
-            ):
-                res = await session.execute(delete(model))
-                deleted[key] = int(res.rowcount or 0)
+            # Audit 2026-05-05 (P0 multi-tenant leak): the previous code
+            # issued unfiltered ``delete(Trade|Position|Watchlist|
+            # ScreenerPreset|Alert|StrategySignal)`` so a non-admin user
+            # calling /erase wiped every other user's books. ``Trade``
+            # carries a ``username`` column so we now scope its delete to
+            # the caller. The other five tables (Position, Watchlist,
+            # ScreenerPreset, Alert, StrategySignal) carry no per-user
+            # column today; deleting them table-wide would leak data
+            # cross-tenant just to satisfy the row-count metric. We skip
+            # them rather than re-introduce the leak. See
+            # TODO(P0-isolation) below.
+            res = await session.execute(
+                delete(Trade).where(Trade.username == username)
+            )
+            deleted["trades"] = int(res.rowcount or 0)
+
+            # TODO(P0-isolation): Position/Watchlist/ScreenerPreset/
+            # Alert/StrategySignal carry no username column. A schema
+            # migration adding ``username`` (or a FK to users.id) is the
+            # prerequisite to wiring them back into the per-user erase
+            # cascade.  Until then we deliberately leave their rows in
+            # place so a /erase call cannot wipe another user's data.
+            # The deleted[...] counters stay at 0, which the response
+            # reports honestly.
 
             # Audit log splits: the erasure deletes user-originated
             # rows; the retention-mandated rows get the flag flipped on

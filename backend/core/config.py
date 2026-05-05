@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     ALPACA_API_KEY: SecretStr = SecretStr("")
     ALPACA_SECRET_KEY: SecretStr = SecretStr("")
     ALPACA_BASE_URL: str = "https://paper-api.alpaca.markets"
+    # Batch W (audit-reports/2026-05-05/HARDCODING-SWEEP.md C-1/C-2):
+    # canonical Alpaca hostnames used by broker_connections / market-data
+    # layers. Override via env when routing through a proxy / sandbox so a
+    # host change is one PR.
+    ALPACA_PAPER_BASE_URL: str = "https://paper-api.alpaca.markets"
+    ALPACA_LIVE_BASE_URL: str = "https://api.alpaca.markets"
+    ALPACA_DATA_BASE_URL: str = "https://data.alpaca.markets"
     # Toggle the broker trade_updates WebSocket subscription in
     # ``data/ingestion/alpaca_stream.py``. When True the backend opens a
     # second Alpaca WS connection and publishes fill / cancel / reject
@@ -72,6 +79,24 @@ class Settings(BaseSettings):
     IB_HOST: str = "127.0.0.1"
     IB_PORT: int = 7497
     IB_CLIENT_ID: int = 1
+
+    # --- Broker: E*TRADE (Batch W — C-3) ---
+    ETRADE_LIVE_BASE_URL: str = "https://api.etrade.com"
+    ETRADE_SANDBOX_BASE_URL: str = "https://apisb.etrade.com"
+
+    # --- Broker: Schwab (Batch W — C-4) ---
+    SCHWAB_API_BASE_URL: str = "https://api.schwabapi.com"
+
+    # --- Market data providers (Batch W — C-5 + sweep) ---
+    # Polygon REST host. /v1, /v2, /v3 prefix lives at the call site so
+    # multi-version routes don't fork on env. FMP host shared by /api/v3
+    # (legacy) and /stable mounts; callers append the version. NewsData.io
+    # centralised for operator overrides. Anthropic surfaced for parity if
+    # a custom proxy is required.
+    POLYGON_BASE_URL: str = "https://api.polygon.io"
+    FMP_BASE_URL: str = "https://financialmodelingprep.com"
+    NEWSDATA_BASE_URL: str = "https://newsdata.io/api/1"
+    ANTHROPIC_BASE_URL: str = "https://api.anthropic.com"
 
     # --- AI ---
     ANTHROPIC_API_KEY: SecretStr = SecretStr("")
@@ -241,6 +266,41 @@ class Settings(BaseSettings):
     # sourcing a dev .env), and a quiet behaviour change in prod is much
     # worse than a noisier explicit setting.
     SKIP_EARNINGS_FMP_CACHE: bool = False
+
+    # --- Earnings IV regime thresholds (Batch U — A-1, A-2) ---
+    # Centralised so ops can tune the regime breakpoints without a code
+    # deploy. The screener / recommender use these to flip directional
+    # vs short-premium framing on iv_rank. Defaults preserve historic
+    # behaviour: ≥70 = "rich vol" (favor short premium), ≤35 = "cheap
+    # vol" (favor long premium / debit setups).
+    EARNINGS_IV_RICH_THRESHOLD: float = 70.0
+    EARNINGS_IV_CHEAP_THRESHOLD: float = 35.0
+
+    # --- Claude Opus per-call cost estimate (Batch U — A-3) ---
+    # Used solely for cost-ceiling telemetry; tracks Anthropic pricing.
+    CLAUDE_OPUS_COST_PER_CALL_USD: float = 0.30
+
+    # --- FMP cache TTLs (Batch U — A-4, A-5) ---
+    FMP_CALENDAR_CACHE_TTL_SECONDS: int = 300
+    FMP_RESCUE_CACHE_TTL_SECONDS: int = 300
+
+    # --- Rate-limit caps (Batch U — A-6 through A-9) ---
+    RATE_LIMIT_FULL_RESEARCH_MAX: int = 5
+    RATE_LIMIT_FULL_RESEARCH_WINDOW_SECONDS: float = 600.0
+    RATE_LIMIT_DETAIL_MAX: int = 30
+    RATE_LIMIT_DETAIL_WINDOW_SECONDS: float = 600.0
+    RATE_LIMIT_ANALYSIS_PER_IP: int = 30
+    RATE_LIMIT_ANALYSIS_PER_IP_WINDOW_SECONDS: float = 60.0
+    RATE_LIMIT_ANALYSIS_GLOBAL: int = 100
+    RATE_LIMIT_ANALYSIS_GLOBAL_WINDOW_SECONDS: float = 60.0
+
+    # --- Greek-calculation risk-free rate (Batch U — A-21) ---
+    GREEK_CALCULATION_RISK_FREE_RATE: float = 0.05
+
+    # --- Earnings prewarm scheduler knobs (Batch U / R follow-up) ---
+    PREWARM_ENABLED: bool = True
+    PREWARM_CLAUDE_ENABLED: bool = True
+
 
     # --- Compliance (Wave 2H — persona 76 P76-7) ---
     # Operator-owned deny-list. Populated either inline (comma-separated) or

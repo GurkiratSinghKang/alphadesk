@@ -270,6 +270,72 @@ class KillSwitch:
             },
         )
 
+    # -- Async variants (live pipeline hot path) --------------------------
+    # The production pipeline runner (`DailyPipelineRunner.run_today`) is
+    # async, and the production repo (`PostgresDisabledEventsRepo`) is
+    # natively async — these helpers let the runner await the async repo
+    # methods directly instead of bouncing through the sync facade's
+    # thread-pool bridge on every layer-3 check.
+    #
+    # Sync `is_enabled` remains for back-compat (CLI scripts, in-memory
+    # repos in unit tests, the disable_manual / re_enable admin helpers).
+
+    async def check_layer3_manual_async(self, strategy: str) -> Decision:
+        repo_get = getattr(
+            self.repo, "latest_unresolved_for_strategy_async", None
+        )
+        if repo_get is not None:
+            ev = await repo_get(strategy, 3)
+        else:
+            ev = self.repo.latest_unresolved_for_strategy(strategy, layer=3)
+        if ev is None:
+            return Decision(
+                enabled=True,
+                layer=0,
+                reason="layer3: no unresolved manual event",
+                metrics={},
+            )
+        return Decision(
+            enabled=False,
+            layer=3,
+            reason=f"layer3: manual disable — {ev.reason or 'no reason given'}",
+            metrics={
+                "event_id": ev.id,
+                "manual_actor": ev.manual_actor,
+                "triggered_at": ev.triggered_at.isoformat() if ev.triggered_at else None,
+            },
+        )
+
+    async def is_enabled_async(self, strategy: str, ctx: KillSwitchContext) -> Decision:
+        """Async variant of :meth:`is_enabled` for use from the live runner.
+
+        Layer 1 + Layer 2 do not consult the repo on the happy path (they
+        only insert when triggered, and that insert is fire-and-forget via
+        the sync facade — same as today). Layer 3 is the only path that
+        reads the repo on every tick, so awaiting the native async query
+        here removes the per-tick thread-pool round-trip.
+        """
+        d1 = self.check_layer1_drawdown(strategy, ctx)
+        if not d1.enabled:
+            return d1
+        d2 = self.check_layer2_daily_pnl(strategy, ctx)
+        if not d2.enabled:
+            return d2
+        d3 = await self.check_layer3_manual_async(strategy)
+        if not d3.enabled:
+            return d3
+        return Decision(
+            enabled=True,
+            layer=0,
+            reason="all layers passed",
+            metrics={
+                "peak_nav": ctx.peak_nav,
+                "current_nav": ctx.current_nav,
+                "alloc_capital": ctx.alloc_capital,
+                "realized_today": ctx.realized_today,
+            },
+        )
+
     def disable_manual(self, strategy: str, actor: str, reason: str) -> DisabledEvent | None:
         """Insert a layer-3 event. No-op if already disabled.
 

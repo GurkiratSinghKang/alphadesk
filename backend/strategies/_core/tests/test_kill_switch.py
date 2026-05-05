@@ -392,3 +392,88 @@ class TestManualDisableReEnable:
         # Calling re_enable on a strategy that isn't disabled shouldn't raise
         ks.re_enable("pead", actor="alice")
         assert repo.latest_unresolved_for_strategy("pead", layer=3) is None
+
+
+class TestAsyncIsEnabled:
+    """Audit B-F3 / R-F1 (2026-05-05): live runner uses ``is_enabled_async``
+    so the layer-3 SELECT runs natively against the async Postgres session
+    instead of bouncing through the sync facade's thread-pool bridge per
+    pipeline tick. The async path must be byte-equivalent to the sync one
+    for the in-memory repo (sync-only methods); the Postgres repo paths
+    are exercised by ``test_kill_switch_postgres.py``.
+    """
+
+    @pytest.mark.asyncio
+    async def test_async_layer3_no_event_returns_enabled(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        d = await ks.check_layer3_manual_async("pead")
+        assert d.enabled is True
+        assert d.layer == 0
+
+    @pytest.mark.asyncio
+    async def test_async_layer3_unresolved_returns_disabled(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        repo.insert(DisabledEvent(
+            id=None, strategy="pead", layer=3,
+            triggered_at=datetime.now(timezone.utc),
+            manual_actor="alice", reason="test",
+        ))
+        ks = KillSwitch(repo=repo)
+        d = await ks.check_layer3_manual_async("pead")
+        assert d.enabled is False
+        assert d.layer == 3
+
+    @pytest.mark.asyncio
+    async def test_async_is_enabled_layer1_short_circuits(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=85.0,
+                                alloc_capital=10000.0, realized_today=0.0)
+        d = await ks.is_enabled_async("pead", ctx)
+        assert d.enabled is False
+        assert d.layer == 1
+
+    @pytest.mark.asyncio
+    async def test_async_is_enabled_layer3_via_repo(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        repo.insert(DisabledEvent(
+            id=None, strategy="pead", layer=3,
+            triggered_at=datetime.now(timezone.utc),
+            manual_actor="alice", reason="ops halt",
+        ))
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=98.0,
+                                alloc_capital=10000.0, realized_today=0.0)
+        d = await ks.is_enabled_async("pead", ctx)
+        assert d.enabled is False
+        assert d.layer == 3
+        assert "ops halt" in d.reason
+
+    @pytest.mark.asyncio
+    async def test_async_is_enabled_all_pass(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=98.0,
+                                alloc_capital=10000.0, realized_today=-50.0)
+        d = await ks.is_enabled_async("pead", ctx)
+        assert d.enabled is True
+        assert d.layer == 0
+
+    @pytest.mark.asyncio
+    async def test_async_layer3_uses_async_repo_method_when_available(self) -> None:
+        """When the repo exposes ``latest_unresolved_for_strategy_async``,
+        ``check_layer3_manual_async`` must prefer it over the sync method
+        (the live PostgresDisabledEventsRepo only has the sync facade as a
+        thread-pool bridge — calling sync from inside the async runner
+        would defeat the whole point of the async variant)."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        async_repo = MagicMock()
+        async_repo.latest_unresolved_for_strategy_async = AsyncMock(return_value=None)
+        async_repo.latest_unresolved_for_strategy = MagicMock(return_value=None)
+        ks = KillSwitch(repo=async_repo)
+        d = await ks.check_layer3_manual_async("pead")
+        async_repo.latest_unresolved_for_strategy_async.assert_awaited_once_with("pead", 3)
+        async_repo.latest_unresolved_for_strategy.assert_not_called()
+        assert d.enabled is True

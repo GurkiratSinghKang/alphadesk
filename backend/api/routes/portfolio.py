@@ -1150,7 +1150,7 @@ async def get_pnl_calendar(
                                 continue
                             try:
                                 resp = await client.get(
-                                    f"https://data.alpaca.markets/v2/stocks/{sym}/trades/latest",
+                                    f"{settings.ALPACA_DATA_BASE_URL}/v2/stocks/{sym}/trades/latest",
                                     headers=headers,
                                 )
                                 if resp.status_code == 200:
@@ -1448,7 +1448,7 @@ async def get_morning_brief() -> MorningBriefResponse:
                 f"{settings.ALPACA_BASE_URL}/v2/positions", headers=headers
             )
             spy_snap_coro = client.get(
-                "https://data.alpaca.markets/v2/stocks/snapshots?symbols=SPY,VIXY",
+                f"{settings.ALPACA_DATA_BASE_URL}/v2/stocks/snapshots?symbols=SPY,VIXY",
                 headers=headers,
             )
 

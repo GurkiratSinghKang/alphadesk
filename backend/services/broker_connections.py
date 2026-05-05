@@ -15,7 +15,12 @@ import httpx
 from sqlalchemy import select
 
 from core.config import settings
-from core.crypto import EncryptionKeyUnavailable, decrypt_secret, encrypt_secret
+from core.crypto import (
+    CURRENT_CRYPTO_VERSION,
+    EncryptionKeyUnavailable,
+    decrypt_secret,
+    encrypt_secret,
+)
 
 
 class BrokerCredentialError(RuntimeError):
@@ -79,7 +84,12 @@ class AlpacaCredentials:
 
 
 def _base_url_for_env(account_env: str) -> str:
-    return "https://api.alpaca.markets" if account_env == "live" else "https://paper-api.alpaca.markets"
+    # Batch W (HARDCODING-SWEEP C-1/C-2): hostnames live in Settings.
+    return (
+        settings.ALPACA_LIVE_BASE_URL
+        if account_env == "live"
+        else settings.ALPACA_PAPER_BASE_URL
+    )
 
 
 def _account_env_from_settings() -> str:
@@ -195,7 +205,12 @@ def _last4(value: str | None) -> str | None:
 
 
 def _etrade_base_url(account_env: str) -> str:
-    return "https://api.etrade.com" if account_env == "live" else "https://apisb.etrade.com"
+    # Batch W (HARDCODING-SWEEP C-3): hostnames live in Settings.
+    return (
+        settings.ETRADE_LIVE_BASE_URL
+        if account_env == "live"
+        else settings.ETRADE_SANDBOX_BASE_URL
+    )
 
 
 def _oauth1_quote(value: str) -> str:
@@ -309,7 +324,8 @@ async def verify_schwab_connection(
     refresh_token: str,
     redirect_uri: str | None = None,
 ) -> dict[str, Any]:
-    token_url = "https://api.schwabapi.com/v1/oauth/token"
+    # Batch W (HARDCODING-SWEEP C-4): host lives in Settings.
+    token_url = f"{settings.SCHWAB_API_BASE_URL}/v1/oauth/token"
     auth = base64.b64encode(f"{client_id}:{client_secret}".encode("utf-8")).decode("ascii")
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.post(
@@ -454,6 +470,7 @@ async def upsert_broker_connection(
                 account_env=account_env,
                 api_key_ciphertext=encrypted_primary,
                 secret_key_ciphertext=encrypted_bundle,
+                crypto_version=CURRENT_CRYPTO_VERSION,
                 key_last4=_last4(primary_id),
                 display_name=display_name,
                 status="active",
@@ -463,6 +480,7 @@ async def upsert_broker_connection(
         else:
             row.api_key_ciphertext = encrypted_primary
             row.secret_key_ciphertext = encrypted_bundle
+            row.crypto_version = CURRENT_CRYPTO_VERSION
             row.key_last4 = _last4(primary_id)
             row.display_name = display_name
             row.status = "active"

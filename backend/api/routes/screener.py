@@ -22,7 +22,12 @@ logger = logging.getLogger(__name__)
 # Alpaca data helpers (screener-local)
 # ---------------------------------------------------------------------------
 
-ALPACA_DATA_URL = "https://data.alpaca.markets"
+# Batch W: hostname lives on ``settings.ALPACA_DATA_BASE_URL``;
+# legacy module alias kept for callers that imported the constant.
+from core.config import settings as _settings_w_screener  # noqa: E402
+
+ALPACA_DATA_URL = _settings_w_screener.ALPACA_DATA_BASE_URL
+del _settings_w_screener
 
 
 def _alpaca_keys_available() -> bool:

@@ -182,6 +182,9 @@ def compute_earnings_edge_score(
 
     score = 0.0
     reasons: list[str] = []
+    # Wave 4a / Batch Q (Q-8): track each input's contribution to the
+    # composite score so the analyst can audit which signals drove it.
+    components: dict[str, float] = {}
     evidence_count = 0
     setup = (top_setup or "").strip().lower()
     setup_known = bool(setup)
@@ -195,18 +198,24 @@ def compute_earnings_edge_score(
     is_debit_setup = is_straddle_debit or directional_debit_side is not None
 
     if iv_rank is not None:
+        # Batch U (A-1, A-2): IV regime breakpoints centralised in settings.
+        from core.config import settings as _settings
+        iv_rich = _settings.EARNINGS_IV_RICH_THRESHOLD
+        iv_cheap = _settings.EARNINGS_IV_CHEAP_THRESHOLD
         iv = clamp(float(iv_rank), 0.0, 100.0)
         if not setup_known:
-            score += clamp(100.0 - abs(iv - 55.0) * 1.4, 0.0, 100.0) * 0.10
+            iv_contrib = clamp(100.0 - abs(iv - 55.0) * 1.4, 0.0, 100.0) * 0.10
             reasons.append(f"IV rank {iv:.0f}; setup not selected yet")
         elif is_debit_setup:
-            score += (100.0 - iv) * 0.25
-            if iv <= 35:
+            iv_contrib = (100.0 - iv) * 0.25
+            if iv <= iv_cheap:
                 reasons.append(f"IV rank {iv:.0f} keeps debit moderate")
         else:
-            score += iv * 0.35
-            if iv >= 70:
+            iv_contrib = iv * 0.35
+            if iv >= iv_rich:
                 reasons.append(f"IV rank {iv:.0f} keeps premium rich")
+        score += iv_contrib
+        components["iv_rank"] = round(iv_contrib, 2)
         evidence_count += 1
 
     premiums = [
@@ -215,13 +224,14 @@ def compute_earnings_edge_score(
     ]
     if premiums:
         premium_evidence = True
+        premium_contrib = 0.0
         if not setup_known:
             premium = max(float(p) for p in premiums)
-            score += clamp(premium / 0.06, 0.0, 1.0) * 10.0
+            premium_contrib = clamp(premium / 0.06, 0.0, 1.0) * 10.0
             reasons.append(f"ATM option yield {premium:.1%}; needs setup")
         elif is_straddle_debit:
             debit = sum(float(p) for p in premiums)
-            score += clamp((0.10 - debit) / 0.08, 0.0, 1.0) * 20.0
+            premium_contrib = clamp((0.10 - debit) / 0.08, 0.0, 1.0) * 20.0
             if debit <= 0.06:
                 reasons.append(f"ATM straddle debit {debit:.1%}")
         elif directional_debit_side:
@@ -233,15 +243,17 @@ def compute_earnings_edge_score(
             if side_premium is not None and side_premium > 0:
                 multiplier = 0.6 if "spread" in setup else 1.0
                 debit = float(side_premium) * multiplier
-                score += clamp((0.06 - debit) / 0.05, 0.0, 1.0) * 20.0
+                premium_contrib = clamp((0.06 - debit) / 0.05, 0.0, 1.0) * 20.0
                 if debit <= 0.035:
                     reasons.append(f"{setup.title()} debit {debit:.1%}")
             else:
                 premium_evidence = False
         else:
             premium = max(float(p) for p in premiums)
-            score += clamp(premium / 0.06, 0.0, 1.0) * 20.0
+            premium_contrib = clamp(premium / 0.06, 0.0, 1.0) * 20.0
             reasons.append(f"ATM premium yield {premium:.1%}")
+        score += premium_contrib
+        components["premium_yield"] = round(premium_contrib, 2)
         if premium_evidence:
             evidence_count += 1
 
@@ -252,9 +264,10 @@ def compute_earnings_edge_score(
     ):
         expected = float(expected_move_pct)
         hist = float(hist_avg_abs_move_pct)
+        implied_vs_hist_contrib = 0.0
         if not setup_known:
             mismatch = abs(expected - hist) / hist
-            score += clamp(mismatch / 0.5, 0.0, 1.0) * 15.0
+            implied_vs_hist_contrib = clamp(mismatch / 0.5, 0.0, 1.0) * 15.0
             relation = "above" if expected > hist else "below"
             reasons.append(
                 f"Implied move {relation} {hist:.1%} historical avg; setup pending"
@@ -262,48 +275,60 @@ def compute_earnings_edge_score(
         elif is_debit_setup:
             underprice_ratio = (hist - expected) / expected if expected > 0 else 0.0
             if underprice_ratio > 0:
-                score += clamp(underprice_ratio / 0.5, 0.0, 1.0) * 35.0
+                implied_vs_hist_contrib = clamp(underprice_ratio / 0.5, 0.0, 1.0) * 35.0
                 reasons.append(
                     f"Historical move {hist:.1%} clears debit {expected:.1%}"
                 )
             else:
                 overprice_ratio = (expected - hist) / hist
-                score -= clamp(overprice_ratio / 0.5, 0.0, 1.0) * 25.0
+                implied_vs_hist_contrib = -clamp(overprice_ratio / 0.5, 0.0, 1.0) * 25.0
                 reasons.append(
                     f"Debit {expected:.1%} above {hist:.1%} historical avg"
                 )
         else:
             overprice_ratio = (expected - hist) / hist
             if overprice_ratio > 0:
-                score += clamp(overprice_ratio / 0.5, 0.0, 1.0) * 25.0
+                implied_vs_hist_contrib = clamp(overprice_ratio / 0.5, 0.0, 1.0) * 25.0
                 reasons.append(
                     f"Implied move {expected:.1%} vs {hist:.1%} historical avg"
                 )
             else:
                 underprice_ratio = (hist - expected) / hist
-                score -= clamp(underprice_ratio / 0.5, 0.0, 1.0) * 25.0
+                implied_vs_hist_contrib = -clamp(underprice_ratio / 0.5, 0.0, 1.0) * 25.0
                 reasons.append(
                     f"Implied move {expected:.1%} below {hist:.1%} historical avg"
                 )
+        score += implied_vs_hist_contrib
+        components["implied_vs_historical"] = round(implied_vs_hist_contrib, 2)
         evidence_count += 1
 
     if claude_confidence is not None:
         confidence = clamp(float(claude_confidence), 0.0, 1.0)
-        score += confidence * 15.0
+        confidence_contrib = confidence * 15.0
+        score += confidence_contrib
+        components["confidence"] = round(confidence_contrib, 2)
         evidence_count += 1
         if confidence >= 0.6:
             reasons.append(f"Claude confidence {confidence:.0%}")
 
     if evidence_count == 0:
-        return {"edge_score": None, "edge_score_reasons": []}
+        return {
+            "edge_score": None,
+            "edge_score_reasons": [],
+            "edge_score_components": {},
+        }
 
     if days_until is not None:
+        days_contrib = 0.0
         if 0 <= days_until <= 3:
-            score += 5.0
+            days_contrib = 5.0
             reasons.append("Near-term event window")
         elif days_until < 0:
-            score -= 20.0
+            days_contrib = -20.0
             reasons.append("Already reported; edge decays")
+        if days_contrib != 0.0:
+            score += days_contrib
+            components["days_until"] = round(days_contrib, 2)
 
     if setup_known and (
         expected_move_pct is None
@@ -319,6 +344,7 @@ def compute_earnings_edge_score(
     return {
         "edge_score": round(clamp(score, 0.0, 100.0), 1),
         "edge_score_reasons": reasons[:4],
+        "edge_score_components": components,
     }
 
 
@@ -622,47 +648,17 @@ _REPORT_TIME_MAP = {"amc": "AMC", "bmo": "BMO", "unknown": "DMT"}
 
 
 # Curated universe of high-market-cap, deeply-liquid, options-heavy US names.
-#
-# Rules for inclusion (all three must hold):
-#   1. Market cap ≥ $25B at the time of vetting (mega + liquid large caps).
-#   2. Weekly or monthly options listed with ≥ 10k contract OI on the
-#      front-month straddle (deep enough to absorb multi-leg fills).
-#   3. Single-name business story — a Claude thesis has substance to work
-#      against (not thematic ETFs or SPACs or inverse/leveraged derivatives).
-#
-# Explicitly excluded even if they're earnings-cycle liquid:
-#   • Sub-$20B meme / retail names (GME, AMC, BB, BBIG, PTON, BYND, LCID,
-#     NIO, XPEV, RIVN, AFRM, SOFI, HOOD, DKNG, MARA, RIOT, ROKU, U,
-#     OKTA-ish, SNAP, PINS, DASH, FSLY, ZM, DOCU, TWLO) — spreads are wide
-#     relative to premium and Claude can't consistently read the tape.
-#   • Foreign ADRs with thin US options chains (kept BABA/TSM/ASML — the
-#     three whose US chains are actually deep; dropped JD/PDD/NTES/BIDU).
+# Authoritative definition lives in ``backend/data/symbol_lists.py`` (Batch V).
+# Re-exported here so existing importers continue to work.
 #
 # B-66: the filter is now unconditional (formerly gated on a vestigial
 # `market_cap` query param that never did anything). If a user wants the
 # full FMP feed they can hit the raw provider directly.
-CURATED_OPTIONABLE_UNIVERSE: frozenset[str] = frozenset({
-    # Mega caps (SP100 + top 30 outside) — $100B+
-    "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "META", "NVDA", "TSLA",
-    "BRK.B", "AVGO", "LLY", "WMT", "JPM", "V", "XOM", "MA", "ORCL",
-    "COST", "HD", "PG", "JNJ", "NFLX", "BAC", "CRM", "ABBV", "CVX",
-    "KO", "MRK", "AMD", "ADBE", "PEP", "TMO", "ACN", "LIN", "CSCO",
-    "MCD", "ABT", "TXN", "GE", "DHR", "WFC", "NOW", "INTU", "IBM",
-    "CAT", "AMGN", "NEE", "ISRG", "PFE", "PM", "QCOM", "GS", "UNP",
-    "VZ", "T", "RTX", "COP", "SPGI", "LOW", "ETN", "BLK", "HON",
-    "SYK", "AXP", "BKNG", "VRTX", "C", "ELV", "DE", "TJX", "ADP",
-    "GILD", "PLD", "PANW", "SCHW", "MMC", "LMT", "CB", "REGN", "MDT",
-    "UBER", "BSX", "MU", "SBUX", "FI", "BX", "AMT", "KLAC", "MDLZ",
-    "ADI", "CVS", "SO", "GEV", "ZTS", "CI", "MO", "CL", "DUK",
-    "BMY", "WM", "ICE", "SNPS", "APH", "SHW", "PYPL", "CME",
-    # Liquid large caps with deep options ($25B–$100B)
-    "BA", "F", "GM", "DIS", "NKE", "SPOT", "TEAM", "ANET", "MRVL",
-    "LRCX", "WDAY", "FTNT", "CDNS", "PLTR", "SNOW", "COIN", "SHOP",
-    "ABNB", "CRWD", "DDOG", "SQ", "DASH", "CVNA", "RBLX", "NET",
-    "MDB", "ZS",
-    # Foreign ADRs with deep US options chains
-    "ASML", "TSM", "BABA",
-})
+from data.symbol_lists import (  # noqa: E402 — re-export for back-compat
+    BMO_AMC_FALLBACK_MAP as _CURATED_REPORT_TIME_FALLBACK,
+    CURATED_OPTIONABLE_UNIVERSE,
+    HEADLINE_EARNINGS_SYMBOLS as _HEADLINE_EARNINGS_SYMBOLS,
+)
 
 
 def _in_curated_universe(symbol: str) -> bool:
@@ -675,70 +671,11 @@ def _in_curated_universe(symbol: str) -> bool:
 # soon after they print, while /earnings still keeps the event row. Rescue
 # a small headline/default-watchlist subset from that per-symbol endpoint
 # so crowded mega-cap days don't show as if MSFT/AMZN/GOOG never reported.
-_HEADLINE_EARNINGS_SYMBOLS: tuple[str, ...] = (
-    "MSFT", "AMZN", "GOOGL", "GOOG", "AAPL", "META", "NVDA", "TSLA",
-)
 _HEADLINE_SYMBOL_RANK: dict[str, int] = {
     symbol: idx for idx, symbol in enumerate(_HEADLINE_EARNINGS_SYMBOLS)
 }
 _HEADLINE_REPORT_TIME_DEFAULTS: dict[str, str] = {
     symbol: "AMC" for symbol in _HEADLINE_EARNINGS_SYMBOLS
-}
-
-
-# Batch P / P-4: BMO/AMC fallback for symbols where FMP's ``time`` field
-# is null / "unknown". The curated universe is small (~150 names) and the
-# AMC vs. BMO classification is stable across quarters for most names —
-# tech megacaps overwhelmingly print AMC, US banks BMO, etc. When FMP's
-# upstream tells us "unknown" we overlay this static map and downgrade to
-# "DMT" only as a last resort. This lets the FE render the correct chip
-# (AMC / BMO) for AMD, NFLX, AVGO, JPM, … on the day-of even when the
-# provider is slow to update.
-#
-# Sources:
-#   * Each symbol's most recent ≥ 6 quarters of confirmed timing on
-#     Bloomberg / earningswhispers / company IR press-release headers.
-#   * Only symbols with a stable pattern (≥ 5 of last 6 reports same
-#     timing) are populated; ambiguous ones stay null and fall through
-#     to "DMT".
-_CURATED_REPORT_TIME_FALLBACK: dict[str, str] = {
-    # Tech / semis (overwhelmingly AMC)
-    "AAPL": "AMC", "MSFT": "AMC", "GOOG": "AMC", "GOOGL": "AMC",
-    "AMZN": "AMC", "META": "AMC", "NVDA": "AMC", "TSLA": "AMC",
-    "AMD": "AMC", "NFLX": "AMC", "AVGO": "AMC", "ADBE": "AMC",
-    "ORCL": "AMC", "CRM": "AMC", "NOW": "AMC", "INTU": "AMC",
-    "PANW": "AMC", "FTNT": "AMC", "CRWD": "AMC", "DDOG": "AMC",
-    "CDNS": "AMC", "SNPS": "AMC", "PLTR": "AMC", "SNOW": "AMC",
-    "MRVL": "AMC", "MU": "AMC", "KLAC": "AMC", "LRCX": "AMC",
-    "ANET": "AMC", "ADI": "AMC", "QCOM": "AMC", "TXN": "AMC",
-    "ZS": "AMC", "MDB": "AMC", "NET": "AMC", "TEAM": "AMC",
-    "WDAY": "AMC", "INTC": "AMC", "CSCO": "AMC", "IBM": "AMC",
-    "PYPL": "AMC", "UBER": "AMC", "ABNB": "AMC", "RBLX": "AMC",
-    "SHOP": "AMC", "COIN": "AMC", "DASH": "AMC", "SPOT": "AMC",
-    # Banks / financials (overwhelmingly BMO)
-    "JPM": "BMO", "BAC": "BMO", "WFC": "BMO", "C": "BMO",
-    "GS": "BMO", "MS": "BMO", "BLK": "BMO", "SCHW": "BMO",
-    "AXP": "BMO", "USB": "BMO", "PNC": "BMO", "TFC": "BMO",
-    # Healthcare / pharma (mostly BMO)
-    "JNJ": "BMO", "PFE": "BMO", "MRK": "BMO", "ABBV": "BMO",
-    "BMY": "BMO", "LLY": "BMO", "AMGN": "BMO", "GILD": "AMC",
-    "VRTX": "AMC", "REGN": "BMO", "BSX": "BMO", "MDT": "BMO",
-    "TMO": "BMO", "ABT": "BMO", "DHR": "BMO", "SYK": "BMO",
-    "ISRG": "AMC", "ELV": "BMO", "CI": "BMO", "CVS": "BMO",
-    "ZTS": "BMO",
-    # Consumer / staples / retail (mixed; document each)
-    "WMT": "BMO", "COST": "AMC", "HD": "BMO", "LOW": "BMO",
-    "TGT": "BMO", "TJX": "BMO", "MCD": "BMO", "SBUX": "AMC",
-    "NKE": "AMC", "DIS": "AMC", "BKNG": "AMC", "CMCSA": "BMO",
-    "PG": "BMO", "KO": "BMO", "PEP": "BMO", "MDLZ": "AMC",
-    "PM": "BMO", "MO": "BMO", "CL": "BMO",
-    # Industrials / energy / materials (mostly BMO)
-    "BA": "BMO", "CAT": "BMO", "DE": "BMO", "GE": "BMO",
-    "HON": "BMO", "RTX": "BMO", "LMT": "BMO", "UPS": "BMO",
-    "UNP": "BMO", "F": "BMO", "GM": "BMO", "XOM": "BMO",
-    "CVX": "BMO", "COP": "BMO",
-    # Misc liquid
-    "V": "AMC", "MA": "AMC", "FI": "BMO",
 }
 
 
@@ -845,9 +782,19 @@ def _merge_calendar_rows(primary: Sequence[dict], rescued: Sequence[dict]) -> li
 # workers hit the same data; the in-process locks prevent N concurrent
 # refills on cold-cache.
 _FMP_UPCOMING_LOCKS: dict[str, asyncio.Lock] = {}
-_FMP_UPCOMING_TTL_S = 300  # 5 min
 _FMP_RESCUE_LOCKS: dict[str, asyncio.Lock] = {}
-_FMP_RESCUE_TTL_S = 300  # 5 min
+
+
+def _fmp_upcoming_ttl_s() -> int:
+    """Batch U (A-4): TTL for the FMP upcoming-earnings calendar cache."""
+    from core.config import settings as _settings
+    return int(_settings.FMP_CALENDAR_CACHE_TTL_SECONDS)
+
+
+def _fmp_rescue_ttl_s() -> int:
+    """Batch U (A-5): TTL for the per-symbol FMP rescue cache."""
+    from core.config import settings as _settings
+    return int(_settings.FMP_RESCUE_CACHE_TTL_SECONDS)
 
 
 def _fmp_upcoming_cache_key(window: str, start: date, end: date) -> str:
@@ -909,7 +856,7 @@ async def _fmp_upcoming(window: str) -> list[dict]:
         merged_start, merged_end = _resolve_window_dates("both")
         merged_key = _fmp_upcoming_cache_key("both", merged_start, merged_end)
         if not settings.SKIP_EARNINGS_FMP_CACHE:
-            await cache.set(merged_key, merged, ttl_seconds=_FMP_UPCOMING_TTL_S)
+            await cache.set(merged_key, merged, ttl_seconds=_fmp_upcoming_ttl_s())
         return merged
 
     start, end = _resolve_window_dates(window)
@@ -1031,7 +978,7 @@ async def _fmp_upcoming(window: str) -> list[dict]:
             )
             raise
         if not in_test:
-            await cache.set(cache_key, rows, ttl_seconds=_FMP_UPCOMING_TTL_S)
+            await cache.set(cache_key, rows, ttl_seconds=_fmp_upcoming_ttl_s())
         return rows
 
 
@@ -1139,7 +1086,7 @@ async def _fmp_headline_earnings_rescue(
         try:
             timeout = max(2.0, settings.EARNINGS_FMP_TIMEOUT_S * 2)
             rows = await asyncio.wait_for(asyncio.to_thread(_load), timeout=timeout)
-            await cache.set(cache_key, rows, ttl_seconds=_FMP_RESCUE_TTL_S)
+            await cache.set(cache_key, rows, ttl_seconds=_fmp_rescue_ttl_s())
             return rows
         except asyncio.TimeoutError:
             log.warning(
@@ -2468,6 +2415,58 @@ async def _hydrate_row(
         days_until=days_until,
         top_setup=claude.get("suggested_play") if claude else None,
     )
+    # Wave 4a / Batch Q: vol-aware ranked top-3 recommendations. The
+    # legacy ``top_setup`` string is kept for back-compat (FE still
+    # reads it); callers should migrate to ``top_setups[0]`` for the
+    # full leg structure / EV / Kelly sizing.
+    top_setups: list = []
+    legacy_top_setup = claude.get("suggested_play") if claude else None
+    if (
+        metrics
+        and not synthetic_ranking_inputs
+        and (quote and quote.get("last"))
+        and metrics.get("current_iv")
+    ):
+        try:
+            from services.earnings_recommender import (
+                recommend_setups,
+                setup_id_to_legacy_top_setup,
+            )
+            from services.options import fetch_chain
+
+            chain = await fetch_chain(symbol)
+            top_setups = await recommend_setups(
+                symbol=symbol,
+                spot=float(quote["last"]),
+                iv_rank=iv_rank,
+                iv_percentile=metrics.get("iv_percentile"),
+                current_iv=float(metrics.get("current_iv") or 0.0),
+                hv_20=metrics.get("hv_20"),
+                expected_move_pct=expected_move_pct,
+                hist_avg_abs_move_pct=metrics.get("hist_avg_abs_move_pct"),
+                claude_verdict=claude.get("verdict") if claude else None,
+                claude_confidence=claude.get("confidence") if claude else None,
+                chain=chain,
+                report_date=report_date_obj,
+                report_time=row.get("report_time", "DMT"),
+            )
+            if top_setups:
+                # Override the legacy top_setup with the recommender's
+                # best pick so FE displays the vol-aware shape rather
+                # than the verdict-mapped one.
+                mapped = setup_id_to_legacy_top_setup(top_setups[0].setup_id)
+                if mapped is not None:
+                    legacy_top_setup = mapped
+        except Exception as e:  # noqa: BLE001
+            log.debug(
+                "earnings recommender failed for %s: %s", symbol, e,
+                extra=_log_ctx(
+                    endpoint="earnings._hydrate_row.recommender",
+                    symbol=symbol,
+                    error=str(e),
+                ),
+            )
+            top_setups = []
     return {
         **row,
         "price": quote["last"] if quote else None,
@@ -2480,7 +2479,8 @@ async def _hydrate_row(
         "hist_avg_abs_move_pct": metrics.get("hist_avg_abs_move_pct") if metrics else None,
         "claude_verdict": claude.get("verdict") if claude else None,
         "claude_confidence": claude.get("confidence") if claude else None,
-        "top_setup": claude.get("suggested_play") if claude else None,
+        "top_setup": legacy_top_setup,
+        "top_setups": top_setups,
         **edge,
         "days_until": days_until,
         "report_state": report_state,

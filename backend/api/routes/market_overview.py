@@ -125,7 +125,7 @@ async def get_indices() -> IndicesResponse:
             syms = [d["symbol"] for d in _DEMO_INDICES if d["symbol"] != "VIX"]
             syms.append("VIXY")  # VIX proxy ETF
             snap_resp = await client.get(
-                f"https://data.alpaca.markets/v2/stocks/snapshots?symbols={','.join(syms)}",
+                f"{settings.ALPACA_DATA_BASE_URL}/v2/stocks/snapshots?symbols={','.join(syms)}",
                 headers=headers,
             )
             snapshots = snap_resp.json() if snap_resp.status_code == 200 else {}
@@ -211,7 +211,7 @@ async def get_sectors() -> SectorsResponse:
             # Fetch all sector ETF snapshots in one batch
             etf_syms = list(_SECTOR_ETFS.keys())
             snap_resp = await client.get(
-                f"https://data.alpaca.markets/v2/stocks/snapshots?symbols={','.join(etf_syms)}",
+                f"{settings.ALPACA_DATA_BASE_URL}/v2/stocks/snapshots?symbols={','.join(etf_syms)}",
                 headers=headers,
             )
             snapshots = snap_resp.json() if snap_resp.status_code == 200 else {}
@@ -223,7 +223,7 @@ async def get_sectors() -> SectorsResponse:
             for etf_sym in etf_syms:
                 try:
                     ytd_resp = await client.get(
-                        f"https://data.alpaca.markets/v2/stocks/{etf_sym}/bars?timeframe=1Day&start={ytd_start}&limit=1",
+                        f"{settings.ALPACA_DATA_BASE_URL}/v2/stocks/{etf_sym}/bars?timeframe=1Day&start={ytd_start}&limit=1",
                         headers=headers,
                     )
                     if ytd_resp.status_code == 200:
@@ -291,7 +291,7 @@ async def _get_regime_data() -> dict[str, Any] | None:
     async with httpx.AsyncClient(timeout=10) as client:
         # Use snapshot API for accurate prev_close
         snap_resp = await client.get(
-            "https://data.alpaca.markets/v2/stocks/snapshots?symbols=SPY,VIXY",
+            f"{settings.ALPACA_DATA_BASE_URL}/v2/stocks/snapshots?symbols=SPY,VIXY",
             headers=headers,
         )
         if snap_resp.status_code != 200:
@@ -414,7 +414,7 @@ async def get_index_sparklines() -> IndexSparklinesResponse:
         async with httpx.AsyncClient(timeout=10) as client:
             try:
                 resp = await client.get(
-                    "https://data.alpaca.markets/v2/stocks/bars",
+                    f"{settings.ALPACA_DATA_BASE_URL}/v2/stocks/bars",
                     headers=headers,
                     params={
                         "symbols": ",".join(symbols),

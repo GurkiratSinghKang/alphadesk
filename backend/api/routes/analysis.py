@@ -99,7 +99,7 @@ async def _fetch_alpaca_bars(symbol: str, limit: int = 60) -> list[dict]:
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
-                f"https://data.alpaca.markets/v2/stocks/{symbol}/bars",
+                f"{settings.ALPACA_DATA_BASE_URL}/v2/stocks/{symbol}/bars",
                 headers=headers,
                 params={"timeframe": "1Day", "limit": limit, "feed": "sip"},
             )
@@ -120,7 +120,7 @@ async def _fetch_polygon_ticker(symbol: str) -> dict:
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
-                f"https://api.polygon.io/v3/reference/tickers/{symbol}",
+                f"{settings.POLYGON_BASE_URL}/v3/reference/tickers/{symbol}",
                 params={"apiKey": api_key},
             )
             if resp.status_code != 200:

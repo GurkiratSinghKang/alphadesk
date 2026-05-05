@@ -121,13 +121,14 @@ class Greeks(BaseModel):
 # ---------------------------------------------------------------------------
 # Demo data helpers
 # ---------------------------------------------------------------------------
+# Demo seed tables live in ``backend/data/symbol_lists.py`` (Batch V). The
+# options service uses its own price/IV tables (kept separate from the
+# market service tables because the existing values diverge — see the
+# module docstring there for the consolidation plan).
 
-_DEMO_BASE_PRICES: dict[str, float] = {
-    "AAPL": 265.0, "NVDA": 197.0, "TSLA": 390.0, "MSFT": 418.0,
-    "AMZN": 249.0, "META": 672.0, "GOOGL": 339.0, "SPY": 700.0,
-    "AMD": 155.0, "NFLX": 1050.0, "CRM": 310.0, "INTC": 25.0,
-    "QQQ": 639.0,
-}
+from data.symbol_lists import (
+    DEMO_BASE_PRICES_OPTIONS as _DEMO_BASE_PRICES,
+)
 
 # B-47/B-48: bounded TTL+LRU caches for the three options-data hot paths.
 # OrderedDict + a single helper keeps memory predictable: under the worst case
@@ -168,11 +169,8 @@ def _ttl_lru_set(
 _real_spot_cache: "_OrderedDict[str, tuple[float, float]]" = _OrderedDict()
 _SPOT_CACHE_TTL = 60  # seconds
 
-_DEMO_BASE_IV: dict[str, float] = {
-    "TSLA": 0.55, "NVDA": 0.48, "AMD": 0.45, "META": 0.38,
-    "NFLX": 0.40, "COIN": 0.65, "AAPL": 0.25, "MSFT": 0.22,
-    "AMZN": 0.30, "GOOGL": 0.26, "SPY": 0.15,
-}
+# See ``backend/data/symbol_lists.py`` for the canonical definition.
+from data.symbol_lists import DEMO_BASE_IV as _DEMO_BASE_IV  # noqa: E402
 
 
 def _symbol_seed(symbol: str) -> int:
@@ -190,10 +188,12 @@ async def _fetch_alpaca_spot(symbol: str) -> float | None:
         return cached[0]
 
     try:
+        from core.config import settings as _settings_w
+
         headers = _alpaca_headers()
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(
-                f"https://data.alpaca.markets/v2/stocks/{s}/trades/latest",
+                f"{_settings_w.ALPACA_DATA_BASE_URL}/v2/stocks/{s}/trades/latest",
                 headers=headers,
             )
         if resp.status_code == 200:
@@ -290,7 +290,9 @@ async def _demo_chain(symbol: str, expiry_filter: date | None,
     rng = random.Random(_symbol_seed(s))
     spot = await _demo_spot(s)
     base_iv = _DEMO_BASE_IV.get(s, 0.30)
-    r = 0.05
+    # Batch U (A-21): risk-free rate sourced from settings.
+    from core.config import settings as _settings
+    r = float(_settings.GREEK_CALCULATION_RISK_FREE_RATE)
 
     # Generate 6 weekly expirations
     today = market_today()
@@ -449,7 +451,12 @@ def _polygon_key_empty() -> bool:
 # Alpaca OPRA options helpers
 # ---------------------------------------------------------------------------
 
-_ALPACA_OPTIONS_BASE = "https://data.alpaca.markets/v1beta1/options"
+# Batch W (HARDCODING-SWEEP): centralised in :mod:`core.config`. The
+# constant remains for callers that imported the module-level alias.
+from core.config import settings as _settings_w_options  # noqa: E402
+
+_ALPACA_OPTIONS_BASE = f"{_settings_w_options.ALPACA_DATA_BASE_URL}/v1beta1/options"
+del _settings_w_options
 
 # Cache: symbol -> (OptionChain, timestamp). B-48: bounded via _ttl_lru_set.
 _chain_cache: "_OrderedDict[str, tuple[OptionChain, float]]" = _OrderedDict()
@@ -755,7 +762,7 @@ async def _fetch_real_chain(
 def _fill_missing_greeks(
     contracts: list[OptionContract],
     spot: float,
-    risk_free_rate: float = 0.05,
+    risk_free_rate: float | None = None,
     today: date | None = None,
 ) -> None:
     """Batch T T-3: populate zero-valued greeks in-place using BSM.
@@ -772,6 +779,10 @@ def _fill_missing_greeks(
     """
     if not contracts or spot <= 0:
         return
+    if risk_free_rate is None:
+        # Batch U (A-21): default sourced from settings.
+        from core.config import settings as _settings
+        risk_free_rate = float(_settings.GREEK_CALCULATION_RISK_FREE_RATE)
     today = today or date.today()
     try:
         from indicators.options import bs_greeks

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +32,27 @@ export default function DestructiveConfirmModal({
   onConfirm,
   loading,
 }: DestructiveConfirmModalProps) {
+  // Audit A-F4 (2026-05-05): explicit ref + useEffect to default focus on
+  // the SAFE (Cancel) action when the dialog opens. Previously relied on
+  // the `autoFocus` attribute which can be unreliable with base-ui's
+  // portal-rendered dialog (async mount, focus trap timing). Used by 19
+  // destructive sites — a keyboard/SR user opening with Enter pre-pressed
+  // could otherwise fire the destructive action. Cancel is also FIRST in
+  // DOM tab order (rendered before the destructive button below) so a
+  // forward Tab keeps users on the safe path. WCAG SC 2.4.3 + 3.3.4.
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      // Defer one frame so base-ui's portal/focus-trap finishes mounting
+      // before we steal focus.
+      const id = requestAnimationFrame(() => {
+        cancelRef.current?.focus();
+      });
+      return () => cancelAnimationFrame(id);
+    }
+  }, [open]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[440px]">
@@ -49,19 +71,17 @@ export default function DestructiveConfirmModal({
           </ul>
         )}
         <DialogFooter className="mt-5 flex gap-2">
-          {/* Audit A-F4 (2026-05-05): autoFocus the Cancel button so the
-           * initial focus on dialog open lands on the SAFE action. Base
-           * UI's natural-tab-order default focuses the first interactive
-           * element which is the close button in the Dialog header — but
-           * keyboard/screen-reader users opening a destructive dialog
-           * with Enter pre-pressed could activate the destructive
-           * action. Cancel-first follows the WCAG SC 3.3.4 destructive-
-           * action confirmation pattern. */}
+          {/* Cancel renders FIRST in DOM order so forward-Tab traversal
+           * stays on the safe action; the destructive button below is
+           * reached only with an intentional Tab. On wide screens the
+           * footer flips to `sm:flex-row sm:justify-end` so Cancel sits
+           * on the left and destructive on the right (standard pattern),
+           * but DOM order is preserved. */}
           <Button
+            ref={cancelRef}
             variant="ghost"
             onClick={() => onOpenChange(false)}
             disabled={loading}
-            autoFocus
           >
             Cancel
           </Button>

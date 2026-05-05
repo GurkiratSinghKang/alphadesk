@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from strategies._core.contracts import StrategyInput, StrategyResult
 from strategies._core.kill_switch import (
@@ -111,6 +112,86 @@ class TestPipelineRunnerKillSwitch:
             strategy=mock_strategy,
             input=_build_input(),
             params=mock_params,
+            kill_switch=None,
+            kill_switch_context=None,
+        )
+        mock_strategy.run.assert_called_once()
+        assert result.diagnostics.get("ran") is True
+
+
+class TestAsyncKillSwitchWrapper:
+    """Audit B-F3 / R-F1 (2026-05-05): live runner uses
+    ``invoke_strategy_with_kill_switch_async`` so it can ``await`` the
+    async repo path. Sync wrapper above stays for any non-async callers
+    (CLI scripts, in-memory tests). Both must produce byte-equivalent
+    diagnostics so dashboard / audit log readers don't have to special-
+    case the path."""
+
+    @pytest.mark.asyncio
+    async def test_async_disabled_strategy_short_circuits(self) -> None:
+        from strategies._core.runners.pipeline_runner import (
+            invoke_strategy_with_kill_switch_async,
+        )
+        repo = InMemoryDisabledEventsRepo()
+        repo.insert(DisabledEvent(
+            id=None, strategy="test_strategy", layer=3,
+            triggered_at=datetime.now(timezone.utc),
+            manual_actor="alice", reason="async test",
+        ))
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=98.0,
+                                alloc_capital=10000.0, realized_today=0.0)
+
+        mock_strategy = MagicMock()
+        mock_strategy.name = "test_strategy"
+        result = await invoke_strategy_with_kill_switch_async(
+            strategy=mock_strategy,
+            input=_build_input(),
+            params=MagicMock(),
+            kill_switch=ks,
+            kill_switch_context=ctx,
+        )
+        mock_strategy.run.assert_not_called()
+        assert isinstance(result, StrategyResult)
+        assert result.diagnostics.get("kill_switch_disabled") is True
+        assert result.diagnostics.get("kill_switch_layer") == 3
+
+    @pytest.mark.asyncio
+    async def test_async_enabled_strategy_runs(self) -> None:
+        from strategies._core.runners.pipeline_runner import (
+            invoke_strategy_with_kill_switch_async,
+        )
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=98.0,
+                                alloc_capital=10000.0, realized_today=0.0)
+        expected = StrategyResult(signals=[], diagnostics={"ran": True}, warnings=[])
+        mock_strategy = MagicMock()
+        mock_strategy.name = "test_strategy"
+        mock_strategy.run = MagicMock(return_value=expected)
+        result = await invoke_strategy_with_kill_switch_async(
+            strategy=mock_strategy,
+            input=_build_input(),
+            params=MagicMock(),
+            kill_switch=ks,
+            kill_switch_context=ctx,
+        )
+        mock_strategy.run.assert_called_once()
+        assert result.diagnostics.get("ran") is True
+
+    @pytest.mark.asyncio
+    async def test_async_kill_switch_none_bypasses(self) -> None:
+        from strategies._core.runners.pipeline_runner import (
+            invoke_strategy_with_kill_switch_async,
+        )
+        expected = StrategyResult(signals=[], diagnostics={"ran": True}, warnings=[])
+        mock_strategy = MagicMock()
+        mock_strategy.name = "test_strategy"
+        mock_strategy.run = MagicMock(return_value=expected)
+        result = await invoke_strategy_with_kill_switch_async(
+            strategy=mock_strategy,
+            input=_build_input(),
+            params=MagicMock(),
             kill_switch=None,
             kill_switch_context=None,
         )

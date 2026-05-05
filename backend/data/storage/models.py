@@ -249,6 +249,14 @@ def _define_models() -> dict[str, Any]:
         display_name = Column(String(160), nullable=True)
         api_key_ciphertext = Column(Text, nullable=False)
         secret_key_ciphertext = Column(Text, nullable=False)
+        # Audit fix-D (2026-05-05): track which KDF version produced
+        # ``*_ciphertext`` so the bulk re-encryption script can be re-run
+        # idempotently. Migration 0015 backfills existing rows with 1 (the
+        # legacy sha256 default) and ``encrypt_secret`` writes 3 going
+        # forward; the migration script lifts straggling 1/2 rows to 3.
+        crypto_version = Column(
+            Integer, nullable=False, server_default="1", default=1
+        )
         key_last4 = Column(String(8), nullable=True)
         status = Column(String(32), nullable=False, server_default="active", default="active", index=True)
         is_default = Column(Boolean, nullable=False, server_default="true", default=True)

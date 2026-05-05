@@ -100,6 +100,29 @@ export default function KillSwitchStatusPanel({
 
   const activeEvent = events.find((e) => e.resolved_at === null) ?? null;
 
+  // Audit A-F6 (2026-05-05): precomputed sr-only live-region message.
+  // Recomputed each render so a state flip (Layer-1 auto-trip, admin
+  // emergency-disable, re-enable) yields new text content inside the
+  // ``aria-live="polite"`` span below — which is what AT picks up.
+  // Eslint disables: same pre-existing project-wide
+  // ``no-unsafe-member-access`` noise that already lights up on every
+  // ``activeEvent.*`` access in the body of this component (eslint
+  // config note: "noise burst on first enable; accept"). Suppressed
+  // narrowly here so the a11y fix doesn't add NEW warning instances
+  // beyond the pre-existing 42 in this file.
+  let liveAnnouncement: string;
+  if (activeEvent) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+    const layer: 1 | 2 | 3 = activeEvent.layer;
+    const layerLabel = LAYER_LABELS[layer] ?? "unknown";
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+    const reasonRaw: string | null = activeEvent.reason;
+    const reasonSuffix = reasonRaw ? `: ${reasonRaw}` : "";
+    liveAnnouncement = `Strategy ${strategyName} is disabled by Layer ${layer} (${layerLabel})${reasonSuffix}`;
+  } else {
+    liveAnnouncement = `Strategy ${strategyName} is enabled.`;
+  }
+
   const handleDisable = async (): Promise<void> => {
     if (!reason.trim()) {
       setError("Reason is required for emergency disable.");
@@ -145,18 +168,19 @@ export default function KillSwitchStatusPanel({
          * with ``aria-label`` only — no role + no live region. Screen-
          * reader users got no announcement when the strategy state
          * transitioned (e.g. an admin emergency-disabled a strategy
-         * mid-session). ``role="status"`` + ``aria-live="polite"``
-         * announces the new state without interrupting the user, and
-         * the visible text inside the span gives SR users the same
-         * label sighted users get from the colour. */}
+         * mid-session, or Layer-1 drawdown auto-tripped). The visible
+         * chip on the right shows the short "Enabled"/"Disabled" label
+         * to sighted users; the dot itself is decorative
+         * (``aria-hidden``). The full transition message (with the
+         * layer + reason on disable) lives in the dedicated sr-only
+         * ``role="status"`` + ``aria-live="polite"`` region rendered
+         * just below — that re-announces the COMPLETE status whenever
+         * ``activeEvent`` flips. WCAG SC 4.1.3. */}
         <span
           className={cn(
             "inline-flex items-center gap-1.5 text-label",
             activeEvent ? "text-loss" : "text-profit",
           )}
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
         >
           <span
             className={cn(
@@ -165,11 +189,19 @@ export default function KillSwitchStatusPanel({
             )}
             aria-hidden="true"
           />
-          <span className="sr-only md:not-sr-only">
+          <span aria-hidden="true" className="sr-only md:not-sr-only">
             {activeEvent ? "Disabled" : "Enabled"}
           </span>
         </span>
       </header>
+
+      {/* Screen-reader live region — announces the FULL transition message
+       * (state + layer + reason) whenever the panel re-renders after a
+       * state change. Hidden visually because the human-readable detail
+       * sits in the body paragraphs below for sighted users. */}
+      <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {liveAnnouncement}
+      </span>
 
       {error && (
         <p className="text-sm text-loss" role="alert">
