@@ -99,7 +99,7 @@ class SentimentServer(BaseMCPServer):
 
         async with httpx.AsyncClient() as client:
             resp = await client.get(
-                f"https://api.polygon.io/v2/reference/news",
+                f"{settings.POLYGON_BASE_URL}/v2/reference/news",
                 params={
                     "ticker": symbol,
                     "limit": limit,

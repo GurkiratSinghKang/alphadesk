@@ -188,10 +188,12 @@ async def _fetch_alpaca_spot(symbol: str) -> float | None:
         return cached[0]
 
     try:
+        from core.config import settings as _settings_w
+
         headers = _alpaca_headers()
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(
-                f"https://data.alpaca.markets/v2/stocks/{s}/trades/latest",
+                f"{_settings_w.ALPACA_DATA_BASE_URL}/v2/stocks/{s}/trades/latest",
                 headers=headers,
             )
         if resp.status_code == 200:
@@ -449,7 +451,12 @@ def _polygon_key_empty() -> bool:
 # Alpaca OPRA options helpers
 # ---------------------------------------------------------------------------
 
-_ALPACA_OPTIONS_BASE = "https://data.alpaca.markets/v1beta1/options"
+# Batch W (HARDCODING-SWEEP): centralised in :mod:`core.config`. The
+# constant remains for callers that imported the module-level alias.
+from core.config import settings as _settings_w_options  # noqa: E402
+
+_ALPACA_OPTIONS_BASE = f"{_settings_w_options.ALPACA_DATA_BASE_URL}/v1beta1/options"
+del _settings_w_options
 
 # Cache: symbol -> (OptionChain, timestamp). B-48: bounded via _ttl_lru_set.
 _chain_cache: "_OrderedDict[str, tuple[OptionChain, float]]" = _OrderedDict()

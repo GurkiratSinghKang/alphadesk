@@ -27,7 +27,7 @@ class MarketDataServer(BaseMCPServer):
 
         async with httpx.AsyncClient() as client:
             resp = await client.get(
-                f"https://api.polygon.io/v3/quotes/{symbol}",
+                f"{settings.POLYGON_BASE_URL}/v3/quotes/{symbol}",
                 params={"limit": 1, "apiKey": self._api_key()},
             )
             data = resp.json()
@@ -76,7 +76,7 @@ class MarketDataServer(BaseMCPServer):
         if not end_date:
             end_date = date.today().isoformat()
 
-        url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/{mult}/{span}/{start_date}/{end_date}"
+        url = f"{settings.POLYGON_BASE_URL}/v2/aggs/ticker/{symbol}/range/{mult}/{span}/{start_date}/{end_date}"
 
         async with httpx.AsyncClient() as client:
             resp = await client.get(url, params={
@@ -99,7 +99,7 @@ class MarketDataServer(BaseMCPServer):
         symbol = symbol.upper()
         async with httpx.AsyncClient() as client:
             resp = await client.get(
-                f"https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/{symbol}",
+                f"{settings.POLYGON_BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers/{symbol}",
                 params={"apiKey": self._api_key()},
             )
             data = resp.json().get("ticker", {})
@@ -127,7 +127,7 @@ class MarketDataServer(BaseMCPServer):
 
         async with httpx.AsyncClient() as client:
             resp = await client.get(
-                f"https://api.polygon.io/v3/reference/tickers/{symbol}",
+                f"{settings.POLYGON_BASE_URL}/v3/reference/tickers/{symbol}",
                 params={"apiKey": self._api_key()},
             )
             data = resp.json().get("results", {})
@@ -149,7 +149,7 @@ class MarketDataServer(BaseMCPServer):
     async def get_market_status(self) -> dict[str, Any]:
         async with httpx.AsyncClient() as client:
             resp = await client.get(
-                "https://api.polygon.io/v1/marketstatus/now",
+                f"{settings.POLYGON_BASE_URL}/v1/marketstatus/now",
                 params={"apiKey": self._api_key()},
             )
             return resp.json()
@@ -163,7 +163,7 @@ class MarketDataServer(BaseMCPServer):
         symbol = symbol.upper()
         async with httpx.AsyncClient() as client:
             resp = await client.get(
-                f"https://api.polygon.io/v1/related-companies/{symbol}",
+                f"{settings.POLYGON_BASE_URL}/v1/related-companies/{symbol}",
                 params={"apiKey": self._api_key()},
             )
             data = resp.json()

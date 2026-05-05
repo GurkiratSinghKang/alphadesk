@@ -224,7 +224,6 @@ def _demo_bars(symbol: str, timeframe: str, limit: int,
     delta = tf_deltas.get(timeframe, timedelta(days=1))
 
     bars: list[Bar] = []
-    # Demo intraday jitter range is asymmetric (-15% / +5%) so demo data trends down — not a market simulation.
     price = base * (1 + rng.uniform(-0.15, 0.05))  # start lower for uptrend feel
     ts = datetime.combine(effective_start, datetime.min.time(), tzinfo=timezone.utc)
     now = datetime.now(timezone.utc)
@@ -381,7 +380,7 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
 
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     resp = await client.get(
-                        f"https://api.polygon.io/v3/snapshot/options/{occ_underlying}/O:{contract}",
+                        f"{settings.POLYGON_BASE_URL}/v3/snapshot/options/{occ_underlying}/O:{contract}",
                         params={"apiKey": settings.POLYGON_API_KEY.get_secret_value()},
                     )
                     if resp.status_code == 200:
@@ -499,7 +498,7 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
 
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
-                    f"https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/{symbol.upper()}",
+                    f"{settings.POLYGON_BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers/{symbol.upper()}",
                     params={"apiKey": settings.POLYGON_API_KEY.get_secret_value()},
                 )
                 if resp.status_code == 200:

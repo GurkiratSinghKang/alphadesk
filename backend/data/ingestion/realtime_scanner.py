@@ -435,7 +435,7 @@ async def _check_pairs_zscore() -> None:
             try:
                 async with httpx.AsyncClient(timeout=5) as client:
                     resp = await client.get(
-                        "https://data.alpaca.markets/v2/stocks/trades/latest",
+                        f"{settings.ALPACA_DATA_BASE_URL}/v2/stocks/trades/latest",
                         headers=headers,
                         params={"symbols": ",".join(sorted(needed))},
                     )

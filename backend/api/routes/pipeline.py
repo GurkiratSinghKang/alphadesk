@@ -602,7 +602,7 @@ async def pipeline_positions() -> dict[str, Any]:
                         # Fallback for ledger-only symbols not held at broker.
                         try:
                             resp = await client.get(
-                                f"https://data.alpaca.markets/v2/stocks/{symbol}/trades/latest",
+                                f"{settings.ALPACA_DATA_BASE_URL}/v2/stocks/{symbol}/trades/latest",
                                 headers=alpaca_headers,
                             )
                             if resp.status_code == 200:

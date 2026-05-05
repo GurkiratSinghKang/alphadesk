@@ -95,7 +95,7 @@ async def _check_price_alerts() -> list[dict]:
             sym = trade["symbol"]
             try:
                 resp = await client.get(
-                    f"https://data.alpaca.markets/v2/stocks/{sym}/trades/latest",
+                    f"{settings.ALPACA_DATA_BASE_URL}/v2/stocks/{sym}/trades/latest",
                     headers=headers,
                 )
                 if resp.status_code != 200:
