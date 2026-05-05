@@ -174,6 +174,14 @@ function TradeBuilderTab() {
   const { selectedSymbol } = useMarketStore();
   const { tradingMode } = useUIStore();
   const addOrder = usePortfolioStore((s) => s.addOrder);
+  // Audit MF-P1-2 (2026-05-05): the legacy TradePanel submit path
+  // had no broker-degraded gate, unlike /trade which blocks order
+  // submission via buildExecutionReadiness when the broker pipeline
+  // reports synthetic / fallback quotes. A trader using the dashboard
+  // sidebar TradePanel during a broker outage could submit a real
+  // order against demo data. Read brokerDegraded from the same store
+  // /trade uses; refuse to open the confirmation dialog when set.
+  const brokerDegraded = usePortfolioStore((s) => s.brokerDegraded);
   const selectedStrikes = useOptionsStore((s) => s.selectedStrikes);
 
   const [legs, setLegs] = useState<TradeLeg[]>([]);
@@ -317,6 +325,17 @@ function TradeBuilderTab() {
 
   const handleSubmit = useCallback(() => {
     if (legs.length === 0 || submitting) return;
+    // MF-P1-2: gate on brokerDegraded — match /trade's
+    // buildExecutionReadiness check. A broker pipeline reporting
+    // synthetic / fallback quotes cannot be trusted to fill orders.
+    if (brokerDegraded) {
+      toast({
+        type: "error",
+        message:
+          "Broker pipeline degraded — submission blocked. Refresh quotes once feed recovers.",
+      });
+      return;
+    }
     // Wave 4P Fix 4 (P98): build OCC-format option symbols for every
     // option leg so the backend sees the strike/expiry/call-put
     // encoded in the symbol. Stock legs keep the underlying ticker.
@@ -360,7 +379,7 @@ function TradeBuilderTab() {
     };
     setPendingOrder(payload);
     setConfirmOpen(true);
-  }, [legs, submitting, selectedSymbol, toast]);
+  }, [legs, submitting, selectedSymbol, toast, brokerDegraded]);
 
   const confirmSubmit = useCallback(async () => {
     if (!pendingOrder || submitting) return;

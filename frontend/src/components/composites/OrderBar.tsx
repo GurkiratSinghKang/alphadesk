@@ -799,16 +799,26 @@ export default function OrderBar({
               </select>
             </label>
             <label className="grid gap-1.5">
-              <span className="t-label text-fg-hint">Route / venue</span>
+              <span className="t-label text-fg-hint">
+                Route / venue{" "}
+                <span className="text-state-warning-fg">· not submitted</span>
+              </span>
               <select
                 value={routeVenue}
                 onChange={(e) => setRouteVenue(e.target.value)}
+                aria-describedby="orderbar-route-disclaimer"
                 className="h-11 rounded-sm border border-border bg-bg px-3 font-mono text-base text-fg outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring md:h-10 md:text-body-sm"
               >
                 <option value="smart">SMART paper route</option>
                 <option value="manual" disabled>Manual venue soon</option>
                 <option value="dark" disabled>Dark/ATS not supported</option>
               </select>
+              <span
+                id="orderbar-route-disclaimer"
+                className="text-label leading-snug text-state-warning-fg"
+              >
+                Planning only — broker handles routing.
+              </span>
             </label>
             <label className="grid gap-1.5">
               <span className="t-label text-fg-hint">Risk size</span>
@@ -853,14 +863,25 @@ export default function OrderBar({
               </span>
             </label>
             <label className="grid gap-1.5">
-              <span className="t-label text-fg-hint">Trailing stop</span>
+              <span className="t-label text-fg-hint">
+                Trailing stop{" "}
+                <span className="text-state-warning-fg">· not submitted</span>
+              </span>
               <Input
                 value={trailingStop}
                 onChange={(e) => setTrailingStop(e.target.value)}
                 inputMode="decimal"
                 placeholder="Amount or %"
+                aria-describedby="orderbar-trailing-disclaimer"
                 className="h-11 md:h-10"
               />
+              <span
+                id="orderbar-trailing-disclaimer"
+                className="text-label leading-snug text-state-warning-fg"
+              >
+                Planning only — wire via bracket OCO instead. Use the bracket
+                checkbox below to submit a real protective stop.
+              </span>
             </label>
             {bracketEnabled ? (
               <>
