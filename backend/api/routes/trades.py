@@ -2132,12 +2132,20 @@ async def get_trade_history(
     strategy: str | None = Query(None),
     limit: int = Query(100, ge=1, le=10000),
     offset: int = Query(0, ge=0, le=1000),
+    username: str = Depends(require_auth),
 ) -> list[TradeHistoryEntry]:
     """Retrieve historical trades from the trade ledger (primary) and local database (fallback).
 
     persona-9 #5/#10: ``offset`` + ``limit`` are bounded by Pydantic. Negative
     offsets, non-numeric input and oversized pages are rejected with HTTP 422
     rather than silently producing an empty / oversized response.
+
+    Audit P1-5 (2026-05-05): historically this endpoint had no auth
+    dependency, so any caller could enumerate every user's trade
+    history. Now requires ``require_auth`` and scopes the ledger query
+    by username. The ``Trade`` model carries a nullable ``username``
+    column; rows with NULL (legacy / pre-multi-user) are still visible
+    to admin only.
     """
 
     # Strategy route ID -> ledger strategy name mapping
@@ -2173,6 +2181,11 @@ async def get_trade_history(
             filters["strategy"] = _ID_TO_LEDGER_NAME.get(strategy, strategy)
         if symbol:
             filters["symbol"] = symbol.upper()
+        # Audit P1-5: scope by caller. Admin sees all rows including
+        # legacy NULL-username rows; non-admin only their own.
+        from core.config import settings as _cfg
+        if username != _cfg.ADMIN_USERNAME:
+            filters["username"] = username
 
         all_trades = ledger.list_paginated(
             limit=limit,
@@ -2237,6 +2250,10 @@ async def get_trade_history(
                 query = query.where(Trade.symbol == symbol.upper())
             if strategy:
                 query = query.where(Trade.strategy == strategy)
+            # Audit P1-5: same per-caller scoping as the ledger path.
+            from core.config import settings as _cfg
+            if username != _cfg.ADMIN_USERNAME:
+                query = query.where(Trade.username == username)
 
             result = await db.execute(query)
             trades = result.scalars().all()

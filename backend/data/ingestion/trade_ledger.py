@@ -653,6 +653,8 @@ class TradeLedger:
             "take_profit", "conviction", "rationale", "strategy", "status",
             "exit_price", "exit_time", "exit_reason", "pnl", "pnl_pct",
             "side",
+            # Audit P1-5: per-user scoping requires username filterability.
+            "username",
         }
         bad = [k for k in filter if k not in allowed]
         if bad:
@@ -730,6 +732,8 @@ class TradeLedger:
             "take_profit", "conviction", "rationale", "strategy", "status",
             "exit_price", "exit_time", "exit_reason", "pnl", "pnl_pct",
             "side",
+            # Audit P1-5: per-user scoping requires username filterability.
+            "username",
         }
         if order_by not in allowed:
             raise ValueError(
