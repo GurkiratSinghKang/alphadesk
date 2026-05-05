@@ -505,11 +505,12 @@ async def livez() -> dict:
 
 
 @app.get("/health", tags=["Health"])
+@app.get("/healthz", tags=["Health"])
 async def health_check() -> dict:
-    """Backward-compat alias for /livez.
+    """Aliases for /livez.
 
-    docker-compose.prod.yml has a healthcheck pointed at /health; keep it
-    working until every deployment switches to /livez.
+    /health: legacy compat — docker-compose.prod.yml healthcheck.
+    /healthz: Kubernetes-style convention; pairs with the existing /readyz.
 
     Round-6 L-14: ``git_sha`` removed (see /livez).
     """
