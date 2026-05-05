@@ -290,9 +290,12 @@ def _classify_regime(
     Returns one of: ``rich_neutral``, ``rich_directional``,
     ``cheap_directional``, ``cheap_neutral``, ``mixed``.
     """
+    # Batch U (A-1): IV "rich" threshold sourced from settings.
+    from core.config import settings as _settings
+    iv_rich_threshold = _settings.EARNINGS_IV_RICH_THRESHOLD
     rank = iv_rank if iv_rank is not None else None
     ratio = iv_to_hv_ratio if iv_to_hv_ratio is not None else None
-    is_iv_rich = (rank is not None and rank >= 70) or (ratio is not None and ratio >= 1.5)
+    is_iv_rich = (rank is not None and rank >= iv_rich_threshold) or (ratio is not None and ratio >= 1.5)
     is_iv_cheap = rank is not None and rank < 30
     bias_strength = abs(claude_confidence - 0.5) if claude_confidence is not None else 0.0
     is_directional = bias_strength >= 0.15

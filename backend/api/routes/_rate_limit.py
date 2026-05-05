@@ -28,6 +28,8 @@ from typing import Deque, Dict
 
 from fastapi import HTTPException
 
+from core.config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,24 +37,27 @@ logger = logging.getLogger(__name__)
 # and takes 20–60s. Five per ten minutes is loose enough for a human
 # exploring symbols but tight enough that a stuck client or a hostile
 # script can't burn $100 in a minute.
-_BUCKET_MAX: int = 5
-_BUCKET_WINDOW_S: float = 600.0
+#
+# Batch U (A-6 through A-9): defaults live in core.config.settings.
+# Module-level constants populated at import time from settings values.
+_BUCKET_MAX: int = int(settings.RATE_LIMIT_FULL_RESEARCH_MAX)
+_BUCKET_WINDOW_S: float = float(settings.RATE_LIMIT_FULL_RESEARCH_WINDOW_SECONDS)
 
 # Round-4 CLUSTER 2 #8: /detail is a Sonnet-tier call (cheaper) but the
 # detail endpoint also fans out to FMP/Alpaca/Newsdata so we want a
 # looser cap that still bounds the abuse case.
-_DETAIL_BUCKET_MAX: int = 30
-_DETAIL_BUCKET_WINDOW_S: float = 600.0
+_DETAIL_BUCKET_MAX: int = int(settings.RATE_LIMIT_DETAIL_MAX)
+_DETAIL_BUCKET_WINDOW_S: float = float(settings.RATE_LIMIT_DETAIL_WINDOW_SECONDS)
 
 # Batch S: /earnings/{symbol}/analysis triggers a Claude lookup if the
 # pre-warm cache is cold ($0.30 per uncached call) and orchestrates 6
 # upstream services. Cap at 30 / minute per IP — generous enough for an
 # analyst rapid-cycling symbols, tight enough to bound the cost of a
 # stuck client. The 100/min global cap below protects the daily budget.
-_ANALYSIS_BUCKET_MAX: int = 30
-_ANALYSIS_BUCKET_WINDOW_S: float = 60.0
-_ANALYSIS_GLOBAL_MAX: int = 100
-_ANALYSIS_GLOBAL_WINDOW_S: float = 60.0
+_ANALYSIS_BUCKET_MAX: int = int(settings.RATE_LIMIT_ANALYSIS_PER_IP)
+_ANALYSIS_BUCKET_WINDOW_S: float = float(settings.RATE_LIMIT_ANALYSIS_PER_IP_WINDOW_SECONDS)
+_ANALYSIS_GLOBAL_MAX: int = int(settings.RATE_LIMIT_ANALYSIS_GLOBAL)
+_ANALYSIS_GLOBAL_WINDOW_S: float = float(settings.RATE_LIMIT_ANALYSIS_GLOBAL_WINDOW_SECONDS)
 
 _history: Dict[str, Deque[float]] = defaultdict(deque)
 _detail_history: Dict[str, Deque[float]] = defaultdict(deque)
@@ -188,7 +193,6 @@ async def _check_bucket(
 # dict growing unboundedly (each abandoned deque was empty after the
 # window passed but never cleaned up). Drive a sweep every 60s from the
 # app lifespan.
-# Memory hygiene — sweep stale rate-limit buckets every 60s. Balances overhead vs leak risk.
 _SWEEP_INTERVAL_S = 60.0
 _sweep_task: asyncio.Task | None = None
 
