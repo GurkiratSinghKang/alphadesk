@@ -154,8 +154,10 @@
   --radius-pill: var(--radius-pill);
 
   /* QA r6a — Typography size scale wired from design-tokens */
+  --text-display-xl: var(--fs-display-xl);
   --text-display-lg: var(--fs-display-lg);
   --text-display-md: var(--fs-display-md);
+  --text-display-sm: var(--fs-display-sm);
   --text-h1: var(--fs-h1);
   --text-h2: var(--fs-h2);
   --text-h3: var(--fs-h3);
@@ -164,6 +166,11 @@
   --text-numeric-md: var(--fs-numeric-md);
   --text-body: var(--fs-body);
   --text-body-sm: var(--fs-body-sm);
+  /* R6-1: Map Tailwind's default text-sm/text-base to AlphaDesk body
+   * tokens. Without these, ~160 sites that say `text-sm` silently bypass
+   * the type ladder (Tailwind's default: 14px ≠ AlphaDesk body-sm 13px). */
+  --text-sm: var(--fs-body-sm);
+  --text-base: var(--fs-body);
   --text-label: var(--fs-label);
   --text-eyebrow: var(--fs-eyebrow);
 
