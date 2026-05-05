@@ -37,15 +37,23 @@ function quoteToDepth(symbol: string, quote: QuoteLike | null | undefined): Mark
 export function useMarketDepth(
   symbol: string,
   quoteFallback?: QuoteLike | null,
+  // Audit F-F8 (2026-05-05): callers that don't actually render depth
+  // (most of the trade page outside the order-book panel) were polling
+  // the L2 endpoint every 5s anyway. Add an opt-in ``enabled`` arg so
+  // a parent that hides the depth UI can short-circuit the fetch.
+  // Default true preserves the legacy behaviour for any caller that
+  // hasn't migrated yet.
+  enabled: boolean = true,
 ): MarketDepthSnapshot | null {
   const fallback = quoteToDepth(symbol, quoteFallback);
   const query = useQuery({
     queryKey: ["market-depth", symbol.toUpperCase()],
     queryFn: () => getMarketDepth(symbol, 10),
-    enabled: Boolean(symbol),
+    enabled: enabled && Boolean(symbol),
     staleTime: 2_000,
     gcTime: 30_000,
-    refetchInterval: 5_000,
+    // Pause the 5s poll when the UI doesn't render depth.
+    refetchInterval: enabled ? 5_000 : false,
     retry: 1,
   });
 

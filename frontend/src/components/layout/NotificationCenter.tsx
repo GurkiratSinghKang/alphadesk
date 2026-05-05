@@ -106,15 +106,24 @@ export function NotificationCenter() {
   const clearAll = useNotificationsStore((s) => s.clearAll);
   const [activeTab, setActiveTab] = useState<TabFilter>("all");
 
+  // Audit F-F9 (2026-05-05): controlled popover open state so the
+  // re-render ticker below can pause when the popover is closed.
+  // Previously fired every 30s regardless of visibility, re-rendering
+  // the whole popover subtree (and its bell-icon parent) on a closed
+  // dropdown. The relative-time labels only matter when the user
+  // actually sees them.
+  const [popoverOpen, setPopoverOpen] = useState(false);
+
   // Relative-time labels ("just now", "2m ago") are pure functions of
   // Date.now(), so without a ticker a 10-minute-old notification sticks
-  // on "just now" forever. Force a re-render every 30s so the strings
-  // roll forward while the component is mounted; clear on unmount.
+  // on "just now" forever. Force a re-render every 30s — but only
+  // while the popover is open (audit F-F9).
   const [, setTick] = useState(0);
   useEffect(() => {
+    if (!popoverOpen) return;
     const id = setInterval(() => setTick((t) => t + 1), 30_000);
     return () => clearInterval(id);
-  }, []);
+  }, [popoverOpen]);
 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 
@@ -133,7 +142,7 @@ export function NotificationCenter() {
   // preferences (Settings → Notifications), and calls `addNotification`.
 
   return (
-    <Popover>
+    <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
       <PopoverTrigger
         render={
         <Button variant="ghost" size="icon" className="relative h-11 w-11 sm:h-8 sm:w-8" aria-label="Notifications">
