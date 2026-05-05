@@ -619,6 +619,14 @@ import time as _time  # alias to avoid the ``import time`` shadowing risk
 _READYZ_FULL_CACHE: dict[str, Any] = {"snapshot": None, "ts": 0.0, "status": ""}
 _READYZ_FULL_TTL_OK_S = 30.0
 _READYZ_FULL_TTL_DEGRADED_S = 5.0
+# Audit P0-3 (2026-05-05): the cache is updated across three separate
+# dict assignments below. Without a lock, a concurrent reader between
+# the snapshot write and the timestamp write sees a fresh snapshot but
+# a stale ``ts``, computes a huge ``age``, and bypasses the TTL guard
+# — triggering a full FMP + Anthropic recompute on every concurrent
+# request. The lock serialises the writer; readers continue to use the
+# (atomic) dict-key reads on the fast path.
+_READYZ_FULL_LOCK: asyncio.Lock = asyncio.Lock()
 
 
 async def _probe_fmp() -> dict[str, Any]:
@@ -698,6 +706,26 @@ async def readyz_full() -> JSONResponse:
         snap["cache_age_s"] = round(age, 2)
         return JSONResponse(status_code=http_status, content=snap)
 
+    # Audit P0-3: serialise the recompute path so concurrent waiters
+    # share one upstream call rather than each launching their own
+    # FMP + Anthropic probes. After acquiring the lock, re-check the
+    # cache — the previous holder may have just written a fresh value.
+    async with _READYZ_FULL_LOCK:
+        now = _time.monotonic()
+        age = now - _READYZ_FULL_CACHE["ts"]
+        cached_status = _READYZ_FULL_CACHE.get("status", "")
+        ttl = _READYZ_FULL_TTL_OK_S if cached_status == "ok" else _READYZ_FULL_TTL_DEGRADED_S
+        if _READYZ_FULL_CACHE["snapshot"] is not None and age < ttl:
+            snap = dict(_READYZ_FULL_CACHE["snapshot"])
+            http_status = snap.pop("_http_status", 200)
+            snap["cache_age_s"] = round(age, 2)
+            return JSONResponse(status_code=http_status, content=snap)
+
+        return await _readyz_full_recompute(now)
+
+
+async def _readyz_full_recompute(now: float) -> JSONResponse:
+    """Recompute path for ``readyz_full``. Caller must hold ``_READYZ_FULL_LOCK``."""
     # ── Recompute ─────────────────────────────────────────────────
     snapshot: dict[str, Any] = {}
     overall_ok = True
