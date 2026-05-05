@@ -756,6 +756,27 @@ export default function StrategyDetailPage() {
               </>
             )}
           </button>
+          {/* Persona F2 (2026-05-05 workflow audit) — strategy detail had
+              zero outbound CTA into /trade, leaving the researcher to
+              hand-navigate and re-enter context. The catalogue card already
+              links to ``/strategies`` for browsing; the missing rung was
+              the handoff *out* of research and *into* execution. The trade
+              page has supported ``?strategy=`` since R5-B1, so this is a
+              pure deep-link. Rendered as a real <Link> (not <button>) so
+              middle-click / cmd-click open in a new tab and screen readers
+              announce "link" — the same lesson as F4 on the mobile dashboard. */}
+          <Link
+            href={`/trade?strategy=${strategyId}`}
+            className={cn(
+              "inline-flex h-9 items-center gap-1.5 rounded-sm border border-border bg-bg-elev-1 px-3.5 font-sans text-label font-semibold text-fg transition-colors",
+              "hover:bg-bg-elev-2",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+            )}
+            aria-label={`Open ${meta.name} in the trade ticket`}
+          >
+            Open in trade ticket
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          </Link>
           <button
             type="button"
             onClick={() => router.push(`/?strategy=${strategyId}`)}
