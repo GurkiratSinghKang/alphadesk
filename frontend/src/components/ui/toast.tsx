@@ -47,7 +47,7 @@ const TOAST_ACCENT: Record<ToastType, string> = {
 const TOAST_ICON_COLOR: Record<ToastType, string> = {
   success: "text-profit",
   error: "text-loss",
-  info: "text-brand",
+  info: "text-primary",
   warning: "text-amber",
 };
 
@@ -74,7 +74,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastEntry; onDismiss: (id: st
         {toast.action && (
           <button
             onClick={() => { toast.action!.onClick(); onDismiss(toast.id); }}
-            className="mt-1 text-label font-medium text-brand hover:underline"
+            className="mt-1 text-label font-medium text-primary hover:underline"
           >
             {toast.action.label}
           </button>

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import Mono from "@/components/typography/Mono";
 import PnLNumber from "@/components/primitives/PnLNumber";
@@ -49,11 +50,18 @@ export default function PositionsSection({
   strategyLabel,
   className,
 }: PositionsSectionProps) {
+  const router = useRouter();
   if (!positions || positions.length === 0) {
+    // P2-22: was a dead-end card. Offer "Run pipeline" so the operator can
+    // queue a run rather than getting stuck staring at "hasn't traded yet".
     return (
       <EmptyState
         title="This strategy hasn't traded yet"
         description="Open positions and signals will populate here once the strategy goes live."
+        action={{
+          label: "Run pipeline",
+          onClick: () => router.push("/pipeline"),
+        }}
         className={className}
       />
     );
@@ -123,7 +131,7 @@ export default function PositionsSection({
                   <Link
                     href={`/trade?symbol=${p.symbol}`}
                     className={cn(
-                      "rounded-sm font-sans text-body font-semibold text-fg transition-colors hover:text-brand",
+                      "rounded-sm font-sans text-body font-semibold text-fg transition-colors hover:text-primary",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                     )}
                   >

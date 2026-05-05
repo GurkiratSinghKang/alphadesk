@@ -30,7 +30,7 @@ const buttonVariants = cva(
     "font-sans font-medium",
     "relative overflow-hidden rounded-sm border border-transparent",
     "outline-none transition-all select-none",
-    "focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+    "focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
     "active:scale-[0.98]",
     "aria-busy:cursor-wait data-[state=loading]:cursor-wait data-[state=loading]:opacity-90",
     "data-[state=stale]:border-amber data-[state=stale]:bg-amber/10",
@@ -42,20 +42,20 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          "bg-brand text-primary-foreground hover:bg-gold-300",
+          "bg-primary text-primary-foreground hover:bg-gold-300",
         secondary:
-          "bg-transparent text-fg border-border-strong hover:bg-bg-elev-1 hover:border-brand",
+          "bg-transparent text-fg border-border-strong hover:bg-bg-elev-1 hover:border-primary",
         ghost:
           "bg-transparent text-fg-dim hover:text-fg hover:bg-bg-elev-1",
-        buy: "bg-up-500/10 text-up-500 border-up-500/30 hover:bg-up-500/20 uppercase tracking-[0.1em] text-label",
+        buy: "bg-profit/10 text-profit border-profit/30 hover:bg-profit/20 uppercase tracking-[0.1em] text-label",
         sell: "bg-down-500/10 text-down-500 border-down-500/30 hover:bg-down-500/20 uppercase tracking-[0.1em] text-label",
-        link: "bg-transparent text-brand border-0 border-b border-brand-dim rounded-none px-0 h-auto hover:text-gold-300",
+        link: "bg-transparent text-primary border-0 border-b border-primary-dim rounded-none px-0 h-auto hover:text-gold-300",
 
         // Legacy aliases — keep older callers working
         default:
-          "bg-brand text-primary-foreground hover:bg-gold-300",
+          "bg-primary text-primary-foreground hover:bg-gold-300",
         outline:
-          "bg-transparent text-fg border-border-strong hover:bg-bg-elev-1 hover:border-brand",
+          "bg-transparent text-fg border-border-strong hover:bg-bg-elev-1 hover:border-primary",
         destructive:
           "bg-down-500/10 text-down-500 border-down-500/30 hover:bg-down-500/20",
       },

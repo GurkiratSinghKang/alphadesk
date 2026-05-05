@@ -146,8 +146,8 @@ function squarify(
 // modifiers, and the neutral floor still uses --neutral.
 function getTileColor(changePct: number): string {
   if (changePct > 2) return "bg-up-700";
-  if (changePct > 1) return "bg-up-500/70";
-  if (changePct > 0.3) return "bg-up-500/50";
+  if (changePct > 1) return "bg-profit/70";
+  if (changePct > 0.3) return "bg-profit/50";
   if (changePct >= -0.3) return "bg-[var(--neutral)]";
   if (changePct >= -1) return "bg-down-500/50";
   if (changePct >= -2) return "bg-down-500/70";

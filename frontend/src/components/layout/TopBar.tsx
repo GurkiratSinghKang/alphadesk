@@ -79,7 +79,7 @@ export function TopBar() {
           <SheetContent side="left" className="w-64 bg-[var(--bg-card)] border-border p-0">
             <SheetHeader className="border-b border-border px-4 py-3">
               <SheetTitle className="flex items-baseline gap-1.5 text-numeric-lg">
-                <span className="font-display italic text-brand">α</span>
+                <span className="font-display italic text-primary">α</span>
                 <span>AlphaDesk</span>
               </SheetTitle>
             </SheetHeader>
@@ -91,7 +91,7 @@ export function TopBar() {
                   className={cn(
                     "flex min-h-11 items-center gap-2.5 rounded-sm border px-3 py-2.5 text-sm font-medium transition-colors",
                     active
-                      ? "border-brand/30 bg-brand/15 text-brand"
+                      ? "border-primary/30 bg-primary/15 text-primary"
                       : "border-transparent text-muted-foreground hover:border-border-hair hover:bg-bg-elev-1 hover:text-foreground"
                   )}
                 >
@@ -109,7 +109,7 @@ export function TopBar() {
           className="inline-flex min-h-11 min-w-0 items-center gap-1.5 rounded-md px-1 font-display italic text-numeric-lg text-ink-1000 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-8"
           onClick={() => router.push("/")}
         >
-          <span className="text-brand">α</span>
+          <span className="text-primary">α</span>
           <span className="truncate">AlphaDesk</span>
         </button>
         {/* Desktop navigation -- hidden on mobile */}
@@ -121,7 +121,7 @@ export function TopBar() {
               className={cn(
                 "flex min-h-9 items-center gap-1.5 rounded-sm border px-3 py-2 text-label font-medium transition-colors",
                 active
-                  ? "border-brand/30 bg-brand/15 text-brand"
+                  ? "border-primary/30 bg-primary/15 text-primary"
                   : "border-transparent text-muted-foreground hover:border-border-hair hover:bg-bg-elev-1 hover:text-foreground"
               )}
             >
@@ -132,7 +132,7 @@ export function TopBar() {
         {/* Round-11 / W-1: workspace selector removed (was a placebo). */}
       </div>
 
-      <button data-tour="search-bar" onClick={() => setCommandPaletteOpen(true)} aria-label="Open command palette to search symbols and commands" className="hidden h-9 min-w-[180px] max-w-[520px] flex-1 items-center gap-2 rounded-sm border border-border-hair bg-bg-elev-1/80 px-3 text-sm text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:border-brand/40 hover:text-foreground md:flex">
+      <button data-tour="search-bar" onClick={() => setCommandPaletteOpen(true)} aria-label="Open command palette to search symbols and commands" className="hidden h-9 min-w-[180px] max-w-[520px] flex-1 items-center gap-2 rounded-sm border border-border-hair bg-bg-elev-1/80 px-3 text-sm text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:border-primary/40 hover:text-foreground md:flex">
         <Search className="h-3.5 w-3.5" aria-hidden="true" />
         <span className="flex-1 text-left">Search symbols, commands...</span>
         <kbd className="rounded-sm border border-border-hair bg-bg px-2 py-0.5 text-label font-mono text-muted-foreground">{isMac ? "\u2318K" : "Ctrl+K"}</kbd>

@@ -76,7 +76,7 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
         "data-[state=loading]:cursor-wait data-[state=stale]:border data-[state=stale]:border-amber data-[state=error]:border data-[state=error]:border-down-500",
         "group-data-[variant=line]/tabs-list:data-active:bg-transparent",
         "group-data-[variant=line]/tabs-list:data-active:border-b-2",
-        "group-data-[variant=line]/tabs-list:data-active:border-brand",
+        "group-data-[variant=line]/tabs-list:data-active:border-primary",
         "group-data-[variant=line]/tabs-list:rounded-none",
         "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
         className

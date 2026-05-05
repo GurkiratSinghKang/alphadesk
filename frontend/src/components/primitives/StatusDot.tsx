@@ -33,7 +33,7 @@ const toneClass: Record<StatusDotTone, string> = {
   ice: "bg-ice shadow-[0_0_6px_var(--ice-500)]",
   amber: "bg-amber shadow-[0_0_6px_var(--state-warning)]",
   wine: "bg-wine shadow-[0_0_6px_var(--wine-500)]",
-  brand: "bg-brand shadow-[0_0_6px_var(--brand)]",
+  brand: "bg-primary shadow-[0_0_6px_var(--brand)]",
   muted: "bg-fg-muted",
 };
 

@@ -19,7 +19,7 @@ function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
         "font-sans text-body-sm text-fg",
         "placeholder:text-fg-hint",
         "outline-none transition-colors",
-        "focus-visible:border-brand focus-visible:shadow-[0_0_0_3px_rgba(201,166,107,0.12)]",
+        "focus-visible:border-primary focus-visible:shadow-[0_0_0_3px_rgba(201,166,107,0.12)]",
         "disabled:cursor-not-allowed disabled:opacity-50",
         "aria-invalid:border-down-500",
         className

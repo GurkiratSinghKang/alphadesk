@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useId } from "react";
+import { useRouter } from "next/navigation";
 
 import Eyebrow from "@/components/typography/Eyebrow";
 import Mono from "@/components/typography/Mono";
@@ -23,6 +24,10 @@ export interface EquityPanelProps {
   /** Formatted stats displayed alongside the chart. */
   summary?: { label: string; value: string; tone?: "profit" | "loss" | "neutral" }[];
   className?: string;
+  /** P2-22: optional strategy id used by the empty-state CTA so a researcher
+   *  with no equity curve yet can route back to /strategies instead of
+   *  staring at a dead-end. */
+  strategyId?: string;
 }
 
 const RANGES: EquityRange[] = ["1M", "3M", "YTD", "1Y", "ALL"];
@@ -47,15 +52,24 @@ export default function EquityPanel({
   onRangeChange,
   summary,
   className,
+  strategyId: _strategyId,
 }: EquityPanelProps) {
   const idBase = useId().replace(/:/g, "");
   const gradId = `equity-grad-${idBase}`;
+  const router = useRouter();
 
   if (!data || data.length < 2) {
+    // P2-22: empty state used to dead-end. Add a recovery action so
+    // researchers staring at "No equity curve yet" can jump back to the
+    // strategies index and pick a different strategy.
     return (
       <EmptyState
         title="No equity curve yet"
         description="The strategy needs at least one closed trade before this chart renders. Open a paper position to start tracking."
+        action={{
+          label: "View other strategies",
+          onClick: () => router.push("/strategies"),
+        }}
         className={cn("h-[280px]", className)}
       />
     );

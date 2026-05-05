@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { toRegime } from "@/app/(dashboard)/_desk/selectors";
 
 // Dot color per regime tone. Codebase uses CSS-var-based profit/loss/amber tokens
-// (not bg-up-500 / bg-down-500 — those don't exist in the design system).
+// (not bg-profit / bg-down-500 — those don't exist in the design system).
 function regimeDotClass(regime: ReturnType<typeof toRegime>["regime"]): string {
   if (regime === "bull") return "bg-profit";
   if (regime === "bear" || regime === "crisis") return "bg-loss";
@@ -51,7 +51,7 @@ function VixPill({ vixLevel }: { vixLevel: number | null }) {
       : vixLevel >= 30
         ? "text-loss"
         : vixLevel >= 20
-          ? "text-amber"
+          ? "text-state-warning"
           : "text-fg-muted";
 
   return (
@@ -70,7 +70,7 @@ function VixPill({ vixLevel }: { vixLevel: number | null }) {
         {vixLevel != null && vixLevel >= 30 ? (
           <span className="ml-1 text-loss">· high volatility</span>
         ) : vixLevel != null && vixLevel >= 20 ? (
-          <span className="ml-1 text-amber">· elevated volatility</span>
+          <span className="ml-1 text-state-warning">· elevated volatility</span>
         ) : null}
       </TooltipContent>
     </Tooltip>

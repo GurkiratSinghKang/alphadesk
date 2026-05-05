@@ -174,7 +174,7 @@ export function StatusStrip() {
               ? "bg-fg-muted/15 text-fg-muted"
               : brokerPillState === "paper"
                 ? "bg-[var(--profit)]/15 text-[var(--profit)]"
-                : "bg-amber/20 text-amber",
+                : "bg-state-mode/20 text-state-mode",
           )}
         >
           {brokerPillState === "not-connected"
@@ -193,11 +193,11 @@ export function StatusStrip() {
         <Link
           href="/settings"
           aria-label="Demo data. Link Alpaca in settings."
-          className="ml-0 flex shrink-0 items-center gap-1.5 border-l border-border/50 pl-3 text-amber hover:text-foreground sm:ml-auto sm:pl-4"
+          className="ml-0 flex shrink-0 items-center gap-1.5 border-l border-border/50 pl-3 text-state-warning hover:text-foreground sm:ml-auto sm:pl-4"
           title="AlphaDesk hasn't seen Alpaca credentials yet. Click to configure."
         >
           <span
-            className="inline-block h-1.5 w-1.5 rounded-full bg-amber"
+            className="inline-block h-1.5 w-1.5 rounded-full bg-state-warning"
             aria-hidden
           />
           <span className="hidden font-semibold uppercase tracking-[0.1em] text-label sm:inline">

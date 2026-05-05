@@ -779,7 +779,7 @@ function SignalsTab() {
       </p>
       <Link
         href="/alerts"
-        className="font-sans text-label uppercase tracking-[0.18em] text-brand transition-colors hover:text-gold-300"
+        className="font-sans text-label uppercase tracking-[0.18em] text-primary transition-colors hover:text-gold-300"
       >
         Configure alerts
       </Link>

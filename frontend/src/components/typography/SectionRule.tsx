@@ -38,7 +38,7 @@ export default function SectionRule({
   const TagEl = tagAs as React.ElementType;
   return (
     <div className={cn("flex flex-col gap-3", className)} {...rest}>
-      {tag ? <TagEl className="t-label">{tag}</TagEl> : null}
+      {tag ? <TagEl className="t-label uppercase tracking-wider">{tag}</TagEl> : null}
       <span className="u-rule" aria-hidden />
     </div>
   );

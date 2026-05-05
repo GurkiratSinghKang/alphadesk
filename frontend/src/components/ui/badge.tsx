@@ -36,14 +36,14 @@ const badgeVariants = cva(
     variants: {
       variant: {
         active:
-          "text-up-500 bg-up-500/10 border-up-500/25",
+          "text-profit bg-profit/10 border-profit/25",
         paused:
           "text-amber bg-amber/10 border-amber/25",
         halted:
           "text-down-500 bg-down-500/10 border-down-500/25",
         idle:
           "text-fg-muted bg-transparent border-border",
-        ai: "text-gold-300 bg-brand/10 border-brand/30",
+        ai: "text-gold-300 bg-primary/10 border-primary/30",
         loading:
           "text-ice bg-ice/10 border-ice/25",
         stale:
@@ -55,7 +55,7 @@ const badgeVariants = cva(
 
         // Legacy aliases
         default:
-          "text-up-500 bg-up-500/10 border-up-500/25",
+          "text-profit bg-profit/10 border-profit/25",
         secondary:
           "text-fg bg-bg-elev-2 border-border",
         destructive:
@@ -65,7 +65,7 @@ const badgeVariants = cva(
         ghost:
           "text-fg-muted bg-transparent border-transparent",
         link:
-          "text-brand border-transparent underline underline-offset-2",
+          "text-primary border-transparent underline underline-offset-2",
       },
     },
     defaultVariants: {
@@ -75,7 +75,7 @@ const badgeVariants = cva(
 )
 
 const dotToneClass: Record<string, string> = {
-  active: "bg-up-500 shadow-[0_0_6px_var(--up-500)]",
+  active: "bg-profit shadow-[0_0_6px_var(--up-500)]",
   paused: "bg-amber",
   halted: "bg-down-500 animate-pulse",
   idle: "bg-fg-muted",
@@ -84,12 +84,12 @@ const dotToneClass: Record<string, string> = {
   stale: "bg-amber",
   error: "bg-down-500 animate-pulse",
   disabled: "bg-fg-muted",
-  default: "bg-up-500 shadow-[0_0_6px_var(--up-500)]",
+  default: "bg-profit shadow-[0_0_6px_var(--up-500)]",
   secondary: "bg-fg-muted",
   destructive: "bg-down-500 animate-pulse",
   outline: "bg-fg-muted",
   ghost: "bg-fg-muted",
-  link: "bg-brand",
+  link: "bg-primary",
 }
 
 type BadgeProps = useRender.ComponentProps<"span"> &

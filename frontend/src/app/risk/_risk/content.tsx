@@ -208,7 +208,7 @@ export const RISK_CLAUSES: StaticClause[] = [
           href="https://alpaca.markets/disclosures"
           target="_blank"
           rel="noopener noreferrer"
-          className="underline underline-offset-2 decoration-dotted hover:text-brand"
+          className="underline underline-offset-2 decoration-dotted hover:text-primary"
         >
           alpaca.markets/disclosures
         </a>

@@ -435,10 +435,20 @@ export default function OrderBar({
   // re-entry until the parent's ``submitting`` prop comes back true.
   const submittingRef = React.useRef(false);
   React.useEffect(() => {
-    // Parent has acknowledged the submission and is now showing the
-    // submitting state — clear the local guard so subsequent legit
-    // submissions (after this one resolves) can proceed.
-    if (submitting) submittingRef.current = false;
+    // Audit MF-P1-6 (2026-05-05): the prior version cleared the local
+    // guard on ``submitting === true`` (i.e. the moment the in-flight
+    // state began), which is the WRONG transition. A second rapid tap
+    // on "Place order" within the same React tick where the parent
+    // had just flipped submitting=true would pass the guard
+    // ``submittingRef.current`` (now false) and re-enter ``stage()`` —
+    // firing a second POST against the same staged draft.
+    //
+    // Guard semantics: clear when the parent's async round-trip has
+    // RESOLVED (submitting transitions back from true → false), not
+    // when the in-flight begins. The Promise-chain in ``stage()`` also
+    // clears on resolved-false / rejection, so the guard is multiply
+    // protected; this just closes the in-flight overlap window.
+    if (!submitting) submittingRef.current = false;
   }, [submitting]);
 
   const stage = () => {
@@ -589,7 +599,7 @@ export default function OrderBar({
             // a11y audit r3 — WCAG 2.4.7: outline-none + 1px brand border
             // change was not a visible focus cue. Add a ring so keyboard
             // users can see which select is focused.
-            "focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
+            "focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
             noStrategies && "opacity-60 cursor-not-allowed"
           )}
         >
@@ -627,14 +637,14 @@ export default function OrderBar({
             className={cn(
               "flex items-center gap-2 px-4 py-2 text-body-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:pointer-events-none disabled:opacity-55 transition-colors",
               side === "buy"
-                ? "bg-bg-elev-2 border-r border-up-500/40 text-fg"
+                ? "bg-bg-elev-2 border-r border-profit/40 text-fg"
                 : "bg-transparent border-r border-border-hair text-fg-muted hover:text-fg"
             )}
           >
             <span
               className={cn(
                 "size-1.5 rounded-full shrink-0",
-                side === "buy" ? "bg-up-500" : "border border-fg-muted"
+                side === "buy" ? "bg-profit" : "border border-fg-muted"
               )}
               aria-hidden
             />
@@ -715,7 +725,7 @@ export default function OrderBar({
             "font-mono text-base md:text-body-sm text-ink-1000 outline-none",
             // a11y audit r3 — WCAG 2.4.7: matching visible focus ring on the
             // Type select (same treatment as the Strategy select above).
-            "focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0"
+            "focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0"
           )}
         >
           {TYPES.map((t) => (
@@ -767,7 +777,7 @@ export default function OrderBar({
               TIF, bracket/OCO planning, route, slippage, and risk sizing.
             </span>
           </span>
-          <span className="shrink-0 font-mono text-label text-brand">
+          <span className="shrink-0 font-mono text-label text-primary">
             {advancedOpen ? "Hide details" : "Show details"}
           </span>
         </button>
@@ -778,7 +788,7 @@ export default function OrderBar({
               <select
                 value={timeInForce}
                 onChange={(e) => setTimeInForce(e.target.value as TimeInForceOption)}
-                className="h-11 rounded-sm border border-border bg-bg px-3 font-mono text-base text-fg outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-ring md:h-10 md:text-body-sm"
+                className="h-11 rounded-sm border border-border bg-bg px-3 font-mono text-base text-fg outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring md:h-10 md:text-body-sm"
               >
                 <option value="day">DAY</option>
                 <option value="gtc">GTC</option>
@@ -793,7 +803,7 @@ export default function OrderBar({
               <select
                 value={routeVenue}
                 onChange={(e) => setRouteVenue(e.target.value)}
-                className="h-11 rounded-sm border border-border bg-bg px-3 font-mono text-base text-fg outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-ring md:h-10 md:text-body-sm"
+                className="h-11 rounded-sm border border-border bg-bg px-3 font-mono text-base text-fg outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring md:h-10 md:text-body-sm"
               >
                 <option value="smart">SMART paper route</option>
                 <option value="manual" disabled>Manual venue soon</option>

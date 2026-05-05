@@ -78,11 +78,27 @@ export function OnboardingTour() {
   const [active, setActive] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [spotlightRect, setSpotlightRect] = useState<DOMRect | null>(null);
+  // P2-23: SSR sees `window === undefined` so `alreadyCompleted` is always
+  // false at the first render; once the client hydrates the localStorage
+  // check actually runs. To keep the tour from flashing on first paint
+  // before that check + the 1500ms grace period complete, gate the entire
+  // render on a mount-tick + 200ms grace flag.
+  const [hydrated, setHydrated] = useState(false);
   const rafRef = useRef<number>(0);
   const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const isDashboardRoute = pathname === "/";
+
+  // P2-23: 200ms grace period after mount. The 1500ms `setActive(true)`
+  // delay below already gates the visible tooltip, but the early-return
+  // `if (!active) return null` in the render body could still race a
+  // hydration mismatch on slow connections — explicit hydration flag keeps
+  // the markup deterministic across SSR + CSR.
+  useEffect(() => {
+    const t = setTimeout(() => setHydrated(true), 200);
+    return () => clearTimeout(t);
+  }, []);
 
   // Wave 3N persona-94 #7: gate the tour on actual login events, not a
   // bare mount. Listen for the `alphadesk:auth-login-success` event the
@@ -287,6 +303,13 @@ export function OnboardingTour() {
     completeTour();
   }, [completeTour]);
 
+  // P2-23: gate on hydration grace before any tooltip renders. Without
+  // this, a localStorage hiccup (Safari private mode, stale dismissal
+  // marker race) could briefly flash the tooltip on first paint before
+  // the activation effect resolves. The 200ms hydration check + the
+  // existing 1500ms activation timer combine to keep the tour invisible
+  // until both have settled.
+  if (!hydrated) return null;
   if (!active) return null;
 
   const step = TOUR_STEPS[currentStep];

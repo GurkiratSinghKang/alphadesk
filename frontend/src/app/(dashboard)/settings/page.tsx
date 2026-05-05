@@ -596,7 +596,7 @@ export default function SettingsPage() {
                 "switch" whose resting state (green = paper) looked like a
                 positive live indicator — ambiguous on first glance. Replaced
                 with a two-button segmented control where the ACTIVE side
-                wears the gold brand accent (`bg-brand/20 text-brand`). A
+                wears the gold brand accent (`bg-primary/20 text-primary`). A
                 sibling `aria-labelledby="trading-mode-label"` radiogroup
                 exposes the same semantics for AT. */}
             <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
@@ -637,7 +637,7 @@ export default function SettingsPage() {
                         active
                           ? opt === "live"
                             ? "bg-loss/15 text-loss"
-                            : "bg-brand/20 text-brand"
+                            : "bg-primary/20 text-primary"
                           : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
                       )}
                     >
@@ -699,7 +699,7 @@ export default function SettingsPage() {
                       className={cn(
                         "min-h-9 px-3 text-label font-semibold uppercase transition-colors",
                         brokerProvider === provider
-                          ? "bg-brand/20 text-brand"
+                          ? "bg-primary/20 text-primary"
                           : "text-muted-foreground hover:bg-accent/30 hover:text-foreground",
                       )}
                     >
@@ -742,7 +742,7 @@ export default function SettingsPage() {
                         brokerEnv === env
                           ? env === "live"
                             ? "bg-loss/15 text-loss"
-                            : "bg-brand/20 text-brand"
+                            : "bg-primary/20 text-primary"
                           : "text-muted-foreground hover:bg-accent/30 hover:text-foreground",
                       )}
                     >
@@ -899,7 +899,7 @@ export default function SettingsPage() {
                               {issueTitle(issue)}
                             </p>
                             {issue.symbol && (
-                              <span className="t-num-md text-brand">{issue.symbol}</span>
+                              <span className="t-num-md text-primary">{issue.symbol}</span>
                             )}
                           </div>
                           <p className="t-meta mt-1">

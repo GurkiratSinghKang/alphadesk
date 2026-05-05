@@ -68,7 +68,7 @@ export default function LoginResetPage() {
           Email{" "}
           <a
             href="mailto:support@tradingalpha.net?subject=Password%20reset"
-            className="text-brand underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
+            className="text-primary underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
           >
             support@tradingalpha.net
           </a>{" "}

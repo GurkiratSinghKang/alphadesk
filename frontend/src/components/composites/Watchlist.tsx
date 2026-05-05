@@ -193,7 +193,7 @@ export function Watchlist({ symbols, className }: WatchlistProps) {
             className={cn(
               "min-w-0 flex-1 rounded-sm border border-border bg-bg-card px-2 py-1.5",
               "font-mono text-label uppercase text-fg outline-none",
-              "focus:border-brand focus:ring-1 focus:ring-brand"
+              "focus:border-primary focus:ring-1 focus:ring-brand"
             )}
             placeholder="SYMBOL"
           />
@@ -203,7 +203,7 @@ export function Watchlist({ symbols, className }: WatchlistProps) {
             disabled={addDisabled}
             className={cn(
               "inline-flex h-8 w-8 items-center justify-center rounded-sm border border-border",
-              "text-brand transition-colors hover:bg-bg-elev-2",
+              "text-primary transition-colors hover:bg-bg-elev-2",
               "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand",
               addDisabled && "opacity-50 cursor-not-allowed hover:bg-transparent"
             )}
@@ -285,7 +285,7 @@ function WatchlistRow({
         {selected && (
           <span
             aria-hidden
-            className="absolute left-0 top-0 bottom-0 w-0.5 bg-brand"
+            className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary"
           />
         )}
 

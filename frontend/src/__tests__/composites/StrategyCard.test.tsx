@@ -28,7 +28,7 @@ describe("StrategyCard", () => {
     const anchor = container.querySelector("a[data-slot='strategy-card']");
     expect(anchor).not.toBeNull();
     expect(anchor?.getAttribute("href")).toBe("/strategies/mq");
-    expect(anchor?.className).toContain("before:bg-brand");
+    expect(anchor?.className).toContain("before:bg-primary");
     expect(container.textContent).toContain("Momentum");
     expect(container.textContent).toContain("+3.42%");
     expect(container.textContent).toContain("4 positions");

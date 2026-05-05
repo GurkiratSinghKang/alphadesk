@@ -24,7 +24,7 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
         // so placeholder copy passes AA once fg-muted token is lifted to ink-700.
         "placeholder:text-fg-muted placeholder:font-sans",
         "outline-none transition-colors",
-        "focus-visible:border-brand focus-visible:shadow-[0_0_0_3px_rgba(201,166,107,0.12)]",
+        "focus-visible:border-primary focus-visible:shadow-[0_0_0_3px_rgba(201,166,107,0.12)]",
         "disabled:cursor-not-allowed disabled:opacity-50",
         "aria-invalid:border-down-500",
         "file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-fg",

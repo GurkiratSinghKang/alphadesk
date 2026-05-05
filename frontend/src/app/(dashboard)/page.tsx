@@ -459,6 +459,19 @@ export default function DeskPage() {
     }
   }, []);
 
+  // P2-27: subscribe to the global `alphadesk:refresh` event the keyboard
+  // shortcut hook dispatches when the operator presses `r`. Previously
+  // nothing listened, so the shortcut overlay over-promised. Now the
+  // dashboard refreshes portfolio data on demand; the shortcut copy in
+  // SHORTCUT_GROUPS also makes the dashboard scope explicit.
+  useEffect(() => {
+    function onRefresh() {
+      refreshPortfolio().catch(() => {});
+    }
+    window.addEventListener("alphadesk:refresh", onRefresh);
+    return () => window.removeEventListener("alphadesk:refresh", onRefresh);
+  }, [refreshPortfolio]);
+
   /**
    * Execute a cancel after user confirms via the DestructiveConfirmModal.
    */
@@ -1088,7 +1101,7 @@ function DashboardCommandCenter({
                     ? `${activeStrategyCount} active · ${pausedStrategyCount} paused · ${devStrategyCount} dev`
                     : "Enabled systems"
                 }
-                valueClassName="text-brand"
+                valueClassName="text-primary"
               />
             </div>
           </header>
@@ -1225,7 +1238,7 @@ function MobilePriorityBrief({
           type="button"
           onClick={actionHandler}
           data-slot="dashboard-mobile-primary-action"
-          className="mt-3 grid min-h-[116px] w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-md border border-brand/30 bg-brand/10 px-3.5 py-3.5 text-left transition-[border-color,background-color,transform] active:scale-[0.99]"
+          className="mt-3 grid min-h-[116px] w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-md border border-primary/30 bg-primary/10 px-3.5 py-3.5 text-left transition-[border-color,background-color,transform] active:scale-[0.99]"
         >
           <span
             className={cn(
@@ -1245,7 +1258,7 @@ function MobilePriorityBrief({
             <span className="mt-2 block line-clamp-2 text-body-sm leading-snug text-fg-muted">
               {actionDetail}
             </span>
-            <span className="mt-3 inline-flex min-h-8 items-center rounded-sm bg-brand px-3 text-label font-semibold text-primary-foreground">
+            <span className="mt-3 inline-flex min-h-8 items-center rounded-sm bg-primary px-3 text-label font-semibold text-primary-foreground">
               {actionLabel}
             </span>
           </span>
@@ -1355,7 +1368,7 @@ function PortfolioCanvas({
       <div className="flex h-full min-w-0 flex-col justify-between gap-7">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <Sparkle className="size-4 text-brand" aria-hidden />
+            <Sparkle className="size-4 text-primary" aria-hidden />
             <p className="t-label text-fg-hint">Capital canvas</p>
           </div>
           {/* design-intentional: leading-[0.92] on hero numeric display — extreme tight leading for capital-canvas wraparound visual cohesion */}
@@ -1402,7 +1415,7 @@ function PortfolioCanvas({
             <button
               type="button"
               onClick={onTrade}
-              className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-sm bg-brand px-3 text-body-sm font-semibold text-primary-foreground transition-transform hover:-translate-y-0.5"
+              className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-sm bg-primary px-3 text-body-sm font-semibold text-primary-foreground transition-transform hover:-translate-y-0.5"
             >
               Open execution
               <ArrowRight className="size-4" aria-hidden />
@@ -1412,7 +1425,7 @@ function PortfolioCanvas({
             <div
               className={cn(
                 "h-full rounded-sm transition-[width] duration-500",
-                account.grossExposurePct > 85 ? "bg-loss" : account.grossExposurePct > 55 ? "bg-amber" : "bg-brand",
+                account.grossExposurePct > 85 ? "bg-loss" : account.grossExposurePct > 55 ? "bg-amber" : "bg-primary",
               )}
               style={{ width: `${Math.min(100, exposurePct)}%` }}
             />
@@ -1566,7 +1579,7 @@ function FocusTickerPanel({
         <button
           type="button"
           onClick={onTrade}
-          className="flex min-h-12 items-center justify-center gap-2 bg-bg px-3 py-3 text-body-sm font-semibold text-fg transition-transform hover:-translate-y-0.5 hover:bg-brand/10"
+          className="flex min-h-12 items-center justify-center gap-2 bg-bg px-3 py-3 text-body-sm font-semibold text-fg transition-transform hover:-translate-y-0.5 hover:bg-primary/10"
         >
           <ChartLineUp className="size-4" aria-hidden />
           Trade
@@ -1574,7 +1587,7 @@ function FocusTickerPanel({
         <button
           type="button"
           onClick={onAlert}
-          className="flex min-h-12 items-center justify-center gap-2 bg-bg px-3 py-3 text-body-sm font-semibold text-fg transition-transform hover:-translate-y-0.5 hover:bg-brand/10"
+          className="flex min-h-12 items-center justify-center gap-2 bg-bg px-3 py-3 text-body-sm font-semibold text-fg transition-transform hover:-translate-y-0.5 hover:bg-primary/10"
         >
           <ClipboardText className="size-4" aria-hidden />
           Alert
@@ -1607,7 +1620,7 @@ function DecisionQueue({
     <div className="min-w-0 bg-bg-elev-1 p-5 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <ListChecks className="size-5 shrink-0 text-brand" aria-hidden />
+          <ListChecks className="size-5 shrink-0 text-primary" aria-hidden />
           <div className="min-w-0">
             <p className="t-label text-fg-hint">Action stack</p>
             <p className="mt-1 text-body-sm leading-snug text-fg-muted">
@@ -1647,7 +1660,7 @@ function DecisionQueue({
               key={item.title}
               type="button"
               onClick={onClick}
-              className="card-stagger group grid min-h-[104px] grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-md border border-border-hair bg-bg px-4 py-4 text-left transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-brand/35 hover:bg-brand/5"
+              className="card-stagger group grid min-h-[104px] grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-md border border-border-hair bg-bg px-4 py-4 text-left transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-primary/35 hover:bg-primary/5"
               style={{ animationDelay: `${index * 45}ms` }}
             >
               <span className={cn(
@@ -1778,7 +1791,7 @@ function AuditTrailPanel({ items }: { items: readonly AuditItem[] }) {
           const Icon = iconFor(item.kind);
           return (
             <div key={item.label} className="grid grid-cols-[auto_minmax(0,1fr)] gap-3 bg-bg-elev-1 px-4 py-3">
-              <span className="mt-0.5 flex size-8 items-center justify-center rounded-sm border border-border-hair bg-bg text-brand">
+              <span className="mt-0.5 flex size-8 items-center justify-center rounded-sm border border-border-hair bg-bg text-primary">
                 <Icon className="size-4" aria-hidden />
               </span>
               <div className="min-w-0">
@@ -1822,7 +1835,7 @@ function SessionSnapshot({
     <section className="overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/95 shadow-[0_18px_48px_-38px_rgba(16,22,17,0.36)]">
       <header className="flex items-start justify-between gap-3 border-b border-border-hair px-4 py-3">
         <div className="flex min-w-0 items-start gap-2">
-          <Pulse className="size-4 shrink-0 text-brand" aria-hidden />
+          <Pulse className="size-4 shrink-0 text-primary" aria-hidden />
           <div className="min-w-0">
             <h3 className="truncate text-body font-semibold text-ink-1000">Session telemetry</h3>
             <p className="mt-0.5 text-label leading-snug text-fg-muted">Ticker, strategy, and pipeline context</p>
@@ -1843,7 +1856,7 @@ function SessionSnapshot({
           label="Strategy focus"
           title={selectedStrategyName}
           value={`${activeStrategyCount}/${totalStrategyCount || 0} active`}
-          toneClass="text-brand"
+          toneClass="text-primary"
         />
         <SessionRow
           label="Pipeline"
@@ -1856,7 +1869,7 @@ function SessionSnapshot({
         <button
           type="button"
           onClick={onPipeline}
-          className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-sm border border-border-hair bg-bg px-3 text-body-sm font-semibold text-fg transition-transform hover:-translate-y-0.5 hover:border-brand/40"
+          className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-sm border border-border-hair bg-bg px-3 text-body-sm font-semibold text-fg transition-transform hover:-translate-y-0.5 hover:border-primary/40"
         >
           Open pipeline
           <ArrowRight className="size-4" aria-hidden />
@@ -1945,7 +1958,7 @@ function PanelHeader({
   return (
     <header className="flex items-start justify-between gap-3 border-b border-border-hair bg-bg-elev-1 px-4 py-3 sm:items-center">
       <div className="flex min-w-0 items-start gap-2 sm:items-center">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-brand/10 text-brand">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
           <Icon className="size-4" aria-hidden />
         </span>
         <div className="min-w-0">
@@ -1999,7 +2012,7 @@ function RiskMeter({ label, value, detail }: { label: string; value: number; det
         <div
           className={cn(
             "h-full rounded-sm transition-all duration-500",
-            value > 85 ? "bg-loss" : value > 55 ? "bg-amber" : "bg-brand",
+            value > 85 ? "bg-loss" : value > 55 ? "bg-amber" : "bg-primary",
           )}
           style={{ width: `${clamped}%` }}
         />

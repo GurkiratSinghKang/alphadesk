@@ -21,7 +21,7 @@ export interface AIMemoPanelProps {
 }
 
 const chipClass: Record<AIMemo["chips"][number]["tone"], string> = {
-  profit: "text-up-500 bg-up-500/10 border-up-500/25",
+  profit: "text-profit bg-profit/10 border-profit/25",
   loss: "text-down-500 bg-down-500/10 border-down-500/25",
   ice: "text-ice bg-ice/10 border-ice/25",
   muted: "text-fg-muted bg-bg-elev-1 border-border",
@@ -56,7 +56,7 @@ export default function AIMemoPanel({ memo, className }: AIMemoPanelProps) {
     >
       <header className="flex items-center gap-2 mb-2.5">
         <StatusDot tone="brand" pulse size={8} />
-        <span className="t-label text-brand">
+        <span className="t-label uppercase tracking-wider text-primary">
           Claude · Pre-trade memo
         </span>
         <span className="ml-auto t-meta text-fg-hint">
@@ -77,7 +77,7 @@ export default function AIMemoPanel({ memo, className }: AIMemoPanelProps) {
             <span
               key={c.label + i}
               className={cn(
-                "t-label px-[7px] py-[3px] rounded-xs border",
+                "t-label uppercase tracking-wider px-[7px] py-[3px] rounded-xs border",
                 chipClass[c.tone]
               )}
             >

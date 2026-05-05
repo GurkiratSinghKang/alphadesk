@@ -703,9 +703,26 @@ export default function StrategyDetailPage() {
           />
           <div className="flex flex-col">
             <Eyebrow as="span">Last trade</Eyebrow>
-            <Mono className="text-body-sm text-fg">
-              {formatLastTrade(perf?.last_trade_date)}
-            </Mono>
+            {/* P2-22: when the strategy has never traded the chip used to
+                render a lonely em-dash with no recovery path. The dash is
+                now a "Run pipeline →" link so the operator can act on the
+                empty state instead of staring at a dead-end. */}
+            {perf?.last_trade_date ? (
+              <Mono className="text-body-sm text-fg">
+                {formatLastTrade(perf.last_trade_date)}
+              </Mono>
+            ) : (
+              <Link
+                href="/pipeline"
+                className={cn(
+                  "inline-flex items-center gap-1 font-mono text-body-sm text-fg-muted transition-colors hover:text-primary",
+                  "rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                )}
+              >
+                Run pipeline
+                <ArrowRight className="h-3 w-3" aria-hidden />
+              </Link>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -743,7 +760,7 @@ export default function StrategyDetailPage() {
             type="button"
             onClick={() => router.push(`/?strategy=${strategyId}`)}
             className={cn(
-              "inline-flex h-9 items-center gap-1.5 rounded-sm bg-brand px-3.5 font-sans text-label font-semibold text-primary-foreground transition-colors hover:bg-gold-300",
+              "inline-flex h-9 items-center gap-1.5 rounded-sm bg-primary px-3.5 font-sans text-label font-semibold text-primary-foreground transition-colors hover:bg-gold-300",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
             )}
             aria-label={`View ${meta.name} trades on the desk`}
@@ -776,11 +793,19 @@ export default function StrategyDetailPage() {
             activeRange={range}
             onRangeChange={setRange}
             summary={returnSummary}
+            strategyId={strategyId}
           />
         ) : (
+          // P2-22: was a dead-end card. Now routes back to the strategies
+          // index so the operator has a recovery path rather than staring
+          // at an inert empty.
           <EmptyState
             title="No equity curve yet"
             description="The strategy needs at least one closed trade before this chart renders. Open a paper position to start tracking."
+            action={{
+              label: "View other strategies",
+              onClick: () => router.push("/strategies"),
+            }}
           />
         )}
       </section>

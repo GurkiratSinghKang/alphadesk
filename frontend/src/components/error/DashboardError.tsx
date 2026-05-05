@@ -96,7 +96,7 @@ export default function DashboardErrorPage({
           </Button>
           <Link
             href="/"
-            className="inline-flex items-center gap-2 rounded-sm border border-border-strong bg-transparent px-4 py-2 font-sans text-body-sm font-medium text-fg transition-colors hover:bg-bg-elev-1 hover:border-brand"
+            className="inline-flex items-center gap-2 rounded-sm border border-border-strong bg-transparent px-4 py-2 font-sans text-body-sm font-medium text-fg transition-colors hover:bg-bg-elev-1 hover:border-primary"
           >
             Back to dashboard
           </Link>

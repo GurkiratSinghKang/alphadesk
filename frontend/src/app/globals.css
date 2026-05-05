@@ -71,6 +71,11 @@
   --color-state-warning-fg: var(--state-warning-fg);
   --color-state-warning-fg-muted: var(--state-warning-fg-muted);
   --color-state-info-time: var(--state-info-time);
+  /* P2-16 — additional semantic tokens for the amber decomposition.
+     `state-mode` is the paper/live indicator; `state-stale-color` is an
+     alias for the dashed-border data-aged-out indicator. */
+  --color-state-mode: var(--state-mode);
+  --color-state-stale: var(--state-stale-color);
 
   /* Ink scale (warm near-blacks) */
   --color-ink-000: var(--ink-000);
@@ -105,6 +110,12 @@
   /* shadcn semantic aliases — keep existing shadcn components working */
   --color-primary: var(--brand);
   --color-primary-foreground: var(--primary-foreground);
+  /* P2-17 — primary == brand. Wire dim/tint aliases so the consolidated
+     `text-primary`/`bg-primary`/`border-primary` family also covers the
+     `*-dim` and `*-tint` variants previously reached via `text-brand-dim`
+     etc. Both pairs resolve to the same underlying tokens. */
+  --color-primary-dim: var(--brand-dim);
+  --color-primary-tint: var(--brand-tint);
   --color-destructive: var(--loss);
   --color-destructive-foreground: var(--loss-foreground);
   --color-accent: var(--bg-elev-1);
@@ -597,13 +608,48 @@ button:active { transform: scale(0.98); }
   line-height: var(--lh-body) !important;
 }
 
+/* P2-15 — Auth shell tokens.
+ * The auth/marketing shell ships its own porcelain-on-emerald palette
+ * (light, calm, premium). Previously it hard-coded ~120 hex literals
+ * across .alpha-auth-shell + the four component files, breaking theme
+ * parity (the theme toggle had no effect on /login, /request-access).
+ *
+ * Decompose into semantic tokens scoped to the auth shell. The component
+ * files now consume `bg-[var(--auth-bg)]`, `text-[var(--auth-fg)]`,
+ * etc. Theme toggle re-enters the token system because the shell's
+ * tokens cascade through the same :root/.light bridge as everywhere
+ * else — they're SHELL-LOCAL overrides of design-tokens.css values.
+ */
 .alpha-auth-shell {
+  /* Forest-on-porcelain palette tokens, shell-scoped. */
+  --auth-fg: #12281f;          /* primary text */
+  --auth-fg-strong: #12281f;   /* same as fg here */
+  --auth-fg-dim: #40574c;      /* body dim */
+  --auth-fg-muted: #5d7268;    /* secondary text */
+  --auth-fg-soft: #8b9a91;     /* hint text */
+  --auth-bg: #f8f7ef;          /* canvas (porcelain) */
+  --auth-bg-card: #ffffff;     /* card surface */
+  --auth-bg-soft: #f7fbf4;     /* palest sage tint */
+  --auth-bg-hover: #ecf4ed;    /* nav hover bg */
+  --auth-bg-tint: #e8f5ea;     /* tint */
+  --auth-border: #d7e4d9;      /* primary border */
+  --auth-border-soft: #c7d6ce; /* softer divider */
+  --auth-border-strong: #b4c4b9; /* stronger border */
+  --auth-primary: #0f7a5d;     /* emerald — auth shell primary */
+  --auth-primary-deep: #0d654d; /* pressed */
+  --auth-primary-deeper: #0c654d;
+  --auth-primary-soft: #75d9af; /* tint */
+  --auth-primary-on: #f8f7ef;   /* foreground on primary */
+  --auth-loss: #c95d42;        /* coral — for danger states */
+  --auth-loss-deep: #8f321f;
+  --auth-loss-soft: #fff1ec;
+
   position: relative;
   isolation: isolate;
   background:
-    linear-gradient(118deg, rgba(15, 122, 93, 0.16) 0%, transparent 34%, rgba(18, 40, 31, 0.08) 72%, transparent 100%),
+    linear-gradient(118deg, color-mix(in oklab, var(--auth-primary) 16%, transparent) 0%, transparent 34%, color-mix(in oklab, var(--auth-fg) 8%, transparent) 72%, transparent 100%),
     linear-gradient(180deg, #fbfaf4 0%, #edf6ec 48%, #f7f5ed 100%);
-  color: #12281f;
+  color: var(--auth-fg);
 }
 
 .alpha-auth-shell::before {
@@ -613,8 +659,8 @@ button:active { transform: scale(0.98); }
   z-index: -1;
   pointer-events: none;
   background:
-    linear-gradient(to right, rgba(18, 40, 31, 0.052) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(18, 40, 31, 0.042) 1px, transparent 1px);
+    linear-gradient(to right, color-mix(in oklab, var(--auth-fg) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--auth-fg) 4%, transparent) 1px, transparent 1px);
   background-size: 64px 64px;
   mask-image: linear-gradient(to bottom, rgba(0,0,0,0.64), rgba(0,0,0,0.18));
 }
@@ -626,7 +672,7 @@ button:active { transform: scale(0.98); }
   z-index: -1;
   pointer-events: none;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, transparent 42%, rgba(15, 122, 93, 0.08) 100%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, transparent 42%, color-mix(in oklab, var(--auth-primary) 8%, transparent) 100%);
 }
 
 @keyframes card-enter {

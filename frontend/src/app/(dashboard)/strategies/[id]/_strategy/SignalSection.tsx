@@ -50,7 +50,7 @@ export default function SignalSection({
         // — below the readable floor. Swapped to the shared `.t-label`
         // utility (12px, 0.12em) so this edge callout uses the same label
         // weight as every other eyebrow on the page.
-        <div className="rounded-md border-l-2 border-brand bg-bg-elev-1 py-3 pl-4 pr-4">
+        <div className="rounded-md border-l-2 border-primary bg-bg-elev-1 py-3 pl-4 pr-4">
           <p className="t-label">Edge</p>
           <p className="mt-1.5 font-display italic text-body text-fg">
             {edge}

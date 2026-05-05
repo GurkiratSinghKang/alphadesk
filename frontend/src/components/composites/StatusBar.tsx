@@ -45,7 +45,10 @@ export interface StatusBarProps {
 
 const pillToneClass: Record<StatusPill["tone"], string> = {
   profit: "text-profit",
-  amber: "text-amber",
+  // P2-16: `amber` is the StatusBar's public tone enum; the visual class now
+  // resolves through --state-warning (semantic) rather than --amber-500
+  // (deprecated overloaded token).
+  amber: "text-state-warning",
   muted: "text-fg-muted",
 };
 
@@ -90,7 +93,7 @@ function SystemDetailGrid({ pills }: { pills: StatusPill[] }) {
             {p.href ? (
               <Link
                 href={p.href}
-                className="font-mono text-label text-brand underline decoration-brand-dim underline-offset-2 hover:text-gold-300"
+                className="font-mono text-label text-primary underline decoration-primary-dim underline-offset-2 hover:text-gold-300"
               >
                 {p.hrefLabel ?? "Fix"}
               </Link>

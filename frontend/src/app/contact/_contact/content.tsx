@@ -54,7 +54,7 @@ export const CONTACT_CLAUSES: StaticClause[] = [
             We publish a{" "}
             <a
               href="/.well-known/security.txt"
-              className="text-brand underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
+              className="text-primary underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
             >
               security.txt
             </a>{" "}
@@ -86,7 +86,7 @@ export const CONTACT_CLAUSES: StaticClause[] = [
           the kill-switch in{" "}
           <a
             href="/settings"
-            className="text-brand underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
+            className="text-primary underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
           >
             /settings
           </a>

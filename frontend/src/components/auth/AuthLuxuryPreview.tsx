@@ -27,7 +27,7 @@ interface AuthLuxuryPreviewProps {
 
 export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewProps) {
   return (
-    <div className={`relative min-h-[510px] overflow-hidden rounded-[8px] border border-[#d7e4d9] bg-[#10281f] p-3 shadow-[0_34px_90px_-58px_rgba(18,40,31,0.72)] sm:min-h-[560px] sm:p-4 ${className}`}>
+    <div className={`relative min-h-[510px] overflow-hidden rounded-[8px] border border-[var(--auth-border)] bg-[var(--auth-fg)] p-3 shadow-[0_34px_90px_-58px_rgba(18,40,31,0.72)] sm:min-h-[560px] sm:p-4 ${className}`}>
       <style>{`
         @keyframes auth-scene-rise {
           from { opacity: 0; transform: translate3d(0, 14px, 0) scale(0.985); }
@@ -76,37 +76,37 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
       </div>
 
       <div className="relative grid h-full gap-3 sm:grid-cols-[minmax(0,1fr)_190px]">
-        <section className="relative flex min-h-0 flex-col overflow-hidden rounded-[8px] border border-white/10 bg-[#f7fbf4] p-3 text-[#12281f] shadow-[0_24px_70px_-42px_rgba(0,0,0,0.68)] sm:p-4">
+        <section className="relative flex min-h-0 flex-col overflow-hidden rounded-[8px] border border-white/10 bg-[var(--auth-bg-soft)] p-3 text-[var(--auth-fg)] shadow-[0_24px_70px_-42px_rgba(0,0,0,0.68)] sm:p-4">
           <span className="pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/70 to-transparent [animation:auth-scene-sheen_8.5s_cubic-bezier(0.22,1,0.36,1)_infinite]" aria-hidden />
 
-          <div className="relative flex items-center justify-between gap-4 border-b border-[#d7e4d9] pb-3">
+          <div className="relative flex items-center justify-between gap-4 border-b border-[var(--auth-border)] pb-3">
             <div className="flex min-w-0 items-center gap-3">
-              <span className="grid size-9 shrink-0 place-items-center rounded-[8px] bg-[#10281f] text-[#f8f7ef]">
+              <span className="grid size-9 shrink-0 place-items-center rounded-[8px] bg-[var(--auth-fg)] text-[var(--auth-bg)]">
                 <ChartLineUp className="size-5" aria-hidden weight="regular" />
               </span>
               <div className="min-w-0">
                 <p className="truncate font-sans text-body-sm font-semibold tracking-tight">AlphaDesk workspace</p>
-                <p className="truncate font-mono text-eyebrow uppercase tracking-[0.14em] text-[#819188]">
+                <p className="truncate font-mono text-eyebrow uppercase tracking-[0.14em] text-[var(--auth-fg-soft)]">
                   Idea to order
                 </p>
               </div>
             </div>
-            <div className="hidden items-center gap-2 rounded-[8px] bg-[#e8f5ea] px-2.5 py-2 text-label font-medium text-[#0f7a5d] sm:flex">
-              <span className="size-1.5 rounded-full bg-[#0f7a5d]" />
+            <div className="hidden items-center gap-2 rounded-[8px] bg-[var(--auth-bg-tint)] px-2.5 py-2 text-label font-medium text-[var(--auth-primary)] sm:flex">
+              <span className="size-1.5 rounded-full bg-[var(--auth-primary)]" />
               Live review
             </div>
           </div>
 
           <div className="relative mt-4 grid flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_170px]">
-            <div className="flex min-h-0 flex-col rounded-[8px] border border-[#d7e4d9] bg-white p-3">
+            <div className="flex min-h-0 flex-col rounded-[8px] border border-[var(--auth-border)] bg-white p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-sans text-body-sm font-semibold">Market idea canvas</p>
-                  <p className="mt-1 max-w-[34ch] font-sans text-label leading-normal text-[#5d7268]">
+                  <p className="mt-1 max-w-[34ch] font-sans text-label leading-normal text-[var(--auth-fg-muted)]">
                     Ask, test, adjust size, and keep the decision record in one flow.
                   </p>
                 </div>
-                <span className="rounded-[8px] bg-[#ecf4ed] px-2 py-1 font-mono text-eyebrow text-[#0f7a5d]">
+                <span className="rounded-[8px] bg-[var(--auth-bg-hover)] px-2 py-1 font-mono text-eyebrow text-[var(--auth-primary)]">
                   AAPL
                 </span>
               </div>
@@ -114,8 +114,8 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
               <svg className="mt-5 min-h-[154px] w-full flex-1 overflow-visible" viewBox="0 0 560 190" preserveAspectRatio="none" role="img" aria-label="Animated AlphaDesk chart and control path">
                 <defs>
                   <linearGradient id="authSceneArea" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#0f7a5d" stopOpacity="0.2" />
-                    <stop offset="100%" stopColor="#0f7a5d" stopOpacity="0" />
+                    <stop offset="0%" stopColor="var(--auth-primary)" stopOpacity="0.2" />
+                    <stop offset="100%" stopColor="var(--auth-primary)" stopOpacity="0" />
                   </linearGradient>
                 </defs>
                 {[32, 72, 112, 152].map((y) => (
@@ -128,7 +128,7 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
                 <path
                   d="M0 150 C54 128 78 102 126 112 C180 124 185 63 239 72 C292 82 314 50 360 54 C420 60 424 23 474 34 C515 43 531 31 560 25"
                   fill="none"
-                  stroke="#0f7a5d"
+                  stroke="var(--auth-primary)"
                   strokeLinecap="round"
                   strokeWidth="4"
                   style={{
@@ -137,36 +137,36 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
                     animation: "auth-scene-trace 6.2s cubic-bezier(0.22, 1, 0.36, 1) infinite alternate",
                   }}
                 />
-                <circle cx="474" cy="34" r="6" fill="#f7fbf4" stroke="#0f7a5d" strokeWidth="3" className="[animation:auth-scene-float_3.4s_ease-in-out_infinite]" />
+                <circle cx="474" cy="34" r="6" fill="var(--auth-bg-soft)" stroke="var(--auth-primary)" strokeWidth="3" className="[animation:auth-scene-float_3.4s_ease-in-out_infinite]" />
               </svg>
             </div>
 
             <div className="grid min-h-0 gap-3">
-              <div className="rounded-[8px] border border-[#d7e4d9] bg-[#10281f] p-3 text-[#f8f7ef]">
+              <div className="rounded-[8px] border border-[var(--auth-border)] bg-[var(--auth-fg)] p-3 text-[var(--auth-bg)]">
                 <div className="flex items-center gap-2">
-                  <Brain className="size-4 text-[#75d9af]" aria-hidden weight="regular" />
-                  <p className="font-mono text-eyebrow uppercase tracking-[0.16em] text-[#75d9af]">
+                  <Brain className="size-4 text-[var(--auth-primary-soft)]" aria-hidden weight="regular" />
+                  <p className="font-mono text-eyebrow uppercase tracking-[0.16em] text-[var(--auth-primary-soft)]">
                     AI challenge
                   </p>
                 </div>
-                <p className="mt-3 font-sans text-body-sm leading-snug text-[#e9f2ea]">
+                <p className="mt-3 font-sans text-body-sm leading-snug text-[var(--auth-bg-tint)]">
                   “Your event window is thin. Cut size or wait for confirmation.”
                 </p>
               </div>
 
-              <div className="rounded-[8px] border border-[#d7e4d9] bg-white p-3">
+              <div className="rounded-[8px] border border-[var(--auth-border)] bg-white p-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="font-sans text-body-sm font-semibold">Risk route</p>
-                  <Gauge className="size-4 text-[#0f7a5d]" aria-hidden weight="regular" />
+                  <Gauge className="size-4 text-[var(--auth-primary)]" aria-hidden weight="regular" />
                 </div>
                 <div className="mt-3 space-y-2">
                   {reviewSteps.map((item) => (
                     <div
                       key={item}
-                      className="flex items-center gap-2 rounded-[8px] bg-[#ecf4ed] px-2.5 py-2"
+                      className="flex items-center gap-2 rounded-[8px] bg-[var(--auth-bg-hover)] px-2.5 py-2"
                     >
-                      <Checks className="size-4 text-[#0f7a5d]" aria-hidden weight="regular" />
-                      <span className="font-sans text-label text-[#40574c]">{item}</span>
+                      <Checks className="size-4 text-[var(--auth-primary)]" aria-hidden weight="regular" />
+                      <span className="font-sans text-label text-[var(--auth-fg-dim)]">{item}</span>
                     </div>
                   ))}
                 </div>
@@ -174,18 +174,18 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
             </div>
           </div>
 
-          <div className="mt-3 rounded-[8px] border border-[#d7e4d9] bg-[#f7fbf4] p-2">
+          <div className="mt-3 rounded-[8px] border border-[var(--auth-border)] bg-[var(--auth-bg-soft)] p-2">
             <div className="grid gap-2 sm:grid-cols-4">
               {marketCards.map((item) => (
                 <div
                   key={item.ticker}
-                  className="rounded-[8px] border border-[#d7e4d9] bg-white px-3 py-2"
+                  className="rounded-[8px] border border-[var(--auth-border)] bg-white px-3 py-2"
                 >
                   <div className="flex items-baseline justify-between gap-2">
-                    <span className="font-mono text-label font-semibold text-[#12281f]">{item.ticker}</span>
-                    <span className="font-mono text-label text-[#0f7a5d]">{item.value}</span>
+                    <span className="font-mono text-label font-semibold text-[var(--auth-fg)]">{item.ticker}</span>
+                    <span className="font-mono text-label text-[var(--auth-primary)]">{item.value}</span>
                   </div>
-                  <p className="mt-1 truncate font-sans text-label text-[#5d7268]">{item.label}</p>
+                  <p className="mt-1 truncate font-sans text-label text-[var(--auth-fg-muted)]">{item.label}</p>
                 </div>
               ))}
             </div>
@@ -193,8 +193,8 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
         </section>
 
         <aside className="grid min-h-0 gap-3 sm:grid-rows-[1fr_auto]">
-          <div className="flex min-h-0 flex-col rounded-[8px] border border-white/12 bg-white/[0.12] p-3 text-[#f8f7ef] backdrop-blur-xl">
-            <p className="font-mono text-eyebrow uppercase tracking-[0.16em] text-[#75d9af]">Today’s loop</p>
+          <div className="flex min-h-0 flex-col rounded-[8px] border border-white/12 bg-white/[0.12] p-3 text-[var(--auth-bg)] backdrop-blur-xl">
+            <p className="font-mono text-eyebrow uppercase tracking-[0.16em] text-[var(--auth-primary-soft)]">Today’s loop</p>
             <div className="mt-3 grid flex-1 content-start gap-2">
               {[
                 ["Research", "Thesis saved"],
@@ -208,24 +208,24 @@ export default function AuthLuxuryPreview({ className = "" }: AuthLuxuryPreviewP
                 >
                   <div className="flex items-center justify-between gap-3">
                     <span className="font-sans text-body-sm font-semibold">{label}</span>
-                    <span className="size-2 rounded-full bg-[#75d9af] [animation:auth-scene-float_2.8s_ease-in-out_infinite]" />
+                    <span className="size-2 rounded-full bg-[var(--auth-primary-soft)] [animation:auth-scene-float_2.8s_ease-in-out_infinite]" />
                   </div>
-                  <p className="mt-1 font-sans text-label text-[#c7d6ce]">{detail}</p>
+                  <p className="mt-1 font-sans text-label text-[var(--auth-border-soft)]">{detail}</p>
                 </div>
               ))}
             </div>
-            <div className="mt-3 rounded-[8px] border border-white/10 bg-[#0b2119]/60 p-3">
+            <div className="mt-3 rounded-[8px] border border-white/10 bg-[var(--auth-fg)]/60 p-3">
               <p className="font-sans text-label font-semibold text-white">Decision trail</p>
-              <p className="mt-1 font-sans text-label leading-snug text-[#c7d6ce]">
+              <p className="mt-1 font-sans text-label leading-snug text-[var(--auth-border-soft)]">
                 Every edit, review, and route keeps the context attached.
               </p>
             </div>
           </div>
 
-          <div className="relative overflow-hidden rounded-[8px] border border-white/12 bg-[#f7fbf4] p-3 text-[#12281f]">
-            <ShieldCheck className="size-5 text-[#0f7a5d]" aria-hidden weight="regular" />
+          <div className="relative overflow-hidden rounded-[8px] border border-white/12 bg-[var(--auth-bg-soft)] p-3 text-[var(--auth-fg)]">
+            <ShieldCheck className="size-5 text-[var(--auth-primary)]" aria-hidden weight="regular" />
             <p className="mt-3 font-sans text-body-sm font-semibold">Controls before speed.</p>
-            <p className="mt-2 font-sans text-label leading-normal text-[#5d7268]">
+            <p className="mt-2 font-sans text-label leading-normal text-[var(--auth-fg-muted)]">
               Paper mode, review history, and notes stay visible before any live workflow.
             </p>
           </div>

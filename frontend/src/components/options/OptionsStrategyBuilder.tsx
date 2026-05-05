@@ -163,7 +163,7 @@ export default function OptionsStrategyBuilder({
           <button
             type="button"
             onClick={onClose}
-            className="flex size-9 items-center justify-center rounded-sm border border-border-hair text-fg-muted hover:border-brand hover:text-fg"
+            className="flex size-9 items-center justify-center rounded-sm border border-border-hair text-fg-muted hover:border-primary hover:text-fg"
             aria-label="Close builder"
           >
             <X className="size-4" aria-hidden />
@@ -178,13 +178,13 @@ export default function OptionsStrategyBuilder({
                 <input
                   value={symbolDraft}
                   onChange={(event) => setSymbolDraft(event.target.value.toUpperCase())}
-                  className="h-10 rounded-sm border border-border bg-bg-elev-1 px-3 font-mono text-body-sm text-fg outline-none focus-visible:border-brand"
+                  className="h-10 rounded-sm border border-border bg-bg-elev-1 px-3 font-mono text-body-sm text-fg outline-none focus-visible:border-primary"
                   autoCapitalize="characters"
                 />
                 <button
                   type="button"
                   onClick={commitSymbol}
-                  className="flex h-10 w-10 items-center justify-center rounded-sm border border-border bg-brand text-primary-foreground"
+                  className="flex h-10 w-10 items-center justify-center rounded-sm border border-border bg-primary text-primary-foreground"
                   aria-label="Load symbol"
                 >
                   <MagnifyingGlass className="size-4" aria-hidden />
@@ -203,7 +203,7 @@ export default function OptionsStrategyBuilder({
                     className={cn(
                       "rounded-sm border px-2.5 py-1.5 text-label capitalize transition",
                       outlook === item
-                        ? "border-brand bg-brand/10 text-brand"
+                        ? "border-primary bg-primary/10 text-primary"
                         : "border-border-hair text-fg-muted hover:border-border hover:text-fg",
                     )}
                   >
@@ -224,7 +224,7 @@ export default function OptionsStrategyBuilder({
                     className={cn(
                       "rounded-md border px-3 py-2 text-left transition active:translate-y-px",
                       presetId === preset.id
-                        ? "border-brand bg-brand/10"
+                        ? "border-primary bg-primary/10"
                         : "border-border-hair bg-bg-elev-1 hover:border-border",
                     )}
                   >
@@ -250,7 +250,7 @@ export default function OptionsStrategyBuilder({
                   setSelectedExpiry(event.target.value);
                   setLegs([]);
                 }}
-                className="h-10 rounded-sm border border-border bg-bg-elev-1 px-3 font-mono text-body-sm text-fg outline-none focus-visible:border-brand"
+                className="h-10 rounded-sm border border-border bg-bg-elev-1 px-3 font-mono text-body-sm text-fg outline-none focus-visible:border-primary"
               >
                 {chain?.expirations.length ? (
                   chain.expirations.map((expiry) => (
@@ -352,7 +352,7 @@ export default function OptionsStrategyBuilder({
                 type="button"
                 disabled={summary.status !== "ready"}
                 onClick={() => onStage(draft)}
-                className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-sm border border-brand bg-brand px-4 text-body-sm font-semibold text-primary-foreground transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:border-border-hair disabled:bg-bg-elev-1 disabled:text-fg-muted disabled:hover:translate-y-0"
+                className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-sm border border-primary bg-primary px-4 text-body-sm font-semibold text-primary-foreground transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:border-border-hair disabled:bg-bg-elev-1 disabled:text-fg-muted disabled:hover:translate-y-0"
               >
                 Stage ticket
                 <ArrowRight className="size-4" aria-hidden />

@@ -71,7 +71,7 @@ const SWATCHES: Array<{ name: string; bg: string; text: string }> = [
   { name: "bg-bg-elev-1", bg: "bg-bg-elev-1", text: "text-fg" },
   { name: "bg-bg-elev-2", bg: "bg-bg-elev-2", text: "text-fg" },
   { name: "bg-bg-card", bg: "bg-bg-card", text: "text-fg" },
-  { name: "bg-brand", bg: "bg-brand", text: "text-ink-1000" },
+  { name: "bg-primary", bg: "bg-primary", text: "text-ink-1000" },
   { name: "bg-profit", bg: "bg-profit", text: "text-ink-050" },
   { name: "bg-loss", bg: "bg-loss", text: "text-ink-050" },
   { name: "bg-ice", bg: "bg-ice", text: "text-ink-050" },
@@ -179,7 +179,7 @@ export default function DesignPreviewPage() {
         <header className="mb-16 border-b border-border-hair pb-10">
           <div className="flex items-baseline gap-4">
             <span
-              className="text-brand"
+              className="text-primary"
               style={{
                 fontFamily: "var(--font-display)",
                 fontStyle: "italic",
@@ -428,7 +428,7 @@ export default function DesignPreviewPage() {
                       <span
                         className={
                           r.side === "Long"
-                            ? "text-up-500 uppercase tracking-[0.14em] text-label font-sans font-semibold"
+                            ? "text-profit uppercase tracking-[0.14em] text-label font-sans font-semibold"
                             : "text-down-500 uppercase tracking-[0.14em] text-label font-sans font-semibold"
                         }
                       >

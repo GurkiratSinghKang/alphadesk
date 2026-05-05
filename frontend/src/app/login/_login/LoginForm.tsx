@@ -28,9 +28,9 @@ const LOCKOUT_STORAGE_KEY = "alphadesk.login_failures";
 const LOCKOUT_WINDOW_MS = 10 * 60 * 1000; // 10 min rolling window
 const LOCKOUT_THRESHOLD = 5; // failures that trigger the lockout
 const authInputClass =
-  "h-12 rounded-[8px] border border-[#cddbd0] bg-white/80 px-4 font-sans text-body text-[#12281f] placeholder:text-[#8b9a91] focus-visible:border-[#0f7a5d] focus-visible:shadow-[0_0_0_4px_rgba(15,122,93,0.15)]";
-const authLabelClass = "font-sans text-body-sm font-medium text-[#203c31]";
-const authMutedClass = "font-sans text-body-sm leading-relaxed text-[#5d7268]";
+  "h-12 rounded-[8px] border border-[var(--auth-border)] bg-white/80 px-4 font-sans text-body text-[var(--auth-fg)] placeholder:text-[var(--auth-fg-soft)] focus-visible:border-[var(--auth-primary)] focus-visible:shadow-[0_0_0_4px_rgba(15,122,93,0.15)]";
+const authLabelClass = "font-sans text-body-sm font-medium text-[var(--auth-fg)]";
+const authMutedClass = "font-sans text-body-sm leading-relaxed text-[var(--auth-fg-muted)]";
 
 function readFailures(): number[] {
   if (typeof window === "undefined") return [];
@@ -65,6 +65,13 @@ function formatRemaining(ms: number): string {
   return `${m}m ${String(s).padStart(2, "0")}s`;
 }
 
+// P2-26: localStorage marker that says "this browser has signed in to
+// AlphaDesk before". Set on every successful sign-in (alongside the
+// existing session-expired and run-tour-after-login flags). Used to
+// conditionally render "Welcome back" vs "Sign in to AlphaDesk" so a
+// brand-new visitor doesn't see "back" implying they've been here.
+const PRIOR_SESSION_KEY = "alphadesk.has_prior_session";
+
 export default function LoginForm() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -80,6 +87,11 @@ export default function LoginForm() {
   // sessionStorage before redirecting here. We read + clear it on mount so
   // the banner appears once per expired session (not on every visit).
   const [sessionExpired, setSessionExpired] = useState(false);
+  // P2-26: track whether this browser has signed in before so the eyebrow
+  // can read "Welcome back" vs "Sign in to AlphaDesk" appropriately.
+  // Defaults to false on SSR so the markup is deterministic; the effect
+  // below reads localStorage post-hydration and corrects the eyebrow.
+  const [hasPriorSession, setHasPriorSession] = useState(false);
 
   // Rehydrate failure log from localStorage on mount — client-only.
   useEffect(() => {
@@ -91,6 +103,17 @@ export default function LoginForm() {
       }
     } catch {
       // private mode / storage disabled — banner stays hidden, login still works
+    }
+    // P2-26: peek at localStorage to decide whether to greet the user
+    // with "Welcome back" or "Sign in to AlphaDesk". Wrap in try/catch so
+    // private-mode browsers (which throw on storage access) silently fall
+    // back to the new-visitor copy.
+    try {
+      if (window.localStorage.getItem(PRIOR_SESSION_KEY) === "1") {
+        setHasPriorSession(true);
+      }
+    } catch {
+      // ignore — defaults to "Sign in to AlphaDesk"
     }
   }, []);
 
@@ -179,6 +202,10 @@ export default function LoginForm() {
         try {
           sessionStorage.removeItem("alphadesk.session_expired");
           sessionStorage.setItem("alphadesk.run-tour-after-login", "1");
+          // P2-26: persist a "prior session" marker so the next visit to
+          // /login can render "Welcome back" instead of greeting the
+          // returning user as a stranger.
+          window.localStorage.setItem(PRIOR_SESSION_KEY, "1");
         } catch {
           // ignore
         }
@@ -231,16 +258,23 @@ export default function LoginForm() {
         explicit before they try.
       */}
       <noscript>
-        <p className="font-sans text-body-sm text-[#5d7268]">
+        <p className="font-sans text-body-sm text-[var(--auth-fg-muted)]">
           JavaScript is required to sign in to AlphaDesk.
         </p>
       </noscript>
 
-      <div className="border-b border-[#d7e4d9] pb-5">
-        <p className="font-mono text-eyebrow font-semibold uppercase tracking-[0.18em] text-[#0f7a5d]">
-          Welcome back
+      <div className="border-b border-[var(--auth-border)] pb-5">
+        {/* P2-26: eyebrow used to read "Welcome back" for everyone, which
+            was odd for first-time visitors. Now it reads "Welcome back"
+            only when this browser has a prior-session marker; first-time
+            visitors see "Sign in to AlphaDesk" instead. SSR renders the
+            new-visitor variant so the markup is deterministic; the
+            useEffect above swaps to "Welcome back" post-hydration if the
+            localStorage marker is present. */}
+        <p className="font-mono text-eyebrow font-semibold uppercase tracking-[0.18em] text-[var(--auth-primary)]">
+          {hasPriorSession ? "Welcome back" : "Sign in to AlphaDesk"}
         </p>
-        <h2 className="mt-3 font-sans text-h2 font-semibold leading-tight tracking-tight text-[#12281f]">
+        <h2 className="mt-3 font-sans text-h2 font-semibold leading-tight tracking-tight text-[var(--auth-fg)]">
           Open your workspace
         </h2>
         <p className={`mt-2 ${authMutedClass}`}>
@@ -252,7 +286,7 @@ export default function LoginForm() {
         <div
           role="status"
           aria-live="polite"
-          className="rounded-[8px] border border-[#0f7a5d]/[0.24] bg-[#e8f5ea] px-3 py-2 font-sans text-body-sm text-[#0d654d]"
+          className="rounded-[8px] border border-[var(--auth-primary)]/[0.24] bg-[var(--auth-bg-tint)] px-3 py-2 font-sans text-body-sm text-[var(--auth-primary-deep)]"
         >
           Your session expired. Please sign in again.
         </div>
@@ -284,7 +318,7 @@ export default function LoginForm() {
           </label>
           <Link
             href="/login/reset"
-            className="inline-flex min-h-8 items-center rounded-[6px] px-1 font-sans text-label text-[#5d7268] transition-colors hover:text-[#0f7a5d]"
+            className="inline-flex min-h-8 items-center rounded-[6px] px-1 font-sans text-label text-[var(--auth-fg-muted)] transition-colors hover:text-[var(--auth-primary)]"
           >
             Forgot password?
           </Link>
@@ -315,7 +349,7 @@ export default function LoginForm() {
             // there's no need to remove it from tab order.
             aria-label={showPassword ? "Hide password" : "Show password"}
             aria-pressed={showPassword}
-            className="absolute grid h-10 w-10 place-items-center rounded-[8px] p-0 text-[#5d7268] transition-colors hover:bg-[#ecf4ed] hover:text-[#0f7a5d] active:scale-[0.98]"
+            className="absolute grid h-10 w-10 place-items-center rounded-[8px] p-0 text-[var(--auth-fg-muted)] transition-colors hover:bg-[var(--auth-bg-hover)] hover:text-[var(--auth-primary)] active:scale-[0.98]"
             style={{ right: 4, top: 4 }}
           >
             {showPassword ? (
@@ -326,7 +360,7 @@ export default function LoginForm() {
           </button>
         </div>
         {capsLock && (
-          <p className="font-sans text-label text-[#8a5c18]">
+          <p className="font-sans text-label text-[var(--auth-loss-deep)]">
             Caps lock is on.
           </p>
         )}
@@ -355,7 +389,7 @@ export default function LoginForm() {
           id="login-error"
           role="alert"
           aria-live="assertive"
-          className="inline-flex items-start gap-2 rounded-[8px] border border-[#c95d42]/[0.26] bg-[#fff1ec] px-3 py-2 font-sans text-body-sm leading-snug text-[#8f321f]"
+          className="inline-flex items-start gap-2 rounded-[8px] border border-[var(--auth-loss)]/[0.26] bg-[var(--auth-loss-soft)] px-3 py-2 font-sans text-body-sm leading-snug text-[var(--auth-loss-deep)]"
         >
           <WarningCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden weight="regular" />
           {error}
@@ -367,23 +401,23 @@ export default function LoginForm() {
           <p
             role="alert"
             aria-live="assertive"
-            className="font-sans text-body-sm text-[#8f321f]"
+            className="font-sans text-body-sm text-[var(--auth-loss-deep)]"
           >
             Too many attempts. Try again in {formatRemaining(lockoutRemainingMs)}.
           </p>
           <button
             type="button"
             onClick={handleResetLockout}
-            className="self-start rounded-[6px] font-sans text-label text-[#5d7268] underline decoration-[#b4c4b9] underline-offset-4 transition-colors hover:text-[#0f7a5d]"
+            className="self-start rounded-[6px] font-sans text-label text-[var(--auth-fg-muted)] underline decoration-[var(--auth-border-strong)] underline-offset-4 transition-colors hover:text-[var(--auth-primary)]"
           >
             Clear local timer
           </button>
-          <p className="font-sans text-eyebrow text-[#8f7260]">(server lockout still in effect)</p>
+          <p className="font-sans text-eyebrow text-[var(--auth-fg-soft)]">(server lockout still in effect)</p>
         </div>
       )}
 
       {!locked && failCount >= 3 && (
-        <p className="font-sans text-label text-[#8a5c18]">
+        <p className="font-sans text-label text-[var(--auth-loss-deep)]">
           {LOCKOUT_THRESHOLD - failCount} attempt{LOCKOUT_THRESHOLD - failCount === 1 ? "" : "s"} left before lockout.
         </p>
       )}
@@ -403,11 +437,11 @@ export default function LoginForm() {
         {totpRequired ? "Verify code" : "Sign in"}
       </Button>
 
-      <p className="mt-1 text-center font-sans text-body-sm text-[#5d7268]">
+      <p className="mt-1 text-center font-sans text-body-sm text-[var(--auth-fg-muted)]">
         No account?{" "}
         <Link
           href="/request-access"
-          className="font-medium text-[#0f7a5d] underline decoration-[#93cdb8] underline-offset-4 transition-colors hover:text-[#0c654d]"
+          className="font-medium text-[var(--auth-primary)] underline decoration-[var(--auth-primary-soft)] underline-offset-4 transition-colors hover:text-[var(--auth-primary-deeper)]"
         >
           Request access
         </Link>
