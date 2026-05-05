@@ -49,7 +49,20 @@ export default function DestructiveConfirmModal({
           </ul>
         )}
         <DialogFooter className="mt-5 flex gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={loading}>
+          {/* Audit A-F4 (2026-05-05): autoFocus the Cancel button so the
+           * initial focus on dialog open lands on the SAFE action. Base
+           * UI's natural-tab-order default focuses the first interactive
+           * element which is the close button in the Dialog header — but
+           * keyboard/screen-reader users opening a destructive dialog
+           * with Enter pre-pressed could activate the destructive
+           * action. Cancel-first follows the WCAG SC 3.3.4 destructive-
+           * action confirmation pattern. */}
+          <Button
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={loading}
+            autoFocus
+          >
             Cancel
           </Button>
           <Button variant="destructive" onClick={onConfirm} disabled={loading}>
