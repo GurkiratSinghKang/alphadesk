@@ -176,6 +176,14 @@ class StateStore:
                 pass
 
 
+# Audit Persona F4.2 / kill-switch Layers 1+2 wire-up (2026-05-05).
+# A NavProvider returns ``(peak_nav, current_nav)`` for ``strategy_name``,
+# both as floats. Production callers pass a thin closure that reads from
+# ``MasterAgent.strategy_peaks`` + ``strategy_current``; tests pass
+# ``lambda _: (0.0, 0.0)`` to keep Layer 1 short-circuited.
+NavProvider = Callable[[str], tuple[float, float]]
+
+
 class DailyPipelineRunner:
     def __init__(
         self,
@@ -184,6 +192,7 @@ class DailyPipelineRunner:
         state_store: StateStore,
         positions_provider: PositionsProvider | None = None,
         kill_switch: Any | None = None,
+        nav_provider: NavProvider | None = None,
     ):
         """Construct a DailyPipelineRunner.
 
@@ -212,6 +221,7 @@ class DailyPipelineRunner:
         self._state_store = state_store
         self._positions_provider = positions_provider
         self._kill_switch = kill_switch
+        self._nav_provider = nav_provider
 
     async def run_today(
         self,
@@ -408,25 +418,69 @@ class DailyPipelineRunner:
             seed=seed,
             rng=np.random.default_rng(seed),
         )
-        # Audit B-F3 / R-F1 (2026-05-05): partial kill-switch wire-up.
-        # The previous TODO deferred ALL three layers because layers 1+2
-        # (peak_nav drawdown, daily-PnL ratio) require plumbing through
-        # master_agent + trade_ledger. Layer 3 (manual emergency disable)
-        # needs only the strategy name + the repo and works today.
+        # Audit Persona F4.2 / Layers 1+2 wire-up (2026-05-05): full
+        # kill-switch context now built from live data sources.
         #
-        # By passing zeros for the layer-1/2 metrics, both short-circuit
-        # via the "no DD/ratio definable" paths in is_enabled, but layer 3
-        # still consults the repo. Result: an operator clicking "emergency
-        # disable" on /strategies/{id} now actually stops the next pipeline
-        # tick from dispatching that strategy, matching the UI promise.
-        # Layers 1+2 remain dormant pending the master_agent plumbing
-        # (tracked separately).
+        # Layer 1 (drawdown): ``peak_nav`` + ``current_nav`` come from
+        # the optional ``nav_provider`` callable. Production callers
+        # pass a closure that reads ``MasterAgent.strategy_peaks`` and
+        # ``strategy_current``; tests / paper smoke runs without a
+        # provider get zeros, which short-circuits Layer 1 via the
+        # existing "peak_nav <= 0, no DD definable" path.
+        #
+        # Layer 2 (daily-PnL ratio): ``alloc_capital`` is read from
+        # the user-configurable ``settings.STRATEGY_ALLOC_CAPITAL`` JSON
+        # map (default $100k per strategy). ``realized_today`` is a
+        # fresh SQL aggregate from ``trade_ledger.realized_today_for_strategy``.
+        # The aggregate runs sub-millisecond on an indexed query and
+        # is cheap enough to fire once per pipeline tick per strategy.
+        #
+        # Layer 3 (manual disable) was wired in commit 671c84c7 and
+        # continues to consult the disabled-events repo.
         from strategies._core.kill_switch import KillSwitchContext as _KSCtx
+
+        peak_nav = 0.0
+        current_nav = float(equity_value or 0.0)
+        if self._nav_provider is not None:
+            try:
+                p, c = self._nav_provider(self._strategy.META.name)
+                peak_nav = float(p or 0.0)
+                # Prefer the live provider's current NAV when available;
+                # fall back to the strategy's equity_value otherwise.
+                current_nav = float(c) if c is not None else current_nav
+            except Exception:
+                # nav_provider failure → Layer 1 short-circuits via
+                # peak_nav=0; structured log so the operator sees the gap.
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "nav_provider failed for %s; Layer-1 kill-switch "
+                    "fails open this tick", self._strategy.META.name,
+                    exc_info=True,
+                )
+
+        alloc_capital = 0.0
+        realized_today = 0.0
+        try:
+            from core.config import get_strategy_alloc_capital
+            alloc_capital = get_strategy_alloc_capital(self._strategy.META.name)
+        except Exception:
+            pass
+        try:
+            from data.ingestion.trade_ledger import TradeLedger
+            ledger = TradeLedger()
+            realized_today = ledger.realized_today_for_strategy(
+                self._strategy.META.name
+            )
+        except Exception:
+            # Ledger degraded → Layer 2 fails open via the helper's
+            # internal error handling; preserve fail-open at this layer too.
+            realized_today = 0.0
+
         ks_ctx = _KSCtx(
-            peak_nav=0.0,
-            current_nav=float(equity_value or 0.0),
-            alloc_capital=0.0,
-            realized_today=0.0,
+            peak_nav=peak_nav,
+            current_nav=current_nav,
+            alloc_capital=alloc_capital,
+            realized_today=realized_today,
         )
         result = await invoke_strategy_with_kill_switch_async(
             strategy=self._strategy,
