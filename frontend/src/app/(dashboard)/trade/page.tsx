@@ -413,7 +413,7 @@ export default function TradePage() {
       if (activeLegs.length === 0) return [];
       const missing: LegQuoteUnavailable[] = [];
       for (const leg of activeLegs) {
-        if (!snapshot[leg.occ]) {
+        if (!(leg.occ in snapshot)) {
           missing.push({
             occ: leg.occ,
             symbol: leg.symbol,
@@ -434,7 +434,7 @@ export default function TradePage() {
         // If the staged OCC is missing from the result map, surface that to
         // the OrderBar so the trader sees the degradation. Equity-only
         // tickets (no activeContract) don't get this banner.
-        if (activeContract && !snapshot[activeContract.occ]) {
+        if (activeContract && !(activeContract.occ in snapshot)) {
           setOptionsUnavailable({
             occ: activeContract.occ,
             underlying: activeContract.symbol,
@@ -823,6 +823,10 @@ export default function TradePage() {
     ],
   );
   const previewDefaults = ticketDraft ?? orderBarDefaults;
+  const submitLabelDerived =
+    activeLegs.length > 0
+      ? `Submit ${activeLegs.length}-leg combo →`
+      : "Place order";
   const tradePreview = useMemo(
     () =>
       buildPreTradePreview({
@@ -1182,12 +1186,7 @@ export default function TradePage() {
                 submitting={submitting}
                 errorMessage={orderError}
                 defaults={orderBarDefaults}
-                submitLabel={
-                  executionReadiness.submitLabel ??
-                  (activeLegs.length > 0
-                    ? `Place ${activeLegs.length}-leg combo`
-                    : "Place order")
-                }
+                submitLabel={submitLabelDerived}
                 submitDisabled={!executionReadiness.canSubmit}
                 submitDisabledReason={executionReadiness.blocker}
                 submitDestination={executionReadiness.destination}

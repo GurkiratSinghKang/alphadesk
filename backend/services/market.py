@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import random
+import re
 from datetime import date, datetime, timedelta, timezone
 from enum import Enum
 from typing import Literal
@@ -21,6 +22,20 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 log = logging.getLogger(__name__)
+
+
+# OCC option symbol shape: ROOT(1-6) + YYMMDD(6) + [CP](1) + STRIKE(8 digits × 1000)
+# Mirrors `_OCC_SYMBOL_PATTERN` in backend.api.routes.trades.
+_OCC_OPTION_PATTERN = re.compile(r"^[A-Z0-9]{1,6}[0-9]{6}[CP][0-9]{8}$")
+
+
+def _parse_occ_underlying(symbol: str) -> str | None:
+    """Return the underlying root for an OCC option symbol, or None if not OCC."""
+    s = symbol.upper().strip()
+    if not _OCC_OPTION_PATTERN.match(s):
+        return None
+    # Root is everything before the YYMMDD block (6 digits + CP + 8 digits = 15 trailing chars)
+    return s[:-15]
 
 
 # ---------------------------------------------------------------------------
@@ -368,6 +383,134 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
     behavior so the route contract stays stable.
     """
     from fastapi import HTTPException
+
+    # P1-13: option-symbol detection — when the input matches the OCC
+    # contract shape, dispatch to the option-snapshot endpoints rather
+    # than the equity ticker path (which would 404). The equity demo
+    # fallback is intentionally NOT applied to OCC symbols.
+    occ_underlying = _parse_occ_underlying(symbol)
+    if occ_underlying is not None:
+        contract = symbol.upper().strip()
+        cache_key = f"quote:{contract}"
+        try:
+            from core.redis import cache_get, cache_set
+
+            cached = await cache_get(cache_key)
+            if cached:
+                return Quote(**cached)
+        except Exception:
+            cache_set = None  # type: ignore[assignment]
+
+        # --- Polygon option contract snapshot ---
+        if not _polygon_key_empty():
+            try:
+                import httpx
+                from core.config import settings
+
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
+                        f"https://api.polygon.io/v3/snapshot/options/{occ_underlying}/O:{contract}",
+                        params={"apiKey": settings.POLYGON_API_KEY.get_secret_value()},
+                    )
+                    if resp.status_code == 200:
+                        data = (resp.json() or {}).get("results", {}) or {}
+                        lq = data.get("last_quote", {}) or {}
+                        lt = data.get("last_trade", {}) or {}
+                        day = data.get("day", {}) or {}
+                        bid = float(lq.get("bid", 0) or 0)
+                        ask = float(lq.get("ask", 0) or 0)
+                        last_price = float(lt.get("price", 0) or 0)
+                        prev_close = float(day.get("previous_close", 0) or 0)
+                        change = round(last_price - prev_close, 4) if prev_close else 0.0
+                        change_pct = (
+                            round((change / prev_close) * 100, 2) if prev_close else 0.0
+                        )
+                        quote = Quote(
+                            symbol=contract,
+                            bid=bid,
+                            ask=ask,
+                            bidSize=int(lq.get("bid_size") or 0),
+                            askSize=int(lq.get("ask_size") or 0),
+                            last=last_price,
+                            volume=int(day.get("volume") or 0),
+                            timestamp=datetime.now(timezone.utc),
+                            change=change,
+                            changePct=change_pct,
+                            high=float(day.get("high", 0) or 0),
+                            low=float(day.get("low", 0) or 0),
+                            open=float(day.get("open", 0) or 0),
+                            close=prev_close,
+                        )
+                        try:
+                            from core.redis import cache_set as _cs
+
+                            await _cs(cache_key, quote.model_dump(mode="json"), ttl_seconds=5)
+                        except Exception:
+                            pass
+                        return quote
+            except Exception:
+                log.warning(
+                    "Polygon option-quote fetch failed for %s", contract, exc_info=True
+                )
+
+        # --- Alpaca option snapshot ---
+        if _alpaca_keys_available():
+            try:
+                import httpx
+
+                headers = _alpaca_data_headers()
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
+                        f"{ALPACA_DATA_URL}/v1beta1/options/snapshots/{contract}",
+                        headers=headers,
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json() or {}
+                        snap = (data.get("snapshots") or {}).get(contract) or data
+                        lq = snap.get("latestQuote", {}) or {}
+                        lt = snap.get("latestTrade", {}) or {}
+                        daily = snap.get("dailyBar", {}) or {}
+                        prev_daily = snap.get("prevDailyBar", {}) or {}
+                        bid = float(lq.get("bp", 0) or 0)
+                        ask = float(lq.get("ap", 0) or 0)
+                        last_price = float(lt.get("p", 0) or 0)
+                        prev_close = float(prev_daily.get("c", 0) or 0)
+                        change = round(last_price - prev_close, 4) if prev_close else 0.0
+                        change_pct = (
+                            round((change / prev_close) * 100, 2) if prev_close else 0.0
+                        )
+                        quote = Quote(
+                            symbol=contract,
+                            bid=bid,
+                            ask=ask,
+                            bidSize=int(lq.get("bs") or 0),
+                            askSize=int(lq.get("as") or 0),
+                            last=last_price,
+                            volume=int(daily.get("v") or 0),
+                            timestamp=datetime.now(timezone.utc),
+                            change=change,
+                            changePct=change_pct,
+                            high=float(daily.get("h", 0) or 0),
+                            low=float(daily.get("l", 0) or 0),
+                            open=float(daily.get("o", 0) or 0),
+                            close=prev_close,
+                        )
+                        try:
+                            from core.redis import cache_set as _cs
+
+                            await _cs(cache_key, quote.model_dump(mode="json"), ttl_seconds=5)
+                        except Exception:
+                            pass
+                        return quote
+            except Exception:
+                log.warning(
+                    "Alpaca option-quote fetch failed for %s", contract, exc_info=True
+                )
+
+        # No demo fallback for OCC symbols — raise 404 explicitly.
+        raise HTTPException(
+            status_code=404, detail=f"Option contract '{contract}' not found"
+        )
 
     # --- 1. Polygon (if key configured) ---
     if not _polygon_key_empty():
