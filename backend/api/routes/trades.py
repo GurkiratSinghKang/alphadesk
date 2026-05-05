@@ -3211,7 +3211,7 @@ def _broker_open_order_notional(order: dict[str, Any]) -> float:
     return abs(price * qty)
 
 
-async def _get_todays_gross_notional() -> float:
+async def _get_todays_gross_notional(username: str | None = None) -> float:
     """Sum today's deployed notional from the trade ledger + broker-pending.
 
     persona-16 P0-4 — the old ``_risk_check`` only guarded a single order
@@ -3227,6 +3227,13 @@ async def _get_todays_gross_notional() -> float:
     The function FAILS OPEN (returns 0.0 on error) so a broken ledger
     doesn't block all trading — the per-order cap still applies, and the
     `_is_trading_halted` gate sits in front of it for the panic path.
+
+    Audit MB-P0-2: ``username`` routes the broker-pending lookup through
+    that user's :class:`BrokerConnection` row so multi-user deployments
+    measure THIS user's pending notional, not the env account's. The
+    ledger-side aggregation is already process-wide so it does not need
+    further per-user filtering at this layer (a ledger that mixes users
+    is a separate problem).
     """
     total = 0.0
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -3246,17 +3253,18 @@ async def _get_todays_gross_notional() -> float:
         logger.debug("Ledger unavailable for daily-notional aggregation", exc_info=True)
 
     # 2. Broker-side in-flight orders (best-effort).
-    if not _alpaca_keys_empty():
+    # Audit MB-P0-2: route through the requesting user's BrokerConnection
+    # row so multi-user deployments measure THIS user's pending notional,
+    # not the env account's. ``_resolve_alpaca_creds_for_risk`` falls back
+    # to env credentials with a deprecation warning when ``username`` is
+    # omitted.
+    creds = await _resolve_alpaca_creds_for_risk(username)
+    if creds is not None:
         try:
-            from core.config import settings as _s
-            headers = {
-                "APCA-API-KEY-ID": _s.ALPACA_API_KEY.get_secret_value(),
-                "APCA-API-SECRET-KEY": _s.ALPACA_SECRET_KEY.get_secret_value(),
-            }
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.get(
-                    f"{_s.ALPACA_BASE_URL}/v2/orders",
-                    headers=headers,
+                    f"{creds.base_url}/v2/orders",
+                    headers=creds.headers,
                     params={"status": "open", "limit": 500, "nested": "true"},
                 )
                 if resp.status_code == 200:
@@ -3269,20 +3277,58 @@ async def _get_todays_gross_notional() -> float:
     return total
 
 
-async def _get_account_equity() -> float:
-    """Fetch account equity from Alpaca; 0.0 on failure (caller must FAIL CLOSED)."""
-    if _alpaca_keys_empty():
+async def _resolve_alpaca_creds_for_risk(
+    username: str | None,
+):
+    """Audit MB-P0-2 — return ``AlpacaCredentials`` for the user, or env
+    fallback, or ``None`` when neither path yields credentials.
+
+    Risk-gate helpers must FAIL CLOSED (treat broker as unreachable when
+    creds missing) rather than raising 503 — they are called from inside
+    the aggregate-risk pipeline, not the request handler. Mirrors the
+    return-None contract the previous env-only path implicitly had via
+    ``_alpaca_keys_empty()``.
+    """
+    from services.broker_connections import BrokerCredentialError, get_alpaca_credentials
+
+    if username:
+        try:
+            return await get_alpaca_credentials(username)
+        except BrokerCredentialError:
+            logger.warning(
+                "_resolve_alpaca_creds_for_risk: BrokerConnection lookup "
+                "failed for %s — risk gate will fail closed",
+                username,
+                exc_info=True,
+            )
+            return None
+    # Legacy / no-user path: fall back to env credentials with a
+    # deprecation warning so audits can flag the gap.
+    logger.warning(
+        "_resolve_alpaca_creds_for_risk called without username — "
+        "falling back to env credentials. See Audit MB-P0-2."
+    )
+    try:
+        return await get_alpaca_credentials(None)
+    except BrokerCredentialError:
+        return None
+
+
+async def _get_account_equity(username: str | None = None) -> float:
+    """Fetch account equity from Alpaca; 0.0 on failure (caller must FAIL CLOSED).
+
+    Audit MB-P0-2: routes through the requesting user's BrokerConnection
+    row so multi-user deployments measure THIS user's equity, not the
+    env account's.
+    """
+    creds = await _resolve_alpaca_creds_for_risk(username)
+    if creds is None:
         return 0.0
     try:
-        from core.config import settings as _s
-        headers = {
-            "APCA-API-KEY-ID": _s.ALPACA_API_KEY.get_secret_value(),
-            "APCA-API-SECRET-KEY": _s.ALPACA_SECRET_KEY.get_secret_value(),
-        }
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(
-                f"{_s.ALPACA_BASE_URL}/v2/account",
-                headers=headers,
+                f"{creds.base_url}/v2/account",
+                headers=creds.headers,
             )
             if resp.status_code == 200:
                 return float(resp.json().get("equity", 0) or 0)
@@ -3291,25 +3337,27 @@ async def _get_account_equity() -> float:
     return 0.0
 
 
-async def _get_account_equity_and_buying_power() -> tuple[float, float]:
+async def _get_account_equity_and_buying_power(
+    username: str | None = None,
+) -> tuple[float, float]:
     """J-6 — fetch (equity, buying_power) in a single round-trip.
 
     The buying-power preflight needs both numbers but ``_get_account_equity``
     only returns equity. Returns ``(0.0, 0.0)`` on broker failure so
     the caller fails closed on the relevant gates.
+
+    Audit MB-P0-2: routes through the requesting user's BrokerConnection
+    row so the buying-power preflight measures THIS user's account, not
+    the env account's.
     """
-    if _alpaca_keys_empty():
+    creds = await _resolve_alpaca_creds_for_risk(username)
+    if creds is None:
         return 0.0, 0.0
     try:
-        from core.config import settings as _s
-        headers = {
-            "APCA-API-KEY-ID": _s.ALPACA_API_KEY.get_secret_value(),
-            "APCA-API-SECRET-KEY": _s.ALPACA_SECRET_KEY.get_secret_value(),
-        }
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(
-                f"{_s.ALPACA_BASE_URL}/v2/account",
-                headers=headers,
+                f"{creds.base_url}/v2/account",
+                headers=creds.headers,
             )
             if resp.status_code == 200:
                 data = resp.json()
@@ -3853,8 +3901,10 @@ async def _aggregate_risk_check(
         return False, quote_reason
 
     # Today's gross notional
+    # Audit MB-P0-2: ``username`` routes the broker-pending lookup
+    # through THIS user's BrokerConnection row, not the env account.
     incoming = await _compute_order_notional(request)
-    todays_gross = await _get_todays_gross_notional()
+    todays_gross = await _get_todays_gross_notional(username)
     if (todays_gross + incoming) > DAILY_GROSS_NOTIONAL_CAP:
         return False, (
             f"Daily gross notional would reach ${todays_gross + incoming:,.0f} "
@@ -3864,7 +3914,8 @@ async def _aggregate_risk_check(
 
     # J-6 (Round-6): buying-power preflight. Fetched once and reused
     # for the daily-loss gate below.
-    bp_equity, buying_power = await _get_account_equity_and_buying_power()
+    # Audit MB-P0-2: per-user account routing.
+    bp_equity, buying_power = await _get_account_equity_and_buying_power(username)
     first_leg_for_bp = request.legs[0]
     live_broker_enabled = _live_broker_intent_enabled()
     if live_broker_enabled and bp_equity <= 0:
