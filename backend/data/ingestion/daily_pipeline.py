@@ -2342,15 +2342,42 @@ async def _run_pipeline_inner(
                 errors.append(msg)
                 log["portfolio_snapshot"] = {"equity": equity, "cash": cash, "day_pnl": day_pnl}
 
-                # Send alert via available channels
+                # Audit P0-5 (2026-05-05): replaced ad-hoc Discord-only
+                # post with the generic ``services.alerts.fire_alert``
+                # dispatcher so PagerDuty pages oncall in addition to
+                # the Discord ping. Fail-open: dispatcher swallows its
+                # own errors so the pipeline still records the breaker
+                # trip even if every destination is misconfigured.
                 try:
-                    discord_url = settings.DISCORD_WEBHOOK_URL.get_secret_value() if hasattr(settings.DISCORD_WEBHOOK_URL, 'get_secret_value') else settings.DISCORD_WEBHOOK_URL
-                    if discord_url:
-                        async with httpx.AsyncClient(timeout=5) as discord_client:
-                            await discord_client.post(discord_url, json={"content": f"🚨 CIRCUIT BREAKER: Pipeline halted — daily P&L exceeded -2% threshold"})
+                    from services.alerts import (
+                        Alert,
+                        AlertSeverity,
+                        fire_alert,
+                    )
+                    from datetime import datetime, timezone
+
+                    await fire_alert(Alert(
+                        severity=AlertSeverity.P0,
+                        title="Circuit breaker tripped — daily PnL exceeded -2%",
+                        description=(
+                            f"Pipeline halted. day_pnl={day_pnl:.2f} "
+                            f"({day_pnl/equity*100:.2f}%) exceeds threshold "
+                            f"{abs(CIRCUIT_BREAKER_PCT)*100:.1f}%. See "
+                            "docs/RUNBOOK-alerts.md#circuit-breaker"
+                        ),
+                        source="daily_pipeline.circuit_breaker",
+                        deduplication_key="daily_pipeline.circuit_breaker",
+                        occurred_at=datetime.now(timezone.utc),
+                        metadata={
+                            "equity": float(equity),
+                            "day_pnl": float(day_pnl),
+                            "day_pnl_pct": float(day_pnl / equity),
+                            "threshold_pct": float(CIRCUIT_BREAKER_PCT),
+                        },
+                    ))
                 except Exception:
                     logger.critical(
-                        "Circuit breaker notify failed — oncall will not be paged via Discord",
+                        "Circuit breaker notify dispatcher raised",
                         exc_info=True,
                     )
 
@@ -2733,6 +2760,39 @@ async def _run_pipeline_inner(
     except Exception as e:
         logger.exception("Pipeline failed")
         errors.append(f"Pipeline exception: {e}")
+
+        # Audit P0-5 (2026-05-05): page oncall when the daily pipeline
+        # raises an unhandled exception. Same dedup key per-run so a
+        # multi-stage failure doesn't fire 5 distinct pages — PagerDuty
+        # collapses them into one incident.
+        try:
+            from services.alerts import (
+                Alert,
+                AlertSeverity,
+                fire_alert,
+            )
+            from datetime import datetime, timezone
+
+            await fire_alert(Alert(
+                severity=AlertSeverity.P0,
+                title=f"Daily pipeline failure: {type(e).__name__}",
+                description=(
+                    f"Pipeline raised {type(e).__name__}: {e}. See "
+                    "docs/RUNBOOK-alerts.md#daily-pipeline"
+                ),
+                source="daily_pipeline.run",
+                deduplication_key="daily_pipeline.run",
+                occurred_at=datetime.now(timezone.utc),
+                metadata={
+                    "exception_type": type(e).__name__,
+                    "errors_count": len(errors),
+                },
+            ))
+        except Exception:
+            logger.error(
+                "Pipeline failure alert dispatcher raised",
+                exc_info=True,
+            )
     finally:
         current_result = _pipeline_status.get("last_result")
         # Don't double-save in the cancel path (it returned above) —
