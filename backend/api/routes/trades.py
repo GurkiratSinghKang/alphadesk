@@ -987,6 +987,42 @@ async def _enforce_order_rate_limit(username: str) -> None:
 
     if count > _ORDER_RATE_MAX:
         retry_after = max(1, ttl if ttl > 0 else _ORDER_RATE_WINDOW)
+
+        # Audit P0-5 (2026-05-05): rate-limit-trip is a P1 — operator
+        # should investigate within ~2h (script gone wild, compromised
+        # session) but we don't page oncall at 03:00. Dedup per-user
+        # so the first blocked request fires the alert and subsequent
+        # blocks within the window don't re-spam.
+        try:
+            from services.alerts import (
+                Alert,
+                AlertSeverity,
+                fire_alert,
+            )
+            from datetime import datetime, timezone
+
+            await fire_alert(Alert(
+                severity=AlertSeverity.P1,
+                title=f"Order submission rate-limit tripped: {username}",
+                description=(
+                    f"User {username} hit order-submission cap "
+                    f"({_ORDER_RATE_MAX} per {_ORDER_RATE_WINDOW}s). "
+                    "Possible runaway script or compromised session. See "
+                    "docs/RUNBOOK-alerts.md#broker-rate-limit"
+                ),
+                source="trades.order_rate_limit",
+                deduplication_key=f"trades.order_rate_limit.{username}",
+                occurred_at=datetime.now(timezone.utc),
+                metadata={
+                    "username": username,
+                    "count": int(count),
+                    "window_seconds": int(_ORDER_RATE_WINDOW),
+                    "max_orders": int(_ORDER_RATE_MAX),
+                },
+            ))
+        except Exception:
+            logger.debug("order rate-limit alert dispatch failed", exc_info=True)
+
         raise HTTPException(
             status_code=429,
             detail={
@@ -4462,6 +4498,39 @@ async def _aggregate_risk_check(
             )
         except Exception:
             logger.debug("daily_loss audit persistence failed", exc_info=True)
+
+        # Audit P0-5 (2026-05-05): page oncall when the daily-loss
+        # circuit breaker engages — this is the soft-PnL hook from
+        # the audit. Dedup keys per-day so once a session is over the
+        # limit we page once, not on every blocked order.
+        try:
+            from services.alerts import (
+                Alert,
+                AlertSeverity,
+                fire_alert,
+            )
+            from datetime import datetime, timezone, date as _date
+
+            await fire_alert(Alert(
+                severity=AlertSeverity.P0,
+                title="Daily loss limit reached — orders blocked",
+                description=(
+                    f"{daily_reason} See "
+                    "docs/RUNBOOK-alerts.md#daily-loss-limit"
+                ),
+                source="trades.daily_loss_limit",
+                deduplication_key=f"trades.daily_loss_limit.{_date.today().isoformat()}",
+                occurred_at=datetime.now(timezone.utc),
+                metadata={
+                    "realized_pnl_today": float(realized_pnl_today),
+                    "equity": float(bp_equity),
+                    "limit_fraction": float(DAILY_LOSS_LIMIT_FRACTION),
+                    "username": username,
+                },
+            ))
+        except Exception:
+            logger.debug("daily_loss alert dispatch failed", exc_info=True)
+
         return False, daily_reason
 
     # Wave 2H P76-3: closing-auction throttle. After 15:45 ET, non-auction

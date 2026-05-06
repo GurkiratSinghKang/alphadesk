@@ -379,7 +379,7 @@ class KillSwitch:
         existing = self.repo.latest_unresolved_for_strategy(strategy, layer=3)
         if existing is not None:
             return None
-        return self.repo.insert(
+        event = self.repo.insert(
             DisabledEvent(
                 id=None,
                 strategy=strategy,
@@ -389,6 +389,23 @@ class KillSwitch:
                 reason=reason,
             )
         )
+        # Audit P0-5 (2026-05-05): page oncall when Layer 3 (manual
+        # emergency disable) trips. Layer 3 is the "operator pulled the
+        # red handle" path — by definition someone is responding, but a
+        # PagerDuty page wakes a co-oncall to double-cover the response
+        # and the alert lands in the durable incident channel.
+        # Fire-and-forget: this is sync code, so we kick the coroutine
+        # via a fresh event loop in a worker thread when there's no
+        # loop already running, otherwise schedule it as a background
+        # task on the running loop.
+        try:
+            _fire_layer3_alert(strategy, actor, reason)
+        except Exception:
+            import logging as _logging
+            _logging.getLogger(__name__).error(
+                "Layer-3 alert dispatch raised", exc_info=True
+            )
+        return event
 
     def re_enable(self, strategy: str, actor: str) -> None:
         """Resolve the strategy's most recent unresolved layer-3 event.
@@ -526,6 +543,62 @@ class PostgresDisabledEventsRepo:
 
     def resolve(self, event_id: int, resolved_by: str) -> None:
         _run_async_from_sync(self.resolve_async(event_id, resolved_by))
+
+
+def _fire_layer3_alert(strategy: str, actor: str, reason: str) -> None:
+    """Fan out a Layer-3 manual-disable alert via the oncall dispatcher.
+
+    Audit P0-5 (2026-05-05). The kill-switch is sync-callable (the
+    in-memory repo path, the admin route, CLI scripts) but the alert
+    dispatcher is async. This helper does the same trick as
+    :func:`_run_async_from_sync` but as fire-and-forget — the manual
+    disable itself has already succeeded by the time we get here, so
+    blocking on alert delivery would harm response latency for no win.
+    """
+    import asyncio
+
+    async def _run() -> None:
+        try:
+            from services.alerts import (
+                Alert,
+                AlertSeverity,
+                fire_alert,
+            )
+
+            await fire_alert(Alert(
+                severity=AlertSeverity.P0,
+                title=f"Kill-switch Layer-3 manual disable: {strategy}",
+                description=(
+                    f"Strategy {strategy} disabled by {actor}. "
+                    f"Reason: {reason}. See "
+                    "docs/RUNBOOK-alerts.md#kill-switch-layer-3"
+                ),
+                source="kill_switch.layer3",
+                deduplication_key=f"kill_switch.layer3.{strategy}",
+                occurred_at=datetime.now(timezone.utc),
+                metadata={
+                    "strategy": strategy,
+                    "actor": actor,
+                    "reason": reason,
+                },
+            ))
+        except Exception:
+            import logging as _logging
+            _logging.getLogger(__name__).error(
+                "Layer-3 fire_alert raised", exc_info=True
+            )
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # No loop — synchronous caller. Spin one up briefly.
+        try:
+            asyncio.run(_run())
+        except Exception:
+            pass
+        return
+    # Loop running — schedule as fire-and-forget background task.
+    loop.create_task(_run())
 
 
 def _run_async_from_sync(coro: Any) -> Any:
