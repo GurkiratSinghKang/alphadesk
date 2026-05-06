@@ -430,6 +430,35 @@ def _define_models() -> dict[str, Any]:
         # rows without a fill event keep loading.
         filled_qty = Column(Numeric(20, 4), nullable=True)
 
+        # OE-2 (combo-exit hardening, 2026-05-05) — combo-mark stop level.
+        #
+        # Multi-leg option combos (iron condor, vertical spreads, etc.)
+        # cannot attach broker-side bracket exits on Alpaca (the OPRA
+        # multi-leg endpoint does not accept bracket parameters), so
+        # stops live entirely in ``daily_pipeline._check_exits``. The
+        # legacy per-share ``stop_loss`` is meaningless for a defined-
+        # risk spread — comparing the underlying's mark against a
+        # "stop_loss" of $97 fires on the wrong signal for a credit
+        # spread that's bleeding because IV expanded, not because spot
+        # moved.
+        #
+        # ``stop_loss_combo_mark`` is the COMBO MARK (sum of per-leg
+        # signed mids × qty × 100) below which the position should
+        # auto-close. Per :func:`services.combo_calc.compute_combo_mark`
+        # the combo mark is the dollar cost to flatten the position
+        # right now; for a credit spread it's NEGATIVE at entry (you
+        # collected credit) and approaches 0 as the position decays
+        # favourably. A typical iron condor with $662 net credit and
+        # $338 max loss might set ``stop_loss_combo_mark = -200``
+        # (close when it would cost $200 to flatten).
+        #
+        # NULL means "no combo-mark stop has been calculated for this
+        # trade" — applies to every legacy row pre-this-migration and
+        # to single-leg trades where the column is irrelevant. The
+        # exit checker treats NULL as "skip the combo-mark check, fall
+        # through to the existing single-leg logic".
+        stop_loss_combo_mark = Column(Float, nullable=True)
+
         __mapper_args__ = {
             "version_id_col": version,
         }

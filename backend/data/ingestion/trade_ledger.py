@@ -169,27 +169,37 @@ def _ensure_schema(engine: Any) -> None:
     # side VARCHAR(8)`` — the ``ADD COLUMN IF NOT EXISTS`` statement below is
     # idempotent and safe to rerun.  TODO: generate a dedicated alembic
     # revision for this schema change.
+    # OE-2 (combo-exit hardening, 2026-05-05): ``stop_loss_combo_mark``
+    # added so multi-leg combos can be exited on the COMBINED spread mark
+    # instead of the underlying's mark. ``legs`` (TEXT) is also added for
+    # the ad-hoc legacy ledger DDL — production rows live on the
+    # ``trades`` ORM table where ``legs`` is JSONB on Postgres. The
+    # ALTER TABLE statements are idempotent and safe to rerun.
     ddl = """
     CREATE TABLE IF NOT EXISTS trade_ledger (
-        id            INTEGER PRIMARY KEY,
-        symbol        VARCHAR(20)  NOT NULL,
-        shares        INTEGER      NOT NULL,
-        entry_price   DOUBLE PRECISION,
-        entry_time    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-        stop_loss     DOUBLE PRECISION,
-        take_profit   DOUBLE PRECISION,
-        conviction    INTEGER      DEFAULT 0,
-        rationale     TEXT,
-        strategy      VARCHAR(60)  NOT NULL DEFAULT 'claude_alpha',
-        status        VARCHAR(16)  NOT NULL DEFAULT 'open',
-        exit_price    DOUBLE PRECISION,
-        exit_time     TIMESTAMPTZ,
-        exit_reason   VARCHAR(60),
-        pnl           DOUBLE PRECISION,
-        pnl_pct       DOUBLE PRECISION,
-        side          VARCHAR(8)   DEFAULT 'long'
+        id                       INTEGER PRIMARY KEY,
+        symbol                   VARCHAR(20)  NOT NULL,
+        shares                   INTEGER      NOT NULL,
+        entry_price              DOUBLE PRECISION,
+        entry_time               TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        stop_loss                DOUBLE PRECISION,
+        stop_loss_combo_mark     DOUBLE PRECISION,
+        take_profit              DOUBLE PRECISION,
+        conviction               INTEGER      DEFAULT 0,
+        rationale                TEXT,
+        strategy                 VARCHAR(60)  NOT NULL DEFAULT 'claude_alpha',
+        status                   VARCHAR(16)  NOT NULL DEFAULT 'open',
+        exit_price               DOUBLE PRECISION,
+        exit_time                TIMESTAMPTZ,
+        exit_reason              VARCHAR(60),
+        pnl                      DOUBLE PRECISION,
+        pnl_pct                  DOUBLE PRECISION,
+        side                     VARCHAR(8)   DEFAULT 'long',
+        legs                     TEXT
     );
     ALTER TABLE trade_ledger ADD COLUMN IF NOT EXISTS side VARCHAR(8) DEFAULT 'long';
+    ALTER TABLE trade_ledger ADD COLUMN IF NOT EXISTS legs TEXT;
+    ALTER TABLE trade_ledger ADD COLUMN IF NOT EXISTS stop_loss_combo_mark DOUBLE PRECISION;
     CREATE INDEX IF NOT EXISTS ix_trade_ledger_status ON trade_ledger(status);
     CREATE INDEX IF NOT EXISTS ix_trade_ledger_symbol ON trade_ledger(symbol);
     CREATE INDEX IF NOT EXISTS ix_trade_ledger_strategy ON trade_ledger(strategy);
@@ -681,6 +691,13 @@ class TradeLedger:
             "take_profit", "conviction", "rationale", "strategy", "status",
             "exit_price", "exit_time", "exit_reason", "pnl", "pnl_pct",
             "side",
+            # OE-2 (combo-exit hardening, 2026-05-05): combo-mark stop
+            # level + legs JSON. Required so the exit checker can
+            # persist a combo-aware close (status='closed' +
+            # exit_reason + exit_time + exit_price) and so callers
+            # seeding new combo trades can populate
+            # ``stop_loss_combo_mark`` after entry.
+            "legs", "stop_loss_combo_mark",
         }
         patch = {k: v for k, v in patch.items() if k in allowed}
         if not patch:
