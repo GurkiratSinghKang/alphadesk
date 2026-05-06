@@ -1012,6 +1012,22 @@ async def create_order(
     http_request: Request,
     username: str = Depends(require_auth),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    override_kill_switch: bool = Query(
+        False,
+        description=(
+            "SHF-1 admin escape hatch: bypass the per-strategy kill-switch "
+            "Layer-3 gate. Requires the caller to be the configured admin "
+            "user. The bypass is logged at WARN with order context."
+        ),
+    ),
+    override_size_limit: bool = Query(
+        False,
+        description=(
+            "SHF-2 admin escape hatch: bypass the max-loss-vs-equity gate "
+            "and the undefined-risk reject. Requires the caller to be the "
+            "configured admin user. The bypass is logged at WARN."
+        ),
+    ),
 ) -> OrderResponse:
     """Submit a new order through the broker (Alpaca).
 
@@ -1335,6 +1351,91 @@ async def create_order(
     risk_ok, risk_msg = await _risk_check(payload)
     if not risk_ok:
         raise HTTPException(status_code=422, detail=f"Risk check failed: {risk_msg}")
+
+    # ------------------------------------------------------------------
+    # SHF-1 (audit 2026-05-05 P0-3) — kill-switch consultation on the
+    # manual-order path. The pipeline runner already consults the
+    # 3-layer kill-switch before strategy-driven orders; without this
+    # gate a Layer-3-disabled strategy would still be tradeable through
+    # the desk by tagging the manual order with that strategy name.
+    # The "manual" pseudo-strategy (and orders without a strategy field)
+    # are default-permissive — Layer 3 only applies when the operator
+    # explicitly disabled THAT named strategy.
+    # ------------------------------------------------------------------
+    if override_kill_switch:
+        # Admin escape hatch — verify the caller is the configured admin.
+        try:
+            from services.users import is_admin_user
+            _is_admin = await is_admin_user(username)
+        except Exception:
+            from core.config import settings as _cfg
+            _is_admin = username == _cfg.ADMIN_USERNAME
+        if not _is_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="override_kill_switch is admin-only.",
+            )
+        logger.warning(
+            "kill_switch_overridden",
+            extra={
+                "event": "kill_switch_overridden",
+                "user": username,
+                "strategy": payload.strategy,
+                "symbol": payload.legs[0].symbol if payload.legs else None,
+            },
+        )
+    else:
+        ks_disabled, ks_reason = await _check_kill_switch(payload.strategy)
+        if ks_disabled:
+            _strategy_label = (payload.strategy or "manual").strip() or "manual"
+            raise HTTPException(
+                status_code=423,  # Locked
+                detail={
+                    "code": "STRATEGY_DISABLED",
+                    "strategy": _strategy_label,
+                    "reason": ks_reason,
+                    "hint": (
+                        "Re-enable in /settings#kill-switch or use "
+                        "?override_kill_switch=true if admin"
+                    ),
+                },
+            )
+
+    # ------------------------------------------------------------------
+    # SHF-2 (audit 2026-05-05 P0-4) — max-loss as a fraction of book
+    # equity. Existing $50k absolute notional cap does NOT prevent a
+    # $48k iron-condor max-loss against a $100k account (= 48% of book
+    # in one trade). Default cap is 5% of equity (settings field
+    # ``MAX_LOSS_PER_TRADE_PCT_OF_EQUITY``). Equity is cached for 60s
+    # per user so a burst of orders only refreshes once per minute.
+    # ------------------------------------------------------------------
+    if override_size_limit:
+        try:
+            from services.users import is_admin_user
+            _is_admin_size = await is_admin_user(username)
+        except Exception:
+            from core.config import settings as _cfg2
+            _is_admin_size = username == _cfg2.ADMIN_USERNAME
+        if not _is_admin_size:
+            raise HTTPException(
+                status_code=403,
+                detail="override_size_limit is admin-only.",
+            )
+        logger.warning(
+            "size_limit_overridden",
+            extra={
+                "event": "size_limit_overridden",
+                "user": username,
+                "strategy": payload.strategy,
+                "symbol": payload.legs[0].symbol if payload.legs else None,
+            },
+        )
+    else:
+        size_ok, size_msg, _max_loss, _equity = await _max_loss_vs_equity_check(
+            payload, username=username,
+        )
+        if not size_ok:
+            raise HTTPException(status_code=422, detail=size_msg)
 
     # Duplicate order check (persona-40: now covers notes + strategy + canonical floats)
     # Round-8 / R-4: pass username so the dedup namespace is per-user.
@@ -3457,6 +3558,329 @@ def _live_broker_intent_enabled() -> bool:
     except Exception:
         logger.warning("Failed to evaluate live broker intent", exc_info=True)
         return False
+
+
+# ---------------------------------------------------------------------------
+# SHF-1 / SHF-2 (audit 2026-05-05 P0-3 / P0-4) — kill-switch on manual orders
+# + per-trade max-loss-as-fraction-of-equity gate.
+# ---------------------------------------------------------------------------
+#
+# Two risk-budget holes the audit pinpointed (audit-reports/2026-05-05/
+# STRATEGY-HARDENING-AUDIT.md §5 / §3):
+#
+#   * SHF-1 (P0-3): the 3-layer kill-switch is consulted by the daily
+#     pipeline runner before strategy-driven orders, but NOT on the
+#     manual-order path. A user (or a stale frontend tab, or a
+#     compromised session) could submit ``strategy="momentum_quality"``
+#     against a Layer-3-disabled strategy and the order sailed through.
+#
+#   * SHF-2 (P0-4): the existing per-order $50k notional ceiling does
+#     NOT prevent a $48k iron-condor max-loss landing on a $100k book
+#     (= 48% of capital in one trade). The audit recommends a
+#     ``max_loss <= equity * MAX_LOSS_PER_TRADE_PCT_OF_EQUITY`` gate
+#     (5% default — admin-tunable via env / Settings).
+#
+# Both gates support an admin override path:
+#   * ``?override_kill_switch=true`` requires admin role; the bypass
+#     is logged at WARN with the order context.
+#   * ``?override_size_limit=true`` requires admin role; same WARN log.
+#
+# Equity is cached for 60s to keep the gate cheap (the audit asked for
+# < 50ms additional latency on the order path).
+
+
+# --- SHF-1: kill-switch consultation ---------------------------------------
+
+
+async def _check_kill_switch(strategy: str | None) -> tuple[bool, str | None]:
+    """Return ``(disabled, reason)`` for a strategy name.
+
+    The "manual" pseudo-strategy is treated as DEFAULT-PERMISSIVE: a manual
+    order with ``strategy=None`` (or the literal ``"manual"``) is allowed
+    even if no row exists for it. Empty / whitespace strategy names are
+    coerced to ``"manual"`` for this gate so ``""`` doesn't accidentally
+    block on a typo.
+
+    Returns ``(False, None)`` when:
+      - strategy is None / empty / "manual" with no unresolved layer-3 row
+      - the kill-switch session can't be opened (DB unreachable —
+        fail-OPEN here is the same posture the live pipeline already
+        takes; the daily-loss gate / aggregate-risk gate will catch
+        whatever this can't)
+
+    Returns ``(True, reason)`` when an unresolved layer-3 manual disable
+    row exists for the strategy.
+
+    SHF-1 (audit 2026-05-05 P0-3): ``KillSwitch.disable_manual`` writes
+    a layer-3 row when an operator hits the disable button; this helper
+    consults the same row before manual orders submit. Layer 1 (drawdown
+    from peak NAV) and Layer 2 (daily realized PnL) are NOT checked here
+    because they require live ``KillSwitchContext`` (current_nav,
+    realized_today) that the manual-order request handler doesn't carry —
+    the pipeline runner is the canonical source for those layers. Manual
+    orders are gated by Layer 3 (operator-pressed button) only.
+    """
+    name = (strategy or "").strip().lower() or "manual"
+    if name == "manual":
+        # Manual pseudo-strategy: treat absence of a row as not-disabled
+        # (default permissive). An operator who wants to lock down ALL
+        # manual orders can still flip the global emergency halt
+        # (POST /api/v1/trades/halt) which is checked at the top of
+        # create_order.
+        return False, None
+    try:
+        from core.database import _get_session_factory
+        from strategies._core.kill_switch import (
+            KillSwitch,
+            PostgresDisabledEventsRepo,
+        )
+    except Exception:
+        logger.warning(
+            "kill-switch import failed — manual order gate fails open",
+            exc_info=True,
+        )
+        return False, None
+
+    try:
+        from core.config import settings as _cfg
+        if _cfg.SKIP_DB_INIT:
+            # Tests / SQLite-only environments — no Postgres to query.
+            return False, None
+    except Exception:
+        return False, None
+
+    try:
+        factory = _get_session_factory()
+        async with factory() as session:
+            ks = KillSwitch(repo=PostgresDisabledEventsRepo(session))
+            decision = await ks.check_layer3_manual_async(name)
+    except Exception:
+        logger.warning(
+            "kill-switch consultation failed for strategy=%s — manual order gate fails open",
+            name,
+            exc_info=True,
+        )
+        return False, None
+    if decision.enabled:
+        return False, None
+    return True, decision.reason or "strategy disabled by operator"
+
+
+# --- SHF-2: equity cache (60s) ---------------------------------------------
+
+# (username, expiry_unix_ts, equity)
+_EQUITY_CACHE: dict[str, tuple[float, float]] = {}
+_EQUITY_CACHE_TTL_SECONDS = 60.0
+
+
+async def _get_account_equity_cached(username: str | None) -> float:
+    """``_get_account_equity`` with a 60s per-user cache.
+
+    Order submission already pays for one Alpaca round-trip on the broker
+    POST. The max-loss-vs-equity gate adds another ``GET /v2/account``
+    on every request, doubling the broker-call budget. Cache the equity
+    snapshot per user so a burst of orders only refreshes once per
+    minute. Cache key is the username (or ``"__env__"`` for the legacy
+    no-user path) so multi-user deployments don't share equity rows
+    across accounts.
+
+    On cache miss + broker failure (``_get_account_equity`` returns
+    0.0) we DO NOT cache the zero — a transient Alpaca blip should not
+    pin a 0.0 equity for 60s and silently disable every max-loss check.
+    """
+    import time as _time
+
+    key = username or "__env__"
+    now = _time.monotonic()
+    cached = _EQUITY_CACHE.get(key)
+    if cached is not None and cached[0] > now:
+        return cached[1]
+    equity = await _get_account_equity(username)
+    if equity > 0:
+        _EQUITY_CACHE[key] = (now + _EQUITY_CACHE_TTL_SECONDS, equity)
+    return equity
+
+
+def _equity_cache_clear() -> None:
+    """Test helper — drop all cached equity rows."""
+    _EQUITY_CACHE.clear()
+
+
+# --- SHF-2: order max-loss --------------------------------------------------
+
+
+async def _compute_order_max_loss(request: CreateOrderRequest) -> tuple[float, bool]:
+    """Best-effort max-loss envelope for the order in dollars.
+
+    Returns ``(max_loss, is_undefined_risk)``:
+      * ``is_undefined_risk=True`` means the worst-case loss has no
+        finite cap that this code can compute (naked short call, naked
+        short equity, undefined-shape combo). The caller MUST refuse
+        the order unless the admin override is set.
+      * ``is_undefined_risk=False`` + finite ``max_loss`` is what the
+        equity gate compares against.
+
+    Defined-risk shapes:
+      * ``iron_condor`` / ``iron_butterfly`` / ``vertical_spread``
+        : width × qty × 100 (already computed by ``_combo_spread_width``).
+      * ``cash_secured_put`` : strike × qty × 100 (collateral is the
+        ceiling; this overstates max loss vs. strike-minus-premium but
+        we prefer the conservative envelope).
+      * Single long call/put : qty × limit_price × 100 (debit paid
+        = max possible loss).
+      * Single long equity (BUY equity) : qty × limit_price (loss
+        capped at the price paid going to zero).
+
+    Undefined-risk shapes (return ``is_undefined_risk=True``):
+      * Naked short call (SELL call without an offsetting long).
+      * Short equity (SELL equity without a covering position) — the
+        broker may require a margin account; we treat it as undefined
+        for the purposes of this gate. Short equity orders that are
+        actually covering an existing long position will be sized
+        correctly by ``_compute_order_notional``; the override path
+        is the escape hatch.
+      * ``strangle`` (short undefined-risk on each side). The aggregate
+        risk gate already enforces the strangle envelope; here we
+        treat it as undefined so the gate forces an admin override.
+      * Anything we don't recognise.
+
+    Best-effort: when the limit_price is missing on a single-leg path,
+    we fall back to ``_get_current_price`` (already cached upstream).
+    A price-resolution failure raises 400 from ``_get_current_price``
+    which the caller surfaces.
+    """
+    legs = request.legs or []
+    if not legs:
+        return 0.0, False
+
+    combo = (request.combo_type or "").strip().lower()
+
+    # --- Defined-risk combo shapes -----------------------------------
+    if combo in ("iron_condor", "iron_butterfly", "vertical_spread"):
+        try:
+            width = _combo_spread_width(request, combo)
+        except HTTPException:
+            raise
+        qty = float(legs[0].qty) if legs else 0.0
+        # Width × 100 × qty is the conservative max-loss for these shapes
+        # (overstated by the credit received, but that's the safe side).
+        return abs(width) * qty * 100.0, False
+
+    if combo == "cash_secured_put":
+        # Collateral is the ceiling on max loss for a CSP.
+        leg = legs[0]
+        parsed = _parse_occ_symbol(leg.symbol)
+        if parsed and parsed.get("call_put") == "put":
+            strike = float(parsed["strike"])
+            return strike * float(leg.qty) * 100.0, False
+        return 0.0, True  # malformed CSP — defer to combo validators
+
+    if combo == "covered_call":
+        # The covering long stock bounds the max loss. Without the
+        # current spot we can't say exactly; a conservative bound is
+        # the cost basis of the covering shares — which we don't
+        # have here. Treat as undefined and require override.
+        return 0.0, True
+
+    if combo == "strangle":
+        # Short strangle is undefined risk on both sides.
+        return 0.0, True
+
+    # --- Single-leg / per-leg fall-through ---------------------------
+    if len(legs) == 1:
+        leg = legs[0]
+        is_option = (
+            (getattr(leg, "asset_class", "equity") or "equity").lower() == "option"
+            or _parse_occ_symbol(leg.symbol) is not None
+        )
+        side = getattr(getattr(leg, "side", None), "value", getattr(leg, "side", None))
+        qty = float(leg.qty)
+
+        # Resolve a price — limit_price first, otherwise live quote.
+        if leg.limit_price:
+            price = float(leg.limit_price)
+        else:
+            price = float(await _get_current_price(leg.symbol))
+            if price <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot determine price for {leg.symbol} (max-loss check).",
+                )
+
+        if is_option:
+            if side == "buy":
+                # Long option: max loss is the debit paid.
+                return price * qty * 100.0, False
+            # Naked short option (no other legs to bound the risk) —
+            # undefined risk for the purposes of this gate. Operators
+            # who actually have an offsetting position can override.
+            return 0.0, True
+
+        # Equity leg.
+        if side == "buy":
+            # Long equity: max loss is the price paid going to zero.
+            return price * qty, False
+        # Short equity: undefined risk (price can run unbounded). The
+        # account-margin policy is broker-authoritative; this gate
+        # asks the admin to override per-trade for short equity.
+        return 0.0, True
+
+    # --- Multi-leg, no recognised combo_type -------------------------
+    # Without a combo classification we cannot bound the worst-case
+    # loss across legs. Treat as undefined; admin override is the
+    # escape hatch.
+    return 0.0, True
+
+
+# --- SHF-2: equity gate -----------------------------------------------------
+
+
+async def _max_loss_vs_equity_check(
+    request: CreateOrderRequest,
+    *,
+    username: str,
+) -> tuple[bool, str, float, float]:
+    """Reject orders whose max loss exceeds a fraction of account equity.
+
+    Returns ``(passed, reason, max_loss, equity)``. The settings field
+    ``MAX_LOSS_PER_TRADE_PCT_OF_EQUITY`` (default 0.05) is the cap; an
+    admin can override per-order with ``?override_size_limit=true``.
+
+    Fail-open semantics on equity == 0 (broker unreachable). The
+    aggregate-risk gate's other layers already fail-closed on critical
+    paths; matching ``_daily_loss_check``'s posture here keeps the
+    request handler consistent.
+    """
+    from core.config import settings as _s
+
+    pct = float(getattr(_s, "MAX_LOSS_PER_TRADE_PCT_OF_EQUITY", 0.05))
+    max_loss, undefined = await _compute_order_max_loss(request)
+    equity = await _get_account_equity_cached(username)
+    if equity <= 0:
+        # Broker unreachable — defer to other gates.
+        return True, "skipped_no_equity", max_loss, 0.0
+    if undefined:
+        return (
+            False,
+            (
+                "Order max loss is undefined (naked short / unrecognised combo). "
+                f"Set ?override_size_limit=true to bypass (admin only)."
+            ),
+            0.0,
+            equity,
+        )
+    cap = equity * pct
+    if max_loss > cap:
+        return (
+            False,
+            (
+                f"Order max loss ${max_loss:,.0f} exceeds {pct:.0%} of book "
+                f"equity (${equity:,.0f})."
+            ),
+            max_loss,
+            equity,
+        )
+    return True, "passed", max_loss, equity
 
 
 async def _get_realized_pnl_today() -> float:
