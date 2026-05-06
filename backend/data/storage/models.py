@@ -473,6 +473,65 @@ def _define_models() -> dict[str, Any]:
         actual_fill_price = Column(Float, nullable=True)
         slippage_pct = Column(Float, nullable=True)
 
+        # M-O P (2026-05-05) — scaled profit-take ladder support.
+        #
+        # ``partial_close_log`` records which scaled-exit rules have
+        # already fired against this trade so the engine can NOT re-fire
+        # the same scale on the next tick (idempotency). Shape:
+        #
+        # .. code-block:: python
+        #
+        #     {
+        #         "fires": [
+        #             {
+        #                 "rule_id": 17,
+        #                 "threshold": 0.25,
+        #                 "qty_fraction": 0.33,
+        #                 "qty_closed": 1,
+        #                 "remaining_qty": 2,
+        #                 "fired_at": "2026-05-05T14:32:11+00:00",
+        #             },
+        #             ...
+        #         ]
+        #     }
+        #
+        # NULL until the first scaled exit fires. The engine reads
+        # ``fires[*].rule_id`` to filter out already-fired rules; the
+        # dispatcher appends a new entry on every successful close. We
+        # store ``rule_id`` rather than threshold so an operator who edits
+        # a rule's threshold mid-flight doesn't re-fire the renamed scale.
+        #
+        # ``original_qty`` snapshots the quantity at trade open. Scaled
+        # exits compute their close_qty as ``remaining_qty * qty_fraction``
+        # (qty_fraction is "of REMAINING", not "of original") — but
+        # original_qty stays available for analytics/UI ("you closed 33%
+        # of the original 6-lot at 25% profit"). NULL on legacy rows
+        # pre-this-migration and falls back to leg.qty when missing.
+        partial_close_log = Column(JSONB, nullable=True, default=None)
+        original_qty = Column(Integer, nullable=True)
+
+        # M-O A (2026-05-05) — adverse-momentum exit support.
+        #
+        # ``expected_move_pct`` snapshots the implied 1-σ move at trade
+        # entry, sourced from the recommender's ATM-straddle expected-
+        # move calculation. The exit-rule engine's
+        # ``adverse_momentum_close`` rule scales the underlying's
+        # current intraday move against this snapshot
+        # (sigma_move = abs(intraday) / expected_move_pct) to decide
+        # whether to cut the position before deeper drawdown.
+        #
+        # AMD postmortem 2026-05: spot ran +21% overnight; the IC's
+        # expected_move_pct was 8.55% → σ_move ≈ 2.46. The 1.5σ-
+        # threshold rule would have closed the trade at the open and
+        # spared the operator further loss. Without this snapshot the
+        # rule abstains (fail-open — the wing_capture rule still catches
+        # the position once it's deeper underwater).
+        #
+        # Units: PERCENT (8.55 means an 8.55% expected move). NULLABLE
+        # so legacy rows that pre-date this column don't fail validation
+        # — the engine treats NULL as "abstain" rather than zero.
+        expected_move_pct = Column(Float, nullable=True)
+
         __mapper_args__ = {
             "version_id_col": version,
         }
@@ -803,10 +862,25 @@ def _define_models() -> dict[str, Any]:
             iron_butterfly, vertical_spread, bull_put_spread,
             bear_call_spread). Captures residual long-wing time value
             instead of holding capped trades to expiration for max loss.
+          - ``scaled_profit_close`` — fire when current pnl >= threshold *
+            max_profit, but close only ``qty_fraction`` of the REMAINING
+            quantity (not the full position). Lets operators stagger
+            exits at 25/50/75% of max profit to capture more upside than
+            the all-or-nothing ``profit_pct`` rule. The trade's
+            ``partial_close_log`` records each fire so the same rule does
+            not re-fire on the next tick (idempotency).
 
         * ``threshold`` — interpretation depends on ``rule_type`` (a fraction
-          for profit/loss_pct, a day count for time_dte, a delta for
-          delta_breach).
+          for profit/loss_pct/scaled_profit_close, a day count for time_dte,
+          a delta for delta_breach).
+
+        * ``qty_fraction`` — fraction of the trade's REMAINING quantity to
+          close when the rule fires. Default 1.0 (close fully). Only
+          ``scaled_profit_close`` reads this; legacy rule_types ignore it
+          and always close the full position. Important: 0.50 means "half
+          of REMAINING" — so the standard 25/50/75 ladder uses 0.33 / 0.50
+          / 1.00 to close 1/3 of original at each scale (1/3 + 1/2 of
+          remaining 2/3 + all of remaining 1/3 = 100%).
 
         * ``action`` — one of ``close`` | ``roll`` | ``alert``. Auto-roll
           is downgraded to ``alert`` by ``services.position_roller`` when
@@ -829,6 +903,14 @@ def _define_models() -> dict[str, Any]:
         rule_type = Column(String(32), nullable=False, index=True)
         threshold = Column(Float, nullable=False)
         action = Column(String(16), nullable=False, server_default="close", default="close")
+        # M-O P (2026-05-05) — scaled-exit support. ``qty_fraction`` is
+        # the fraction of REMAINING qty to close when the rule fires;
+        # default 1.0 preserves the legacy "close full position"
+        # semantics so all existing rule_types are unaffected. Only
+        # ``scaled_profit_close`` reads this column today.
+        qty_fraction = Column(
+            Float, nullable=False, server_default="1.0", default=1.0,
+        )
         enabled = Column(Boolean, nullable=False, server_default="true", default=True, index=True)
         priority = Column(Integer, nullable=False, server_default="100", default=100, index=True)
         # Free-form notes / rationale shown in the admin UI. Optional.
@@ -849,12 +931,16 @@ def _define_models() -> dict[str, Any]:
             Index("ix_exit_rules_scope", "strategy", "structure_type", "enabled"),
             Index("ix_exit_rules_priority", "priority", "enabled"),
             CheckConstraint(
-                "rule_type IN ('profit_pct','time_dte','loss_pct','delta_breach','wing_capture')",
+                "rule_type IN ('profit_pct','time_dte','loss_pct','delta_breach','wing_capture','scaled_profit_close','adverse_momentum_close')",
                 name="ck_exit_rules_rule_type",
             ),
             CheckConstraint(
                 "action IN ('close','roll','alert')",
                 name="ck_exit_rules_action",
+            ),
+            CheckConstraint(
+                "qty_fraction > 0 AND qty_fraction <= 1",
+                name="ck_exit_rules_qty_fraction",
             ),
         )
 

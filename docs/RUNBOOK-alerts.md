@@ -184,6 +184,63 @@ Disable per-trade by setting the `structure_type` filter or adjusting
 and AFTER the priority-5 `loss_pct` alert so the operator is paged
 before the auto-close runs.
 
+## Exit-rule engine — adverse_momentum_close
+
+`wing_capture` only catches a position once it has bled to 80% of max
+loss. Momentum-aware traders cut losers earlier — when the underlying
+gaps strongly INTO a wing, the trade is functionally dead well before
+the 80% threshold. The `adverse_momentum_close` rule (seeded by
+alembic `0019_exit_rule_adverse_momentum`, priority 12 — between
+`profit_pct` at 10 and `wing_capture` at 15) fires when ALL THREE
+conditions hold:
+
+1. The underlying has moved at least `threshold` σ adverse to the
+   structure (default 1.5σ). σ is set per-trade from
+   `Trade.expected_move_pct`, the implied 1-σ move snapshotted at trade
+   entry from the recommender's ATM-straddle. The intraday change
+   itself rides into the rule engine via the
+   `<underlying>:change_pct` sidechannel key on the marks dict — same
+   convention as `<symbol>:delta` for `delta_breach`.
+2. The move's direction is "adverse" for the structure. Short-vol
+   structures (`iron_condor`, `iron_butterfly`, `short_strangle`,
+   `short_straddle`) treat any large move as adverse. Bear-side
+   spreads (`bear_call_spread`, `bear_put_spread`) gate on +moves;
+   bull-side spreads (`bull_put_spread`, `bull_call_spread`) gate on
+   -moves. Long-vol structures (`long_call`, `long_put`,
+   `long_straddle`, `long_strangle`) NEVER fire — any large move
+   benefits them.
+3. Loss is already ≥ 30% of max_loss. Don't cut at break-even or in
+   profit; momentum-and-loss together is the signal.
+
+AMD postmortem 2026-05: spot ran +21% overnight on an iron condor
+whose entry-time `expected_move_pct` was 8.55%, σ_move ≈ 2.46. With
+30%+ realised loss at the open, this rule would have fired at 09:30 ET
+and closed the position before the day's open hammered it deeper into
+the wing. `wing_capture` would still have caught it later (and did, in
+backtest), but at the cost of an extra ~$50–$100 per contract.
+
+Failure modes — the rule abstains (returns `None`) on:
+
+* `Trade.expected_move_pct` NULL or ≤ 0 (legacy rows that pre-date
+  the 0019 migration, or trades opened before the recommender stamped
+  the snapshot). The σ scale is undefined → engine skips. Always
+  paired with `wing_capture` so the position still has a safety net at
+  80% loss.
+* No `<underlying>:change_pct` in the marks dict. The pipeline must
+  populate this from the quote stream's regular-session change pct;
+  if the quote feed is degraded the rule abstains rather than treating
+  "no data" as a zero move.
+* `structure_type` not in the direction map (e.g. equity, futures,
+  exotic combos). Logged as `structure_not_classified:<type>` in the
+  decision metadata so an operator can extend the map intentionally.
+
+Tunable: `UPDATE exit_rules SET threshold=1.0 WHERE
+rule_type='adverse_momentum_close'` to fire at 1σ (more aggressive,
+more whipsaws); `2.0` for the conservative side. The 30% loss floor
+is hard-coded in the rule body — change it there if you want a
+different cut-in level (raising it to 50% effectively turns the rule
+into a "early wing_capture at lower σ").
+
 ## How to add a new alert hook
 
 The dispatcher is `services.alerts.fire_alert`. Keep alerts wrapped in

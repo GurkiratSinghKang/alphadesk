@@ -42,6 +42,7 @@ class _StubRule(SimpleNamespace):
     action: str
     enabled: bool
     priority: int
+    qty_fraction: float
 
 
 def _rule(
@@ -54,6 +55,7 @@ def _rule(
     action: str = "close",
     enabled: bool = True,
     priority: int = 100,
+    qty_fraction: float = 1.0,
 ) -> _StubRule:
     return _StubRule(
         id=id,
@@ -64,6 +66,7 @@ def _rule(
         action=action,
         enabled=enabled,
         priority=priority,
+        qty_fraction=qty_fraction,
     )
 
 
@@ -734,3 +737,766 @@ def test_wing_capture_seed_loads_in_migration_0018() -> None:
     assert "15" in migration
     # CHECK constraint must be widened.
     assert "ck_exit_rules_rule_type" in migration
+
+
+# ---------------------------------------------------------------------------
+# adverse_momentum_close rule (M-O A)
+# ---------------------------------------------------------------------------
+#
+# Cuts losing positions BEFORE wing_capture would catch them — fires at
+# (a) intraday move >= threshold σ adverse to the structure's bias AND
+# (b) loss >= 30% of max_loss. Sits at priority 12 (above profit_pct=10,
+# below wing_capture=15). Long-vol structures (long_call / long_put /
+# long_straddle / long_strangle) NEVER fire because any large move
+# helps them. AMD postmortem 2026-05 case: spot ran +21% overnight
+# vs an 8.55% expected_move snapshot → σ_move ≈ 2.46, well above the
+# 1.5σ default threshold.
+
+
+def _adverse_marks(
+    *,
+    short_put_mark: float = 1.00,
+    long_put_mark: float = 0.50,
+    short_call_mark: float = 1.00,
+    long_call_mark: float = 0.50,
+    underlying: str = "AMD",
+    intraday_pct: float = 0.0,
+) -> dict[str, float]:
+    """Iron-condor marks plus an underlying-side intraday change pct.
+
+    Sidechannel key shape ``"<underlying>:change_pct"`` — same idiom as
+    the per-symbol delta keys read by ``delta_breach``.
+    """
+    marks: dict[str, float] = {
+        "AMD250620P145": short_put_mark, "AMD250620P140": long_put_mark,
+        "AMD250620C175": short_call_mark, "AMD250620C180": long_call_mark,
+    }
+    marks[f"{underlying}:change_pct"] = intraday_pct
+    return marks
+
+
+@pytest.mark.asyncio
+async def test_adverse_momentum_fires_iron_condor_above_1_5_sigma_with_30pct_loss() -> None:
+    """Iron condor at 1.6σ adverse + ~30% loss must fire close."""
+    from services.exit_rules import evaluate_exit_rules
+
+    today = date(2026, 5, 5)
+    trade = _iron_condor_trade(expiration=today + timedelta(days=10))
+    trade["max_loss"] = 400.0
+    trade["expected_move_pct"] = 8.0  # 1σ = 8%
+    # Loss target: -$120 = 30% of $400 max loss. Construct via call wing:
+    #   short_call: (1.00 - 2.50) * 100 = -$150
+    #   long_call : (0.80 - 0.50) * 100 =  $30
+    #   net call wing = -$120 (puts at entry → 0 pnl)
+    marks = _adverse_marks(
+        short_call_mark=2.50, long_call_mark=0.80,
+        intraday_pct=12.8,  # +12.8% / 8% = 1.6σ
+    )
+    rule = _rule(
+        structure_type="*", rule_type="adverse_momentum_close",
+        threshold=1.5, action="close", priority=12,
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[rule], today=today)
+    assert decision is not None, (
+        "adverse_momentum must fire on IC at 1.6σ + 30% loss"
+    )
+    assert decision.rule_type == "adverse_momentum_close"
+    assert decision.action == "close"
+    assert decision.metadata["sigma_move"] == pytest.approx(1.6, abs=0.001)
+    assert decision.metadata["is_adverse"] is True
+    assert decision.metadata["loss_pct"] == pytest.approx(0.30, abs=0.001)
+    assert decision.metadata["underlying"] == "AMD"
+
+
+@pytest.mark.asyncio
+async def test_adverse_momentum_does_not_fire_below_1_5_sigma() -> None:
+    """At 1.0σ the rule (threshold 1.5σ) MUST abstain."""
+    from services.exit_rules import evaluate_exit_rules
+
+    today = date(2026, 5, 5)
+    trade = _iron_condor_trade(expiration=today + timedelta(days=10))
+    trade["max_loss"] = 400.0
+    trade["expected_move_pct"] = 8.0
+    # 1.0σ adverse — below threshold even if loss is at 30%.
+    marks = _adverse_marks(
+        short_call_mark=2.50, long_call_mark=0.80,
+        intraday_pct=8.0,  # 1σ exactly
+    )
+    rule = _rule(
+        structure_type="*", rule_type="adverse_momentum_close",
+        threshold=1.5, action="close", priority=12,
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[rule], today=today)
+    assert decision is None, "must abstain when σ_move < threshold"
+
+
+@pytest.mark.asyncio
+async def test_adverse_momentum_does_not_fire_on_favourable_direction_for_bear_call() -> None:
+    """Bear-call spread benefits from a -move; +move is bad. A +1.5σ move
+    on a bear_call_spread → adverse → would fire. But +move on a
+    bull_put_spread is favourable → must NOT fire on a bull_put_spread.
+
+    This test inverts the AMD-style scenario: a bear_call_spread with a
+    NEGATIVE move (favourable) at 1.5σ. The rule must abstain because
+    the structure is benefiting from the move.
+    """
+    from services.exit_rules import evaluate_exit_rules
+
+    today = date(2026, 5, 5)
+    trade = _iron_condor_trade(expiration=today + timedelta(days=10))
+    trade["structure_type"] = "bear_call_spread"
+    trade["max_loss"] = 400.0
+    trade["expected_move_pct"] = 8.0
+    # NEGATIVE move — favourable for bear_call_spread (premium decays
+    # as the underlying drifts away from the short call strike).
+    # Construct enough loss for the loss-floor check via mark choices,
+    # but the direction check gates first.
+    marks = _adverse_marks(
+        short_call_mark=2.50, long_call_mark=0.80,
+        intraday_pct=-12.8,  # 1.6σ FAVOURABLE for a bear-call
+    )
+    rule = _rule(
+        structure_type="*", rule_type="adverse_momentum_close",
+        threshold=1.5, action="close", priority=12,
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[rule], today=today)
+    assert decision is None, (
+        "must abstain — negative move is favourable for bear_call_spread"
+    )
+
+
+@pytest.mark.asyncio
+async def test_adverse_momentum_never_fires_on_long_call() -> None:
+    """Long-vol structures (long_call) NEVER fire — any move is favourable."""
+    from services.exit_rules import evaluate_exit_rules
+
+    today = date(2026, 5, 5)
+    trade = _iron_condor_trade(expiration=today + timedelta(days=10))
+    trade["structure_type"] = "long_call"
+    trade["max_loss"] = 400.0
+    trade["expected_move_pct"] = 8.0
+    # Massive +5σ move — should still abstain because long_call benefits.
+    marks = _adverse_marks(
+        short_call_mark=2.50, long_call_mark=0.80,
+        intraday_pct=40.0,  # 5σ
+    )
+    rule = _rule(
+        structure_type="*", rule_type="adverse_momentum_close",
+        threshold=1.5, action="close", priority=12,
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[rule], today=today)
+    assert decision is None, "long_call never fires regardless of σ"
+
+
+@pytest.mark.asyncio
+async def test_adverse_momentum_does_not_fire_when_loss_below_30pct_floor() -> None:
+    """Even at 5σ the rule abstains if loss < 30% of max_loss."""
+    from services.exit_rules import evaluate_exit_rules
+
+    today = date(2026, 5, 5)
+    trade = _iron_condor_trade(expiration=today + timedelta(days=10))
+    trade["max_loss"] = 400.0
+    trade["expected_move_pct"] = 8.0
+    # 5σ adverse but only ~10% loss:
+    #   short_call: (1.00 - 1.40) * 100 = -$40
+    #   long_call : (0.50 - 0.50) * 100 =  $0
+    #   net = -$40 = 10% of $400 max loss — below the 30% floor.
+    marks = _adverse_marks(
+        short_call_mark=1.40, long_call_mark=0.50,
+        intraday_pct=40.0,  # 5σ
+    )
+    rule = _rule(
+        structure_type="*", rule_type="adverse_momentum_close",
+        threshold=1.5, action="close", priority=12,
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[rule], today=today)
+    assert decision is None, "must abstain when loss is below 30% of max_loss"
+
+
+@pytest.mark.asyncio
+async def test_adverse_momentum_abstains_when_expected_move_pct_unset() -> None:
+    """No expected_move snapshot → rule abstains (fail-open)."""
+    from services.exit_rules import evaluate_exit_rules
+
+    today = date(2026, 5, 5)
+    trade = _iron_condor_trade(expiration=today + timedelta(days=10))
+    trade["max_loss"] = 400.0
+    # expected_move_pct intentionally not set on the trade dict.
+    marks = _adverse_marks(
+        short_call_mark=2.50, long_call_mark=0.80,
+        intraday_pct=20.0,
+    )
+    rule = _rule(
+        structure_type="*", rule_type="adverse_momentum_close",
+        threshold=1.5, action="close", priority=12,
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[rule], today=today)
+    assert decision is None
+
+
+@pytest.mark.asyncio
+async def test_adverse_momentum_abstains_when_intraday_change_unknown() -> None:
+    """No <underlying>:change_pct in marks → rule abstains."""
+    from services.exit_rules import evaluate_exit_rules
+
+    today = date(2026, 5, 5)
+    trade = _iron_condor_trade(expiration=today + timedelta(days=10))
+    trade["max_loss"] = 400.0
+    trade["expected_move_pct"] = 8.0
+    # Marks WITHOUT the change_pct sidechannel — rule must abstain
+    # rather than treat "no data" as zero.
+    marks = {
+        "AMD250620P145": 1.00, "AMD250620P140": 0.50,
+        "AMD250620C175": 2.50, "AMD250620C180": 0.80,
+    }
+    rule = _rule(
+        structure_type="*", rule_type="adverse_momentum_close",
+        threshold=1.5, action="close", priority=12,
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[rule], today=today)
+    assert decision is None
+
+
+@pytest.mark.asyncio
+async def test_adverse_momentum_amd_postmortem_integration() -> None:
+    """AMD postmortem: +21% intraday vs 8.55% expected → 2.46σ → fires.
+
+    Flagship integration test: iron condor on AMD, $375/$385 wing
+    breached, spot ran +21% overnight, expected_move_pct snapshot was
+    8.55% at entry → σ_move = 21/8.55 ≈ 2.46. 1.5σ threshold rule MUST
+    fire close at the open, BEFORE wing_capture (priority 15) would
+    have caught it later in the day.
+
+    Pnl construction: -$130 = ~38% of $338 max_loss. Above the 30%
+    loss floor, below the 80% wing_capture threshold — exactly the
+    band ``adverse_momentum_close`` is meant to cover.
+
+      put wing — both far OTM at AMD's overnight $403, marked at entry
+                 → $0 pnl
+      short_call: (1.00 - 2.40) * 100 = -$140
+      long_call : (0.60 - 0.50) * 100 =  $10
+      net = -$130 ≈ 38% of $338 max loss
+    """
+    from services.exit_rules import evaluate_exit_rules
+
+    today = date(2026, 5, 5)
+    trade = _iron_condor_trade(expiration=today + timedelta(days=10))
+    trade["max_loss"] = 338.0
+    trade["expected_move_pct"] = 8.55
+    trade["symbol"] = "AMD"
+    marks = _adverse_marks(
+        short_put_mark=1.00, long_put_mark=0.50,
+        short_call_mark=2.40, long_call_mark=0.60,
+        intraday_pct=21.0,  # AMD overnight gap
+    )
+    rule = _rule(
+        structure_type="*", rule_type="adverse_momentum_close",
+        threshold=1.5, action="close", priority=12,
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[rule], today=today)
+    assert decision is not None, "AMD case: 2.46σ + 38% loss MUST fire"
+    assert decision.rule_type == "adverse_momentum_close"
+    assert decision.action == "close"
+    # σ_move = 21 / 8.55 ≈ 2.456
+    assert decision.metadata["sigma_move"] == pytest.approx(2.456, abs=0.005)
+    assert decision.metadata["is_adverse"] is True
+    assert decision.metadata["intraday_pct"] == pytest.approx(21.0, abs=0.001)
+    assert decision.metadata["expected_move_pct"] == pytest.approx(8.55, abs=0.001)
+    assert decision.metadata["loss_pct"] >= 0.30
+    assert decision.metadata["loss_pct"] < 0.80, (
+        "AMD case must sit BELOW the wing_capture 80% threshold — "
+        "that's the whole point of this earlier-firing rule"
+    )
+    # Rationale should describe the early-cut intent.
+    assert "cut" in decision.rationale.lower() or "adverse" in decision.rationale.lower()
+
+
+@pytest.mark.asyncio
+async def test_adverse_momentum_priority_12_fires_before_wing_capture_15() -> None:
+    """When both adverse_momentum AND wing_capture would match, adverse wins.
+
+    Constructs a trade that's BOTH at >= 80% loss (wing_capture threshold)
+    AND at >= 1.5σ adverse (adverse_momentum threshold). Both rules fire
+    on the same tick — priority 12 < 15 means adverse_momentum_close
+    returns first. Critical: documents the rule's priority slot.
+    """
+    from services.exit_rules import evaluate_exit_rules
+
+    today = date(2026, 5, 5)
+    trade = _iron_condor_trade(expiration=today + timedelta(days=5))
+    trade["max_loss"] = 400.0
+    trade["expected_move_pct"] = 8.0
+    # 80%+ loss construction — same as wing_capture's 80% test:
+    #   short_call: (1.00 - 5.00) * 100 = -$400
+    #   long_call : (1.30 - 0.50) * 100 =  $80
+    #   net = -$320 = 80% of $400. Plus a 2σ adverse move.
+    marks = _adverse_marks(
+        short_call_mark=5.00, long_call_mark=1.30,
+        intraday_pct=16.0,  # 2σ adverse
+    )
+    adverse = _rule(
+        id=1, structure_type="*", rule_type="adverse_momentum_close",
+        threshold=1.5, action="close", priority=12,
+    )
+    wing = _rule(
+        id=2, structure_type="*", rule_type="wing_capture",
+        threshold=0.80, action="close", priority=15,
+    )
+    decision = await evaluate_exit_rules(
+        trade, marks, rules=[wing, adverse], today=today,
+    )
+    assert decision is not None
+    assert decision.rule_type == "adverse_momentum_close", (
+        "priority 12 adverse_momentum_close must beat priority 15 wing_capture"
+    )
+    assert decision.rule_id == 1
+
+
+def test_adverse_momentum_seed_loads_in_migration_0019() -> None:
+    """Migration 0019 must seed the default adverse_momentum_close rule.
+
+    Mirrors ``test_wing_capture_seed_loads_in_migration_0018``: a
+    refactor that drops or alters the seed should fail CI rather than
+    silently shipping a degraded ruleset to prod. Also asserts the
+    Trade.expected_move_pct column add and the CHECK-constraint
+    widening — the engine cannot evaluate without those landing
+    together.
+    """
+    migration = (
+        BACKEND_ROOT / "alembic" / "versions" / "0019_exit_rule_adverse_momentum.py"
+    ).read_text(encoding="utf-8")
+    assert "'adverse_momentum_close'" in migration
+    # Threshold 1.5σ.
+    assert "1.5" in migration
+    assert "'close'" in migration
+    # Priority 12 — between profit_pct (10) and wing_capture (15).
+    assert "12" in migration
+    # CHECK-constraint widening.
+    assert "ck_exit_rules_rule_type" in migration
+    # Trade.expected_move_pct column add.
+    assert "expected_move_pct" in migration
+    assert "trades" in migration
+
+
+# ---------------------------------------------------------------------------
+# scaled_profit_close ladder (M-O P)
+# ---------------------------------------------------------------------------
+#
+# Scaled exits beat single-threshold per industry data — close 1/3 at
+# 25% of max profit, 1/3 more at 50%, leave the runner for 75%. Each
+# scale is one ExitRule row; ``Trade.partial_close_log`` records which
+# scales have already fired so the same rule_id never re-fires on the
+# same trade.
+
+
+def _ic_marks_for_pct(target_pct: float) -> dict:
+    """Return marks for the standard IC trade that yield pnl == target_pct of $100 max profit.
+
+    Default trade: max_profit=$100, all 4 legs at $1.00 short / $0.50
+    long. To get pnl = X, mark each short leg down by X/200 (so each
+    short contributes X/2 via 100 multiplier; two shorts → +X) and
+    leave longs at entry (long pnl = 0).
+    """
+    short_decay = target_pct / 200.0
+    short_mark = max(0.0, 1.00 - short_decay)
+    return {
+        "AMD250620P145": short_mark, "AMD250620P140": 0.50,
+        "AMD250620C175": short_mark, "AMD250620C180": 0.50,
+    }
+
+
+@pytest.mark.asyncio
+async def test_scaled_profit_close_fires_at_threshold_25() -> None:
+    """At 25% of max profit, scaled_profit_close threshold=0.25 fires."""
+    from services.exit_rules import evaluate_exit_rules
+
+    trade = _iron_condor_trade(max_profit=100.0)
+    trade["original_qty"] = 3
+    marks = _ic_marks_for_pct(30.0)  # 30% — above 0.25 threshold
+    rule = _rule(
+        id=101, structure_type="iron_condor",
+        rule_type="scaled_profit_close",
+        threshold=0.25, qty_fraction=0.33,
+        action="close", priority=10,
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[rule])
+    assert decision is not None
+    assert decision.rule_type == "scaled_profit_close"
+    assert decision.action == "close"
+    assert decision.metadata["pnl_ratio"] >= 0.25
+    assert decision.metadata["qty_fraction"] == pytest.approx(0.33)
+
+
+@pytest.mark.asyncio
+async def test_scaled_profit_close_idempotency_same_rule_does_not_refire() -> None:
+    """A scaled rule that has already fired must NOT fire again on the next tick.
+
+    Idempotency lives in ``Trade.partial_close_log`` — once the
+    dispatcher records a fire entry with the rule's id, the evaluator
+    filters that rule out of the candidate set.
+    """
+    from services.exit_rules import evaluate_exit_rules
+
+    trade = _iron_condor_trade(max_profit=100.0)
+    trade["original_qty"] = 3
+    # Pretend the 0.25 scale already fired in a prior tick.
+    trade["partial_close_log"] = {
+        "fires": [
+            {
+                "rule_id": 101,
+                "threshold": 0.25,
+                "qty_fraction": 0.33,
+                "qty_closed": 1,
+                "remaining_qty": 2,
+                "fired_at": "2026-05-04T18:00:00+00:00",
+            }
+        ]
+    }
+    # Marks still show 30% profit — without the log filter the rule WOULD fire.
+    marks = _ic_marks_for_pct(30.0)
+    rule = _rule(
+        id=101, structure_type="iron_condor",
+        rule_type="scaled_profit_close",
+        threshold=0.25, qty_fraction=0.33,
+        action="close", priority=10,
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[rule])
+    assert decision is None, (
+        "scaled_profit_close must NOT re-fire after partial_close_log records its rule_id"
+    )
+
+
+@pytest.mark.asyncio
+async def test_scaled_profit_close_50_fires_after_25_already_fired() -> None:
+    """The 0.50 scale must still fire even though the 0.25 scale already did.
+
+    Different rule_ids — the idempotency filter is per-rule, not
+    per-rule-type. After 0.25 has fired, when pnl reaches 50% the 0.50
+    rule must fire next.
+    """
+    from services.exit_rules import evaluate_exit_rules
+
+    trade = _iron_condor_trade(max_profit=100.0)
+    trade["original_qty"] = 3
+    trade["partial_close_log"] = {
+        "fires": [
+            {
+                "rule_id": 101, "threshold": 0.25, "qty_fraction": 0.33,
+                "qty_closed": 1, "remaining_qty": 2,
+                "fired_at": "2026-05-04T18:00:00+00:00",
+            }
+        ]
+    }
+    marks = _ic_marks_for_pct(60.0)  # 60% — above 0.50 threshold
+    scale_25 = _rule(
+        id=101, structure_type="iron_condor",
+        rule_type="scaled_profit_close",
+        threshold=0.25, qty_fraction=0.33,
+        action="close", priority=10,
+    )
+    scale_50 = _rule(
+        id=102, structure_type="iron_condor",
+        rule_type="scaled_profit_close",
+        threshold=0.50, qty_fraction=0.50,
+        action="close", priority=10,
+    )
+    decision = await evaluate_exit_rules(
+        trade, marks, rules=[scale_25, scale_50],
+    )
+    assert decision is not None
+    assert decision.rule_id == 102, "0.50 scale must fire after 0.25 already recorded"
+    assert decision.metadata["qty_fraction"] == pytest.approx(0.50)
+
+
+@pytest.mark.asyncio
+async def test_scaled_profit_close_runner_qty_fraction_one() -> None:
+    """The 0.75 scale at qty_fraction=1.0 closes the remaining runner."""
+    from services.exit_rules import evaluate_exit_rules
+    from services.exit_rules import compute_scaled_close_qty
+
+    trade = _iron_condor_trade(max_profit=100.0)
+    trade["original_qty"] = 3
+    trade["partial_close_log"] = {
+        "fires": [
+            {"rule_id": 101, "threshold": 0.25, "qty_fraction": 0.33,
+             "qty_closed": 1, "remaining_qty": 2,
+             "fired_at": "2026-05-04T18:00:00+00:00"},
+            {"rule_id": 102, "threshold": 0.50, "qty_fraction": 0.50,
+             "qty_closed": 1, "remaining_qty": 1,
+             "fired_at": "2026-05-04T19:00:00+00:00"},
+        ]
+    }
+    marks = _ic_marks_for_pct(80.0)  # 80% — fires the 0.75 scale
+    scale_75 = _rule(
+        id=103, structure_type="iron_condor",
+        rule_type="scaled_profit_close",
+        threshold=0.75, qty_fraction=1.00,
+        action="close", priority=10,
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[scale_75])
+    assert decision is not None
+    assert decision.rule_id == 103
+    assert decision.metadata["qty_fraction"] == pytest.approx(1.00)
+    # Runner closes ALL remaining (3 - 1 - 1 = 1 contract left).
+    close_qty = compute_scaled_close_qty(trade, scale_75)
+    assert close_qty == 1
+
+
+@pytest.mark.asyncio
+async def test_scaled_profit_close_priority_beats_time_dte() -> None:
+    """Scaled close at priority 10 fires BEFORE time_dte at priority 20.
+
+    Both rules match: the trade is at 30% profit AND inside the 21 DTE
+    window. The scaled close (priority 10) MUST win — operators want
+    to take partial profits before the gamma-cliff exit kicks in.
+    """
+    from services.exit_rules import evaluate_exit_rules
+
+    today = date(2026, 5, 5)
+    trade = _iron_condor_trade(
+        max_profit=100.0, expiration=today + timedelta(days=15),
+    )
+    trade["original_qty"] = 3
+    marks = _ic_marks_for_pct(30.0)
+    scale_25 = _rule(
+        id=101, structure_type="iron_condor",
+        rule_type="scaled_profit_close",
+        threshold=0.25, qty_fraction=0.33,
+        action="close", priority=10,
+    )
+    time_dte = _rule(
+        id=200, structure_type="*", rule_type="time_dte",
+        threshold=21.0, action="close", priority=20,
+    )
+    decision = await evaluate_exit_rules(
+        trade, marks, rules=[time_dte, scale_25], today=today,
+    )
+    assert decision is not None
+    assert decision.rule_type == "scaled_profit_close", (
+        "priority=10 scaled_profit_close must fire BEFORE priority=20 time_dte"
+    )
+    assert decision.rule_id == 101
+
+
+@pytest.mark.asyncio
+async def test_scaled_profit_close_ladder_25_50_75_integration() -> None:
+    """Integration: simulate IC moving 30% → 60% → 80% profit; ladder fires correctly.
+
+    Three ticks, each with the right pnl for the next scale. The
+    partial_close_log accumulates across ticks; the same rule never
+    fires twice; close_qty math respects the "of REMAINING" semantics
+    so a 6-lot IC closes 2 + 2 + 2 across the ladder.
+    """
+    from services.exit_rules import (
+        evaluate_exit_rules,
+        compute_scaled_close_qty,
+        append_partial_close_fire,
+    )
+
+    trade = _iron_condor_trade(max_profit=100.0)
+    trade["original_qty"] = 6  # 6-lot — divisible cleanly across the ladder
+
+    scale_25 = _rule(
+        id=101, structure_type="iron_condor",
+        rule_type="scaled_profit_close",
+        threshold=0.25, qty_fraction=0.33,
+        action="close", priority=10,
+    )
+    scale_50 = _rule(
+        id=102, structure_type="iron_condor",
+        rule_type="scaled_profit_close",
+        threshold=0.50, qty_fraction=0.50,
+        action="close", priority=10,
+    )
+    scale_75 = _rule(
+        id=103, structure_type="iron_condor",
+        rule_type="scaled_profit_close",
+        threshold=0.75, qty_fraction=1.00,
+        action="close", priority=10,
+    )
+    rules = [scale_25, scale_50, scale_75]
+
+    # ── Tick 1: 30% profit → fire scale_25 ──
+    trade["partial_close_log"] = None
+    decision1 = await evaluate_exit_rules(
+        trade, _ic_marks_for_pct(30.0), rules=rules,
+    )
+    assert decision1 is not None
+    assert decision1.rule_id == 101
+    close_qty_1 = compute_scaled_close_qty(trade, scale_25)
+    assert close_qty_1 == 2, "33% of 6-lot remaining = 2"
+    trade["partial_close_log"] = append_partial_close_fire(
+        trade.get("partial_close_log"),
+        rule_id=101, threshold=0.25, qty_fraction=0.33,
+        qty_closed=close_qty_1,
+        remaining_qty=6 - close_qty_1,
+        fired_at_iso="2026-05-04T18:00:00+00:00",
+    )
+
+    # ── Tick 2: 60% profit → fire scale_50 (NOT scale_25 again) ──
+    decision2 = await evaluate_exit_rules(
+        trade, _ic_marks_for_pct(60.0), rules=rules,
+    )
+    assert decision2 is not None
+    assert decision2.rule_id == 102, "second tick must fire 0.50 scale, not the already-fired 0.25"
+    close_qty_2 = compute_scaled_close_qty(trade, scale_50)
+    assert close_qty_2 == 2, "50% of 4 remaining = 2"
+    trade["partial_close_log"] = append_partial_close_fire(
+        trade["partial_close_log"],
+        rule_id=102, threshold=0.50, qty_fraction=0.50,
+        qty_closed=close_qty_2,
+        remaining_qty=4 - close_qty_2,
+        fired_at_iso="2026-05-04T19:00:00+00:00",
+    )
+
+    # ── Tick 3: 80% profit → fire scale_75 (the runner) ──
+    decision3 = await evaluate_exit_rules(
+        trade, _ic_marks_for_pct(80.0), rules=rules,
+    )
+    assert decision3 is not None
+    assert decision3.rule_id == 103
+    close_qty_3 = compute_scaled_close_qty(trade, scale_75)
+    assert close_qty_3 == 2, "runner: all 2 remaining"
+    # All 6 contracts have now been scheduled to close: 2 + 2 + 2 = 6.
+    assert close_qty_1 + close_qty_2 + close_qty_3 == 6
+
+
+@pytest.mark.asyncio
+async def test_scaled_profit_close_does_not_fire_below_threshold() -> None:
+    """At 20% profit the 0.25-threshold rule must NOT fire."""
+    from services.exit_rules import evaluate_exit_rules
+
+    trade = _iron_condor_trade(max_profit=100.0)
+    trade["original_qty"] = 3
+    marks = _ic_marks_for_pct(20.0)  # below 25% threshold
+    rule = _rule(
+        id=101, structure_type="iron_condor",
+        rule_type="scaled_profit_close",
+        threshold=0.25, qty_fraction=0.33,
+        action="close", priority=10,
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[rule])
+    assert decision is None
+
+
+@pytest.mark.asyncio
+async def test_scaled_profit_close_skipped_when_max_profit_unset() -> None:
+    """No max_profit → scaled rule must NOT fire (consistent with profit_pct)."""
+    from services.exit_rules import evaluate_exit_rules
+
+    trade = _iron_condor_trade(max_profit=100.0)
+    trade["max_profit"] = 0  # missing
+    trade["original_qty"] = 3
+    marks = _ic_marks_for_pct(50.0)
+    rule = _rule(
+        id=101, structure_type="iron_condor",
+        rule_type="scaled_profit_close",
+        threshold=0.25, qty_fraction=0.33,
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[rule])
+    assert decision is None
+
+
+@pytest.mark.asyncio
+async def test_legacy_profit_pct_still_works() -> None:
+    """Regression — the legacy profit_pct rule must still fire as before.
+
+    The migration soft-disables the seeded iron_condor / iron_butterfly
+    rows but the rule_type is still valid (operators may have
+    per-strategy overrides). Direct re-run of the canonical 50% test
+    after the engine extension to prove no regression.
+    """
+    from services.exit_rules import evaluate_exit_rules
+
+    trade = _iron_condor_trade(max_profit=100.0)
+    marks = {
+        "AMD250620P145": 0.50, "AMD250620P140": 0.30,
+        "AMD250620C175": 0.50, "AMD250620C180": 0.30,
+    }
+    rule = _rule(
+        structure_type="iron_condor", rule_type="profit_pct",
+        threshold=0.50, action="close",
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[rule])
+    assert decision is not None, "legacy profit_pct must continue to work post-extension"
+    assert decision.rule_type == "profit_pct"
+    assert decision.action == "close"
+
+
+def test_compute_scaled_close_qty_remaining_semantics() -> None:
+    """qty_fraction is fraction of REMAINING, not original — verify directly.
+
+    With original_qty=6 and 2 already closed, qty_fraction=0.50 must
+    close half of the REMAINING 4 (= 2), not half of the ORIGINAL 6
+    (which would be 3).
+    """
+    from services.exit_rules import compute_scaled_close_qty
+
+    trade = {
+        "original_qty": 6,
+        "partial_close_log": {
+            "fires": [
+                {"rule_id": 101, "qty_closed": 2, "remaining_qty": 4,
+                 "threshold": 0.25, "qty_fraction": 0.33,
+                 "fired_at": "..."},
+            ]
+        },
+        "legs": [],
+    }
+    rule_50 = _rule(qty_fraction=0.50)
+    assert compute_scaled_close_qty(trade, rule_50) == 2
+
+    rule_full = _rule(qty_fraction=1.00)
+    assert compute_scaled_close_qty(trade, rule_full) == 4
+
+
+def test_compute_scaled_close_qty_clamps_to_remaining() -> None:
+    """Final scale (qty_fraction=1.0) closes whatever is left, not original."""
+    from services.exit_rules import compute_scaled_close_qty
+
+    trade = {
+        "original_qty": 6,
+        "partial_close_log": {
+            "fires": [
+                {"rule_id": 101, "qty_closed": 5, "remaining_qty": 1,
+                 "threshold": 0.5, "qty_fraction": 0.83,
+                 "fired_at": "..."},
+            ]
+        },
+        "legs": [],
+    }
+    runner = _rule(qty_fraction=1.00)
+    assert compute_scaled_close_qty(trade, runner) == 1
+
+
+def test_scaled_profit_close_seed_loads_in_migration_0020() -> None:
+    """Migration 0020 must seed the 6-row scaled ladder + soft-disable legacy rows.
+
+    Same migration-contract pattern as wing_capture: a refactor that
+    drops a seed should fail CI rather than silently shipping a
+    degraded ruleset.
+    """
+    migration = (
+        BACKEND_ROOT / "alembic" / "versions" / "0020_exit_rule_scaled_profit_close.py"
+    ).read_text(encoding="utf-8")
+    # Iron condor ladder
+    assert "'iron_condor'" in migration
+    assert "'scaled_profit_close'" in migration
+    assert "0.25" in migration
+    assert "0.50" in migration
+    assert "0.75" in migration
+    assert "0.33" in migration
+    # Iron butterfly ladder (tighter thresholds)
+    assert "'iron_butterfly'" in migration
+    assert "0.15" in migration
+    assert "0.30" in migration
+    # qty_fraction column added
+    assert "qty_fraction" in migration
+    # CHECK constraint widened
+    assert "ck_exit_rules_rule_type" in migration
+    assert "ck_exit_rules_qty_fraction" in migration
+    # Legacy rows are SOFT-DISABLED, not deleted
+    assert "enabled = FALSE" in migration
+    # Trade columns added
+    assert "partial_close_log" in migration
+    assert "original_qty" in migration
