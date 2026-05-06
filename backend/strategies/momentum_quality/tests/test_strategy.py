@@ -146,6 +146,7 @@ class TestRegistrationAndConfig:
         assert set(space) == {
             "momentum_lookback_m", "momentum_skip_m", "quality_weight",
             "top_n", "rebalance_freq", "min_f_score", "momentum_filter_min",
+            "max_per_sector",
         }
 
 
@@ -404,3 +405,120 @@ class TestSignalEmission:
         target = _compute_target(params, bars, fund, earnings, syms, REBAL_DAY)
         assert "AAPL" not in target
         assert len(target) == 3
+
+
+# --------------------------------------------------------------------------- #
+# Sector concentration cap (audit 2026-05-05 forward gap)                     #
+# --------------------------------------------------------------------------- #
+class TestSectorCap:
+    """Cap on count-per-GICS-sector in the Top-N basket.
+
+    Without the cap, an AI-momentum rally with 17 IT names in the universe
+    can produce a 12/15 IT portfolio that's sector beta dressed up as alpha.
+    """
+
+    def test_sector_cap_limits_information_technology_concentration(self):
+        """Top-10 basket with cap=3 should pick at most 3 IT names even
+        when the top 5 raw-momentum candidates are all IT."""
+        syms = eligible_universe()
+        returns = {sym: 0.05 for sym in syms}
+        # Five IT names with the highest momentum
+        for sym in ("AAPL", "MSFT", "NVDA", "AMD", "ORCL"):
+            returns[sym] = 0.50
+        # Five non-IT names with second-highest momentum
+        for sym in ("LLY", "UNH", "ABBV", "MRK", "PG"):
+            returns[sym] = 0.40
+
+        bars = _build_bars(returns, REBAL_DAY)
+        fund = _build_fundamentals({sym: 9 for sym in syms}, REBAL_DAY)
+        params = MomentumQualityParams(
+            top_n=10, min_f_score=1, max_per_sector=3,
+        )
+        target, diagnostics = _compute_target_with_diagnostics(
+            params, bars, fund, None, syms, REBAL_DAY,
+        )
+        it_in_target = [s for s in target if SECTOR_MAP.get(s) == "Information Technology"]
+        assert len(it_in_target) <= 3, f"IT count {len(it_in_target)} exceeds cap of 3"
+        # Cap-binding sector must report exactly 3 in diagnostics
+        assert diagnostics["sector_counts"].get("Information Technology") == 3
+        # Greedy-by-score within IT bucket: the 3 highest-score IT names
+        # should be the ones picked (AAPL/MSFT/NVDA — all tie on momentum
+        # but rank tiebreak makes them deterministic).
+        # We only assert subset membership since rank ties on equal
+        # momentum + equal F-score may permute the top 3.
+        assert set(it_in_target).issubset(
+            {"AAPL", "MSFT", "NVDA", "AMD", "ORCL"}
+        )
+
+    def test_sector_cap_disabled_when_zero(self):
+        """max_per_sector=0 disables the cap — Top-N is pure-score-greedy."""
+        syms = eligible_universe()
+        returns = {sym: 0.05 for sym in syms}
+        for sym in ("AAPL", "MSFT", "NVDA", "AMD", "ORCL"):
+            returns[sym] = 0.50
+
+        bars = _build_bars(returns, REBAL_DAY)
+        fund = _build_fundamentals({sym: 9 for sym in syms}, REBAL_DAY)
+        params = MomentumQualityParams(
+            top_n=5, min_f_score=1, max_per_sector=0,
+        )
+        target = _compute_target(params, bars, fund, None, syms, REBAL_DAY)
+        # All 5 IT names should be selected because cap is off
+        assert set(target) == {"AAPL", "MSFT", "NVDA", "AMD", "ORCL"}
+
+    def test_sector_cap_falls_through_to_lower_sectors(self):
+        """When IT cap binds, slots overflow to next-best names in other sectors."""
+        syms = eligible_universe()
+        returns = {sym: 0.01 for sym in syms}
+        # 5 IT high-momentum, 3 healthcare lower-momentum
+        for sym in ("AAPL", "MSFT", "NVDA", "AMD", "ORCL"):
+            returns[sym] = 0.50
+        for sym in ("LLY", "UNH", "ABBV"):
+            returns[sym] = 0.30
+
+        bars = _build_bars(returns, REBAL_DAY)
+        fund = _build_fundamentals({sym: 9 for sym in syms}, REBAL_DAY)
+        params = MomentumQualityParams(
+            top_n=6, min_f_score=1, max_per_sector=3,
+        )
+        target = _compute_target(params, bars, fund, None, syms, REBAL_DAY)
+        it_target = [s for s in target if SECTOR_MAP.get(s) == "Information Technology"]
+        hc_target = [s for s in target if SECTOR_MAP.get(s) == "Health Care"]
+        assert len(it_target) == 3  # capped
+        assert len(hc_target) == 3  # next-best fill
+        assert len(target) == 6
+
+    def test_sector_cap_respects_top_n_when_universe_thin(self):
+        """If after capping there are fewer eligible names than top_n, return
+        the smaller list rather than padding with capped-out names."""
+        # Force a small universe where the cap binds and there's no overflow
+        syms = ["AAPL", "MSFT", "NVDA", "AMD", "ORCL"]  # all IT
+        returns = {sym: 0.10 for sym in syms}
+        bars = _build_bars(returns, REBAL_DAY)
+        fund = _build_fundamentals({sym: 9 for sym in syms}, REBAL_DAY)
+        params = MomentumQualityParams(
+            top_n=5, min_f_score=1, max_per_sector=2,
+        )
+        target = _compute_target(params, bars, fund, None, syms, REBAL_DAY)
+        # All 5 are IT; cap=2 limits to 2 names in the basket
+        assert len(target) == 2
+
+    def test_sector_cap_diagnostics_reports_counts(self):
+        syms = eligible_universe()
+        returns = {sym: 0.05 for sym in syms}
+        for sym in ("AAPL", "MSFT", "NVDA"):
+            returns[sym] = 0.50
+        for sym in ("LLY", "UNH"):
+            returns[sym] = 0.40
+
+        bars = _build_bars(returns, REBAL_DAY)
+        fund = _build_fundamentals({sym: 9 for sym in syms}, REBAL_DAY)
+        params = MomentumQualityParams(
+            top_n=5, min_f_score=1, max_per_sector=4,
+        )
+        _target, diagnostics = _compute_target_with_diagnostics(
+            params, bars, fund, None, syms, REBAL_DAY,
+        )
+        assert "sector_counts" in diagnostics
+        assert isinstance(diagnostics["sector_counts"], dict)
+        assert sum(diagnostics["sector_counts"].values()) == len(_target)

@@ -35,7 +35,7 @@ from strategies._core.contracts import (
 )
 from strategies._core.protocol import Strategy, StrategyMeta, register_strategy
 
-from .config import MomentumQualityParams, eligible_universe
+from .config import MomentumQualityParams, SECTOR_MAP, eligible_universe
 from .helpers import (
     close_panel_from_bars,
     compute_momentum,
@@ -311,9 +311,27 @@ def _compute_target_with_diagnostics(
         }
         for i in order
     ]
-    target = [row["symbol"] for row in ranked[:params.top_n]]
+
+    # Audit 2026-05-05: sector concentration cap. With params.max_per_sector
+    # set, walk the score-sorted candidates greedily and skip any whose
+    # sector bucket is already full. Symbols missing from SECTOR_MAP go to
+    # an "Unknown" bucket and are subject to the same cap (defensive).
+    sector_counts: dict[str, int] = {}
+    selected_rows: list[dict[str, Any]] = []
+    cap = int(params.max_per_sector or 0)
+    for row in ranked:
+        if len(selected_rows) >= params.top_n:
+            break
+        sector = SECTOR_MAP.get(row["symbol"], "Unknown")
+        if cap > 0 and sector_counts.get(sector, 0) >= cap:
+            continue
+        selected_rows.append(row)
+        sector_counts[sector] = sector_counts.get(sector, 0) + 1
+
+    target = [row["symbol"] for row in selected_rows]
     diagnostics["ranked_candidates"] = len(ranked)
-    diagnostics["selected"] = ranked[:params.top_n]
+    diagnostics["selected"] = selected_rows
+    diagnostics["sector_counts"] = dict(sorted(sector_counts.items()))
     return target, diagnostics
 
 

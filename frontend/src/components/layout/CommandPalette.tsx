@@ -495,6 +495,23 @@ export function CommandPalette() {
                   onSelect={() => selectSymbol(sym.symbol)}
                 />
               ))}
+              {/* T11 — per-symbol research deep-link. Keeps the symbol-
+                  selection entry above as the primary action; this is
+                  the secondary "go research this" jump. Only rendered
+                  when the user is searching (showApiResults) so the
+                  popular-symbols list stays tight. */}
+              {showApiResults &&
+                symbolsToShow.map((sym) => (
+                  <CommandItem
+                    key={`research-${sym.symbol}`}
+                    icon={<FileText className="h-4 w-4" />}
+                    label={`${sym.symbol} — research`}
+                    onSelect={() => {
+                      setCommandPaletteOpen(false);
+                      router.push(`/symbols/${encodeURIComponent(sym.symbol)}`);
+                    }}
+                  />
+                ))}
             </Command.Group>
 
             <Command.Separator className="my-1 h-px bg-border" />

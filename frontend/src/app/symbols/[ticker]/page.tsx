@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 
 import { notFound, useParams } from "next/navigation";
 
+import { SymbolPageClient } from "./_components/SymbolPageClient";
 import { normalizeSymbol } from "./_lib/normalizeSymbol";
 
 /**
@@ -31,10 +32,5 @@ export default function SymbolPage() {
     notFound();
   }
 
-  return (
-    <main data-testid="symbol-page" data-sym={sym}>
-      <h1 className="font-display text-h1">{sym}</h1>
-      <p className="t-mono u-muted">Page shell — sections coming in tasks 2-12.</p>
-    </main>
-  );
+  return <SymbolPageClient symbol={sym} />;
 }

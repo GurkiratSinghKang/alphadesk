@@ -407,6 +407,283 @@ def test_on_fill_exit_drops_position() -> None:
     orjson.dumps(update)
 
 
+# --------------------------------------------------------------------------- #
+# Earnings filter — pairs cointegration breaks across earnings prints         #
+# (audit 2026-05-05 forward gap)                                              #
+# --------------------------------------------------------------------------- #
+def _build_input_with_earnings(
+    bars: pd.DataFrame,
+    asof: date,
+    state: dict | None = None,
+    earnings: pd.DataFrame | None = None,
+) -> StrategyInput:
+    return StrategyInput(
+        asof=asof, mode="backtest", bars=bars,
+        cash=Decimal("100000"), equity=Decimal("100000"),
+        positions=[], state=state or {},
+        seed=0, rng=np.random.default_rng(0),
+        earnings=earnings,
+    )
+
+
+def _make_entry_setup(asof: date) -> tuple[pd.DataFrame, list]:
+    """Build a closes frame + active pair primed for entry."""
+    rng = np.random.default_rng(17)
+    n = 300
+    x = 100.0 * np.exp(np.cumsum(rng.normal(0, 0.01, n)))
+    eps = np.zeros(n)
+    sh = rng.normal(0, 1.0, n)
+    for t in range(1, n):
+        eps[t] = 0.9 * eps[t - 1] + sh[t]
+    beta_true = 1.2
+    y = beta_true * x + eps
+    idx = pd.date_range("2018-01-02", periods=n, freq="B")
+    closes = pd.DataFrame({"AAPL": y, "MSFT": x}, index=idx)
+    spread = closes["AAPL"] - beta_true * closes["MSFT"]
+    shock = 3.0 * float(spread.tail(90).std())
+    closes.iloc[-1, closes.columns.get_loc("AAPL")] += shock
+
+    full = _full_universe_closes(closes)
+    bars = _closes_to_bars(full)
+    active = [ActivePair(
+        pair_id="AAPL-MSFT", sector="Tech", y="AAPL", x="MSFT",
+        beta=float(beta_true), screen_pvalue=0.01, screen_halflife=10.0,
+        last_screen_date=asof, last_watchdog_date=asof,
+    )]
+    return bars, active
+
+
+def test_entry_skipped_when_y_leg_has_earnings_in_window() -> None:
+    """Y-leg earnings within ±5 days → no entry signal emitted."""
+    rng = np.random.default_rng(17)
+    n = 300
+    x = 100.0 * np.exp(np.cumsum(rng.normal(0, 0.01, n)))
+    eps = np.zeros(n)
+    sh = rng.normal(0, 1.0, n)
+    for t in range(1, n):
+        eps[t] = 0.9 * eps[t - 1] + sh[t]
+    beta_true = 1.2
+    y_arr = beta_true * x + eps
+    idx = pd.date_range("2018-01-02", periods=n, freq="B")
+    closes = pd.DataFrame({"AAPL": y_arr, "MSFT": x}, index=idx)
+    spread = closes["AAPL"] - beta_true * closes["MSFT"]
+    shock = 3.0 * float(spread.tail(90).std())
+    closes.iloc[-1, closes.columns.get_loc("AAPL")] += shock
+
+    full = _full_universe_closes(closes)
+    bars = _closes_to_bars(full)
+    asof = closes.index[-1].date()
+
+    active = [ActivePair(
+        pair_id="AAPL-MSFT", sector="Tech", y="AAPL", x="MSFT",
+        beta=float(beta_true), screen_pvalue=0.01, screen_halflife=10.0,
+        last_screen_date=asof, last_watchdog_date=asof,
+    )]
+    state = {
+        "pairs_trading.active": active,
+        "pairs_trading.last_screen": asof,
+    }
+    earnings = pd.DataFrame({
+        "symbol": ["AAPL"],
+        "date": [asof + timedelta(days=2)],  # AAPL earnings 2 days out
+    })
+    params = PairsTradingParams(
+        z_entry=1.5, z_stop=10.0, z_window=45, max_pairs=3,
+        rescreen_days=1000,
+        # earnings_skip_days=5 default
+    )
+    strat = PairsTradingStrategy()
+    result = strat.run(
+        _build_input_with_earnings(bars, asof, state=state, earnings=earnings),
+        params,
+    )
+    entry_sigs = [sig for sig in result.signals if sig.tag.startswith("pairs-entry")]
+    assert entry_sigs == [], f"expected no entries, got {[s.tag for s in entry_sigs]}"
+
+
+def test_entry_skipped_when_x_leg_has_earnings_in_window() -> None:
+    """X-leg earnings within ±5 days → no entry signal emitted."""
+    rng = np.random.default_rng(17)
+    n = 300
+    x = 100.0 * np.exp(np.cumsum(rng.normal(0, 0.01, n)))
+    eps = np.zeros(n)
+    sh = rng.normal(0, 1.0, n)
+    for t in range(1, n):
+        eps[t] = 0.9 * eps[t - 1] + sh[t]
+    beta_true = 1.2
+    y_arr = beta_true * x + eps
+    idx = pd.date_range("2018-01-02", periods=n, freq="B")
+    closes = pd.DataFrame({"AAPL": y_arr, "MSFT": x}, index=idx)
+    spread = closes["AAPL"] - beta_true * closes["MSFT"]
+    shock = 3.0 * float(spread.tail(90).std())
+    closes.iloc[-1, closes.columns.get_loc("AAPL")] += shock
+
+    full = _full_universe_closes(closes)
+    bars = _closes_to_bars(full)
+    asof = closes.index[-1].date()
+
+    active = [ActivePair(
+        pair_id="AAPL-MSFT", sector="Tech", y="AAPL", x="MSFT",
+        beta=float(beta_true), screen_pvalue=0.01, screen_halflife=10.0,
+        last_screen_date=asof, last_watchdog_date=asof,
+    )]
+    state = {
+        "pairs_trading.active": active,
+        "pairs_trading.last_screen": asof,
+    }
+    earnings = pd.DataFrame({
+        "symbol": ["MSFT"],
+        "date": [asof - timedelta(days=3)],  # MSFT earnings 3 days ago
+    })
+    params = PairsTradingParams(
+        z_entry=1.5, z_stop=10.0, z_window=45, max_pairs=3,
+        rescreen_days=1000,
+    )
+    strat = PairsTradingStrategy()
+    result = strat.run(
+        _build_input_with_earnings(bars, asof, state=state, earnings=earnings),
+        params,
+    )
+    entry_sigs = [sig for sig in result.signals if sig.tag.startswith("pairs-entry")]
+    assert entry_sigs == []
+
+
+def test_entry_allowed_when_earnings_outside_window() -> None:
+    """Earnings 8 days out (window=5) → entry happens normally."""
+    rng = np.random.default_rng(17)
+    n = 300
+    x = 100.0 * np.exp(np.cumsum(rng.normal(0, 0.01, n)))
+    eps = np.zeros(n)
+    sh = rng.normal(0, 1.0, n)
+    for t in range(1, n):
+        eps[t] = 0.9 * eps[t - 1] + sh[t]
+    beta_true = 1.2
+    y_arr = beta_true * x + eps
+    idx = pd.date_range("2018-01-02", periods=n, freq="B")
+    closes = pd.DataFrame({"AAPL": y_arr, "MSFT": x}, index=idx)
+    spread = closes["AAPL"] - beta_true * closes["MSFT"]
+    shock = 3.0 * float(spread.tail(90).std())
+    closes.iloc[-1, closes.columns.get_loc("AAPL")] += shock
+
+    full = _full_universe_closes(closes)
+    bars = _closes_to_bars(full)
+    asof = closes.index[-1].date()
+
+    active = [ActivePair(
+        pair_id="AAPL-MSFT", sector="Tech", y="AAPL", x="MSFT",
+        beta=float(beta_true), screen_pvalue=0.01, screen_halflife=10.0,
+        last_screen_date=asof, last_watchdog_date=asof,
+    )]
+    state = {
+        "pairs_trading.active": active,
+        "pairs_trading.last_screen": asof,
+    }
+    earnings = pd.DataFrame({
+        "symbol": ["AAPL"],
+        "date": [asof + timedelta(days=8)],  # 8 days out — outside ±5
+    })
+    params = PairsTradingParams(
+        z_entry=1.5, z_stop=10.0, z_window=45, max_pairs=3,
+        rescreen_days=1000,
+    )
+    strat = PairsTradingStrategy()
+    result = strat.run(
+        _build_input_with_earnings(bars, asof, state=state, earnings=earnings),
+        params,
+    )
+    entry_sigs = [sig for sig in result.signals if sig.tag.startswith("pairs-entry")]
+    assert len(entry_sigs) == 2
+
+
+def test_earnings_filter_disabled_when_skip_days_zero() -> None:
+    """earnings_skip_days=0 disables the filter — entry happens despite earnings."""
+    rng = np.random.default_rng(17)
+    n = 300
+    x = 100.0 * np.exp(np.cumsum(rng.normal(0, 0.01, n)))
+    eps = np.zeros(n)
+    sh = rng.normal(0, 1.0, n)
+    for t in range(1, n):
+        eps[t] = 0.9 * eps[t - 1] + sh[t]
+    beta_true = 1.2
+    y_arr = beta_true * x + eps
+    idx = pd.date_range("2018-01-02", periods=n, freq="B")
+    closes = pd.DataFrame({"AAPL": y_arr, "MSFT": x}, index=idx)
+    spread = closes["AAPL"] - beta_true * closes["MSFT"]
+    shock = 3.0 * float(spread.tail(90).std())
+    closes.iloc[-1, closes.columns.get_loc("AAPL")] += shock
+
+    full = _full_universe_closes(closes)
+    bars = _closes_to_bars(full)
+    asof = closes.index[-1].date()
+
+    active = [ActivePair(
+        pair_id="AAPL-MSFT", sector="Tech", y="AAPL", x="MSFT",
+        beta=float(beta_true), screen_pvalue=0.01, screen_halflife=10.0,
+        last_screen_date=asof, last_watchdog_date=asof,
+    )]
+    state = {
+        "pairs_trading.active": active,
+        "pairs_trading.last_screen": asof,
+    }
+    earnings = pd.DataFrame({
+        "symbol": ["AAPL"],
+        "date": [asof + timedelta(days=1)],  # tomorrow — would normally filter
+    })
+    params = PairsTradingParams(
+        z_entry=1.5, z_stop=10.0, z_window=45, max_pairs=3,
+        rescreen_days=1000,
+        earnings_skip_days=0,  # disabled
+    )
+    strat = PairsTradingStrategy()
+    result = strat.run(
+        _build_input_with_earnings(bars, asof, state=state, earnings=earnings),
+        params,
+    )
+    entry_sigs = [sig for sig in result.signals if sig.tag.startswith("pairs-entry")]
+    assert len(entry_sigs) == 2  # filter off → entry proceeds
+
+
+def test_entry_proceeds_when_no_earnings_data() -> None:
+    """No earnings DataFrame on input → behaves as if filter disabled."""
+    rng = np.random.default_rng(17)
+    n = 300
+    x = 100.0 * np.exp(np.cumsum(rng.normal(0, 0.01, n)))
+    eps = np.zeros(n)
+    sh = rng.normal(0, 1.0, n)
+    for t in range(1, n):
+        eps[t] = 0.9 * eps[t - 1] + sh[t]
+    beta_true = 1.2
+    y_arr = beta_true * x + eps
+    idx = pd.date_range("2018-01-02", periods=n, freq="B")
+    closes = pd.DataFrame({"AAPL": y_arr, "MSFT": x}, index=idx)
+    spread = closes["AAPL"] - beta_true * closes["MSFT"]
+    shock = 3.0 * float(spread.tail(90).std())
+    closes.iloc[-1, closes.columns.get_loc("AAPL")] += shock
+
+    full = _full_universe_closes(closes)
+    bars = _closes_to_bars(full)
+    asof = closes.index[-1].date()
+
+    active = [ActivePair(
+        pair_id="AAPL-MSFT", sector="Tech", y="AAPL", x="MSFT",
+        beta=float(beta_true), screen_pvalue=0.01, screen_halflife=10.0,
+        last_screen_date=asof, last_watchdog_date=asof,
+    )]
+    state = {
+        "pairs_trading.active": active,
+        "pairs_trading.last_screen": asof,
+    }
+    params = PairsTradingParams(
+        z_entry=1.5, z_stop=10.0, z_window=45, max_pairs=3,
+        rescreen_days=1000,
+    )
+    strat = PairsTradingStrategy()
+    # earnings=None — same input shape as test_entry_emits_two_legs_with_opposite_signs
+    result = strat.run(_build_input(bars, asof, state=state), params)
+    entry_sigs = [sig for sig in result.signals if sig.tag.startswith("pairs-entry")]
+    assert len(entry_sigs) == 2
+
+
 def test_active_pair_frozen_model_rejects_mutation() -> None:
     """ActivePair / OpenPosition must be frozen Pydantic models (Round-6 / I-19)."""
     from pydantic import ValidationError as _ValidationError

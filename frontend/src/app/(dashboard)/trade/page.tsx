@@ -29,6 +29,7 @@
  *     legs=NVDA260424P00200000:sell:1,NVDA260424C00220000:sell:1             (OLD — still works)
  */
 	import { useEffect, useMemo, useRef, useState, type ElementType } from "react";
+	import Link from "next/link";
 	import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
@@ -1206,6 +1207,15 @@ export default function TradePage() {
                       </>
                     )}
                   </span>
+                )}
+                {tradeContextSymbol && (
+                  <Link
+                    data-slot="trade-research-pill"
+                    href={`/symbols/${encodeURIComponent(tradeContextSymbol)}?from=trade`}
+                    className="inline-flex min-h-[28px] items-center gap-1 rounded-sm border border-border bg-transparent px-2 py-1 font-mono text-label text-fg-muted transition-colors hover:border-primary hover:text-primary"
+                  >
+                    Research →
+                  </Link>
                 )}
               </div>
             </div>

@@ -130,6 +130,18 @@ class PairsTradingParams(StrategyParams):
     # antipersistent threshold and reduces false-positive cointegration.
     hurst_max: float = Field(default=0.40, ge=0.0, le=1.0)
     formation_days: int = Field(default=252, ge=60)
+    # Audit 2026-05-05 (forward gap): cointegration assumptions break across
+    # earnings announcements (overnight gap, vol regime shift, fundamental
+    # repricing). Skip new pair entries when EITHER leg has a scheduled
+    # earnings announcement within ±earnings_skip_days of the entry date.
+    # Default 5 sessions covers the canonical post/pre-print window. Set to
+    # 0 to disable the filter entirely (legacy behaviour).
+    earnings_skip_days: int = Field(
+        default=5,
+        ge=0,
+        le=30,
+        json_schema_extra={"tune": {"type": "categorical", "choices": [0, 3, 5, 7]}},
+    )
     watchdog_days: int = Field(default=21, ge=0)
     watchdog_pvalue: float = Field(default=0.10, gt=0.0, le=1.0)
     kalman_delta: float = Field(default=1e-5, gt=0.0)

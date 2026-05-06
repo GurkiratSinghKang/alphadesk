@@ -604,6 +604,149 @@ def test_create_order_with_bracket() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Bracket sanity bounds (audit 2026-05-05 P1-5)                               #
+# --------------------------------------------------------------------------- #
+# A bracket of stop=149.9 / tp=150.1 on a $150 entry is technically valid
+# under the gt=0 field check but functionally a no-stop, no-target.
+# Mirror's the audit's reasonable-bounds rule: 0.5% min distance, 50% max,
+# correct orientation for the side. Validates only when the order is a
+# single-leg LIMIT with a known limit_price; otherwise defers (entry not
+# known at validation time).
+
+
+def test_bracket_sanity_long_reasonable_passes() -> None:
+    leg = OrderLeg(
+        symbol="AAPL", side=OrderSide.BUY, qty=10,
+        order_type=OrderType.LIMIT, limit_price=150.0,
+    )
+    req = CreateOrderRequest(
+        legs=[leg],
+        bracket=BracketSpec(stop_loss=142.5, take_profit=157.5),  # 5% / 5%
+    )
+    assert req.bracket.stop_loss == 142.5
+
+
+def test_bracket_sanity_short_reasonable_passes() -> None:
+    leg = OrderLeg(
+        symbol="AAPL", side=OrderSide.SELL, qty=10,
+        order_type=OrderType.LIMIT, limit_price=150.0,
+    )
+    req = CreateOrderRequest(
+        legs=[leg],
+        bracket=BracketSpec(stop_loss=157.5, take_profit=142.5),  # short: stop above, tp below
+    )
+    assert req.bracket.take_profit == 142.5
+
+
+def test_bracket_sanity_stop_too_tight_rejected_long() -> None:
+    leg = OrderLeg(
+        symbol="AAPL", side=OrderSide.BUY, qty=10,
+        order_type=OrderType.LIMIT, limit_price=150.0,
+    )
+    with pytest.raises(ValueError, match="stop_loss"):
+        CreateOrderRequest(
+            legs=[leg],
+            bracket=BracketSpec(stop_loss=149.9, take_profit=160.0),  # 0.07% — under 0.5% floor
+        )
+
+
+def test_bracket_sanity_stop_too_wide_rejected_long() -> None:
+    leg = OrderLeg(
+        symbol="AAPL", side=OrderSide.BUY, qty=10,
+        order_type=OrderType.LIMIT, limit_price=150.0,
+    )
+    with pytest.raises(ValueError, match="stop_loss"):
+        CreateOrderRequest(
+            legs=[leg],
+            bracket=BracketSpec(stop_loss=70.0, take_profit=160.0),  # 53% — over 50% ceiling
+        )
+
+
+def test_bracket_sanity_tp_too_tight_rejected_long() -> None:
+    leg = OrderLeg(
+        symbol="AAPL", side=OrderSide.BUY, qty=10,
+        order_type=OrderType.LIMIT, limit_price=150.0,
+    )
+    with pytest.raises(ValueError, match="take_profit"):
+        CreateOrderRequest(
+            legs=[leg],
+            bracket=BracketSpec(stop_loss=142.5, take_profit=150.5),  # 0.33% — under 0.5%
+        )
+
+
+def test_bracket_sanity_tp_too_wide_rejected_long() -> None:
+    leg = OrderLeg(
+        symbol="AAPL", side=OrderSide.BUY, qty=10,
+        order_type=OrderType.LIMIT, limit_price=150.0,
+    )
+    with pytest.raises(ValueError, match="take_profit"):
+        CreateOrderRequest(
+            legs=[leg],
+            bracket=BracketSpec(stop_loss=142.5, take_profit=300.0),  # 100% — over 50%
+        )
+
+
+def test_bracket_sanity_long_inverted_orientation_rejected() -> None:
+    """For a BUY (long entry), stop must be BELOW limit_price."""
+    leg = OrderLeg(
+        symbol="AAPL", side=OrderSide.BUY, qty=10,
+        order_type=OrderType.LIMIT, limit_price=150.0,
+    )
+    with pytest.raises(ValueError, match="orientation|stop_loss"):
+        CreateOrderRequest(
+            legs=[leg],
+            bracket=BracketSpec(stop_loss=160.0, take_profit=170.0),  # stop above entry — wrong
+        )
+
+
+def test_bracket_sanity_short_inverted_orientation_rejected() -> None:
+    """For a SELL (short entry), stop must be ABOVE limit_price."""
+    leg = OrderLeg(
+        symbol="AAPL", side=OrderSide.SELL, qty=10,
+        order_type=OrderType.LIMIT, limit_price=150.0,
+    )
+    with pytest.raises(ValueError, match="orientation|stop_loss"):
+        CreateOrderRequest(
+            legs=[leg],
+            bracket=BracketSpec(stop_loss=140.0, take_profit=130.0),  # stop below entry — wrong
+        )
+
+
+def test_bracket_sanity_market_order_skips_validation() -> None:
+    """Market orders have no limit_price at validation time; sanity check defers."""
+    leg = OrderLeg(
+        symbol="AAPL", side=OrderSide.BUY, qty=10,
+        order_type=OrderType.MARKET,
+    )
+    # Even with a tight stop that would fail on a LIMIT order, this passes
+    # because the entry price is unknown until execution.
+    req = CreateOrderRequest(
+        legs=[leg],
+        bracket=BracketSpec(stop_loss=149.999, take_profit=150.001),
+    )
+    assert req.bracket is not None
+
+
+def test_bracket_sanity_multileg_skips_validation() -> None:
+    """Multi-leg orders don't have a single 'entry' price; defer to submit-time reject."""
+    leg1 = OrderLeg(
+        symbol="AAPL250117C00150000", side=OrderSide.BUY, qty=1,
+        order_type=OrderType.LIMIT, limit_price=2.50,
+    )
+    leg2 = OrderLeg(
+        symbol="AAPL250117C00160000", side=OrderSide.SELL, qty=1,
+        order_type=OrderType.LIMIT, limit_price=1.20,
+    )
+    # Bracket on a multi-leg order is rejected later in the submit path
+    # (trades.py:5773); model validation should not double-reject here.
+    req = CreateOrderRequest(
+        legs=[leg1, leg2],
+        bracket=BracketSpec(stop_loss=1.0, take_profit=2.0),
+    )
+    assert req.bracket is not None
+
+
+# --------------------------------------------------------------------------- #
 # J-9 — reconcile_positions_on_boot                                           #
 # --------------------------------------------------------------------------- #
 

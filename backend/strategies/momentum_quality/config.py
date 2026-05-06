@@ -113,6 +113,19 @@ class MomentumQualityParams(StrategyParams):
         json_schema_extra={"tune": {"low": 0.0, "high": 0.1, "type": "float"}},
     )
     earnings_skip_days: int = Field(default=3, ge=0, le=30)
+    # Audit 2026-05-05 (forward gap): Top-N selection runs cross-sectionally
+    # over the post-quality-gate universe. With ~37 eligible names and 17 of
+    # them in Information Technology, a strong-momentum AI rally can produce
+    # a 12/15 IT portfolio — sector beta dressed up as strategy alpha.
+    # ``max_per_sector`` caps the count of GICS sectors per rebalance basket.
+    # Default 4 means at top_n=15 no sector exceeds 4/15 ≈ 27% (close to the
+    # natural GICS weights). Set to 0 to disable.
+    max_per_sector: int = Field(
+        default=4,
+        ge=0,
+        le=20,
+        json_schema_extra={"tune": {"type": "categorical", "choices": [0, 3, 4, 5, 6]}},
+    )
 
 
 # --------------------------------------------------------------------------- #
