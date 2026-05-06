@@ -45,7 +45,7 @@ export function EarningsPanel({
       id="earnings"
       data-testid="earnings-panel"
       data-slot="earnings-panel"
-      className="rounded-md border border-border-hair bg-bg-elev-1 p-4 scroll-mt-24 mx-4 sm:mx-6 mb-6"
+      className="rounded-md border border-border-hair bg-bg-elev-1 p-4 scroll-mt-24"
     >
       <header className="flex items-baseline justify-between gap-3">
         <h2 className="t-label u-muted">EARNINGS</h2>

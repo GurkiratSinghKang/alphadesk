@@ -3,6 +3,8 @@
 import type { EarningsNewsArticle, Quote } from "@/types";
 
 import { useSymbolPageData } from "../_hooks/useSymbolPageData";
+import { AboutAnalystPeersStub } from "../_sections/AboutAnalystPeersStub";
+import { AgentsDebateStub } from "../_sections/AgentsDebateStub";
 import { ChartBand } from "../_sections/ChartBand";
 import { DecisionStrip, type DecisionStripMarketRegime } from "../_sections/DecisionStrip";
 import { EarningsPanel } from "../_sections/EarningsPanel";
@@ -11,6 +13,7 @@ import { NotFound } from "../_sections/NotFound";
 import { OptionsThesisBand } from "../_sections/OptionsThesisBand";
 import { RecommendedSetups } from "../_sections/RecommendedSetups";
 import { StickyBand, type StickyBandQuote } from "../_sections/StickyBand";
+import { StrategyReverseLookupStub } from "../_sections/StrategyReverseLookupStub";
 import { UnsupportedAsset } from "../_sections/UnsupportedAsset";
 
 export interface SymbolPageClientProps {
@@ -170,15 +173,25 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
         underlying={quote?.last ?? null}
       />
 
-      <EarningsPanel
-        isETF={data.isETF}
-        historicalEarnings={data.earningsDetail?.historicalEarnings ?? null}
-        ivTermStructure={ivTermStructure}
-        nextReportDate={data.earningsDetail?.reportDate ?? null}
-        nextReportTime={data.earningsDetail?.reportTime ?? null}
-      />
+      <StrategyReverseLookupStub />
+
+      <div
+        data-slot="agents-earnings-row"
+        className="grid grid-cols-1 gap-4 px-4 sm:px-6 mb-6 xl:grid-cols-2"
+      >
+        <AgentsDebateStub />
+        <EarningsPanel
+          isETF={data.isETF}
+          historicalEarnings={data.earningsDetail?.historicalEarnings ?? null}
+          ivTermStructure={ivTermStructure}
+          nextReportDate={data.earningsDetail?.reportDate ?? null}
+          nextReportTime={data.earningsDetail?.reportTime ?? null}
+        />
+      </div>
 
       <NewsBand news={newsArticles} />
+
+      <AboutAnalystPeersStub />
     </main>
   );
 }
