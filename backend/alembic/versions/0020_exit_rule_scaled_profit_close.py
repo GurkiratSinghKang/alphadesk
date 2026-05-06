@@ -1,7 +1,7 @@
 """scaled_profit_close exit rule — ladder 25/50/75 of original qty (M-O P)
 
 Revision ID: 0020_exit_rule_scaled_profit_close
-Revises: 0019_exit_rule_adverse_momentum
+Revises: 0018_exit_rule_wing_capture
 Create Date: 2026-05-05
 
 M-O P (squeeze more profit out of winners). The single-threshold
@@ -50,7 +50,7 @@ import sqlalchemy as sa
 
 
 revision = "0020_exit_rule_scaled_profit_close"
-down_revision = "0019_exit_rule_adverse_momentum"
+down_revision = "0018_exit_rule_wing_capture"
 branch_labels = None
 depends_on = None
 
