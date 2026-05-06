@@ -37,6 +37,7 @@ from services.earnings_recommender import (
     _select_vertical_short_delta,
     _should_avoid_iron_butterfly,
     compute_pop,
+    find_liquid_strike_by_delta,
     find_strike_by_delta,
     find_strike_nearest,
     kelly_fraction,
@@ -65,6 +66,9 @@ class _FakeContract:
     vega: float = 0.0
     volume: int = 100
     open_interest: int = 1000
+    # Wave V V2: liquidity_score plumbed by Agent 1. Default None so the
+    # existing tests (which don't set it) hit the graceful-degradation path.
+    liquidity_score: float | None = None
 
 
 @dataclass
@@ -1295,3 +1299,242 @@ async def test_iron_butterfly_suppressed_below_low_confidence():
         f"iron_butterfly must be suppressed below low-confidence threshold; "
         f"got setups={setup_ids}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Wave V V2 — liquidity gating
+# ---------------------------------------------------------------------------
+
+
+def _liquid_chain(
+    *,
+    spot: float = 100.0,
+    iv: float = 0.30,
+    dte_days: int = 7,
+    strikes: list[float] | None = None,
+    liquidity_per_strike: dict[float, float] | None = None,
+    default_liquidity: float | None = 0.7,
+) -> _FakeChain:
+    """Synthetic chain with controllable per-strike liquidity_score."""
+    chain = _make_chain(spot=spot, iv=iv, dte_days=dte_days, strikes=strikes)
+    overrides = liquidity_per_strike or {}
+    for c in chain.contracts:
+        if c.strike in overrides:
+            c.liquidity_score = overrides[c.strike]
+        else:
+            c.liquidity_score = default_liquidity
+    return chain
+
+
+def test_find_liquid_strike_by_delta_walks_to_liquid_alternative():
+    """Best-delta match is illiquid; one strike away is liquid."""
+    base = _liquid_chain(
+        spot=100.0, iv=0.30, dte_days=7, default_liquidity=0.7,
+    )
+    expiry = base.expirations[0]
+    best = find_strike_by_delta(base, expiry, "put", -0.20)
+    assert best is not None
+    poisoned_strike = best.strike
+
+    chain = _liquid_chain(
+        spot=100.0, iv=0.30, dte_days=7,
+        liquidity_per_strike={poisoned_strike: 0.05},
+        default_liquidity=0.7,
+    )
+    chosen, warn = find_liquid_strike_by_delta(
+        chain, expiry, "put", -0.20,
+        min_liquidity_score=0.4,
+        max_strikes_to_search=2,
+    )
+    assert chosen is not None
+    assert chosen.strike != poisoned_strike, (
+        "picker should have walked off the illiquid strike"
+    )
+    assert chosen.liquidity_score is not None
+    assert chosen.liquidity_score >= 0.4
+    assert warn is False, "walk found a liquid alternative; no warning"
+
+
+def test_find_liquid_strike_by_delta_falls_back_when_window_dead():
+    """Best-delta + 2 strikes either side ALL illiquid → fall back + warn."""
+    chain = _liquid_chain(
+        spot=100.0, iv=0.30, dte_days=7, default_liquidity=0.05,
+    )
+    expiry = chain.expirations[0]
+    chosen, warn = find_liquid_strike_by_delta(
+        chain, expiry, "put", -0.20,
+        min_liquidity_score=0.4,
+        max_strikes_to_search=2,
+    )
+    assert chosen is not None
+    assert warn is True, "nothing in window qualified — warning must fire"
+    best = find_strike_by_delta(chain, expiry, "put", -0.20)
+    assert best is not None and chosen.strike == best.strike
+
+
+def test_find_liquid_strike_by_delta_graceful_when_chain_lacks_liquidity():
+    """No contract has liquidity_score → behave like legacy delta picker."""
+    chain = _make_chain(spot=100.0, iv=0.30, dte_days=7)
+    expiry = chain.expirations[0]
+    chosen, warn = find_liquid_strike_by_delta(
+        chain, expiry, "put", -0.20,
+        min_liquidity_score=0.4,
+    )
+    legacy = find_strike_by_delta(chain, expiry, "put", -0.20)
+    assert chosen is not None and legacy is not None
+    assert chosen.strike == legacy.strike
+    assert warn is False, "graceful-degradation path must not warn"
+
+
+@pytest.mark.asyncio
+async def test_setup_excluded_when_worst_leg_below_exclude_threshold():
+    """A setup with a leg below the exclude threshold is dropped from candidates."""
+    chain = _liquid_chain(
+        spot=100.0, iv=0.85, dte_days=7, default_liquidity=0.05,
+    )
+    setups = await recommend_setups(
+        symbol="XYZ",
+        spot=100.0,
+        iv_rank=82,
+        iv_percentile=80,
+        current_iv=0.85,
+        hv_20=0.40,
+        expected_move_pct=0.06,
+        hist_avg_abs_move_pct=0.05,
+        claude_verdict="neutral",
+        claude_confidence=0.65,
+        chain=chain,
+    )
+    # Every leg at 0.05 is below exclude (0.10) — every setup with
+    # a worst score should have been excluded.
+    for s in setups:
+        if s.worst_leg_liquidity_score is not None:
+            assert s.worst_leg_liquidity_score >= 0.10, (
+                f"{s.setup_id} survived with worst leg "
+                f"liquidity {s.worst_leg_liquidity_score}"
+            )
+
+
+@pytest.mark.asyncio
+async def test_setup_ev_halved_when_worst_leg_below_demote_threshold():
+    """worst_leg_liquidity 0.15 (between exclude 0.10 and demote 0.20) halves EV."""
+    common_kwargs = dict(
+        symbol="XYZ",
+        spot=100.0,
+        iv_rank=82,
+        iv_percentile=80,
+        current_iv=0.85,
+        hv_20=0.40,
+        expected_move_pct=0.06,
+        hist_avg_abs_move_pct=0.05,
+        claude_verdict="bearish",
+        claude_confidence=0.78,
+    )
+    # Baseline: legacy chain (no liquidity_score) → no demote.
+    baseline_chain = _make_chain(spot=100.0, iv=0.85, dte_days=7)
+    baseline_setups = await recommend_setups(chain=baseline_chain, **common_kwargs)
+    baseline = next(
+        (s for s in baseline_setups if s.setup_id == "bear_call_spread"), None,
+    )
+    assert baseline is not None
+    # Poisoned: every contract at 0.15 — between exclude (0.10) and demote (0.20).
+    poisoned = _liquid_chain(
+        spot=100.0, iv=0.85, dte_days=7, default_liquidity=0.15,
+    )
+    poisoned_setups = await recommend_setups(chain=poisoned, **common_kwargs)
+    poisoned_bcs = next(
+        (s for s in poisoned_setups if s.setup_id == "bear_call_spread"), None,
+    )
+    assert poisoned_bcs is not None
+    assert poisoned_bcs.liquidity_warning is True
+    assert poisoned_bcs.worst_leg_liquidity_score == pytest.approx(0.15, abs=1e-6)
+    assert poisoned_bcs.expected_value == pytest.approx(
+        baseline.expected_value / 2.0, rel=1e-3,
+    )
+    assert "Liquidity score" in poisoned_bcs.rationale
+
+
+@pytest.mark.asyncio
+async def test_setup_passes_through_when_worst_leg_above_min():
+    """worst_leg_liquidity = 0.5 — no demote, no warning, EV unchanged."""
+    common_kwargs = dict(
+        symbol="XYZ",
+        spot=100.0,
+        iv_rank=82,
+        iv_percentile=80,
+        current_iv=0.85,
+        hv_20=0.40,
+        expected_move_pct=0.06,
+        hist_avg_abs_move_pct=0.05,
+        claude_verdict="bearish",
+        claude_confidence=0.78,
+    )
+    baseline_chain = _make_chain(spot=100.0, iv=0.85, dte_days=7)
+    baseline_setups = await recommend_setups(chain=baseline_chain, **common_kwargs)
+    baseline = next(
+        (s for s in baseline_setups if s.setup_id == "bear_call_spread"), None,
+    )
+    assert baseline is not None
+    healthy = _liquid_chain(
+        spot=100.0, iv=0.85, dte_days=7, default_liquidity=0.5,
+    )
+    healthy_setups = await recommend_setups(chain=healthy, **common_kwargs)
+    healthy_bcs = next(
+        (s for s in healthy_setups if s.setup_id == "bear_call_spread"), None,
+    )
+    assert healthy_bcs is not None
+    assert healthy_bcs.liquidity_warning is False
+    assert healthy_bcs.worst_leg_liquidity_score == pytest.approx(0.5, abs=1e-6)
+    assert healthy_bcs.expected_value == pytest.approx(
+        baseline.expected_value, rel=1e-3,
+    )
+
+
+@pytest.mark.asyncio
+async def test_amd_style_recommender_prefers_liquid_alternative():
+    """AMD-style: chain with one weak wing — recommender walks for the wing leg."""
+    base_chain = _make_chain(underlying="AMD", spot=356.0, iv=1.19, dte_days=3)
+    expiry = base_chain.expirations[0]
+    legacy_pick = find_strike_by_delta(base_chain, expiry, "put", -0.08)
+    assert legacy_pick is not None
+    weak_strike = float(legacy_pick.strike)
+
+    chain = _liquid_chain(
+        spot=356.0, iv=1.19, dte_days=3,
+        liquidity_per_strike={weak_strike: 0.05},
+        default_liquidity=0.7,
+    )
+    setups = await recommend_setups(
+        symbol="AMD",
+        spot=356.0,
+        iv_rank=None,
+        iv_percentile=None,
+        current_iv=1.19,
+        hv_20=0.65,
+        expected_move_pct=0.066,
+        hist_avg_abs_move_pct=0.045,
+        claude_verdict="neutral-bear",
+        claude_confidence=0.65,
+        chain=chain,
+        report_date=date.today(),
+        report_time="AMC",
+    )
+    ic = next((s for s in setups if s.setup_id == "iron_condor"), None)
+    assert ic is not None, (
+        f"iron_condor should still surface (only one strike poisoned); "
+        f"got {[s.setup_id for s in setups]}"
+    )
+    long_put_leg = next(
+        (l for l in ic.legs if l.side == "buy" and l.contract_type == "put"),
+        None,
+    )
+    assert long_put_leg is not None
+    assert long_put_leg.strike != weak_strike, (
+        "recommender locked onto the illiquid strike — walk-search "
+        "should have found a liquid alternative"
+    )
+    assert (
+        ic.worst_leg_liquidity_score is not None
+        and ic.worst_leg_liquidity_score >= 0.4
+    )
+    assert ic.liquidity_warning is False

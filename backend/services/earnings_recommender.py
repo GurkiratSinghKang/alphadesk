@@ -1372,8 +1372,9 @@ def _build_short_strangle(ctx: _BuildContext) -> EarningsSetup | None:
         claude_confidence=ctx.claude_confidence,
         iv_rank=ctx.iv_rank,
     )
-    short_put = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -short_d)
-    short_call = find_strike_by_delta(ctx.chain, ctx.expiry, "call", short_d)
+    warns: list[bool] = []
+    short_put = _pick_strike_by_delta(ctx, "put", -short_d, warns)
+    short_call = _pick_strike_by_delta(ctx, "call", short_d, warns)
     if not (short_put and short_call):
         return None
     legs = [
@@ -1396,7 +1397,7 @@ def _build_short_strangle(ctx: _BuildContext) -> EarningsSetup | None:
     sigma = ctx.current_iv * math.sqrt(ctx.dte_days / 365.0)
     tail_loss = ctx.spot * (math.exp(3.0 * sigma) - 1.0) * 100.0
     ev = pop * max_profit - (1.0 - pop) * tail_loss
-    return EarningsSetup(
+    setup = EarningsSetup(
         setup_id="short_strangle",
         legs=legs,
         net_credit_or_debit=net_credit,
@@ -1413,6 +1414,9 @@ def _build_short_strangle(ctx: _BuildContext) -> EarningsSetup | None:
         sizing_kelly_pct=0.0,  # never auto-size naked positions
         is_defined_risk=False,
         requires_margin_estimate=margin,
+    )
+    return _annotate_liquidity(
+        setup, [short_put, short_call], extra_warning=any(warns),
     )
 
 
@@ -1438,7 +1442,7 @@ def _build_short_straddle(ctx: _BuildContext) -> EarningsSetup | None:
     tail_loss = ctx.spot * (math.exp(3.0 * sigma) - 1.0) * 100.0
     ev = pop * max_profit - (1.0 - pop) * tail_loss
     margin = 0.20 * ctx.spot * 100.0 + max_profit
-    return EarningsSetup(
+    setup = EarningsSetup(
         setup_id="short_straddle",
         legs=legs,
         net_credit_or_debit=net_credit,
@@ -1456,6 +1460,7 @@ def _build_short_straddle(ctx: _BuildContext) -> EarningsSetup | None:
         is_defined_risk=False,
         requires_margin_estimate=margin,
     )
+    return _annotate_liquidity(setup, [atm_put, atm_call])
 
 
 # ─── Bear call spread (rich_directional, bearish) ────────────
@@ -1472,8 +1477,9 @@ def _build_bear_call_spread(ctx: _BuildContext) -> EarningsSetup | None:
         claude_confidence=ctx.claude_confidence,
         iv_rank=ctx.iv_rank,
     )
-    short_call = find_strike_by_delta(ctx.chain, ctx.expiry, "call", short_d)
-    long_call = find_strike_by_delta(ctx.chain, ctx.expiry, "call", long_d)
+    warns: list[bool] = []
+    short_call = _pick_strike_by_delta(ctx, "call", short_d, warns)
+    long_call = _pick_strike_by_delta(ctx, "call", long_d, warns)
     if not (short_call and long_call):
         return None
     if long_call.strike <= short_call.strike:
@@ -1491,7 +1497,7 @@ def _build_bear_call_spread(ctx: _BuildContext) -> EarningsSetup | None:
     breakevens = [short_call.strike + net_credit]
     pop = _ctx_pop(ctx, breakevens, "below_lower")
     ev = pop * max_profit - (1.0 - pop) * max_loss
-    return EarningsSetup(
+    setup = EarningsSetup(
         setup_id="bear_call_spread",
         legs=legs,
         net_credit_or_debit=net_credit,
@@ -1507,6 +1513,9 @@ def _build_bear_call_spread(ctx: _BuildContext) -> EarningsSetup | None:
         ),
         sizing_kelly_pct=_ctx_kelly(ctx, pop, max_profit / max_loss),
         is_defined_risk=True,
+    )
+    return _annotate_liquidity(
+        setup, [short_call, long_call], extra_warning=any(warns),
     )
 
 
@@ -1524,8 +1533,9 @@ def _build_bull_put_spread(ctx: _BuildContext) -> EarningsSetup | None:
         claude_confidence=ctx.claude_confidence,
         iv_rank=ctx.iv_rank,
     )
-    short_put = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -short_d)
-    long_put = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -long_d)
+    warns: list[bool] = []
+    short_put = _pick_strike_by_delta(ctx, "put", -short_d, warns)
+    long_put = _pick_strike_by_delta(ctx, "put", -long_d, warns)
     if not (short_put and long_put):
         return None
     if long_put.strike >= short_put.strike:
@@ -1543,7 +1553,7 @@ def _build_bull_put_spread(ctx: _BuildContext) -> EarningsSetup | None:
     breakevens = [short_put.strike - net_credit]
     pop = _ctx_pop(ctx, breakevens, "above_upper")
     ev = pop * max_profit - (1.0 - pop) * max_loss
-    return EarningsSetup(
+    setup = EarningsSetup(
         setup_id="bull_put_spread",
         legs=legs,
         net_credit_or_debit=net_credit,
@@ -1560,14 +1570,18 @@ def _build_bull_put_spread(ctx: _BuildContext) -> EarningsSetup | None:
         sizing_kelly_pct=_ctx_kelly(ctx, pop, max_profit / max_loss),
         is_defined_risk=True,
     )
+    return _annotate_liquidity(
+        setup, [short_put, long_put], extra_warning=any(warns),
+    )
 
 
 # ─── Bull call spread (cheap_directional, bullish) ───────────
 
 
 def _build_bull_call_spread(ctx: _BuildContext) -> EarningsSetup | None:
-    long_call = find_strike_by_delta(ctx.chain, ctx.expiry, "call", 0.45)
-    short_call = find_strike_by_delta(ctx.chain, ctx.expiry, "call", 0.20)
+    warns: list[bool] = []
+    long_call = _pick_strike_by_delta(ctx, "call", 0.45, warns)
+    short_call = _pick_strike_by_delta(ctx, "call", 0.20, warns)
     if not (long_call and short_call):
         return None
     if short_call.strike <= long_call.strike:
@@ -1587,7 +1601,7 @@ def _build_bull_call_spread(ctx: _BuildContext) -> EarningsSetup | None:
     breakevens = [long_call.strike + net_debit]
     pop = _ctx_pop(ctx, breakevens, "above_upper")
     ev = pop * max_profit - (1.0 - pop) * max_loss
-    return EarningsSetup(
+    setup = EarningsSetup(
         setup_id="bull_call_spread",
         legs=legs,
         net_credit_or_debit=-net_debit,
@@ -1605,14 +1619,18 @@ def _build_bull_call_spread(ctx: _BuildContext) -> EarningsSetup | None:
         sizing_kelly_pct=_ctx_kelly(ctx, pop, max_profit / max_loss),
         is_defined_risk=True,
     )
+    return _annotate_liquidity(
+        setup, [long_call, short_call], extra_warning=any(warns),
+    )
 
 
 # ─── Bear put spread (cheap_directional, bearish) ────────────
 
 
 def _build_bear_put_spread(ctx: _BuildContext) -> EarningsSetup | None:
-    long_put = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -0.45)
-    short_put = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -0.20)
+    warns: list[bool] = []
+    long_put = _pick_strike_by_delta(ctx, "put", -0.45, warns)
+    short_put = _pick_strike_by_delta(ctx, "put", -0.20, warns)
     if not (long_put and short_put):
         return None
     if short_put.strike >= long_put.strike:
@@ -1632,7 +1650,7 @@ def _build_bear_put_spread(ctx: _BuildContext) -> EarningsSetup | None:
     breakevens = [long_put.strike - net_debit]
     pop = _ctx_pop(ctx, breakevens, "below_lower")
     ev = pop * max_profit - (1.0 - pop) * max_loss
-    return EarningsSetup(
+    setup = EarningsSetup(
         setup_id="bear_put_spread",
         legs=legs,
         net_credit_or_debit=-net_debit,
@@ -1650,13 +1668,17 @@ def _build_bear_put_spread(ctx: _BuildContext) -> EarningsSetup | None:
         sizing_kelly_pct=_ctx_kelly(ctx, pop, max_profit / max_loss),
         is_defined_risk=True,
     )
+    return _annotate_liquidity(
+        setup, [long_put, short_put], extra_warning=any(warns),
+    )
 
 
 # ─── Long single (cheap_directional fallback) ───────────────
 
 
 def _build_long_call(ctx: _BuildContext) -> EarningsSetup | None:
-    long_call = find_strike_by_delta(ctx.chain, ctx.expiry, "call", 0.45)
+    warns: list[bool] = []
+    long_call = _pick_strike_by_delta(ctx, "call", 0.45, warns)
     if not long_call:
         return None
     legs = [_make_leg(side="buy", contract_type="call", contract=long_call, expiry=ctx.expiry)]
@@ -1670,7 +1692,7 @@ def _build_long_call(ctx: _BuildContext) -> EarningsSetup | None:
     expected_terminal_up = ctx.spot * math.exp(2.0 * sigma)
     expected_profit = max(0.0, (expected_terminal_up - long_call.strike) * 100.0 - max_loss)
     ev = pop * expected_profit - (1.0 - pop) * max_loss
-    return EarningsSetup(
+    setup = EarningsSetup(
         setup_id="long_call",
         legs=legs,
         net_credit_or_debit=-debit,
@@ -1687,10 +1709,12 @@ def _build_long_call(ctx: _BuildContext) -> EarningsSetup | None:
         sizing_kelly_pct=_ctx_kelly_long_premium(ctx, max_loss),
         is_defined_risk=True,
     )
+    return _annotate_liquidity(setup, [long_call], extra_warning=any(warns))
 
 
 def _build_long_put(ctx: _BuildContext) -> EarningsSetup | None:
-    long_put = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -0.45)
+    warns: list[bool] = []
+    long_put = _pick_strike_by_delta(ctx, "put", -0.45, warns)
     if not long_put:
         return None
     legs = [_make_leg(side="buy", contract_type="put", contract=long_put, expiry=ctx.expiry)]
@@ -1704,7 +1728,7 @@ def _build_long_put(ctx: _BuildContext) -> EarningsSetup | None:
     expected_terminal_dn = ctx.spot * math.exp(-2.0 * sigma)
     expected_profit = max(0.0, (long_put.strike - expected_terminal_dn) * 100.0 - max_loss)
     ev = pop * expected_profit - (1.0 - pop) * max_loss
-    return EarningsSetup(
+    setup = EarningsSetup(
         setup_id="long_put",
         legs=legs,
         net_credit_or_debit=-debit,
@@ -1721,6 +1745,7 @@ def _build_long_put(ctx: _BuildContext) -> EarningsSetup | None:
         sizing_kelly_pct=_ctx_kelly_long_premium(ctx, max_loss),
         is_defined_risk=True,
     )
+    return _annotate_liquidity(setup, [long_put], extra_warning=any(warns))
 
 
 # ─── Long straddle / strangle (cheap_neutral) ────────────────
@@ -1745,7 +1770,7 @@ def _build_long_straddle(ctx: _BuildContext) -> EarningsSetup | None:
     avg_winning_move = ctx.spot * math.exp(2.0 * sigma) - atm_call.strike
     expected_profit = max(0.0, avg_winning_move * 100.0 - max_loss)
     ev = pop * expected_profit - (1.0 - pop) * max_loss
-    return EarningsSetup(
+    setup = EarningsSetup(
         setup_id="long_straddle",
         legs=legs,
         net_credit_or_debit=-debit,
@@ -1762,11 +1787,13 @@ def _build_long_straddle(ctx: _BuildContext) -> EarningsSetup | None:
         sizing_kelly_pct=_ctx_kelly_long_premium(ctx, max_loss),
         is_defined_risk=True,
     )
+    return _annotate_liquidity(setup, [atm_call, atm_put])
 
 
 def _build_long_strangle(ctx: _BuildContext) -> EarningsSetup | None:
-    long_call = find_strike_by_delta(ctx.chain, ctx.expiry, "call", 0.30)
-    long_put = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -0.30)
+    warns: list[bool] = []
+    long_call = _pick_strike_by_delta(ctx, "call", 0.30, warns)
+    long_put = _pick_strike_by_delta(ctx, "put", -0.30, warns)
     if not (long_call and long_put):
         return None
     if long_call.strike <= long_put.strike:
@@ -1785,7 +1812,7 @@ def _build_long_strangle(ctx: _BuildContext) -> EarningsSetup | None:
     avg_winning_move = ctx.spot * math.exp(2.0 * sigma) - long_call.strike
     expected_profit = max(0.0, avg_winning_move * 100.0 - max_loss)
     ev = pop * expected_profit - (1.0 - pop) * max_loss
-    return EarningsSetup(
+    setup = EarningsSetup(
         setup_id="long_strangle",
         legs=legs,
         net_credit_or_debit=-debit,
@@ -1801,6 +1828,9 @@ def _build_long_strangle(ctx: _BuildContext) -> EarningsSetup | None:
         ),
         sizing_kelly_pct=_ctx_kelly_long_premium(ctx, max_loss),
         is_defined_risk=True,
+    )
+    return _annotate_liquidity(
+        setup, [long_call, long_put], extra_warning=any(warns),
     )
 
 
@@ -1843,7 +1873,7 @@ def _build_calendar_spread(ctx: _BuildContext) -> EarningsSetup | None:
     # post-front-expiry vol crush.
     estimated_max_profit = debit * 100.0 * 0.30
     ev = pop * estimated_max_profit - (1.0 - pop) * max_loss
-    return EarningsSetup(
+    setup = EarningsSetup(
         setup_id="calendar_spread",
         legs=legs,
         net_credit_or_debit=-debit,
@@ -1860,6 +1890,7 @@ def _build_calendar_spread(ctx: _BuildContext) -> EarningsSetup | None:
         sizing_kelly_pct=_ctx_kelly_long_premium(ctx, max_loss),
         is_defined_risk=True,
     )
+    return _annotate_liquidity(setup, [front_call, back_call])
 
 
 def _build_diagonal_spread(ctx: _BuildContext) -> EarningsSetup | None:
@@ -1870,9 +1901,14 @@ def _build_diagonal_spread(ctx: _BuildContext) -> EarningsSetup | None:
         return None
     back_expiry = next_expiries[0]
     is_bullish = "bull" in (ctx.claude_verdict or "")
+    warns: list[bool] = []
     if is_bullish:
-        front = find_strike_by_delta(ctx.chain, ctx.expiry, "call", 0.20)
-        back = find_strike_by_delta(ctx.chain, back_expiry, "call", 0.45)
+        front = _pick_strike_by_delta(ctx, "call", 0.20, warns)
+        # Back leg uses back_expiry — call walk-search directly
+        back, back_warn = find_liquid_strike_by_delta(
+            ctx.chain, back_expiry, "call", 0.45,
+        )
+        warns.append(back_warn)
         if not (front and back):
             return None
         legs = [
@@ -1880,8 +1916,11 @@ def _build_diagonal_spread(ctx: _BuildContext) -> EarningsSetup | None:
             _make_leg(side="buy", contract_type="call", contract=back, expiry=back_expiry),
         ]
     else:
-        front = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -0.20)
-        back = find_strike_by_delta(ctx.chain, back_expiry, "put", -0.45)
+        front = _pick_strike_by_delta(ctx, "put", -0.20, warns)
+        back, back_warn = find_liquid_strike_by_delta(
+            ctx.chain, back_expiry, "put", -0.45,
+        )
+        warns.append(back_warn)
         if not (front and back):
             return None
         legs = [
@@ -1899,7 +1938,7 @@ def _build_diagonal_spread(ctx: _BuildContext) -> EarningsSetup | None:
     pop = _ctx_pop(ctx, breakevens, direction)
     estimated_max_profit = debit * 100.0 * 0.40
     ev = pop * estimated_max_profit - (1.0 - pop) * max_loss
-    return EarningsSetup(
+    setup = EarningsSetup(
         setup_id="diagonal_spread",
         legs=legs,
         net_credit_or_debit=-debit,
@@ -1916,6 +1955,7 @@ def _build_diagonal_spread(ctx: _BuildContext) -> EarningsSetup | None:
         sizing_kelly_pct=_ctx_kelly_long_premium(ctx, max_loss),
         is_defined_risk=True,
     )
+    return _annotate_liquidity(setup, [front, back], extra_warning=any(warns))
 
 
 # ---------------------------------------------------------------------------
@@ -2123,6 +2163,49 @@ async def recommend_setups(
             setup = None
         if setup is not None:
             candidates.append(setup)
+
+    # Wave V V2: liquidity overlay. Setups with a leg below
+    # ``RECOMMENDER_EXCLUDE_LIQUIDITY_THRESHOLD`` (default 0.10) are
+    # dropped entirely — that contract is essentially untradeable and
+    # the recommendation would be a paper-only construction. Setups
+    # below ``RECOMMENDER_DEMOTE_LIQUIDITY_THRESHOLD`` (default 0.20)
+    # have their EV halved so they sink in the ranking but still
+    # surface as alternatives. Setups whose worst leg is None
+    # (chain has no liquidity_score field — pre-Agent-1, demo data,
+    # or partial coverage) pass through unchanged. The rationale also
+    # gets a one-line liquidity note when the setup is flagged.
+    from core.config import settings as _settings_liq
+
+    liq_demote = _settings_liq.RECOMMENDER_DEMOTE_LIQUIDITY_THRESHOLD
+    liq_exclude = _settings_liq.RECOMMENDER_EXCLUDE_LIQUIDITY_THRESHOLD
+    if candidates:
+        gated: list[EarningsSetup] = []
+        for s in candidates:
+            worst = s.worst_leg_liquidity_score
+            if worst is None:
+                gated.append(s)
+                continue
+            if worst < liq_exclude:
+                log.debug(
+                    "recommender excluding %s for %s — worst leg liquidity %.2f < %.2f",
+                    s.setup_id, symbol, worst, liq_exclude,
+                )
+                continue
+            updates: dict[str, Any] = {}
+            if worst < liq_demote:
+                # Halve EV; the magnitude shrinks toward zero from either
+                # sign so a positive EV stays positive but ranks lower,
+                # and a negative EV stays negative.
+                updates["expected_value"] = s.expected_value / 2.0
+                updates["liquidity_warning"] = True
+            warning_after = updates.get("liquidity_warning", s.liquidity_warning)
+            suffix = _liquidity_rationale_suffix(worst, warning_after)
+            if suffix and suffix not in s.rationale:
+                updates["rationale"] = s.rationale + suffix
+            if updates:
+                s = s.model_copy(update=updates)
+            gated.append(s)
+        candidates = gated
 
     # SHR-2: tail-risk overlay — halve EV for short-vol setups when the
     # score crosses the demote threshold. This rebalances the ranking
