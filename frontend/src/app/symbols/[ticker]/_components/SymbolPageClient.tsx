@@ -1,10 +1,12 @@
 "use client";
 
-import type { Quote } from "@/types";
+import type { EarningsNewsArticle, Quote } from "@/types";
 
 import { useSymbolPageData } from "../_hooks/useSymbolPageData";
 import { ChartBand } from "../_sections/ChartBand";
 import { DecisionStrip, type DecisionStripMarketRegime } from "../_sections/DecisionStrip";
+import { EarningsPanel } from "../_sections/EarningsPanel";
+import { NewsBand } from "../_sections/NewsBand";
 import { NotFound } from "../_sections/NotFound";
 import { OptionsThesisBand } from "../_sections/OptionsThesisBand";
 import { RecommendedSetups } from "../_sections/RecommendedSetups";
@@ -51,6 +53,51 @@ function envelopeToQuote(value: Record<string, unknown> | null | undefined): Sti
   };
 }
 
+// T9: ctx.news.value is a raw NewsResponse ({articles: [...], ...}) with
+// snake_case article fields. Earnings detail's news is already mapped to
+// camelCase but is gated to the curated equity universe — sourcing from
+// the spine envelope means ETFs and other broadly-tracked symbols still
+// surface a news rail.
+function envelopeToNewsArticles(
+  value: Record<string, unknown> | null | undefined,
+): EarningsNewsArticle[] | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value.articles;
+  if (!Array.isArray(raw)) return null;
+  const out: EarningsNewsArticle[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const a = item as Record<string, unknown>;
+    const title = a.title;
+    const url = a.url;
+    const source = a.source;
+    const publishedAt = a.published_at;
+    if (
+      typeof title !== "string" ||
+      typeof url !== "string" ||
+      typeof source !== "string" ||
+      typeof publishedAt !== "string"
+    ) {
+      continue;
+    }
+    const relevance = a.relevance_score;
+    const tier = a.tier;
+    const category = a.category;
+    const sentiment = a.sentiment;
+    out.push({
+      title,
+      url,
+      source,
+      publishedAt,
+      relevanceScore: typeof relevance === "number" ? relevance : 0,
+      tier: typeof tier === "number" ? tier : 2,
+      category: typeof category === "string" ? category : null,
+      sentiment: typeof sentiment === "string" ? sentiment : null,
+    });
+  }
+  return out;
+}
+
 function envelopeToMarketRegime(
   value: Record<string, unknown> | null | undefined,
 ): DecisionStripMarketRegime | null {
@@ -77,6 +124,8 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
   const ctxData = data.ctx.data?.symbols?.[symbol] ?? null;
   const quote = envelopeToQuote(ctxData?.quote?.value);
   const marketRegime = envelopeToMarketRegime(ctxData?.marketRegime?.value);
+  const newsArticles =
+    envelopeToNewsArticles(ctxData?.news?.value) ?? data.earningsDetail?.news ?? null;
 
   const claudeStructured = data.earningsDetail?.claudeStructured ?? null;
   const claudeFullResearch = data.earningsDetail?.claudeFullResearch ?? null;
@@ -120,6 +169,16 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
         isETF={data.isETF}
         underlying={quote?.last ?? null}
       />
+
+      <EarningsPanel
+        isETF={data.isETF}
+        historicalEarnings={data.earningsDetail?.historicalEarnings ?? null}
+        ivTermStructure={ivTermStructure}
+        nextReportDate={data.earningsDetail?.reportDate ?? null}
+        nextReportTime={data.earningsDetail?.reportTime ?? null}
+      />
+
+      <NewsBand news={newsArticles} />
     </main>
   );
 }
