@@ -2981,6 +2981,7 @@ interface RawEarningsMetricsBlock {
   expected_move_pct: number | null;
   expected_move_dollars: number | null;
   hist_avg_abs_move_pct: number | null;
+  vol_premium_score?: number | null;
   beat_rate: number | null;
   days_to_earnings: number | null;
   days_to_expiry: number | null;
@@ -3274,6 +3275,7 @@ function mapMetrics(raw: RawEarningsMetricsBlock): EarningsMetricsBlock {
     expectedMovePct: raw.expected_move_pct,
     expectedMoveDollars: raw.expected_move_dollars,
     histAvgAbsMovePct: raw.hist_avg_abs_move_pct,
+    volPremiumScore: raw.vol_premium_score ?? null,
     beatRate: raw.beat_rate,
     daysToEarnings: raw.days_to_earnings,
     daysToExpiry: raw.days_to_expiry,

@@ -52,6 +52,7 @@ function makeMetrics(overrides: Partial<EarningsMetricsBlock> = {}): EarningsMet
     expectedMovePct: 0.07,
     expectedMoveDollars: 12.4,
     histAvgAbsMovePct: 0.06,
+    volPremiumScore: null,
     beatRate: 0.7,
     daysToEarnings: 5,
     daysToExpiry: 7,

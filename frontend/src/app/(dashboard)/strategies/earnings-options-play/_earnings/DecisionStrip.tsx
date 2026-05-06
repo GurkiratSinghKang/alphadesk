@@ -14,6 +14,18 @@ const LEGACY_UNSUPPORTED_PLAYS = new Set(["short call", "short strangle"]);
  */
 const CONFIDENCE_THRESHOLD_PCT = 60;
 
+// PR-1 / T5: 3-bucket tone-mapping for the verdict pill. Mirrors the
+// per-setup credibility chip cutoffs in ``TradeButtonRow.ConfidenceChip``
+// so the page-level verdict tone and the per-button chip tone agree.
+const HIGH_CONFIDENCE_THRESHOLD = 0.65;
+const MEDIUM_CONFIDENCE_THRESHOLD = 0.40;
+
+// PR-1 / T5: vol-premium chip cutoffs. ≥ 15% premium ⇒ vol-selling
+// edge present; 5–15% ⇒ thinner edge; < 5% ⇒ "thin" caveat. Mirrors the
+// gate in ``earnings_recommender._format_vol_premium_chip``.
+const VOL_PREMIUM_EDGE_THRESHOLD = 0.15;
+const VOL_PREMIUM_THIN_THRESHOLD = 0.05;
+
 /**
  * DecisionStrip — Round-8 single-view bundle B.
  *
@@ -43,6 +55,47 @@ export interface DecisionStripProps {
   metrics: EarningsMetricsBlock | null;
 }
 
+function verdictPillToneClass(confidence: number): string {
+  if (confidence >= HIGH_CONFIDENCE_THRESHOLD) {
+    return "border border-[color:var(--brand)] u-brand";
+  }
+  if (confidence >= MEDIUM_CONFIDENCE_THRESHOLD) {
+    return "border border-[color:var(--border)] u-muted";
+  }
+  return "border border-state-warning-border text-state-warning-fg";
+}
+
+function formatSignedPct(value: number): string {
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "-" : "+";
+  return `${sign}${fmtPct(abs, 0)}`;
+}
+
+function VolPremiumChip({ score }: { score: number | null }) {
+  if (score == null || !Number.isFinite(score)) return null;
+  const formatted = formatSignedPct(score);
+  let tone: string;
+  let label: string;
+  if (score >= VOL_PREMIUM_EDGE_THRESHOLD) {
+    tone = "u-brand";
+    label = `Vol premium · ${formatted}`;
+  } else if (score >= VOL_PREMIUM_THIN_THRESHOLD) {
+    tone = "u-muted";
+    label = `Vol premium · ${formatted}`;
+  } else {
+    tone = "text-state-warning-fg";
+    label = `Vol premium · ${formatted} · thin`;
+  }
+  return (
+    <span
+      data-slot="vol-premium-chip"
+      className={`t-meta tabular-nums mt-1 ${tone}`}
+    >
+      {label}
+    </span>
+  );
+}
+
 export default function DecisionStrip({ structured, metrics }: DecisionStripProps) {
   if (!structured) return null;
 
@@ -50,7 +103,9 @@ export default function DecisionStrip({ structured, metrics }: DecisionStripProp
   const confPct = Math.round(structured.confidence * 100);
   const highConfidence = confPct >= 70;
   const expMovePct = metrics?.expectedMovePct ?? null;
+  const volPremiumScore = metrics?.volPremiumScore ?? null;
   const legacyUnsupported = LEGACY_UNSUPPORTED_PLAYS.has(structured.suggestedPlay);
+  const verdictToneClass = verdictPillToneClass(structured.confidence);
 
   return (
     <section
@@ -62,7 +117,8 @@ export default function DecisionStrip({ structured, metrics }: DecisionStripProp
       <div className="flex flex-col">
         <span className="t-label u-muted">Verdict</span>
         <span
-          className="font-serif italic text-h1 leading-tight u-brand"
+          data-slot="verdict-pill"
+          className={`mt-1 inline-flex w-fit items-center rounded-full px-3 py-1 font-serif italic text-h1 leading-tight ${verdictToneClass}`}
           style={{ letterSpacing: 0 }}
         >
           {verdict}
@@ -115,6 +171,7 @@ export default function DecisionStrip({ structured, metrics }: DecisionStripProp
             ? `Threshold: ${CONFIDENCE_THRESHOLD_PCT}% — clears the system's minimum to recommend.`
             : `Threshold: ${CONFIDENCE_THRESHOLD_PCT}% — at ${confPct}% the system suggests caution.`}
         </span>
+        <VolPremiumChip score={volPremiumScore} />
         <span className="t-meta u-muted mt-0.5">
           model: {structured.model}
         </span>

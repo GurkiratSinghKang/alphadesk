@@ -10,7 +10,7 @@ const detail: EarningsDetail = {
   symbol: "NVDA", company: "Nvidia", sector: "Semis",
   reportDate: "2026-04-23", reportTime: "AMC",
   quote: { last: 201.7, change: -1.4, changePct: -0.007 },
-  metrics: { ivRank: 78, ivPercentile: 82, currentIv: 0.79, hv20: 0.42, hv50: null, hv100: null, hvIvRatio: 0.71, expectedMovePct: 0.064, expectedMoveDollars: 12.8, histAvgAbsMovePct: 0.052, beatRate: 0.87, daysToEarnings: 1, daysToExpiry: 3 },
+  metrics: { ivRank: 78, ivPercentile: 82, currentIv: 0.79, hv20: 0.42, hv50: null, hv100: null, hvIvRatio: 0.71, expectedMovePct: 0.064, expectedMoveDollars: 12.8, histAvgAbsMovePct: 0.052, volPremiumScore: null, beatRate: 0.87, daysToEarnings: 1, daysToExpiry: 3 },
   strikeLadder: null, claudeStructured: null, claudeFullResearch: null,
   historicalEarnings: {
     quarters: [
