@@ -4,7 +4,9 @@ import type { Quote } from "@/types";
 
 import { useSymbolPageData } from "../_hooks/useSymbolPageData";
 import { DecisionStrip, type DecisionStripMarketRegime } from "../_sections/DecisionStrip";
+import { NotFound } from "../_sections/NotFound";
 import { StickyBand, type StickyBandQuote } from "../_sections/StickyBand";
+import { UnsupportedAsset } from "../_sections/UnsupportedAsset";
 
 export interface SymbolPageClientProps {
   symbol: string;
@@ -59,21 +61,41 @@ function envelopeToMarketRegime(
 }
 
 export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
-  const { ctx, analysis } = useSymbolPageData(symbol);
+  const data = useSymbolPageData(symbol);
 
-  const ctxData = ctx.data?.symbols?.[symbol] ?? null;
+  if (data.isCryptoForex) {
+    return <UnsupportedAsset symbol={symbol} />;
+  }
+
+  if (!data.isLoading && data.symbolMeta === null) {
+    return <NotFound symbol={symbol} />;
+  }
+
+  const ctxData = data.ctx.data?.symbols?.[symbol] ?? null;
   const quote = envelopeToQuote(ctxData?.quote?.value);
   const marketRegime = envelopeToMarketRegime(ctxData?.marketRegime?.value);
 
   return (
-    <StickyBand symbol={symbol} quote={quote}>
-      <DecisionStrip
-        symbol={symbol}
-        claudeStructured={null}
-        analysis={analysis}
-        marketRegime={marketRegime}
-      />
-    </StickyBand>
+    <main data-testid="symbol-page" data-sym={symbol}>
+      <StickyBand symbol={symbol} quote={quote}>
+        <DecisionStrip
+          symbol={symbol}
+          claudeStructured={null}
+          analysis={data.analysis}
+          marketRegime={marketRegime}
+        />
+      </StickyBand>
+
+      {data.isETF ? (
+        <aside
+          data-testid="etf-thesis-placeholder"
+          data-slot="etf-thesis-placeholder"
+          className="mx-auto max-w-3xl px-4 py-8 text-center sm:px-6 t-mono u-muted"
+        >
+          AI thesis available for individual equities only. ETF analysis coming in a future update.
+        </aside>
+      ) : null}
+    </main>
   );
 }
 
