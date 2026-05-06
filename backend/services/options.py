@@ -943,9 +943,15 @@ async def _fetch_real_chain(
                     if last_trade_dt is not None:
                         from core.time import classify_trade_session
 
-                        s = classify_trade_session(last_trade_dt)
-                        if s in ("pre", "post"):
-                            eh_session = s  # type: ignore[assignment]
+                        # Bug-fix 2026-05-06: this used to assign to ``s``,
+                        # which is the OUTER ``s = symbol`` parameter the
+                        # chain construction below relies on. The reassignment
+                        # leaked into ``OptionChain(underlying=s)`` so the
+                        # response carried "regular"/"post"/etc. instead of
+                        # the ticker. Renamed to ``_session_class``.
+                        _session_class = classify_trade_session(last_trade_dt)
+                        if _session_class in ("pre", "post"):
+                            eh_session = _session_class  # type: ignore[assignment]
                             if last_price:
                                 eh_price = round(float(last_price), 2)
                                 prev_c = prev_daily_bar.get("c", 0) or 0
