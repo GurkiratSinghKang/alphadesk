@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { EarningsNewsArticle } from "@/types";
-import { fmtRelative } from "@/lib/intl";
+import { fmtDateTime, fmtRelative } from "@/lib/intl";
 import { useTick } from "@/lib/time";
 
 export interface NewsFeedProps {
@@ -14,6 +14,64 @@ export interface NewsFeedProps {
 // vendor returns a long unfiltered firehose.
 const COLLAPSED_LIMIT = 10;
 const HARD_CAP = 50;
+
+// B2.1: tiny chip styling per sentiment label. Bullish/bearish/neutral
+// is the canonical vocabulary emitted by the backend heuristic; legacy
+// "positive"/"negative" pass through the same color logic for older
+// cached payloads.
+function sentimentChipClass(sentiment: string | null | undefined): string {
+  switch ((sentiment ?? "").toLowerCase()) {
+    case "bullish":
+    case "positive":
+      return "border-[color:var(--profit)]/40 bg-[color:var(--profit)]/10 text-[color:var(--profit)]";
+    case "bearish":
+    case "negative":
+      return "border-[color:var(--loss)]/40 bg-[color:var(--loss)]/10 text-[color:var(--loss)]";
+    default:
+      return "border-[color:var(--border)] bg-[color:var(--bg-card)]/40 u-muted";
+  }
+}
+
+function sentimentLabel(sentiment: string | null | undefined): string {
+  switch ((sentiment ?? "").toLowerCase()) {
+    case "bullish":
+    case "positive":
+      return "Bullish";
+    case "bearish":
+    case "negative":
+      return "Bearish";
+    default:
+      return "Neutral";
+  }
+}
+
+// B2.1: confidence is rendered as a small dot inside the sentiment
+// chip — solid for high-conf, hollow for low-conf. We bucket at 0.65 so
+// the 0.5 default reads as "uncertain" (hollow).
+function confidenceDot(confidence: number | null | undefined): string {
+  if (confidence == null) return "○";
+  return confidence >= 0.65 ? "●" : "○";
+}
+
+function magnitudeText(magnitude: string | null | undefined): string | null {
+  switch ((magnitude ?? "").toLowerCase()) {
+    case "large":
+      return "·  Large move expected";
+    case "medium":
+      return "·  Medium move expected";
+    default:
+      return null;
+  }
+}
+
+// B2.6: tier badge based on Newsdata source_priority. Lower number =
+// higher tier. <100 → ★, 100..1000 → none, >1000 → muted color.
+function tierBadge(sourcePriority: number | null | undefined): "star" | "none" | "muted" {
+  if (sourcePriority == null) return "none";
+  if (sourcePriority < 100) return "star";
+  if (sourcePriority > 1000) return "muted";
+  return "none";
+}
 
 export default function NewsFeed({ news }: NewsFeedProps) {
   const [showAll, setShowAll] = useState(false);
@@ -75,7 +133,30 @@ export default function NewsFeed({ news }: NewsFeedProps) {
       <ul className="mt-1 space-y-0.5">
         {visible.map((a, i) => {
           const rel = fmtRelative(a.publishedAt);
+          // B2.5: precise timestamp on hover so users can disambiguate
+          // headlines once they age past 24h ("1d ago" → "May 6, 2026,
+          // 1:50 PM EDT").
+          let absoluteTs = a.publishedAt;
+          try {
+            absoluteTs = fmtDateTime(a.publishedAt);
+          } catch {
+            // Leave raw string if formatter throws on unusual values.
+          }
           const itemKey = `${a.url ?? "no-url"}::${a.publishedAt ?? "no-ts"}::${i}`;
+          const sentimentChip = sentimentChipClass(a.sentiment);
+          const sentimentText = sentimentLabel(a.sentiment);
+          const dot = confidenceDot(a.confidence);
+          const magText = magnitudeText(a.magnitude);
+          const badge = tierBadge(a.sourcePriority);
+          // B2.4: append " +N more" suffix when this row collapses N
+          // near-duplicate siblings.
+          const dupSuffix = (a.duplicateCount ?? 0) > 0
+            ? ` · +${a.duplicateCount} more`
+            : "";
+          // B2.6: tier-3 (>1000) sources get a muted treatment.
+          const titleClass = badge === "muted"
+            ? "t-mono text-body-sm u-muted hover:u-brand"
+            : "t-mono text-body-sm hover:u-brand";
           return (
             <li
               key={itemKey}
@@ -95,12 +176,23 @@ export default function NewsFeed({ news }: NewsFeedProps) {
                   {a.category}
                 </span>
               )}
+              {/* B2.1: sentiment chip + confidence dot. Color =
+                  sentiment direction; dot = confidence (filled = high). */}
+              <span
+                data-slot="news-sentiment"
+                data-sentiment={(a.sentiment ?? "neutral").toLowerCase()}
+                className={`mr-2 inline-block rounded border px-1.5 py-px text-label uppercase tracking-wider ${sentimentChip}`}
+                title={`Sentiment: ${sentimentText} (confidence ${a.confidence != null ? a.confidence.toFixed(2) : "—"})`}
+              >
+                <span aria-hidden="true" className="mr-1">{dot}</span>
+                {sentimentText}
+              </span>
               <a
                 href={a.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                title={`${a.source} — ${rel}${a.relevanceScore != null ? ` · score ${a.relevanceScore.toFixed(2)}` : ""}`}
-                className="t-mono text-body-sm hover:u-brand"
+                title={`${a.source} — ${absoluteTs}${a.relevanceScore != null ? ` · score ${a.relevanceScore.toFixed(2)}` : ""}`}
+                className={titleClass}
               >
                 {a.title}
               </a>
@@ -108,8 +200,26 @@ export default function NewsFeed({ news }: NewsFeedProps) {
                 aria-hidden="true"
                 className="ml-2 t-mono text-label u-muted"
               >
-                — {a.source} · {rel}
-                {a.tier === 1 && <span className="ml-1 u-brand" title="Tier-1 newswire">★</span>}
+                {/* B2.5: precise timestamp on hover via the wrapping
+                    span's title attr. The visible label remains
+                    "10h ago" so the layout doesn't shift. */}
+                — {a.source}
+                {" · "}
+                <span title={absoluteTs} data-slot="news-ts">{rel}</span>
+                {magText && (
+                  <span data-slot="news-magnitude" className="ml-1">{magText}</span>
+                )}
+                {dupSuffix}
+                {badge === "star" && (
+                  <span className="ml-1 u-brand" title="Tier-1 newswire">★</span>
+                )}
+                {/* Backward-compat: also show the legacy NF-1 star when
+                    backend only supplies the boolean tier=1 (no
+                    source_priority) so we don't regress the old
+                    rendering. */}
+                {badge === "none" && a.tier === 1 && (
+                  <span className="ml-1 u-brand" title="Tier-1 newswire">★</span>
+                )}
               </span>
             </li>
           );

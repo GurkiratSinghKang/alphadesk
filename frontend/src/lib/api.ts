@@ -2999,6 +2999,13 @@ interface RawEarningsNewsArticle {
   category?: string | null;
   tier?: number;
   sentiment?: string | null;
+  // B2.1: heuristic sentiment / magnitude / confidence chips.
+  magnitude?: "small" | "medium" | "large" | null;
+  confidence?: number | null;
+  // B2.6: source priority pass-through.
+  source_priority?: number | null;
+  // B2.4: collapsed-duplicate count (>0 → "+N more" suffix).
+  duplicate_count?: number;
 }
 
 interface RawEarningsDetail {
@@ -3353,6 +3360,13 @@ function mapNewsArticle(raw: RawEarningsNewsArticle): EarningsNewsArticle {
     category: raw.category ?? null,
     tier: raw.tier ?? 2,
     sentiment: raw.sentiment ?? null,
+    // B2.1 — sentiment/magnitude/confidence chips.
+    magnitude: raw.magnitude ?? null,
+    confidence: raw.confidence ?? null,
+    // B2.6 — source priority for tier badge.
+    sourcePriority: raw.source_priority ?? null,
+    // B2.4 — duplicate-count collapse indicator.
+    duplicateCount: raw.duplicate_count ?? 0,
   };
 }
 

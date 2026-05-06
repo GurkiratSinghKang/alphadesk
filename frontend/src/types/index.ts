@@ -927,11 +927,29 @@ export interface EarningsNewsArticle {
    */
   tier?: number;
   /**
-   * Round-12 / NF-1: passthrough of the upstream sentiment label
-   * (``"positive" | "neutral" | "negative"`` from newsdata.io). Was
-   * dropped at the FE mapper pre-NF-1.
+   * B2.1: directional sentiment chip — one of ``"bullish" | "bearish"
+   * | "neutral"`` (the heuristic), with a confidence score in
+   * ``confidence`` (0..1). Backed by ``services/news.py:_classify_sentiment``.
    */
-  sentiment?: string | null;
+  sentiment?: "bullish" | "bearish" | "neutral" | string | null;
+  /**
+   * B2.1: estimated magnitude of the move the headline suggests.
+   */
+  magnitude?: "small" | "medium" | "large" | null;
+  /**
+   * B2.1: confidence in the sentiment classification (0..1).
+   */
+  confidence?: number | null;
+  /**
+   * B2.6: source priority pass-through (newsdata.io ``source_priority``).
+   * Lower = higher tier (Reuters / Bloomberg / WSJ < 100).
+   */
+  sourcePriority?: number | null;
+  /**
+   * B2.4: number of near-duplicate articles collapsed into this
+   * canonical row (``0`` when alone).
+   */
+  duplicateCount?: number;
 }
 
 /**
