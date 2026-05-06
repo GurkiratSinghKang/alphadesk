@@ -41,6 +41,7 @@ import {
 // the same TopBar as every other dashboard route.
 import { TopBar } from "@/components/layout/TopBar";
 import { DashboardLayout } from "@/components/layouts";
+import { ConfigurableSection } from "@/components/layout/ConfigurableSection";
 import { Button } from "@/components/ui/button";
 import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
 import { useDestructiveAction } from "@/components/destructive/useDestructiveAction";
@@ -1107,53 +1108,67 @@ function DashboardCommandCenter({
           </header>
 
           <div className="hidden gap-px bg-border-hair lg:grid xl:grid-cols-[minmax(320px,0.82fr)_minmax(320px,0.72fr)_minmax(0,1.05fr)]">
-            <DecisionQueue
-              items={actionItems}
-              onTrade={onTrade}
-              onOpenOrders={onOpenOrders}
-              onPipeline={onPipeline}
-              showDemoSeedCta={isDemoSeedAccount && !brokerConnected}
-              onConnectBroker={onConnectBroker}
-            />
-            <RiskEscalationPanel
-              items={riskEscalations}
-              account={account}
-            />
-            <PortfolioCanvas
-              account={account}
-              greeks={greeks}
-              selectedSymbol={selectedSymbol}
-              quoteValue={quoteValue}
-              quoteTone={quoteTone}
-              onTrade={onTrade}
-            />
+            <ConfigurableSection id="decision_queue">
+              <DecisionQueue
+                items={actionItems}
+                onTrade={onTrade}
+                onOpenOrders={onOpenOrders}
+                onPipeline={onPipeline}
+                showDemoSeedCta={isDemoSeedAccount && !brokerConnected}
+                onConnectBroker={onConnectBroker}
+              />
+            </ConfigurableSection>
+            <ConfigurableSection id="risk_escalation">
+              <RiskEscalationPanel
+                items={riskEscalations}
+                account={account}
+              />
+            </ConfigurableSection>
+            <ConfigurableSection id="portfolio_canvas">
+              <PortfolioCanvas
+                account={account}
+                greeks={greeks}
+                selectedSymbol={selectedSymbol}
+                quoteValue={quoteValue}
+                quoteTone={quoteTone}
+                onTrade={onTrade}
+              />
+            </ConfigurableSection>
           </div>
         </section>
 
         <section className="grid gap-5 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-          <RiskPanel account={account} greeks={greeks} />
+          <ConfigurableSection id="risk_panel">
+            <RiskPanel account={account} greeks={greeks} />
+          </ConfigurableSection>
           <section className="grid gap-5 lg:grid-cols-[minmax(0,0.84fr)_minmax(0,1.16fr)] xl:grid-cols-1">
-            <AuditTrailPanel items={auditItems} />
-            <SessionSnapshot
-              selectedSymbol={selectedSymbol}
-              quoteValue={quoteValue}
-              quoteTone={quoteTone}
-              selectedStrategyName={selectedStrategyName}
-              activeStrategyCount={activeStrategyCount}
-              totalStrategyCount={totalStrategyCount}
-              pipelineStatus={pipelineStatus}
-              pipelineValue={pipelineValue}
-              onPipeline={onPipeline}
-            />
-            <StrategyPanel
-              strategies={strategyCards}
-              activeStrategyCount={activeStrategyCount}
-              totalStrategyCount={totalStrategyCount}
-              loading={strategiesLoading}
-              error={strategiesError}
-              onStrategyClick={onStrategyClick}
-              onStrategies={onStrategies}
-            />
+            <ConfigurableSection id="audit_trail">
+              <AuditTrailPanel items={auditItems} />
+            </ConfigurableSection>
+            <ConfigurableSection id="session_snapshot">
+              <SessionSnapshot
+                selectedSymbol={selectedSymbol}
+                quoteValue={quoteValue}
+                quoteTone={quoteTone}
+                selectedStrategyName={selectedStrategyName}
+                activeStrategyCount={activeStrategyCount}
+                totalStrategyCount={totalStrategyCount}
+                pipelineStatus={pipelineStatus}
+                pipelineValue={pipelineValue}
+                onPipeline={onPipeline}
+              />
+            </ConfigurableSection>
+            <ConfigurableSection id="strategy_panel">
+              <StrategyPanel
+                strategies={strategyCards}
+                activeStrategyCount={activeStrategyCount}
+                totalStrategyCount={totalStrategyCount}
+                loading={strategiesLoading}
+                error={strategiesError}
+                onStrategyClick={onStrategyClick}
+                onStrategies={onStrategies}
+              />
+            </ConfigurableSection>
           </section>
         </section>
       </div>
