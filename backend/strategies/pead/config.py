@@ -122,6 +122,25 @@ class PEADParams(StrategyParams):
     # Minimum trailing quarters required to compute σ (< lookback is allowed
     # but we require at least this many to generate a SUE).
     min_quarters_for_sue: int = Field(default=4, gt=0)
+    # Audit 2026-05-05 (forward gap): portfolio-level daily-loss circuit
+    # breaker. PEAD's no-stop philosophy is correct *per trade* (the drift
+    # payoff is positive-skew and brackets destroy it), but a portfolio-level
+    # brake doesn't violate that — it pauses NEW entries during a portfolio-
+    # wide drawdown without forcing existing positions to close. Tracks an
+    # equity high-water mark in state and halts new entries when current
+    # equity falls below ``daily_loss_pct_breaker`` of HWM, for
+    # ``breaker_cooldown_days`` calendar days.
+    #
+    # Default -5% drawdown / 2-day cooldown matches the audit's R5 rule
+    # (R5: −$10K/−5% NLV daily-loss → 48-hour halt). Set
+    # ``daily_loss_pct_breaker=0.0`` to disable (legacy behaviour).
+    daily_loss_pct_breaker: float = Field(
+        default=-0.05,
+        le=0.0,
+        ge=-1.0,
+        json_schema_extra={"tune": {"low": -0.10, "high": -0.02, "type": "float"}},
+    )
+    breaker_cooldown_days: int = Field(default=2, ge=0, le=14)
 
 
 # --------------------------------------------------------------------------- #

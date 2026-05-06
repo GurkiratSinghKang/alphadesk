@@ -68,6 +68,12 @@ _OLD_DEFAULTS: dict = {
     "adv_usd_min": 20_000_000.0,
     "price_min": 10.0,
     "min_quarters_for_sue": 4,
+    # Audit 2026-05-05 — daily-loss circuit breaker (additive; defaults
+    # active because the trade audit's R5 rule says even the modal trader
+    # benefits from the brake. Set daily_loss_pct_breaker=0.0 in tests
+    # that need legacy-equivalent behavior.)
+    "daily_loss_pct_breaker": -0.05,
+    "breaker_cooldown_days": 2,
 }
 
 
@@ -113,6 +119,7 @@ class TestPEADParams:
             "allow_shorts",
             "universe_min_mcap_bn",
             "sue_universe_rank_top_pct",
+            "daily_loss_pct_breaker",
         }
         assert set(space.keys()) == expected_tune_keys
         # Every descriptor must declare a ``type`` and carry either
@@ -899,3 +906,170 @@ class TestPEADStateDurability:
         assert exit_update["pead.held_symbols"] == []
         assert "AAPL" not in exit_update["pead.entries"]
         orjson.dumps(exit_update)
+
+
+# --------------------------------------------------------------------------- #
+# Daily-loss circuit breaker (audit 2026-05-05 forward gap)                   #
+# --------------------------------------------------------------------------- #
+def _input_with_equity(
+    asof: date,
+    *,
+    bars: pd.DataFrame,
+    earnings: pd.DataFrame,
+    equity: Decimal,
+    state: dict | None = None,
+    seed: int = 0,
+) -> StrategyInput:
+    """Build a StrategyInput with explicit equity (decoupled from cash)."""
+    return StrategyInput(
+        asof=asof, mode="backtest", bars=bars, earnings=earnings,
+        cash=equity, equity=equity,
+        positions=[], state=dict(state or {}),
+        seed=seed, rng=np.random.default_rng(seed),
+    )
+
+
+def _surprise_setup(asof: date) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Synthetic NVDA +10% surprise — re-uses the integration-test pattern."""
+    announce_day = asof - timedelta(days=1)
+    hist = _synthetic_history(
+        "NVDA", n=8, base_date=date(2021, 1, 1), surprise_sigma=0.05,
+    )
+    rows = [{
+        "symbol": "NVDA", "date": announce_day,
+        "eps_actual": 1.10, "eps_estimated": 1.00, "surprise": 0.10,
+        "revenue_actual": 100.0, "revenue_estimated": 100.0,
+    }]
+    bars = _bars_frame(
+        ["NVDA"], asof - timedelta(days=200),
+        asof + timedelta(days=60),
+        price=400.0, volume=10_000_000.0,
+    )
+    earnings = _earnings_frame(rows, {"NVDA": hist})
+    return bars, earnings
+
+
+class TestDailyLossBreaker:
+    def test_breaker_inactive_when_equity_at_or_above_hwm(self):
+        """No drawdown ⇒ entries proceed normally; HWM advances."""
+        asof = date(2023, 5, 25)
+        bars, earnings = _surprise_setup(asof)
+        params = PEADParams(daily_loss_pct_breaker=-0.05, breaker_cooldown_days=2)
+        inp = _input_with_equity(asof, bars=bars, earnings=earnings, equity=Decimal("100000"))
+        result = PEADStrategy().run(inp, params)
+        assert result.diagnostics.get("breaker_active") is False
+        assert result.diagnostics.get("entries_skipped_breaker") is None
+        assert result.state_update.get("pead.equity_hwm") == 100000.0
+        # Entries should fire (NVDA +10% surprise produces a SUE-positive long)
+        buys = [s for s in result.signals if s.target_weight is not None and s.target_weight > 0]
+        assert len(buys) >= 1
+
+    def test_breaker_trips_on_drawdown_and_halts_entries(self):
+        """Equity at $94K with prior HWM $100K (−6%) ⇒ entries skipped, breaker_until set."""
+        asof = date(2023, 5, 25)
+        bars, earnings = _surprise_setup(asof)
+        params = PEADParams(daily_loss_pct_breaker=-0.05, breaker_cooldown_days=2)
+        # Pre-existing HWM in state — 6% drawdown from there
+        state = {"pead.equity_hwm": 100000.0}
+        inp = _input_with_equity(
+            asof, bars=bars, earnings=earnings,
+            equity=Decimal("94000"), state=state,
+        )
+        result = PEADStrategy().run(inp, params)
+        assert result.diagnostics.get("breaker_active") is True
+        assert result.diagnostics.get("entries_skipped_breaker") is True
+        # State should record cooldown end-date
+        until = result.state_update.get("pead.breaker_until")
+        assert until is not None
+        assert date.fromisoformat(until) == asof + timedelta(days=2)
+        # No new entry signals (NVDA SUE-positive, but breaker active)
+        new_entries = [s for s in result.signals if s.tag and "pead-entry" in s.tag]
+        assert new_entries == []
+        # Warning emitted
+        assert any("circuit breaker tripped" in w for w in result.warnings)
+
+    def test_breaker_remains_active_during_cooldown_even_if_recovered(self):
+        """Breaker_until in the future ⇒ entries blocked even if equity recovered."""
+        asof = date(2023, 5, 25)
+        bars, earnings = _surprise_setup(asof)
+        params = PEADParams(daily_loss_pct_breaker=-0.05, breaker_cooldown_days=2)
+        # Breaker tripped yesterday and still has 2 days to go
+        state = {
+            "pead.equity_hwm": 100000.0,
+            "pead.breaker_until": (asof + timedelta(days=1)).isoformat(),
+        }
+        inp = _input_with_equity(
+            asof, bars=bars, earnings=earnings,
+            equity=Decimal("100000"),  # fully recovered
+            state=state,
+        )
+        result = PEADStrategy().run(inp, params)
+        assert result.diagnostics.get("breaker_active") is True
+        assert result.diagnostics.get("entries_skipped_breaker") is True
+        new_entries = [s for s in result.signals if s.tag and "pead-entry" in s.tag]
+        assert new_entries == []
+
+    def test_breaker_releases_after_cooldown_expires(self):
+        """asof > breaker_until ⇒ breaker released, entries resume."""
+        asof = date(2023, 5, 25)
+        bars, earnings = _surprise_setup(asof)
+        params = PEADParams(daily_loss_pct_breaker=-0.05, breaker_cooldown_days=2)
+        # Breaker expired 3 days ago
+        state = {
+            "pead.equity_hwm": 100000.0,
+            "pead.breaker_until": (asof - timedelta(days=3)).isoformat(),
+        }
+        inp = _input_with_equity(
+            asof, bars=bars, earnings=earnings,
+            equity=Decimal("100000"),
+            state=state,
+        )
+        result = PEADStrategy().run(inp, params)
+        assert result.diagnostics.get("breaker_active") is False
+        # Entries should fire normally
+        buys = [s for s in result.signals if s.target_weight is not None and s.target_weight > 0]
+        assert len(buys) >= 1
+
+    def test_breaker_disabled_when_threshold_zero(self):
+        """daily_loss_pct_breaker=0.0 ⇒ breaker logic is skipped entirely."""
+        asof = date(2023, 5, 25)
+        bars, earnings = _surprise_setup(asof)
+        # Use 0.0 — disabled
+        params = PEADParams(daily_loss_pct_breaker=0.0)
+        # Enormous drawdown — should be ignored
+        state = {"pead.equity_hwm": 200000.0}
+        inp = _input_with_equity(
+            asof, bars=bars, earnings=earnings,
+            equity=Decimal("50000"),  # -75% from HWM
+            state=state,
+        )
+        result = PEADStrategy().run(inp, params)
+        assert result.diagnostics.get("breaker_active") is None  # not even checked
+        # Entries should fire (NVDA surprise produces a long)
+        buys = [s for s in result.signals if s.target_weight is not None and s.target_weight > 0]
+        assert len(buys) >= 1
+
+    def test_breaker_does_not_force_close_existing_positions(self):
+        """When breaker trips, existing positions still tick toward time-stop —
+        we don't violate PEAD's no-stop-per-trade philosophy."""
+        asof = date(2023, 5, 25)
+        bars, earnings = _surprise_setup(asof)
+        # Position aged 41 days (over the 40-day holding_days default)
+        old_position = Position(
+            symbol="AAPL", quantity=10, avg_entry_price=Decimal("150"),
+            entry_date=asof - timedelta(days=60),
+        )
+        params = PEADParams(daily_loss_pct_breaker=-0.05, breaker_cooldown_days=2)
+        state = {"pead.equity_hwm": 100000.0}
+        inp = StrategyInput(
+            asof=asof, mode="backtest", bars=bars, earnings=earnings,
+            cash=Decimal("94000"), equity=Decimal("94000"),
+            positions=[old_position], state=state,
+            seed=0, rng=np.random.default_rng(0),
+        )
+        result = PEADStrategy().run(inp, params)
+        # Breaker should be active (drawdown -6%)
+        assert result.diagnostics.get("breaker_active") is True
+        # AAPL should still get an exit signal (time-stop fires regardless of breaker)
+        exits = [s for s in result.signals if s.tag and "pead-exit" in s.tag and s.symbol == "AAPL"]
+        assert len(exits) == 1, f"expected AAPL exit signal, got {result.signals}"

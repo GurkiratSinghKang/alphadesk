@@ -160,12 +160,76 @@ class PEADStrategy(Strategy):
                 exits.append(self._exit_signal(pos.symbol, asof))
 
         # ------------------------------------------------------------------ #
+        # 1b. Daily-loss circuit breaker (audit 2026-05-05 forward gap).
+        # Track an equity high-water mark in state. When current equity falls
+        # below ``daily_loss_pct_breaker`` of HWM, pause NEW entries for
+        # ``breaker_cooldown_days`` calendar days. Existing positions still
+        # exit on time-stop — we don't force-close them, which would violate
+        # PEAD's positive-skew payoff.
+        # ------------------------------------------------------------------ #
+        breaker_cfg = float(params.daily_loss_pct_breaker)
+        breaker_active = False
+        if breaker_cfg < 0.0:
+            try:
+                equity_now = float(input.equity)
+            except (TypeError, ValueError):
+                equity_now = 0.0
+            hwm_raw = state.get(f"{_NS}.equity_hwm")
+            try:
+                hwm = float(hwm_raw) if hwm_raw is not None else equity_now
+            except (TypeError, ValueError):
+                hwm = equity_now
+            if equity_now > hwm:
+                hwm = equity_now
+            state_update[f"{_NS}.equity_hwm"] = hwm
+
+            # Are we still inside an existing cooldown?
+            until_raw = state.get(f"{_NS}.breaker_until")
+            until_date: Optional[date] = None
+            if isinstance(until_raw, str):
+                try:
+                    until_date = date.fromisoformat(until_raw)
+                except ValueError:
+                    until_date = None
+            elif isinstance(until_raw, date):
+                until_date = until_raw
+            if until_date is not None and asof <= until_date:
+                breaker_active = True
+            else:
+                # Trip a fresh breaker if drawdown breaches the threshold.
+                if hwm > 0:
+                    drawdown = (equity_now - hwm) / hwm
+                    if drawdown <= breaker_cfg:
+                        breaker_active = True
+                        new_until = asof + timedelta(
+                            days=int(params.breaker_cooldown_days)
+                        )
+                        state_update[f"{_NS}.breaker_until"] = new_until.isoformat()
+                        warnings.append(
+                            f"daily-loss circuit breaker tripped "
+                            f"(drawdown {drawdown:.2%} <= {breaker_cfg:.2%}); "
+                            f"halting new entries until {new_until.isoformat()}"
+                        )
+            diagnostics["breaker_active"] = breaker_active
+            diagnostics["equity_hwm"] = hwm
+
+        # ------------------------------------------------------------------ #
         # 2. Entries — same as the old generate_signals()
         # ------------------------------------------------------------------ #
         # Cache the universe list on state so universe() sees a stable set
         # across subsequent bars. Shallow state merge preserves this.
         universe_list = state.get(f"{_NS}.universe") or list(UNIVERSE_SEED)
         state_update[f"{_NS}.universe"] = universe_list
+
+        # If the daily-loss circuit breaker is active, skip entries for this
+        # bar. Exits already accumulated above; existing positions tick down
+        # toward the time-stop normally.
+        if breaker_active:
+            diagnostics["entries_candidates"] = 0
+            diagnostics["entries_skipped_breaker"] = True
+            return self._finalise_result(
+                exits, entries_state, state_update, diagnostics, warnings,
+            )
 
         earnings = input.earnings
         if earnings is None or earnings.empty:
