@@ -141,12 +141,20 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
         })}
       </div>
 
-      {/* IV rank slider — K-7 (round-6): commit on release, not per-notch */}
+      {/* IV rank slider — K-7 (round-6): commit on release, not per-notch.
+          EOP-AUDIT 2026-05-06 PR-3: the implicit <label> wrapping
+          provides the accessible name ("IV RANK ≥"), but the trailing
+          number span is decorative. Add an explicit aria-label that
+          unambiguously names the control AND aria-valuetext so screen
+          readers announce the percent unit instead of just a bare
+          integer. */}
       <label className="flex items-center gap-2">
         <span className="t-label text-[color:var(--fg-muted)]">IV RANK &ge;</span>
         <input
           type="range"
           name="minIvRank"
+          aria-label="Minimum IV rank filter"
+          aria-valuetext={`${localIvRank} percent`}
           min={0}
           max={100}
           step={5}
@@ -173,7 +181,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
           // Round-4 (CLUSTER E/9): 24×24 thumb classes for touch targets.
           className={cn("w-full md:w-32 max-w-full", SLIDER_THUMB_CLASSES)}
         />
-        <span className="font-mono text-body-sm tabular-nums text-[color:var(--fg-base)]">{localIvRank}</span>
+        <span aria-hidden="true" className="font-mono text-body-sm tabular-nums text-[color:var(--fg-base)]">{localIvRank}</span>
       </label>
 
       {/* TIME — radiogroup (CLUSTER C/7). Replaces the previous select
