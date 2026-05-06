@@ -73,6 +73,44 @@ describe("TickerPriceDisplay — extended-hours secondary", () => {
     expect(sec?.textContent).toMatch(/\+?13\.34%/);
   });
 
+  // ── Maverick FIX-D (new-trader P1 #5): AH delta clarification ──
+  it("appends 'vs. today\\'s close' to the extended-hours label", () => {
+    const { container } = render(
+      <TickerPriceDisplay
+        last={356.28}
+        change={4.32}
+        changePct={1.23}
+        extendedSession="post"
+        extendedPrice={414.0}
+        extendedChange={57.72}
+        extendedChangePct={13.34}
+        extendedTimestamp={recentExtendedTimestamp}
+      />,
+    );
+    const label = container.querySelector("[data-slot='extended-hours-label']");
+    expect(label).not.toBeNull();
+    expect(label?.textContent).toMatch(/vs\.\s*today's close/i);
+  });
+
+  it("exposes the disambiguation tooltip on the extended-hours label via <abbr title>", () => {
+    const { container } = render(
+      <TickerPriceDisplay
+        last={356.28}
+        change={4.32}
+        changePct={1.23}
+        extendedSession="post"
+        extendedPrice={414.0}
+        extendedChange={57.72}
+        extendedChangePct={13.34}
+        extendedTimestamp={recentExtendedTimestamp}
+      />,
+    );
+    const label = container.querySelector("[data-slot='extended-hours-label']");
+    expect(label?.tagName).toBe("ABBR");
+    expect(label?.getAttribute("title")).toMatch(/regular-session close/i);
+    expect(label?.getAttribute("title")).toMatch(/not added to today's regular change/i);
+  });
+
   it("renders 'Pre-market' label when extendedSession === 'pre'", () => {
     const { container } = render(
       <TickerPriceDisplay

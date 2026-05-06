@@ -151,7 +151,20 @@ export function TickerPriceDisplay({
           data-session={extendedSession}
           className="mt-1 border-t border-[color:var(--border-hair,var(--border))] pt-1"
         >
-          <span className="t-label u-muted">{SESSION_LABEL[extendedSession]} </span>
+          {/* Maverick FIX-D (new-trader P1 #5): "After Hours" alone reads
+              like an additional delta on top of today's regular change.
+              Append "(vs. today's close)" so the reference point is
+              explicit, and put the full explanation behind an <abbr>
+              tooltip + dotted underline so screen readers and hover
+              users both get the disambiguation. */}
+          <abbr
+            data-slot="extended-hours-label"
+            title="After-hours change is measured against today's regular-session close, not added to today's regular change"
+            className="t-label u-muted no-underline decoration-dotted underline-offset-4 [text-decoration-style:dotted] hover:underline cursor-help"
+          >
+            {SESSION_LABEL[extendedSession]}{" "}
+            <span className="u-muted">(vs. today&apos;s close)</span>
+          </abbr>{" "}
           <span className="t-mono text-body-sm">{fmtCurrency(extendedPrice, "USD")}</span>
           {extendedDeltaText && (
             <span className={cn("t-mono text-label ml-2", extendedDeltaClass)}>
