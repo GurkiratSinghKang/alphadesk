@@ -1290,6 +1290,9 @@ def _build_tail_risk_signals(
     sector_cohort_momentum_avg: float | None = None,
     analyst_pt_changes_24h: int = 0,
     news_sentiment: float | None = None,
+    underlying_relative_volume: float | None = None,
+    options_call_put_volume_skew: float | None = None,
+    unusual_options_activity: bool = False,
 ) -> Any:
     """SHR-5: assemble :class:`TailRiskSignals` from already-loaded data.
 
@@ -1305,6 +1308,14 @@ def _build_tail_risk_signals(
         wrapper :func:`_build_tail_risk_signals_async` after it fetches
         them upstream. Default to "no signal" when not provided so the
         sync surface stays usable from existing call sites and tests.
+      * ``underlying_relative_volume`` (Wave V V3) — quote volume / 20d
+        ADV. Provided by the async wrapper after it inspects the quote
+        and pulls the rolling baseline; ``None`` means no signal.
+      * ``options_call_put_volume_skew`` (Wave V V3) — total chain call
+        volume / max(put volume, 1). Provided by the async wrapper.
+      * ``unusual_options_activity`` (Wave V V3) — bool flagged when
+        today's chain volume > 3× the rolling 20-day average. Provided
+        by the async wrapper after the time-series append/read cycle.
     """
     from api.schemas.earnings import TailRiskSignals
 
@@ -1332,6 +1343,9 @@ def _build_tail_risk_signals(
         news_sentiment=news_sentiment,
         historical_move_kurtosis=kurt,
         iv_term_steepness=_iv_term_steepness(metrics),
+        underlying_relative_volume=underlying_relative_volume,
+        options_call_put_volume_skew=options_call_put_volume_skew,
+        unusual_options_activity=unusual_options_activity,
     )
 
 
@@ -1593,30 +1607,222 @@ def _try_parse_news_ts(value: Any) -> datetime | None:
         return None
 
 
+# ─── TR-5 (Wave V V3): volume signals ─────────────────────────
+#
+# Three signals split between the underlying and the options chain:
+#   * underlying_relative_volume — today's underlying volume / 20-day ADV
+#   * options_call_put_volume_skew — total call vol / max(total put vol, 1)
+#   * unusual_options_activity — total chain volume > 3× rolling 20d avg
+#
+# The 20-day chain-volume baseline lives in Redis as a per-symbol JSON
+# list of ``[date_iso, total_volume]`` pairs (mirrors the IV-history
+# pattern from Batch P). Each successful read also appends today's
+# observation, trimming to the last 20 trading-day entries. The list
+# is persistent (TTL=0) so the rolling average survives restarts.
+
+# Cap the time-series at 20 entries and idempotent-append once per day:
+# a second hit on the same UTC date overwrites the prior day's entry
+# rather than double-counting. Picked 20 because that's the standard
+# "monthly" trading window — enough samples for a stable mean without
+# letting stale prints from 2 months ago skew the baseline.
+_OPTIONS_VOLUME_HISTORY_MAX_ENTRIES = 20
+_OPTIONS_VOLUME_HISTORY_KEY_PREFIX = "earnings:tr:options_vol_hist:"
+# Threshold for the recommender's bool: 3× the rolling avg = unusual.
+_UNUSUAL_OPTIONS_ACTIVITY_MULTIPLE = 3.0
+
+
+def _total_chain_volume(chain: Any) -> tuple[int, int, int]:
+    """Sum per-contract volumes across calls, puts, and total.
+
+    Returns ``(total, calls, puts)``. Defensive against ``None``
+    contracts / missing volume fields — a busted chain row contributes
+    0 rather than aborting the whole signal.
+    """
+    contracts = getattr(chain, "contracts", None) or []
+    calls = 0
+    puts = 0
+    for c in contracts:
+        try:
+            v = int(getattr(c, "volume", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        if v <= 0:
+            continue
+        otype = getattr(c, "option_type", None)
+        otype_val = getattr(otype, "value", otype)
+        if otype_val == "call":
+            calls += v
+        elif otype_val == "put":
+            puts += v
+    return calls + puts, calls, puts
+
+
+def _underlying_relative_volume_from_quote(
+    quote: Mapping[str, Any] | None,
+) -> float | None:
+    """Pull ``relative_volume`` directly from the quote payload (Wave V V1).
+
+    The Wave V V1 work adds a ``relative_volume`` field to the quote
+    shape produced by :func:`_load_quote` (volume / 20-day ADV). Until
+    that field lands the lookup returns ``None`` and the signal stays
+    silent — graceful degradation, no recomputation here.
+    """
+    if not isinstance(quote, Mapping):
+        return None
+    rv = quote.get("relative_volume")
+    if rv is None:
+        return None
+    try:
+        rvf = float(rv)
+    except (TypeError, ValueError):
+        return None
+    if rvf <= 0:
+        return None
+    return rvf
+
+
+async def _compute_options_volume_signals(
+    symbol: str,
+    *,
+    chain: Any | None,
+) -> tuple[float | None, bool]:
+    """TR-5: compute options call/put skew and unusual-activity flag.
+
+    Returns ``(skew, unusual)`` where:
+      * ``skew`` = total_call_volume / max(total_put_volume, 1) when the
+        chain has at least one volume entry; ``None`` otherwise.
+      * ``unusual`` = True iff today's total chain volume > 3× the
+        rolling 20-day average for ``symbol``. Requires at least 5
+        prior entries in the time-series before flagging unusual (so a
+        cold cache doesn't trigger spurious flags on day 1).
+
+    Side effect: appends today's ``(YYYY-MM-DD, total_volume)`` pair
+    into Redis at ``earnings:tr:options_vol_hist:{SYM}``, trimmed to
+    the last 20 entries. The list is persistent (TTL=0) so the rolling
+    baseline survives container restarts.
+    """
+    from core.redis import cache_get, cache_set
+
+    if chain is None:
+        return None, False
+
+    total, calls, puts = _total_chain_volume(chain)
+    skew: float | None = None
+    if total > 0:
+        # max(puts, 1) avoids div-zero — when a name is purely calls the
+        # ratio is just the call volume itself, which still reads as
+        # extreme skew (>2.0) for the recommender.
+        skew = float(calls) / float(max(puts, 1))
+
+    if total <= 0:
+        # Nothing to record / no signal. Returning skew (which may be
+        # None) keeps the no-signal contract intact.
+        return skew, False
+
+    sym = symbol.upper()
+    cache_k = f"{_OPTIONS_VOLUME_HISTORY_KEY_PREFIX}{sym}"
+
+    history: list[tuple[str, int]] = []
+    try:
+        raw = await cache_get(cache_k)
+    except Exception as e:  # noqa: BLE001 — cache read is best-effort
+        log.debug(
+            "options-vol history read failed for %s: %s", sym, e,
+            extra=_log_ctx(
+                endpoint="earnings._compute_options_volume_signals",
+                symbol=sym, error=str(e),
+            ),
+        )
+        raw = None
+    if isinstance(raw, list):
+        for entry in raw:
+            # Each entry is a [date_iso, volume] pair; defensively
+            # tolerate the wrong shape so a bad cache write doesn't
+            # propagate forever (the trim step rewrites the list).
+            if (
+                isinstance(entry, (list, tuple))
+                and len(entry) == 2
+                and isinstance(entry[0], str)
+            ):
+                try:
+                    history.append((str(entry[0]), int(entry[1])))
+                except (TypeError, ValueError):
+                    continue
+
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    # Idempotent append: replace today's entry if already present so
+    # multiple calendar renders on the same day don't double-count.
+    history = [(d, v) for (d, v) in history if d != today_iso]
+    history.append((today_iso, int(total)))
+    # Trim to the last N entries (most-recent on the right).
+    if len(history) > _OPTIONS_VOLUME_HISTORY_MAX_ENTRIES:
+        history = history[-_OPTIONS_VOLUME_HISTORY_MAX_ENTRIES:]
+
+    # Persist (TTL=0 → no expiry; baseline must survive restarts).
+    try:
+        await cache_set(cache_k, history, ttl_seconds=0)
+    except Exception as e:  # noqa: BLE001 — cache write is best-effort
+        log.debug(
+            "options-vol history write failed for %s: %s", sym, e,
+            extra=_log_ctx(
+                endpoint="earnings._compute_options_volume_signals",
+                symbol=sym, error=str(e),
+            ),
+        )
+
+    # Flag unusual only when we have enough prior days for a stable
+    # baseline (5 prior entries — today's entry isn't its own baseline).
+    prior = [v for (d, v) in history if d != today_iso]
+    unusual = False
+    if len(prior) >= 5:
+        avg = sum(prior) / len(prior)
+        if avg > 0 and float(total) > _UNUSUAL_OPTIONS_ACTIVITY_MULTIPLE * avg:
+            unusual = True
+    return skew, unusual
+
+
 async def _build_tail_risk_signals_async(
     symbol: str,
     *,
     quote: Mapping[str, Any] | None,
     metrics: Mapping[str, Any] | None,
     prior_moves: Sequence[float] | None,
+    chain: Any | None = None,
 ) -> Any:
-    """TR-1: async wrapper that fans out to TR-2/TR-3/TR-4 fetchers, then
-    delegates to the sync :func:`_build_tail_risk_signals` for assembly.
+    """TR-1: async wrapper that fans out to TR-2/TR-3/TR-4/TR-5 fetchers,
+    then delegates to the sync :func:`_build_tail_risk_signals` for
+    assembly.
 
     Each fetcher is exception-safe — a single failed source becomes a
     "no signal" value rather than killing the whole calendar entry.
+
+    ``chain`` (Wave V V3) is the already-loaded options chain. When not
+    provided the volume signals stay silent (graceful degradation for
+    older call sites and tests).
     """
     cohort_t = asyncio.create_task(_compute_sector_cohort_momentum(symbol))
     pt_t = asyncio.create_task(_fetch_analyst_pt_changes_24h(symbol))
     sent_t = asyncio.create_task(_compute_news_sentiment_24h(symbol))
+    # TR-5: options volume signals — only fan out when a chain is
+    # available; otherwise hand back the no-signal default tuple.
+    vol_t = asyncio.create_task(
+        _compute_options_volume_signals(symbol, chain=chain)
+    )
 
-    cohort_r, pt_r, sent_r = await asyncio.gather(
-        cohort_t, pt_t, sent_t, return_exceptions=True,
+    cohort_r, pt_r, sent_r, vol_r = await asyncio.gather(
+        cohort_t, pt_t, sent_t, vol_t, return_exceptions=True,
     )
 
     cohort_avg = cohort_r if isinstance(cohort_r, (int, float)) else None
     pt_changes = int(pt_r) if isinstance(pt_r, (int, float)) else 0
     sentiment = sent_r if isinstance(sent_r, (int, float)) else None
+    if isinstance(vol_r, tuple) and len(vol_r) == 2:
+        skew_r, unusual_r = vol_r
+        skew = float(skew_r) if isinstance(skew_r, (int, float)) else None
+        unusual = bool(unusual_r)
+    else:
+        skew = None
+        unusual = False
 
     return _build_tail_risk_signals(
         quote=quote,
@@ -1625,6 +1831,9 @@ async def _build_tail_risk_signals_async(
         sector_cohort_momentum_avg=cohort_avg,
         analyst_pt_changes_24h=pt_changes,
         news_sentiment=sentiment,
+        underlying_relative_volume=_underlying_relative_volume_from_quote(quote),
+        options_call_put_volume_skew=skew,
+        unusual_options_activity=unusual,
     )
 
 
@@ -1981,6 +2190,16 @@ async def _load_strike_ladder(
                     mid = float(contract.last or 0)
                 yield_pct = mid / underlying if underlying > 0 else 0.0
                 pop = max(0.0, min(1.0, 1 - abs(contract.delta or 0.5)))
+                # Wave V V1-3: forward the contract's volume_oi_ratio
+                # if the chain populated it; otherwise compute on the fly
+                # from the row's volume + OI so older code paths that
+                # build OptionContract dicts directly still emit the
+                # field. ``None`` only when both volume and OI are zero.
+                row_vol = int(contract.volume or 0)
+                row_oi = int(contract.open_interest or 0)
+                row_vol_oi = getattr(contract, "volume_oi_ratio", None)
+                if row_vol_oi is None and (row_vol > 0 or row_oi > 0):
+                    row_vol_oi = round(float(row_vol) / max(float(row_oi), 1.0), 4)
                 rows.append({
                     "strike": contract.strike,
                     "expiry": getattr(contract, "expiry", resolved_expiry),
@@ -1996,8 +2215,9 @@ async def _load_strike_ladder(
                     "theta": contract.theta or 0,
                     "gamma": contract.gamma or 0,
                     "vega": contract.vega or 0,
-                    "oi": contract.open_interest or 0,
-                    "volume": contract.volume or 0,
+                    "oi": row_oi,
+                    "volume": row_vol,
+                    "volume_oi_ratio": row_vol_oi,
                 })
         resolved_expiry = resolved_expiry or (
             chain.expirations[0] if chain.expirations else market_today()
@@ -2862,14 +3082,16 @@ async def _hydrate_row(
             from services.options import fetch_chain
 
             chain = await fetch_chain(symbol)
-            # SHR-5 / TR-1..TR-4: pull prior_moves + tail-risk signals
+            # SHR-5 / TR-1..TR-5: pull prior_moves + tail-risk signals
             # from already-loaded metrics + async-fetch the upstream
-            # signals (sector cohort, analyst PT, news sentiment) so the
-            # recommender sees the full picture instead of all-None.
+            # signals (sector cohort, analyst PT, news sentiment, plus
+            # Wave V V3's options volume signals) so the recommender
+            # sees the full picture instead of all-None.
             prior_moves = _prior_moves_from_metrics(metrics)
             tr_signals = await _build_tail_risk_signals_async(
                 symbol,
                 quote=quote, metrics=metrics, prior_moves=prior_moves,
+                chain=chain,
             )
             tail_risk_score = _compute_tail_risk_score(tr_signals)
             tail_risk_reasons = _tail_risk_reasons(tr_signals)

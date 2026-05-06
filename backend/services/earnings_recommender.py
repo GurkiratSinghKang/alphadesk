@@ -1238,10 +1238,11 @@ def _build_iron_condor(ctx: _BuildContext) -> EarningsSetup | None:
         claude_confidence=ctx.claude_confidence,
         iv_rank=ctx.iv_rank,
     )
-    short_put = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -short_d)
-    long_put = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -long_d)
-    short_call = find_strike_by_delta(ctx.chain, ctx.expiry, "call", short_d)
-    long_call = find_strike_by_delta(ctx.chain, ctx.expiry, "call", long_d)
+    warns: list[bool] = []
+    short_put = _pick_strike_by_delta(ctx, "put", -short_d, warns)
+    long_put = _pick_strike_by_delta(ctx, "put", -long_d, warns)
+    short_call = _pick_strike_by_delta(ctx, "call", short_d, warns)
+    long_call = _pick_strike_by_delta(ctx, "call", long_d, warns)
     if not (short_put and long_put and short_call and long_call):
         return None
     if long_put.strike >= short_put.strike or long_call.strike <= short_call.strike:
@@ -1274,7 +1275,7 @@ def _build_iron_condor(ctx: _BuildContext) -> EarningsSetup | None:
     rationale = (
         f"{_summary_iv_vs_hv(ctx)}. Defined-risk short premium." + _summary_implied_vs_hist(ctx)
     )
-    return EarningsSetup(
+    setup = EarningsSetup(
         setup_id="iron_condor",
         legs=legs,
         net_credit_or_debit=net_credit,
@@ -1287,6 +1288,11 @@ def _build_iron_condor(ctx: _BuildContext) -> EarningsSetup | None:
         rationale=rationale,
         sizing_kelly_pct=_ctx_kelly(ctx, pop, max_profit / max_loss),
         is_defined_risk=True,
+    )
+    return _annotate_liquidity(
+        setup,
+        [long_put, short_put, short_call, long_call],
+        extra_warning=any(warns),
     )
 
 
@@ -1337,7 +1343,7 @@ def _build_iron_butterfly(ctx: _BuildContext) -> EarningsSetup | None:
     breakevens = [atm_put.strike - net_credit, atm_call.strike + net_credit]
     pop = _ctx_pop(ctx, breakevens, "between")
     ev = pop * max_profit - (1.0 - pop) * max_loss
-    return EarningsSetup(
+    setup = EarningsSetup(
         setup_id="iron_butterfly",
         legs=legs,
         net_credit_or_debit=net_credit,
@@ -1354,6 +1360,7 @@ def _build_iron_butterfly(ctx: _BuildContext) -> EarningsSetup | None:
         sizing_kelly_pct=_ctx_kelly(ctx, pop, max_profit / max_loss),
         is_defined_risk=True,
     )
+    return _annotate_liquidity(setup, [long_put, atm_put, atm_call, long_call])
 
 
 # ─── Short strangle (rich_neutral, naked) ────────────────────

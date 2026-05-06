@@ -633,6 +633,149 @@ def test_tail_risk_score_caps_at_one():
 
 
 # ---------------------------------------------------------------------------
+# Wave V V3: volume-derived signals (relative volume, call/put skew, UOA)
+# ---------------------------------------------------------------------------
+
+
+def test_tail_risk_score_underlying_relative_volume_above_threshold():
+    """relative_volume=2.0 (above 1.5×) → +0.10."""
+    score = _compute_tail_risk_score(
+        TailRiskSignals(underlying_relative_volume=2.0)
+    )
+    assert score == pytest.approx(0.10)
+
+
+def test_tail_risk_score_underlying_relative_volume_below_threshold():
+    """relative_volume=1.4 (below 1.5×) → contributes nothing."""
+    score = _compute_tail_risk_score(
+        TailRiskSignals(underlying_relative_volume=1.4)
+    )
+    assert score == 0.0
+
+
+def test_tail_risk_score_call_put_skew_strong_calls():
+    """skew=3.0 (heavy calls, > 2.0) → +0.10."""
+    score = _compute_tail_risk_score(
+        TailRiskSignals(options_call_put_volume_skew=3.0)
+    )
+    assert score == pytest.approx(0.10)
+
+
+def test_tail_risk_score_call_put_skew_strong_puts():
+    """skew=0.3 (heavy puts, < 0.5) → +0.10."""
+    score = _compute_tail_risk_score(
+        TailRiskSignals(options_call_put_volume_skew=0.3)
+    )
+    assert score == pytest.approx(0.10)
+
+
+def test_tail_risk_score_call_put_skew_balanced_no_contribution():
+    """skew=1.0 (balanced) → no contribution."""
+    score = _compute_tail_risk_score(
+        TailRiskSignals(options_call_put_volume_skew=1.0)
+    )
+    assert score == 0.0
+
+
+def test_tail_risk_score_unusual_options_activity_true():
+    """UOA flagged → +0.10."""
+    score = _compute_tail_risk_score(
+        TailRiskSignals(unusual_options_activity=True)
+    )
+    assert score == pytest.approx(0.10)
+
+
+def test_tail_risk_score_unusual_options_activity_false_no_contribution():
+    """UOA not flagged → no contribution (default False)."""
+    score = _compute_tail_risk_score(
+        TailRiskSignals(unusual_options_activity=False)
+    )
+    assert score == 0.0
+
+
+def test_tail_risk_score_volume_signals_none_graceful():
+    """Wave V V3 signals all None / False → behaves like the pre-V3 score."""
+    pre_v3 = _compute_tail_risk_score(
+        TailRiskSignals(intraday_momentum_pct=0.043)
+    )
+    with_v3_silent = _compute_tail_risk_score(
+        TailRiskSignals(
+            intraday_momentum_pct=0.043,
+            underlying_relative_volume=None,
+            options_call_put_volume_skew=None,
+            unusual_options_activity=False,
+        )
+    )
+    assert pre_v3 == pytest.approx(with_v3_silent)
+
+
+def test_tail_risk_score_amd_post_print_skip_threshold():
+    """AMD-style integration: relative_volume 2.5× + call skew 3.5× + UOA
+    on top of intraday + cohort + PT + sentiment → score crosses 0.85
+    so the recommender's skip-threshold fires.
+
+    Builds on the existing AMD-flavour case: the volume signals push a
+    moderate base score (intraday+cohort+PT = 0.60) firmly into the
+    skip band by adding 0.10 + 0.10 + 0.10 = 0.30 more.
+    """
+    signals = TailRiskSignals(
+        intraday_momentum_pct=0.043,         # +0.25
+        sector_cohort_momentum_avg=0.025,    # +0.20
+        analyst_pt_changes_24h=2,            # +0.15
+        underlying_relative_volume=2.5,      # +0.10
+        options_call_put_volume_skew=3.5,    # +0.10
+        unusual_options_activity=True,       # +0.10
+    )
+    score = _compute_tail_risk_score(signals)
+    # 0.25 + 0.20 + 0.15 + 0.10 + 0.10 + 0.10 = 0.90.
+    assert score == pytest.approx(0.90)
+    assert score >= 0.85  # extreme tail-risk band — recommender skips
+
+
+def test_tail_risk_reasons_includes_volume_signals():
+    """Reasons surface the new volume-signal explanations."""
+    from services.earnings_recommender import _tail_risk_reasons
+
+    reasons = _tail_risk_reasons(
+        TailRiskSignals(
+            underlying_relative_volume=2.4,
+            options_call_put_volume_skew=3.2,
+            unusual_options_activity=True,
+        )
+    )
+    text = " | ".join(reasons)
+    assert "2.4" in text and "ADV" in text
+    assert "3.2" in text and "bullish skew" in text
+    assert "unusual options activity" in text
+
+
+def test_tail_risk_reasons_bearish_skew_phrasing():
+    """skew<0.5 surfaces as inverted ratio with 'bearish skew'."""
+    from services.earnings_recommender import _tail_risk_reasons
+
+    reasons = _tail_risk_reasons(
+        TailRiskSignals(options_call_put_volume_skew=0.25)
+    )
+    text = " | ".join(reasons)
+    # 1/0.25 = 4.0× — readable as "puts dominate by 4×".
+    assert "4.0" in text and "bearish skew" in text
+
+
+def test_tail_risk_reasons_silent_when_signals_below_threshold():
+    """Below-threshold values don't add reasons."""
+    from services.earnings_recommender import _tail_risk_reasons
+
+    reasons = _tail_risk_reasons(
+        TailRiskSignals(
+            underlying_relative_volume=1.2,    # below 1.5
+            options_call_put_volume_skew=1.1,  # neither >2 nor <0.5
+            unusual_options_activity=False,
+        )
+    )
+    assert reasons == []
+
+
+# ---------------------------------------------------------------------------
 # SHR-3: confidence + tail-risk Kelly overlay
 # ---------------------------------------------------------------------------
 
