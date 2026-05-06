@@ -1210,6 +1210,23 @@ def _compute_iv_rank_percentile(
     return (round(rank, 1), round(pct, 1))
 
 
+def _iv_history_status(history_len: int) -> str:
+    """Return a short status label describing the IV-history warm-up state.
+
+    Used by callers/UI to explain why ``iv_rank`` / ``iv_percentile`` may be
+    null even though the symbol's chain is healthy. Strings are stable so
+    the FE can switch on them.
+
+    Audit-r5 / B1.6+B2.33: surfaces the "warming up — N days of history
+    needed" tooltip the user asked for.
+    """
+    if history_len <= 0:
+        return "warming_up_no_history"
+    if history_len < _IV_HISTORY_MIN_DAYS_FOR_RANK:
+        return f"warming_up_{history_len}_of_{_IV_HISTORY_MIN_DAYS_FOR_RANK}"
+    return "ready"
+
+
 async def _fetch_real_iv(symbol: str) -> IVData | None:
     """Derive IV analytics from the real Alpaca options chain.
 
@@ -1298,10 +1315,20 @@ async def _fetch_real_iv(symbol: str) -> IVData | None:
         # Batch P / P-1: persist today's ATM IV and compute rank/percentile
         # over the rolling history. The persistence step is best-effort —
         # a Redis blip just keeps the rank null for one day.
+        # Audit-r5 (B1.6 / B2.33): surface the warm-up state in logs at
+        # INFO when rank is still null so operators can tell when the
+        # rolling history has accumulated enough samples (≥30 days) for
+        # the public endpoint to start serving real values.
         try:
             await _persist_iv_history(s, current_iv)
             history = await _read_iv_history_series(s)
             iv_rank, iv_percentile = _compute_iv_rank_percentile(current_iv, history)
+            if iv_rank is None or iv_percentile is None:
+                status = _iv_history_status(len(history))
+                log.info(
+                    "IV rank warm-up: symbol=%s history_days=%d status=%s",
+                    s, len(history), status,
+                )
         except Exception:
             log.debug("IV rank/percentile pipeline failed for %s", s, exc_info=True)
 
@@ -1395,6 +1422,19 @@ async def fetch_chain(
     """
     from fastapi import HTTPException
     from services.market import _is_valid_demo_symbol
+
+    # Audit-r5 (B1.8): reject Polygon-namespaced symbols at the chain
+    # entry point. Indices (I:*) don't have option chains; options
+    # contracts (O:*) shouldn't be queried as underlyings.
+    if ":" in symbol:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Invalid underlying '{symbol}': Polygon-namespaced symbols "
+                "(I:* indices, O:* options) are not supported on the chain "
+                "endpoint. Pass the underlying equity ticker."
+            ),
+        )
 
     symbol = symbol.upper()
 
@@ -1507,6 +1547,20 @@ async def fetch_iv_analysis(symbol: str, client_host: str | None = None) -> IVDa
     from fastapi import HTTPException
     from services.market import _is_valid_demo_symbol
 
+    # Audit-r5 (B1.8): reject Polygon-namespaced symbols at the IV
+    # endpoint as well. The chain provider doesn't speak the indices
+    # namespace; without this guard the request bubbles up as a 404 and
+    # surfaces in the DataUnavailableBanner.
+    if ":" in symbol:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Invalid symbol '{symbol}': Polygon-namespaced symbols "
+                "(I:* indices, O:* options) are not supported on the IV "
+                "analysis endpoint. Pass the underlying equity ticker."
+            ),
+        )
+
     symbol = symbol.upper()
 
     # 1. Try real IV from Alpaca OPRA chain.
@@ -1532,6 +1586,14 @@ async def fetch_iv_analysis(symbol: str, client_host: str | None = None) -> IVDa
             return await _demo_iv(symbol)
 
         current_iv = iv_values[-1]
+
+        # Audit-r5 (B1.6 / B2.33): mirror the current sample into the new
+        # rolling-history key shape so that a real-IV outage doesn't gap
+        # the new history series. Best-effort.
+        try:
+            await _persist_iv_history(symbol, float(current_iv))
+        except Exception:
+            log.debug("legacy fallback IV persist failed for %s", symbol, exc_info=True)
 
         arr = np.array(iv_values)
         iv_rank = float((current_iv - arr.min()) / (arr.max() - arr.min()) * 100) if arr.max() != arr.min() else 50

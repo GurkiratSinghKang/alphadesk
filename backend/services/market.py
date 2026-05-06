@@ -608,6 +608,24 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
     """
     from fastapi import HTTPException
 
+    # Audit-r5 (B1.8): reject Polygon-namespaced inputs at the equity
+    # entry point. Symbols like ``I:TQQQIV`` (Polygon indices namespace)
+    # leak into the equity quote path through legacy watchlists or stale
+    # localStorage; without a guard they fail downstream as a generic
+    # 404 ("Symbol 'I:TQQQIV' not found"), which surfaces in the
+    # DataUnavailableBanner with the unhelpful raw symbol verbatim. Reject
+    # cleanly with a 422 + clear message so the FE can drop the entry
+    # rather than retry on every poll.
+    if ":" in symbol:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Invalid equity symbol '{symbol}': Polygon-namespaced "
+                "symbols (I:* indices, O:* options) are not supported on the "
+                "quote endpoint. Pass the underlying ticker instead."
+            ),
+        )
+
     # P1-13: option-symbol detection — when the input matches the OCC
     # contract shape, dispatch to the option-snapshot endpoints rather
     # than the equity ticker path (which would 404). The equity demo

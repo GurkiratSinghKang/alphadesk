@@ -228,6 +228,17 @@ class CalendarRow(BaseModel):
     sector: str
     report_date: date
     report_time: ReportTime
+    # Audit-r5 (B2.34): human-readable label for ``report_time``. ``DMT``
+    # is the schema-internal "unknown" bucket sourced from FMP and the FE
+    # currently surfaces the raw acronym, which non-options users find
+    # opaque. ``report_time_display`` is the canonical chip label
+    # ("Before market open" / "After market close" / "Time TBD") and
+    # should be used in render paths; ``report_time`` remains the
+    # programmatic key for filtering / sorting.
+    report_time_display: str | None = Field(
+        default=None,
+        description="Human-readable label for report_time (BMO/AMC/DMT).",
+    )
     days_until: int
     # Round-4 CLUSTER 1 #5: report_state lets the frontend dim "already
     # printed today" rows without us filtering them out (which would make
@@ -514,6 +525,13 @@ class EarningsDetail(BaseModel):
     # deep-link for a symbol reporting next quarter). See B-41.
     report_date: date | None = None
     report_time: ReportTime
+    # Audit-r5 (B2.34): see ``CalendarRow.report_time_display`` for the
+    # rationale — the FE should bind this string for chip rendering and
+    # use ``report_time`` only for programmatic filters.
+    report_time_display: str | None = Field(
+        default=None,
+        description="Human-readable label for report_time (BMO/AMC/DMT).",
+    )
     days_until: int | None = None
     report_state: ReportState = "upcoming"
     quote: QuoteBlock | None = None

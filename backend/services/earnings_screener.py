@@ -703,6 +703,31 @@ def _resolve_report_time(symbol: str, fmp_value: str | None) -> str:
     return "DMT"
 
 
+# Audit-r5 (B2.34): map the schema's ReportTime literal to a
+# human-readable chip label. ``DMT`` is FMP's upstream "unknown" bucket
+# and surfaces verbatim in the FE today, which confuses non-options
+# users (industry-standard codes are BMO / AMC only). The mapping is
+# also used for tooltips so the user sees both the standard code and
+# the long-form description.
+REPORT_TIME_DISPLAY: dict[str, str] = {
+    "BMO": "Before market open",
+    "AMC": "After market close",
+    "DMT": "Time TBD",
+}
+
+
+def format_report_time_label(report_time: str | None) -> str:
+    """Return the human-readable chip label for a report_time code.
+
+    Falls back to "Time TBD" when the input is null/empty/unknown so the
+    chip never renders the raw acronym (which the user reported as
+    confusing — see audit-r5 B2.34).
+    """
+    if not report_time:
+        return REPORT_TIME_DISPLAY["DMT"]
+    return REPORT_TIME_DISPLAY.get(report_time.upper(), REPORT_TIME_DISPLAY["DMT"])
+
+
 def _symbol_display_priority(symbol: str) -> int:
     """Lower numbers should appear first within the same report day."""
     return _HEADLINE_SYMBOL_RANK.get(symbol.upper(), len(_HEADLINE_SYMBOL_RANK) + 100)
@@ -3364,6 +3389,13 @@ async def list_upcoming(
                     row_payload.get("report_time", "DMT"),
                 )
             row_payload.setdefault("report_state", "upcoming")
+            # Audit-r5 (B2.34): wire the human-readable label so the FE
+            # chip can render "Before market open" / "After market close"
+            # / "Time TBD" instead of the raw acronym.
+            row_payload.setdefault(
+                "report_time_display",
+                format_report_time_label(row_payload.get("report_time")),
+            )
             rows.append(CalendarRow(**row_payload))
         except Exception as e:
             log.warning(
@@ -3475,6 +3507,8 @@ async def _build_stub_detail(symbol: str) -> EarningsDetail:
         sector="",
         report_date=report_date_val,
         report_time="DMT",
+        # Audit-r5 (B2.34): human-readable chip label.
+        report_time_display=format_report_time_label("DMT"),
         quote=QuoteBlock(**quote) if isinstance(quote, dict) else None,
         metrics=None,
         strike_ladder=None,
@@ -3687,6 +3721,8 @@ async def get_detail(symbol: str) -> EarningsDetail:
         sector=meta["sector"],
         report_date=date.fromisoformat(meta["report_date"]),
         report_time=meta["report_time"],
+        # Audit-r5 (B2.34): human-readable chip label.
+        report_time_display=format_report_time_label(meta["report_time"]),
         days_until=(date.fromisoformat(meta["report_date"]) - market_today()).days,
         report_state=_classify_report_state(
             date.fromisoformat(meta["report_date"]),
