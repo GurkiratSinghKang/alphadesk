@@ -2858,6 +2858,10 @@ interface RawLadderRow {
   vega: number;
   oi: number;
   volume: number;
+  /** Wave V V1-3 (2026-05-05): wire field — volume / OI ratio. */
+  volume_oi_ratio?: number | null;
+  /** Wave V V1-4 (2026-05-05): wire field — 0..1 liquidity score. */
+  liquidity_score?: number | null;
 }
 
 interface RawStrikeLadder {
@@ -3080,6 +3084,12 @@ function mapLadderRow(r: RawLadderRow): LadderRow {
     vega: r.vega,
     oi: r.oi,
     volume: r.volume,
+    // Wave V V1-3/V1-4: forward optional liquidity signals when the
+    // backend provides them. ``null`` survives the round-trip; missing
+    // fields stay missing so legacy paths and older fixtures keep
+    // their existing shapes.
+    volumeOiRatio: r.volume_oi_ratio ?? null,
+    liquidityScore: r.liquidity_score ?? null,
   };
 }
 

@@ -736,6 +736,13 @@ export interface LadderRow {
   /** Wave V V1-3 (2026-05-05): volume / OI ratio. Null only when both
    *  volume and OI are zero. */
   volumeOiRatio?: number | null;
+  /** Wave V V1-4 (2026-05-05): 0..1 liquidity score (composite of
+   *  spread quality + volume floor + OI floor + relative-volume
+   *  bonus). Null when the upstream cannot compute. Optional so
+   *  legacy fixtures + older API responses don't break the type
+   *  contract. EOP-AUDIT 2026-05-06 / B1.13: surfaced in StrikeLadder
+   *  via the Show liquidity toggle. */
+  liquidityScore?: number | null;
 }
 
 export interface StrikeLadder {

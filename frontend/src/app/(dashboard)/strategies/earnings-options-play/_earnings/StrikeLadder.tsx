@@ -22,6 +22,13 @@ export interface StrikeLadderProps {
 
 export default function StrikeLadder({ ladder, underlying }: StrikeLadderProps) {
   const [showGreeks, setShowGreeks] = useState(false);
+  // EOP-AUDIT 2026-05-06 / B1.13: Show liquidity toggle. When on, the
+  // ladder surfaces VOL (today's contract volume), OI (open interest),
+  // and LIQ (a 0-1 composite liquidity score rendered as a coloured
+  // horizontal bar). Off by default — the default ladder view stays
+  // jargon-light. Parallel to "Show Greeks" so the disclosures are
+  // discoverable side-by-side.
+  const [showLiquidity, setShowLiquidity] = useState(false);
   // PM-C: track which row's NBBO panel is expanded. Single-expansion
   // model — expanding one row collapses any other; this keeps the
   // 2s-poll volume to one contract at a time and avoids the
@@ -43,11 +50,22 @@ export default function StrikeLadder({ ladder, underlying }: StrikeLadderProps) 
   const hasGreeks = ladder.rows.some(
     (r) => Number.isFinite(r.theta) || Number.isFinite(r.gamma) || Number.isFinite(r.vega),
   );
+  // EOP-AUDIT 2026-05-06 / B1.13: only render the Show liquidity toggle
+  // when AT LEAST one row carries a finite volume / OI / liquidity
+  // signal. Avoids a disclosure that flips on a column of em-dashes
+  // for fixtures pre-dating Wave V V1.
+  const hasLiquidity = ladder.rows.some(
+    (r) =>
+      Number.isFinite(r.volume) ||
+      Number.isFinite(r.oi) ||
+      (r.liquidityScore != null && Number.isFinite(r.liquidityScore)),
+  );
   // Column count for the expanded NBBO row's colSpan. Static columns:
   // STRIKE / Δ / MID / IV / YLD / POP / SIDE = 7. Greeks adds 3 (θ γ ν).
-  // The new "expand chevron" lives inside the STRIKE cell so it doesn't
-  // claim its own column.
-  const colCount = 7 + (showGreeks ? 3 : 0);
+  // Liquidity adds 3 (VOL / OI / LIQ). The "expand chevron" lives
+  // inside the STRIKE cell so it doesn't claim its own column.
+  const colCount =
+    7 + (showGreeks ? 3 : 0) + (showLiquidity ? 3 : 0);
   // Expansion is only meaningful when we know the underlying — without
   // it we can't build an OCC symbol to query. Pass through to data
   // rows so they can hide the chevron + skip the click handler.
@@ -74,18 +92,34 @@ export default function StrikeLadder({ ladder, underlying }: StrikeLadderProps) 
             </span>
           )}
         </h3>
-        {hasGreeks && (
-          <button
-            type="button"
-            data-slot="ladder-greeks-toggle"
-            onClick={() => setShowGreeks((v) => !v)}
-            aria-expanded={showGreeks}
-            aria-controls="ladder-greeks-cols"
-            className="rounded border border-[color:var(--border)] bg-transparent px-3 py-2 t-mono text-label u-muted hover:border-[color:var(--brand)] hover:u-brand"
-          >
-            {showGreeks ? "Hide Greeks" : "Show Greeks"}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {hasGreeks && (
+            <button
+              type="button"
+              data-slot="ladder-greeks-toggle"
+              onClick={() => setShowGreeks((v) => !v)}
+              aria-expanded={showGreeks}
+              aria-controls="ladder-greeks-cols"
+              className="rounded border border-[color:var(--border)] bg-transparent px-3 py-2 t-mono text-label u-muted hover:border-[color:var(--brand)] hover:u-brand"
+            >
+              {showGreeks ? "Hide Greeks" : "Show Greeks"}
+            </button>
+          )}
+          {/* EOP-AUDIT 2026-05-06 / B1.13: Show liquidity toggle —
+              parallel to Show Greeks. */}
+          {hasLiquidity && (
+            <button
+              type="button"
+              data-slot="ladder-liquidity-toggle"
+              onClick={() => setShowLiquidity((v) => !v)}
+              aria-expanded={showLiquidity}
+              aria-controls="ladder-liquidity-cols"
+              className="rounded border border-[color:var(--border)] bg-transparent px-3 py-2 t-mono text-label u-muted hover:border-[color:var(--brand)] hover:u-brand"
+            >
+              {showLiquidity ? "Hide liquidity" : "Show liquidity"}
+            </button>
+          )}
+        </div>
       </div>
       {/* Round-4 (CLUSTER E/15): wrap the ladder in a scrollable region
           so narrow viewports get horizontal scroll instead of overflow
@@ -110,12 +144,14 @@ export default function StrikeLadder({ ladder, underlying }: StrikeLadderProps) 
               per-day-per-contract.
             */}
             <tr className="t-ladder-row t-ladder-row--head">
-              <th scope="col" className="text-left font-normal">STRIKE</th>
-              <th scope="col" className="text-left font-normal" aria-label="Delta" title="Δ — change in option price per $1 underlying move (≈ probability ITM, only an approximation under skew)">Δ</th>
-              <th scope="col" className="text-left font-normal" title="Mid — (bid + ask) ÷ 2; marked with ⚠ when bid-ask spread > 10% of mid">MID</th>
-              <th scope="col" className="text-left font-normal" title="Implied volatility for this strike + expiry, annualised">IV</th>
-              <th scope="col" className="text-left font-normal" title="Yield — mid ÷ underlying spot, the credit you collect as a % of stock price">YLD</th>
-              <th scope="col" className="text-left font-normal" title="Probability of profit — (1 - |Δ|) approximation; not the true distribution-integrated value">POP</th>
+              {/* EOP-AUDIT 2026-05-06 / B1.14: tooltips on every
+                  abbreviated header so new traders can hover-to-learn. */}
+              <th scope="col" className="text-left font-normal" title="Strike — the contract's exercise price. Closest-to-spot strikes are bucketed ATM; further-OTM strikes are 30Δ / 15Δ.">STRIKE</th>
+              <th scope="col" className="text-left font-normal" aria-label="Delta" title="Δ — Delta: directional sensitivity (0–1; 0.5 ≈ ATM). Change in option price per $1 underlying move; approximates probability ITM.">Δ</th>
+              <th scope="col" className="text-left font-normal" title="MID — Mid-price: (bid + ask) ÷ 2; marked with ⚠ when bid-ask spread > 10% of mid">MID</th>
+              <th scope="col" className="text-left font-normal" title="IV — Implied volatility (annualized) for this strike + expiry">IV</th>
+              <th scope="col" className="text-left font-normal" title="YLD — Premium yield: mid ÷ underlying spot, the credit you collect as a % of stock price">YLD</th>
+              <th scope="col" className="text-left font-normal" title="POP — Probability of Profit: (1 − |Δ|) approximation; not the true distribution-integrated value">POP</th>
               {showGreeks && (
                 <>
                   <th scope="col" className="text-left font-normal" id="ladder-greeks-cols" aria-label="Theta (per day)" title="θ — option price decay per day (negative for long contracts, positive for short)">θ</th>
@@ -123,7 +159,16 @@ export default function StrikeLadder({ ladder, underlying }: StrikeLadderProps) 
                   <th scope="col" className="text-left font-normal" aria-label="Vega (per 1% IV)" title="ν — option price change per 1% IV move (positive for long, negative for short)">ν</th>
                 </>
               )}
-              <th scope="col" className="text-right font-normal">SIDE</th>
+              {showLiquidity && (
+                <>
+                  {/* EOP-AUDIT 2026-05-06 / B1.13: VOL / OI / LIQ
+                      columns gated behind the Show liquidity toggle. */}
+                  <th scope="col" className="text-right font-normal" id="ladder-liquidity-cols" title="VOL — today's contract volume (number of contracts traded). Higher = better fills.">VOL</th>
+                  <th scope="col" className="text-right font-normal" title="OI — Open Interest: total outstanding contracts on this strike + expiry. Indicates depth.">OI</th>
+                  <th scope="col" className="text-left font-normal" title="LIQ — 0–1 liquidity score (composite of spread quality + volume + OI + relative-volume). Red ≤ 0.3, amber 0.3–0.6, green ≥ 0.6.">LIQ</th>
+                </>
+              )}
+              <th scope="col" className="text-right font-normal" title="SIDE — Strike's role in the chain (call or put) + bucket: ATM = at-the-money; 30Δ / 15Δ = OTM by approximate delta.">SIDE</th>
             </tr>
           </thead>
           <tbody>
@@ -148,6 +193,7 @@ export default function StrikeLadder({ ladder, underlying }: StrikeLadderProps) 
                   key={`${r.side}-${r.bucket}-${r.strike}`}
                   row={r}
                   showGreeks={showGreeks}
+                  showLiquidity={showLiquidity}
                   occSymbol={occ}
                   isExpanded={isExpanded}
                   colCount={colCount}
@@ -168,6 +214,7 @@ export default function StrikeLadder({ ladder, underlying }: StrikeLadderProps) 
 interface LadderDataRowProps {
   row: LadderRow;
   showGreeks: boolean;
+  showLiquidity: boolean;
   occSymbol: string | null;
   isExpanded: boolean;
   colCount: number;
@@ -177,6 +224,7 @@ interface LadderDataRowProps {
 function LadderDataRow({
   row,
   showGreeks,
+  showLiquidity,
   occSymbol,
   isExpanded,
   colCount,
@@ -260,6 +308,26 @@ function LadderDataRow({
             <td>{fmtGreek(row.vega)}</td>
           </>
         )}
+        {showLiquidity && (
+          <>
+            {/* EOP-AUDIT 2026-05-06 / B1.13: VOL with thousands
+                separator. ``toLocaleString`` keeps the renderer
+                deterministic in test environments. */}
+            <td className="text-right" data-slot="ladder-cell-volume">
+              {Number.isFinite(row.volume)
+                ? row.volume.toLocaleString("en-US")
+                : "—"}
+            </td>
+            <td className="text-right" data-slot="ladder-cell-oi">
+              {Number.isFinite(row.oi)
+                ? row.oi.toLocaleString("en-US")
+                : "—"}
+            </td>
+            <td data-slot="ladder-cell-liquidity">
+              <LiquidityBar score={row.liquidityScore ?? null} />
+            </td>
+          </>
+        )}
         <td className="text-right u-dim">{sideLabel}</td>
       </tr>
       {isExpanded && occSymbol && (
@@ -292,4 +360,47 @@ function isWideSpread(bid: number, ask: number): boolean {
   const mid = (ask + bid) / 2;
   if (mid <= 0) return false;
   return (ask - bid) / mid > 0.10;
+}
+
+/**
+ * EOP-AUDIT 2026-05-06 / B1.13: 0–1 liquidity score rendered as a
+ * compact horizontal bar. Tone follows red ≤ 0.3, amber 0.3–0.6,
+ * green ≥ 0.6 — same thresholds the slippage-forecast service uses
+ * (services/slippage_forecast.py::_liquidity_penalty). When the
+ * score is null we render an em-dash so the column still aligns.
+ */
+function LiquidityBar({ score }: { score: number | null }) {
+  if (score == null || !Number.isFinite(score)) {
+    return <span className="u-muted">—</span>;
+  }
+  const clamped = Math.max(0, Math.min(1, score));
+  const widthPct = Math.round(clamped * 100);
+  const tone =
+    clamped >= 0.6
+      ? { className: "u-profit", bg: "var(--profit)" }
+      : clamped >= 0.3
+        ? { className: "u-warn", bg: "var(--state-warning, #d97706)" }
+        : { className: "u-loss", bg: "var(--loss)" };
+  return (
+    <span
+      className="inline-flex items-center gap-1.5"
+      title={`Liquidity score ${clamped.toFixed(2)} / 1.00 (red ≤ 0.3, amber 0.3–0.6, green ≥ 0.6)`}
+      aria-label={`Liquidity score ${clamped.toFixed(2)} of 1.00`}
+    >
+      <span
+        aria-hidden="true"
+        data-slot="liquidity-bar-track"
+        className="relative inline-block h-1.5 w-12 rounded-pill bg-[color:var(--bg-elev-2,rgba(255,255,255,0.06))]"
+      >
+        <span
+          data-slot="liquidity-bar-fill"
+          className="absolute left-0 top-0 h-full rounded-pill"
+          style={{ width: `${widthPct}%`, background: tone.bg }}
+        />
+      </span>
+      <span className={cn("tabular-nums", tone.className)}>
+        {clamped.toFixed(2)}
+      </span>
+    </span>
+  );
 }

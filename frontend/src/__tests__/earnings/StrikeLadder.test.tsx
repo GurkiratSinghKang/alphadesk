@@ -165,4 +165,75 @@ describe("StrikeLadder", () => {
     fireEvent.click(firstButton);
     expect(firstButton.getAttribute("aria-expanded")).toBe("true");
   });
+
+  // ── EOP-AUDIT 2026-05-06 / B1.13 — VOL/OI/LIQ + show-liquidity toggle ─
+  describe("Show liquidity toggle (B1.13)", () => {
+    const liquidLadder: LadderShape = {
+      ...ladder,
+      rows: ladder.rows.map((r, i) => ({
+        ...r,
+        liquidityScore: 0.2 + i * 0.25, // 0.2, 0.45, 0.70, 0.95
+      })),
+    };
+
+    it("Show liquidity toggle is hidden by default and the new VOL/OI/LIQ columns aren't rendered", () => {
+      const { container } = render(<StrikeLadder ladder={ladder} />);
+      // Existing Show Greeks toggle still renders; Liquidity toggle
+      // should also render because rows have finite volume / OI.
+      const liqToggle = container.querySelector('[data-slot="ladder-liquidity-toggle"]');
+      expect(liqToggle).not.toBeNull();
+      // Columns themselves stay hidden until the toggle is clicked.
+      expect(container.querySelector('[data-slot="ladder-cell-volume"]')).toBeNull();
+      expect(container.querySelector('[data-slot="ladder-cell-oi"]')).toBeNull();
+      expect(container.querySelector('[data-slot="ladder-cell-liquidity"]')).toBeNull();
+    });
+
+    it("toggling Show liquidity surfaces VOL / OI / LIQ cells with thousands separators", () => {
+      const { container } = render(<StrikeLadder ladder={ladder} />);
+      const toggle = container.querySelector(
+        '[data-slot="ladder-liquidity-toggle"]',
+      ) as HTMLButtonElement;
+      fireEvent.click(toggle);
+      const volCells = container.querySelectorAll('[data-slot="ladder-cell-volume"]');
+      const oiCells = container.querySelectorAll('[data-slot="ladder-cell-oi"]');
+      expect(volCells.length).toBe(ladder.rows.length);
+      expect(oiCells.length).toBe(ladder.rows.length);
+      // Thousands separator on a value like 2000 → "2,000".
+      expect(Array.from(oiCells).map((td) => td.textContent)).toContain("2,000");
+      expect(Array.from(volCells).map((td) => td.textContent)).toContain("900");
+    });
+
+    it("LIQ cell renders a coloured horizontal bar and the score (B1.13)", () => {
+      const { container } = render(<StrikeLadder ladder={liquidLadder} />);
+      const toggle = container.querySelector(
+        '[data-slot="ladder-liquidity-toggle"]',
+      ) as HTMLButtonElement;
+      fireEvent.click(toggle);
+      const liqCells = container.querySelectorAll('[data-slot="ladder-cell-liquidity"]');
+      expect(liqCells.length).toBe(liquidLadder.rows.length);
+      // First row (score 0.20) → red tone; last row (score 0.95) → green.
+      const firstScore = liqCells[0].querySelector('[data-slot="liquidity-bar-fill"]') as HTMLElement;
+      const lastScore = liqCells[liqCells.length - 1].querySelector('[data-slot="liquidity-bar-fill"]') as HTMLElement;
+      expect(firstScore).not.toBeNull();
+      expect(lastScore).not.toBeNull();
+      // Width reflects clamped 0..1 → 0..100%.
+      expect(firstScore.style.width).toBe("20%");
+      expect(lastScore.style.width).toBe("95%");
+    });
+  });
+
+  // ── EOP-AUDIT 2026-05-06 / B1.14 — column tooltips ───────────
+  it("renders descriptive title attributes on STRIKE / Δ / MID / IV / YLD / POP / SIDE headers (B1.14)", () => {
+    const { container } = render(<StrikeLadder ladder={ladder} />);
+    const headers = container.querySelectorAll("th");
+    const titles = Array.from(headers).map((th) => th.getAttribute("title") ?? "");
+    // Each abbreviation should be expanded somewhere in the matching tooltip.
+    expect(titles.some((t) => /strike/i.test(t) && /bucket/i.test(t))).toBe(true);
+    expect(titles.some((t) => /delta/i.test(t))).toBe(true);
+    expect(titles.some((t) => /mid-?price/i.test(t))).toBe(true);
+    expect(titles.some((t) => /implied volatility/i.test(t))).toBe(true);
+    expect(titles.some((t) => /Premium yield/i.test(t))).toBe(true);
+    expect(titles.some((t) => /Probability of Profit/i.test(t))).toBe(true);
+    expect(titles.some((t) => /at-the-money|ATM/.test(t))).toBe(true);
+  });
 });
