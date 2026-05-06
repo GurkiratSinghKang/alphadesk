@@ -157,10 +157,23 @@ export default function TradeButtonRow({
     );
   }
 
+  // EOP-AUDIT 2026-05-06 / Bug 1 (flicker): per-button onMouseLeave
+  // fired before the next button's onMouseEnter, briefly nulling the
+  // preview draft and unmounting the chart between hovers. Hoist the
+  // leave handler to the grid container; crossing button A→B no
+  // longer triggers a leave at all because the cursor never exits
+  // the grid. Per-button onMouseLeave/onBlur removed below.
+  const handleGridBlur = (event: React.FocusEvent<HTMLDivElement>) => {
+    const next = event.relatedTarget as Node | null;
+    if (!next || !event.currentTarget.contains(next)) previewLeave();
+  };
+
   return (
     <div
       data-slot="trade-button-row"
       className="mt-4 grid grid-cols-1 gap-2 border-t border-[color:var(--border)] pt-3 sm:grid-cols-2 md:grid-cols-4"
+      onMouseLeave={previewLeave}
+      onBlur={handleGridBlur}
     >
       {bullPutSpread && (
         <DefinedRiskTradeLink
@@ -181,7 +194,6 @@ export default function TradeButtonRow({
           // [short_put, +∞]. We cap at 2× short_put as a sensible
           // strip-extent so the green band has a visible right edge.
           onHoverEnter={() => previewEnter("bull put spread", [bullPutSpread.short.strike, bullPutSpread.short.strike * 2])}
-          onHoverLeave={previewLeave}
         />
       )}
       {bearCallSpread && (
@@ -203,7 +215,6 @@ export default function TradeButtonRow({
           // [0, short_call]. Lower bound clamped to 0 (price can't go
           // negative).
           onHoverEnter={() => previewEnter("bear call spread", [0, bearCallSpread.short.strike])}
-          onHoverLeave={previewLeave}
         />
       )}
       {bullCallSpread && (
@@ -227,7 +238,6 @@ export default function TradeButtonRow({
             const breakeven = bullCallSpread.long.strike + Math.max(0, bullCallSpread.long.mid - bullCallSpread.short.mid);
             previewEnter("bull call spread", [breakeven, breakeven * 2]);
           }}
-          onHoverLeave={previewLeave}
         />
       )}
       {bearPutSpread && (
@@ -251,7 +261,6 @@ export default function TradeButtonRow({
             const breakeven = bearPutSpread.long.strike - Math.max(0, bearPutSpread.long.mid - bearPutSpread.short.mid);
             previewEnter("bear put spread", [0, breakeven]);
           }}
-          onHoverLeave={previewLeave}
         />
       )}
       {longCall && (
@@ -271,7 +280,6 @@ export default function TradeButtonRow({
             const breakeven = longCall.strike + Math.max(0, longCall.mid);
             previewEnter("long call", [breakeven, breakeven * 2]);
           }}
-          onHoverLeave={previewLeave}
         />
       )}
       {longPut && (
@@ -288,7 +296,6 @@ export default function TradeButtonRow({
           riskCopy={maxLossLongOption(longPut.mid, "Long put")}
           recommended={recommendedSetup === "long put"}
           onHoverEnter={() => previewEnter("long put", [0, longPut.strike - Math.max(0, longPut.mid)])}
-          onHoverLeave={previewLeave}
         />
       )}
       {ironCondor && (
@@ -321,7 +328,6 @@ export default function TradeButtonRow({
             ironCondor.shortPut.strike,
             ironCondor.shortCall.strike,
           ])}
-          onHoverLeave={previewLeave}
         />
       )}
       {longStraddle && (
@@ -346,7 +352,6 @@ export default function TradeButtonRow({
           // surfaces only the brown expected-move band, which is the
           // most-honest visualization of "profitable iff move > 1σ".
           onHoverEnter={() => previewEnter("long straddle", null)}
-          onHoverLeave={previewLeave}
         />
       )}
     </div>
@@ -365,7 +370,6 @@ function DefinedRiskTradeLink({
   riskCopy,
   recommended = false,
   onHoverEnter,
-  onHoverLeave,
 }: {
   dataSlot: string;
   href: string;
@@ -374,9 +378,10 @@ function DefinedRiskTradeLink({
   recommended?: boolean;
   // Slice-6 / CH-3F: hover handlers feed the parent's profit-zone
   // overlay. Optional so the component still works in a standalone
-  // context where no overlay is mounted.
+  // context where no overlay is mounted. EOP-AUDIT 2026-05-06 Bug 1:
+  // leave/blur handlers are owned by the grid container so crossing
+  // A→B doesn't briefly null the draft and unmount the chart.
   onHoverEnter?: () => void;
-  onHoverLeave?: () => void;
 }) {
   return (
     <Link
@@ -385,9 +390,7 @@ function DefinedRiskTradeLink({
       title={riskCopy}
       aria-describedby={`${dataSlot}-risk ${dataSlot}-risk-copy`}
       onMouseEnter={onHoverEnter}
-      onMouseLeave={onHoverLeave}
       onFocus={onHoverEnter}
-      onBlur={onHoverLeave}
       className={cn(
         "group min-h-touch rounded border bg-[color:var(--bg-elev-1)] px-3 py-2 t-mono text-label flex flex-col items-center justify-center gap-0.5 hover:border-[color:var(--brand)]",
         recommended
