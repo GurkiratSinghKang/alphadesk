@@ -1583,18 +1583,30 @@ async def _compute_news_sentiment_24h(symbol: str) -> float | None:
         return None
 
     # Path 1: API-provided sentiment — average of the per-article scores.
+    # B2.1: ``services/news.py`` now emits "bullish" / "bearish" /
+    # "neutral" (heuristic) instead of the upstream Newsdata
+    # "positive" / "negative" / "neutral" labels. Accept either
+    # vocabulary so older cached responses + new ones both work.
     string_scores: list[float] = []
+    has_directional = False
     for a in recent:
         s = getattr(a, "sentiment", None)
         if isinstance(s, str):
             sl = s.lower()
-            if sl == "positive":
+            if sl in ("positive", "bullish"):
                 string_scores.append(1.0)
-            elif sl == "negative":
+                has_directional = True
+            elif sl in ("negative", "bearish"):
                 string_scores.append(-1.0)
+                has_directional = True
             elif sl == "neutral":
                 string_scores.append(0.0)
-    if string_scores:
+    # B2.1: only trust Path 1 when at least one article carried a
+    # *directional* signal. If every article is "neutral" we'd return
+    # 0.0 — but neutral can also be the heuristic's default for
+    # mid-confidence headlines where the keywords-of-titles fallback
+    # often disambiguates better. Fall through to Path 2 in that case.
+    if string_scores and has_directional:
         avg = float(sum(string_scores) / len(string_scores))
         # Clamp defensively.
         avg = max(-1.0, min(1.0, avg))

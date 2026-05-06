@@ -909,6 +909,10 @@ async def get_analysis(
             else:
                 pub_dt = datetime.now(timezone.utc)
             try:
+                # B2.1 / B2.4 / B2.6: forward the new heuristic
+                # sentiment/magnitude/confidence fields plus
+                # source_priority and duplicate_count. ``getattr`` with
+                # safe defaults keeps older cache entries parsing.
                 articles.append(NewsArticle(
                     title=a.title,
                     source=a.source,
@@ -917,7 +921,11 @@ async def get_analysis(
                     relevance_score=getattr(a, "relevance_score", 0.0) or 0.0,
                     category=getattr(a, "category", None),
                     tier=getattr(a, "tier", 2) or 2,
-                    sentiment=getattr(a, "sentiment", None),
+                    sentiment=getattr(a, "sentiment", "neutral") or "neutral",
+                    magnitude=getattr(a, "magnitude", "small") or "small",
+                    confidence=getattr(a, "confidence", 0.5) or 0.5,
+                    source_priority=getattr(a, "source_priority", None),
+                    duplicate_count=getattr(a, "duplicate_count", 0) or 0,
                 ))
             except Exception:
                 continue

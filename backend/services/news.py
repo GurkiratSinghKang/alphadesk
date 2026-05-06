@@ -18,10 +18,10 @@ import logging
 import random
 import re
 from datetime import datetime, timezone
-from typing import Sequence
+from typing import Literal, Sequence
 
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 log = logging.getLogger("alphadesk.news")
 
@@ -48,7 +48,21 @@ class NewsArticle(BaseModel):
     source: str
     published_at: str
     image_url: str | None = None
-    sentiment: str | None = None  # positive/negative/neutral
+    # B2.1: directional sentiment from a keyword heuristic on the
+    # headline. Always one of "bullish" / "bearish" / "neutral" — the
+    # raw upstream sentiment string (or "ONLY AVAILABLE IN
+    # PROFESSIONAL AND CORPORATE PLANS" tier-gated upsell text from
+    # newsdata.io) is filtered out via ``_clean_upstream_sentiment``
+    # before the heuristic runs.
+    sentiment: Literal["bullish", "bearish", "neutral"] = "neutral"
+    # B2.1: estimated magnitude of move the headline suggests. "large"
+    # for shock-language ("blockbuster", "plunge"), "medium" for
+    # softer signals ("concerns", "drops"), "small" otherwise.
+    magnitude: Literal["small", "medium", "large"] = "small"
+    # B2.1: confidence (0..1) for the sentiment classification. Stays
+    # near 0.5 unless multiple positive/negative signals stack in the
+    # same direction.
+    confidence: float = 0.5
     symbols: list[str] = []
     is_demo: bool = False
     # Round-12 / NF-1 (P2): price-driving relevance score (0..1) computed
@@ -67,6 +81,59 @@ class NewsArticle(BaseModel):
     # (Bloomberg/Reuters/WSJ), 2 = mainstream (CNBC/MarketWatch), 3 =
     # syndicated wire (PR Newswire/GlobeNewswire — heavily down-ranked).
     tier: int = 2
+    # B2.6: source priority pass-through (newsdata.io ``source_priority``).
+    # Lower number = higher tier; FE renders a star icon for tier-1
+    # priority < 100 (Reuters/Bloomberg/WSJ).
+    source_priority: int | None = None
+    # B2.4: dedupe collapse — when this article is the canonical
+    # representative of a cluster, ``duplicate_count`` is the number of
+    # other near-duplicate articles that were rolled up. ``0`` means the
+    # article stands alone.
+    duplicate_count: int = 0
+
+    @field_validator("sentiment", mode="before")
+    @classmethod
+    def _coerce_sentiment(cls, v: object) -> str:
+        """B2.25 / B2.1: tolerate legacy vocabulary ("positive" /
+        "negative") and tier-gated upsell strings. Map them to the
+        canonical bullish / bearish / neutral set; default unknowns to
+        "neutral" so the Literal validator passes."""
+        if v is None:
+            return "neutral"
+        if isinstance(v, str):
+            sl = v.strip().lower()
+            if not sl or _is_upsell_string(sl):
+                return "neutral"
+            if sl in ("bullish", "positive", "pos", "+"):
+                return "bullish"
+            if sl in ("bearish", "negative", "neg", "-"):
+                return "bearish"
+            if sl in ("neutral", "neu", "n"):
+                return "neutral"
+            return "neutral"
+        return "neutral"
+
+    @field_validator("magnitude", mode="before")
+    @classmethod
+    def _coerce_magnitude(cls, v: object) -> str:
+        if v is None:
+            return "small"
+        if isinstance(v, str):
+            sl = v.strip().lower()
+            if sl in ("small", "medium", "large"):
+                return sl
+            return "small"
+        return "small"
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def _coerce_confidence(cls, v: object) -> float:
+        if v is None:
+            return 0.5
+        try:
+            return max(0.0, min(1.0, float(v)))
+        except (TypeError, ValueError):
+            return 0.5
 
 
 class NewsResponse(BaseModel):
@@ -269,11 +336,14 @@ def _parse_articles(raw: list[dict], symbols: list[str] | None = None) -> list[N
     mention the ticker or company anywhere meaningful.
     """
     articles: list[NewsArticle] = []
+    primary_symbol = symbols[0] if symbols else None
+    company_name = _TICKER_NAMES.get((primary_symbol or "").upper()) if primary_symbol else None
     for item in raw:
         title = item.get("title")
         if not title:
             continue
-        source = item.get("source_name") or item.get("source_id") or "unknown"
+        # B2.26: prefer source_name → source_id (capitalized) → URL host.
+        source = _resolve_source(item)
         # Stage 1.1: drop tier-3 wires before any further work.
         if _classify_source_tier(source) == 3:
             continue
@@ -285,14 +355,43 @@ def _parse_articles(raw: list[dict], symbols: list[str] | None = None) -> list[N
                 description=description,
                 source=source,
                 tier=tier,
-                symbol=symbols[0] if symbols else None,
-                match_terms=_match_terms_for_symbol(symbols[0] if symbols else None),
+                symbol=primary_symbol,
+                match_terms=_match_terms_for_symbol(primary_symbol),
                 published_at=item.get("pubDate") or "",
             )
             # Stage 1.2: drop rows whose symbol density is zero — no
             # point showing news that doesn't even mention the stock.
             if score <= 0.0:
                 continue
+            # B2.27: when upstream relevance is plan-gated, fall back to
+            # a basic compute. We keep ``relevance_score`` as the
+            # internal ranking signal and let _compute_relevance feed the
+            # FE's article.relevance display.
+            upstream_relevance = _clean_upstream_relevance(item.get("relevance"))
+            if upstream_relevance is None:
+                computed_relevance = compute_relevance(
+                    title=title,
+                    description=description,
+                    symbol=primary_symbol,
+                    company=company_name,
+                )
+            else:
+                computed_relevance = upstream_relevance
+            # B2.3: tighten the earnings category so geopolitical
+            # / macro headlines don't get mis-tagged.
+            category = _tighten_earnings_category(
+                category=category,
+                title=title,
+                description=description,
+                symbol=primary_symbol,
+                company=company_name,
+            )
+            # B2.25: strip plan-tier upsell text from upstream sentiment.
+            _ = _clean_upstream_sentiment(item.get("sentiment"))
+            # B2.1: classify sentiment + magnitude + confidence from
+            # title keywords (cheap, deterministic).
+            sentiment_label, confidence = _classify_sentiment(title, description)
+            magnitude = _classify_magnitude(title, description)
             articles.append(NewsArticle(
                 title=title,
                 description=description,
@@ -300,11 +399,14 @@ def _parse_articles(raw: list[dict], symbols: list[str] | None = None) -> list[N
                 source=source,
                 published_at=item.get("pubDate") or "",
                 image_url=item.get("image_url"),
-                sentiment=item.get("sentiment"),
+                sentiment=sentiment_label,
+                magnitude=magnitude,
+                confidence=confidence,
                 symbols=symbols or [],
-                relevance_score=score,
+                relevance_score=max(score, computed_relevance),
                 category=category,
                 tier=tier,
+                source_priority=_resolve_source_priority(item),
             ))
         except Exception:
             log.debug("Skipping malformed news article", exc_info=True)
@@ -321,7 +423,11 @@ def _parse_articles(raw: list[dict], symbols: list[str] | None = None) -> list[N
     # Sort by relevance desc, with recency as the tiebreaker via
     # published_at (which is encoded in the score already, so this is
     # just a stable secondary key).
-    return sorted(deduped.values(), key=lambda a: a.relevance_score, reverse=True)
+    sorted_articles = sorted(deduped.values(), key=lambda a: a.relevance_score, reverse=True)
+    # B2.4: collapse near-duplicate articles (Jaccard > 0.5 on title
+    # tokens AND within 24h of each other) into a single canonical with
+    # a duplicate_count tag.
+    return _dedupe_similar_articles(sorted_articles)
 
 
 # ─── Round-12 / NF-1: scoring helpers ──────────────────────────────────────────
@@ -450,6 +556,359 @@ def _hours_since(iso_or_rfc: str) -> float | None:
     return max(0.0, delta.total_seconds() / 3600.0)
 
 
+# ---------------------------------------------------------------------------
+# B2.25 / B2.26 / B2.27 / B2.1 / B2.3 / B2.4 — Newsdata sanitization helpers
+# ---------------------------------------------------------------------------
+
+# B2.25: newsdata.io free / starter tiers return a literal upsell string
+# in the ``sentiment`` and ``relevance`` fields rather than ``null`` when
+# the feature isn't included on our plan. Strip these so we never leak
+# them into the FE.
+_UPSELL_TOKENS = ("ONLY AVAILABLE", "PROFESSIONAL", "CORPORATE", " PLAN")
+
+
+def _is_upsell_string(value: object) -> bool:
+    """True if ``value`` looks like a Newsdata plan-tier upsell string."""
+    if not isinstance(value, str):
+        return False
+    upper = value.upper()
+    return any(tok in upper for tok in _UPSELL_TOKENS)
+
+
+def _clean_upstream_sentiment(raw: object) -> str | None:
+    """Return the upstream sentiment string only if it is real data.
+
+    Newsdata returns a hard-coded plan-tier upsell string when sentiment
+    is gated. We strip those before the data ever reaches the FE.
+    """
+    if _is_upsell_string(raw):
+        return None
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip().lower()
+    return None
+
+
+def _clean_upstream_relevance(raw: object) -> float | None:
+    """Drop tier-gated relevance strings; pass through real numbers."""
+    if _is_upsell_string(raw):
+        return None
+    if isinstance(raw, (int, float)):
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+    if isinstance(raw, str):
+        try:
+            return float(raw)
+        except ValueError:
+            return None
+    return None
+
+
+def _resolve_source(item: dict) -> str:
+    """B2.26: derive the display source name from an item.
+
+    Newsdata returns ``source_name`` (which may be null) and
+    ``source_id`` (a slug like ``"benzinga"``). When both are missing we
+    fall back to parsing the article URL hostname.
+    """
+    source_name = item.get("source_name")
+    if isinstance(source_name, str) and source_name.strip():
+        return source_name.strip()
+    source_id = item.get("source_id")
+    if isinstance(source_id, str) and source_id.strip():
+        slug = source_id.strip()
+        # Capitalize tokens — "yahoo finance" → "Yahoo Finance",
+        # "benzinga" → "Benzinga", "the-wall-street-journal" → "The
+        # Wall Street Journal".
+        normalized = re.sub(r"[-_]+", " ", slug)
+        return " ".join(part.capitalize() for part in normalized.split() if part)
+    url = item.get("link") or ""
+    if isinstance(url, str) and url:
+        try:
+            from urllib.parse import urlparse
+
+            host = urlparse(url).hostname or ""
+            host = host.removeprefix("www.")
+            if host:
+                core = host.split(".")[0]
+                return core.capitalize() if core else host
+        except Exception:
+            pass
+    return "unknown"
+
+
+def _resolve_source_priority(item: dict) -> int | None:
+    """Pull Newsdata's source_priority field if it's a real integer."""
+    raw = item.get("source_priority")
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, float):
+        return int(raw)
+    if isinstance(raw, str):
+        try:
+            return int(raw)
+        except ValueError:
+            return None
+    return None
+
+
+# B2.1: keyword-based sentiment classifier on the headline. Fast, cheap,
+# and "good enough" for at-a-glance — we deliberately avoid an ML
+# pipeline here because (a) the news rail re-renders frequently, (b)
+# upstream Newsdata sentiment is plan-gated, and (c) headlines are
+# short enough that bag-of-words stays accurate.
+_BULLISH_TERMS = (
+    "tops estimates", "tops expectations", "beats estimates", "beats expectations",
+    "beats", "tops", "rally", "rallies", "rallying", "surge", "surges", "surging",
+    "soars", "soar", "soaring", "jump", "jumps", "jumping", "climbs",
+    "raises guidance", "raises forecast", "raises outlook", "upgrade", "upgraded",
+    "outperform", "buyback", "record", "all-time high", "blockbuster",
+    "strong", "robust", "exceeds", "boost",
+)
+_BEARISH_TERMS = (
+    "misses estimates", "misses expectations", "miss", "missed", "tumble",
+    "tumbles", "plunge", "plunges", "plunged", "warns", "warning", "downgrade",
+    "downgraded", "underperform", "lowers guidance", "lowers forecast",
+    "cuts outlook", "guidance cut", "lawsuit", "investigation", "probe",
+    "fraud", "recall", "bankruptcy", "delays", "concerns", "questions",
+    "drops", "slump", "slumps", "weak", "weakness", "decline", "declines",
+    "loss", "shortfall", "halt", "halted",
+)
+_LARGE_MAGNITUDE_TERMS = (
+    "blockbuster", "surge", "surges", "surged", "plunge", "plunges", "plunged",
+    "explosive", "soar", "soars", "tumble", "tumbles", "tumbled", "rally",
+    "skyrockets", "crash", "crashes", "all-time high", "record high",
+)
+_MEDIUM_MAGNITUDE_TERMS = (
+    "concerns", "questions", "drops", "slump", "slumps", "decline", "declines",
+    "delays", "warns", "warning", "cuts", "raises",
+)
+
+
+def _classify_sentiment(
+    title: str,
+    description: str | None = None,
+) -> tuple[Literal["bullish", "bearish", "neutral"], float]:
+    """Return (label, confidence) using a simple keyword heuristic.
+
+    Confidence stays near 0.5 unless multiple signals stack in the same
+    direction (then 0.7+). Mixed signals fall back to neutral with low
+    confidence.
+    """
+    haystack = f"{title} {description or ''}".lower()
+    bullish_hits = sum(1 for term in _BULLISH_TERMS if term in haystack)
+    bearish_hits = sum(1 for term in _BEARISH_TERMS if term in haystack)
+    if bullish_hits == 0 and bearish_hits == 0:
+        return "neutral", 0.5
+    if bullish_hits > bearish_hits:
+        # 1 hit -> 0.6, 2 -> 0.75, 3+ -> 0.85 (cap)
+        confidence = min(0.85, 0.5 + 0.1 * bullish_hits + 0.05 * max(0, bullish_hits - bearish_hits - 1))
+        return "bullish", round(confidence, 2)
+    if bearish_hits > bullish_hits:
+        confidence = min(0.85, 0.5 + 0.1 * bearish_hits + 0.05 * max(0, bearish_hits - bullish_hits - 1))
+        return "bearish", round(confidence, 2)
+    # Equal hits — conflicting signals.
+    return "neutral", 0.4
+
+
+def _classify_magnitude(title: str, description: str | None = None) -> Literal["small", "medium", "large"]:
+    """Return small / medium / large from a keyword scan."""
+    haystack = f"{title} {description or ''}".lower()
+    if any(term in haystack for term in _LARGE_MAGNITUDE_TERMS):
+        return "large"
+    if any(term in haystack for term in _MEDIUM_MAGNITUDE_TERMS):
+        return "medium"
+    return "small"
+
+
+# B2.27: Compute a basic relevance score client-side from symbol +
+# company name presence. Returns a value in [0.0, 1.0] suitable as a
+# fallback when Newsdata's ``relevance`` is unavailable.
+def compute_relevance(
+    *,
+    title: str,
+    description: str | None,
+    symbol: str | None,
+    company: str | None = None,
+) -> float:
+    """Lightweight relevance: 1.0 if symbol/company appears in title,
+    0.5 if only in description, 0.0 otherwise."""
+    if not symbol and not company:
+        return 0.0
+    title_l = (title or "").lower()
+    desc_l = (description or "").lower()
+    needles: list[str] = []
+    if symbol:
+        needles.append(symbol.lower())
+    if company:
+        # Match individual company tokens too — "Advanced Micro Devices"
+        # often appears as "AMD" or partial names in headlines.
+        needles.append(company.lower())
+        for token in company.split():
+            tok = token.strip().lower()
+            if tok and len(tok) >= 3 and tok != (symbol or "").lower():
+                needles.append(tok)
+    # Title hit takes precedence.
+    for needle in needles:
+        if needle and needle in title_l:
+            return 1.0
+    for needle in needles:
+        if needle and needle in desc_l:
+            return 0.5
+    return 0.0
+
+
+# B2.3: Tighten the EARNINGS category — only tag earnings if the title
+# mentions the symbol or company AND an earnings-related keyword. This
+# keeps geopolitical or macro headlines from being mis-tagged as
+# EARNINGS just because they contain the word "earnings" in passing.
+_EARNINGS_KEYWORDS = re.compile(
+    r"\b(earnings|beat|miss|beats|misses|q[1-4]\b|revenue|eps|profit|loss|"
+    r"results|reports|reported|outlook|guidance)\b",
+    re.IGNORECASE,
+)
+
+
+def _tighten_earnings_category(
+    *,
+    category: str | None,
+    title: str,
+    description: str | None,
+    symbol: str | None,
+    company: str | None,
+) -> str | None:
+    """Demote a "earnings" tag to ``None`` (then later relabeled GENERAL
+    in the FE) when the title doesn't actually mention the company."""
+    if category != "earnings":
+        return category
+    if not _EARNINGS_KEYWORDS.search(title or ""):
+        return None
+    needles: list[str] = []
+    if symbol:
+        needles.append(symbol.lower())
+    if company:
+        needles.append(company.lower())
+        for token in company.split():
+            tok = token.strip().lower()
+            if tok and len(tok) >= 3 and tok != (symbol or "").lower():
+                needles.append(tok)
+    title_l = (title or "").lower()
+    desc_l = (description or "").lower()
+    if any(n and (n in title_l or n in desc_l) for n in needles):
+        return "earnings"
+    return None
+
+
+# B2.4: dedupe near-duplicate articles via Jaccard word similarity on
+# titles, gated by a 24-hour publish window.
+_TITLE_TOKEN_STOPWORDS = {
+    "the", "a", "an", "of", "to", "in", "on", "for", "and", "or", "vs",
+    "with", "as", "at", "by", "from", "that", "this", "is", "are",
+}
+
+
+def _title_tokens(title: str) -> set[str]:
+    if not title:
+        return set()
+    tokens = re.findall(r"[a-z0-9]+", title.lower())
+    return {t for t in tokens if t and t not in _TITLE_TOKEN_STOPWORDS and len(t) > 1}
+
+
+def _jaccard(a: set[str], b: set[str]) -> float:
+    if not a or not b:
+        return 0.0
+    inter = len(a & b)
+    union = len(a | b)
+    return inter / union if union else 0.0
+
+
+def _parse_publish_dt(raw: str) -> datetime | None:
+    if not raw:
+        return None
+    try:
+        dt = datetime.strptime(raw.strip(), "%Y-%m-%d %H:%M:%S")
+        return dt.replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        try:
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        except (ValueError, TypeError):
+            return None
+
+
+def _dedupe_similar_articles(articles: list[NewsArticle]) -> list[NewsArticle]:
+    """Cluster articles whose titles are >50% Jaccard-similar AND
+    publish within 24h of each other; keep the canonical (highest
+    relevance, then newest) and stamp duplicate_count on it.
+    """
+    if len(articles) <= 1:
+        return list(articles)
+    # Cache token sets + parsed datetimes once per article.
+    enriched = [
+        (a, _title_tokens(a.title), _parse_publish_dt(a.published_at))
+        for a in articles
+    ]
+    n = len(enriched)
+    parent = list(range(n))
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(x: int, y: int) -> None:
+        rx, ry = find(x), find(y)
+        if rx != ry:
+            parent[rx] = ry
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            ai, ti, di = enriched[i]
+            aj, tj, dj = enriched[j]
+            if _jaccard(ti, tj) <= 0.5:
+                continue
+            if di and dj:
+                if abs((di - dj).total_seconds()) > 24 * 3600:
+                    continue
+            union(i, j)
+
+    clusters: dict[int, list[int]] = {}
+    for idx in range(n):
+        clusters.setdefault(find(idx), []).append(idx)
+
+    canonical: list[NewsArticle] = []
+    for members in clusters.values():
+        if len(members) == 1:
+            canonical.append(enriched[members[0]][0])
+            continue
+        # Pick: highest relevance_score; tie-break on newest publish.
+        best_idx = members[0]
+        for cand in members[1:]:
+            a_best = enriched[best_idx][0]
+            a_cand = enriched[cand][0]
+            if a_cand.relevance_score > a_best.relevance_score:
+                best_idx = cand
+            elif a_cand.relevance_score == a_best.relevance_score:
+                d_best = enriched[best_idx][2]
+                d_cand = enriched[cand][2]
+                if d_best is None and d_cand is not None:
+                    best_idx = cand
+                elif d_cand and d_best and d_cand > d_best:
+                    best_idx = cand
+        winner = enriched[best_idx][0].model_copy()
+        winner.duplicate_count = len(members) - 1
+        canonical.append(winner)
+    # Preserve the relevance-desc ordering the caller produced.
+    canonical.sort(key=lambda a: a.relevance_score, reverse=True)
+    return canonical
+
+
 def _canonical_url(url: str) -> str:
     """Strip utm_*/ref/fbclid query params and fragments to a canonical key.
 
@@ -534,14 +993,22 @@ def _generate_demo_articles(symbol: str | None = None, limit: int = 10) -> list[
     articles: list[NewsArticle] = []
     for i, item in enumerate(selected):
         title = item["title"].replace("{sym}", symbol.upper()) if symbol else item["title"]
+        # B2.1: derive the new sentiment / magnitude / confidence fields
+        # via the same heuristic the live pipeline uses so demo cards
+        # render with chips.
+        description = "Demo article for development. Configure NEWSDATA_API_KEY for live news."
+        sentiment_label, confidence = _classify_sentiment(title, description)
+        magnitude = _classify_magnitude(title, description)
         articles.append(NewsArticle(
             title=title,
-            description=f"Demo article for development. Configure NEWSDATA_API_KEY for live news.",
+            description=description,
             url="",
             source=rng.choice(_DEMO_SOURCES),
             published_at=now.strftime("%Y-%m-%d %H:%M:%S"),
             image_url=None,
-            sentiment=item.get("sentiment"),
+            sentiment=sentiment_label,
+            magnitude=magnitude,
+            confidence=confidence,
             symbols=syms,
             is_demo=True,
         ))

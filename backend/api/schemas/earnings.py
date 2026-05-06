@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 ReportTime = Literal["BMO", "AMC", "DMT"]
@@ -513,7 +513,66 @@ class NewsArticle(BaseModel):
     relevance_score: float = 0.0
     category: str | None = None
     tier: int = 2
-    sentiment: str | None = None
+    # B2.1: directional sentiment from a keyword heuristic on the
+    # headline. Always one of "bullish" / "bearish" / "neutral" — the
+    # raw upstream sentiment string (or "ONLY AVAILABLE IN
+    # PROFESSIONAL AND CORPORATE PLANS" tier-gated upsell text from
+    # newsdata.io) is filtered out before reaching this layer.
+    sentiment: Literal["bullish", "bearish", "neutral"] = "neutral"
+    # B2.1: estimated magnitude of move the headline suggests.
+    magnitude: Literal["small", "medium", "large"] = "small"
+    # B2.1: confidence (0..1) for the sentiment classification.
+    confidence: float = 0.5
+    # B2.6: source priority pass-through (newsdata.io ``source_priority``).
+    # Lower number = higher tier; FE renders a star icon for tier-1.
+    source_priority: int | None = None
+    # B2.4: dedupe collapse — number of near-duplicate siblings rolled
+    # up into this canonical article. ``0`` means the article stands
+    # alone.
+    duplicate_count: int = 0
+
+    @field_validator("sentiment", mode="before")
+    @classmethod
+    def _coerce_sentiment(cls, v: object) -> str:
+        """B2.25 / B2.1: tolerate legacy/upsell vocabulary."""
+        if v is None:
+            return "neutral"
+        if isinstance(v, str):
+            sl = v.strip().lower()
+            if not sl:
+                return "neutral"
+            upper = sl.upper()
+            if any(tok in upper for tok in ("ONLY AVAILABLE", "PROFESSIONAL", "CORPORATE", "PLAN")):
+                return "neutral"
+            if sl in ("bullish", "positive", "pos", "+"):
+                return "bullish"
+            if sl in ("bearish", "negative", "neg", "-"):
+                return "bearish"
+            if sl in ("neutral", "neu", "n"):
+                return "neutral"
+            return "neutral"
+        return "neutral"
+
+    @field_validator("magnitude", mode="before")
+    @classmethod
+    def _coerce_magnitude(cls, v: object) -> str:
+        if v is None:
+            return "small"
+        if isinstance(v, str):
+            sl = v.strip().lower()
+            if sl in ("small", "medium", "large"):
+                return sl
+        return "small"
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def _coerce_confidence(cls, v: object) -> float:
+        if v is None:
+            return 0.5
+        try:
+            return max(0.0, min(1.0, float(v)))
+        except (TypeError, ValueError):
+            return 0.5
 
 
 class EarningsDetail(BaseModel):
