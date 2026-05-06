@@ -1,7 +1,7 @@
 """adverse_momentum_close exit rule + Trade.expected_move_pct snapshot column
 
 Revision ID: 0019_exit_rule_adverse_momentum
-Revises: 0020_exit_rule_scaled_profit_close
+Revises: 0020_scaled_profit_close
 Create Date: 2026-05-05
 
 M-O A. The wing_capture rule (priority 15) only fires once a defined-
@@ -49,7 +49,7 @@ from alembic import op
 
 
 revision = "0019_exit_rule_adverse_momentum"
-down_revision = "0020_exit_rule_scaled_profit_close"
+down_revision = "0020_scaled_profit_close"
 branch_labels = None
 depends_on = None
 

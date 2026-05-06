@@ -1,6 +1,6 @@
 """scaled_profit_close exit rule — ladder 25/50/75 of original qty (M-O P)
 
-Revision ID: 0020_exit_rule_scaled_profit_close
+Revision ID: 0020_scaled_profit_close
 Revises: 0018_exit_rule_wing_capture
 Create Date: 2026-05-05
 
@@ -49,7 +49,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0020_exit_rule_scaled_profit_close"
+revision = "0020_scaled_profit_close"
 down_revision = "0018_exit_rule_wing_capture"
 branch_labels = None
 depends_on = None
