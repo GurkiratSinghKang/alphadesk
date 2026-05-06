@@ -34,28 +34,28 @@ export function buildEarningsStrategyDraft(
       legs.push(toLeg(rows.atmCall, symbol, ladder.expiry, "sell"));
       break;
     case "bull put spread":
-      comboType = "vertical_spread";
+      comboType = "bull_put_spread";
       legs.push(
         toLeg(rows.atmPut, symbol, ladder.expiry, "sell"),
         toLeg(rows.farPut, symbol, ladder.expiry, "buy"),
       );
       break;
     case "bear call spread":
-      comboType = "vertical_spread";
+      comboType = "bear_call_spread";
       legs.push(
         toLeg(rows.atmCall, symbol, ladder.expiry, "sell"),
         toLeg(rows.farCall, symbol, ladder.expiry, "buy"),
       );
       break;
     case "bull call spread":
-      comboType = "vertical_spread";
+      comboType = "bull_call_spread";
       legs.push(
         toLeg(rows.atmCall, symbol, ladder.expiry, "buy"),
         toLeg(rows.farCall, symbol, ladder.expiry, "sell"),
       );
       break;
     case "bear put spread":
-      comboType = "vertical_spread";
+      comboType = "bear_put_spread";
       legs.push(
         toLeg(rows.atmPut, symbol, ladder.expiry, "buy"),
         toLeg(rows.farPut, symbol, ladder.expiry, "sell"),
@@ -80,14 +80,14 @@ export function buildEarningsStrategyDraft(
       );
       break;
     case "long straddle":
-      comboType = "straddle";
+      comboType = "long_straddle";
       legs.push(
         toLeg(rows.atmCall, symbol, ladder.expiry, "buy"),
         toLeg(rows.atmPut, symbol, ladder.expiry, "buy"),
       );
       break;
     case "short strangle":
-      comboType = "strangle";
+      comboType = "short_strangle";
       legs.push(
         toLeg(rows.farCall, symbol, ladder.expiry, "sell"),
         toLeg(rows.farPut, symbol, ladder.expiry, "sell"),

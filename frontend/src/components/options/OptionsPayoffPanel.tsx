@@ -411,7 +411,8 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
 }
 
 function LegList({ draft }: { draft: OptionStrategyDraft }) {
-  const isCredit = draft.comboType ? CREDIT_STRATEGIES.has(draft.comboType) : false;
+  const normalizedCombo = normalizeComboType(draft.comboType);
+  const isCredit = normalizedCombo ? CREDIT_STRATEGIES.has(normalizedCombo) : false;
   return (
     <div className="mt-4 grid gap-2">
       {draft.legs.map((leg, index) => (
@@ -434,11 +435,32 @@ function LegList({ draft }: { draft: OptionStrategyDraft }) {
   );
 }
 
+// Defensive alias map — payoffDraft now emits long-form names, but keep
+// these in case other code paths (e.g. backend recommender setup_id, URL
+// params) feed in the older shorthand. PM-A persona finding #1.
+const COMBO_TYPE_ALIASES: Record<string, string> = {
+  straddle: "long_straddle",
+  strangle: "long_strangle",
+  vertical_spread: "bull_call_spread",
+  calendar: "calendar_spread",
+  diagonal: "diagonal_spread",
+};
+
+function normalizeComboType(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  return COMBO_TYPE_ALIASES[raw] ?? raw;
+}
+
 function StrategyCaption({ comboType }: { comboType?: string | null }) {
-  if (!comboType) return null;
-  const text = STRATEGY_CAPTIONS[comboType];
+  const normalized = normalizeComboType(comboType);
+  if (!normalized) return null;
+  const text = STRATEGY_CAPTIONS[normalized];
   if (!text) return null;
-  return <p className="text-[var(--fg-muted)] text-body-sm mt-2">{text}</p>;
+  return (
+    <p className="text-[var(--fg-muted)] text-body-sm mt-2">
+      {text} <span className="text-[var(--fg-hint)]">(at expiration)</span>
+    </p>
+  );
 }
 
 function EmptyPayoff({ copy, compact = false }: { copy: string; compact?: boolean }) {
