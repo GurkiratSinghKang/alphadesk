@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { normalizeSymbol } from "../_lib/normalizeSymbol";
 
 describe("normalizeSymbol", () => {
+  // The three cases the plan calls out explicitly.
   it("upper-cases lowercase input", () => {
     expect(normalizeSymbol("nvda")).toBe("NVDA");
   });
@@ -15,6 +16,7 @@ describe("normalizeSymbol", () => {
     expect(normalizeSymbol("AAAAAAAAAAAAA")).toBeNull(); // 13 As
   });
 
+  // Edge cases.
   it("returns null for empty string", () => {
     expect(normalizeSymbol("")).toBeNull();
   });

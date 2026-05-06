@@ -1,3 +1,5 @@
+"use client";
+
 // Opt out of static prerender. The (dashboard) layout uses client-only
 // hooks (useWs etc.) that throw outside the Providers tree; Next.js's
 // build-time prerender pass tries to render any (dashboard)-grouped
@@ -6,24 +8,24 @@
 // /admin/control-center, and we still set force-dynamic so the route
 // renders only at request time. Do NOT move this file under
 // `src/app/(dashboard)/` — `next build` will fail.
-//
-// This is a Server Component (no "use client" directive) because
-// `notFound()` from `next/navigation` only triggers a real 404 status
-// in Server Components — in a client component it throws an unhandled
-// error instead. See https://nextjs.org/docs/app/api-reference/functions/not-found.
 export const dynamic = "force-dynamic";
 
-import { notFound } from "next/navigation";
+import { notFound, useParams } from "next/navigation";
 
 import { normalizeSymbol } from "./_lib/normalizeSymbol";
 
-export default async function SymbolPage({
-  params,
-}: {
-  params: Promise<{ ticker: string }>;
-}) {
-  const { ticker } = await params;
-  const sym = normalizeSymbol(ticker);
+/**
+ * /symbols/[ticker] — ticker research page (T1 shell).
+ *
+ * Task 1 of the ticker research MVP: route shell + symbol normalization
+ * only. The full surface (quote header, IV/skew, news, etc.) lands in
+ * subsequent tasks. Auth is handled implicitly: any API call that 401s
+ * gets redirected to /login by the existing api-error infrastructure,
+ * so this page itself does not gate on auth.
+ */
+export default function SymbolPage() {
+  const params = useParams<{ ticker: string }>();
+  const sym = normalizeSymbol(params.ticker);
 
   if (!sym) {
     notFound();
