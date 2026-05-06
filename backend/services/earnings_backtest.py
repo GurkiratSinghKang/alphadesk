@@ -10,9 +10,26 @@ logic.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Iterable, Mapping
+
+logger = logging.getLogger(__name__)
+
+# B2.10 / B2.13 — Cap return ratios on directional plays to keep degenerate
+# inputs (e.g., a $0.01 ATM premium yield from an illiquid quote) from
+# producing 240,000% AVG R. The cap is a synthetic "10x debit" ceiling: a real
+# long-call can't more than 10x in a single earnings move under any plausible
+# IV / move scenario; wins beyond that are almost always divide-by-near-zero
+# artifacts. We log a warning so operators can audit which events hit the cap.
+MAX_TRADE_RETURN_RATIO = 10.0
+# Floor on premium-yield denominators used for divide-by-zero guards. A 0.1%
+# ATM yield (10 bps) is already implausibly thin for an earnings ATM straddle,
+# so anything below this is treated as a data-quality flag rather than a
+# realistic trade. The original positive-debit guard still raises ValueError
+# for zero/missing premium so calls / puts aren't silently fabricated.
+MIN_DEBIT_RATIO = 0.001
 
 
 DEFINED_RISK_SETUPS = {
@@ -28,6 +45,39 @@ DEFINED_RISK_SETUPS = {
     "diagonal spread",
     "long straddle",
 }
+
+
+def _clamp_return(
+    raw_ratio: float,
+    *,
+    setup: str,
+    symbol: str,
+    debit: float | None = None,
+) -> float:
+    """Clamp the trade return ratio at ±MAX_TRADE_RETURN_RATIO.
+
+    Directional debit plays divide by entry premium, so a $0.01 ATM yield can
+    produce 200x returns on a 2% realized move. Real long-call / long-put
+    earnings reactions clear ~5x debit at the extreme; anything beyond 10x is
+    almost always a data-quality artifact (illiquid mid, stale yield, unit
+    confusion). We clamp and log so the comparison ranking stays informative
+    even when one cell of the matrix is degenerate.
+    """
+
+    if raw_ratio > MAX_TRADE_RETURN_RATIO:
+        logger.warning(
+            "earnings_backtest: capping %s return %.4f → %.4f for %s "
+            "(debit=%s — likely thin/illiquid premium)",
+            setup,
+            raw_ratio,
+            MAX_TRADE_RETURN_RATIO,
+            symbol,
+            f"{debit:.6f}" if debit is not None else "n/a",
+        )
+        return MAX_TRADE_RETURN_RATIO
+    if raw_ratio < -1.0:
+        return -1.0
+    return raw_ratio
 
 
 @dataclass(frozen=True)
@@ -72,7 +122,14 @@ def simulate_event_trade(event: Mapping[str, Any]) -> EventTrade:
         debit = call_yield + put_yield
         if debit <= 0:
             raise ValueError("long straddle requires call + put premium yield")
-        ret = max(-1.0, (abs(realized) - debit) / debit)
+        # B2.10: floor the denominator so a $0.01 sum doesn't 200x the return
+        safe_debit = max(debit, MIN_DEBIT_RATIO)
+        ret = _clamp_return(
+            (abs(realized) - safe_debit) / safe_debit,
+            setup=setup,
+            symbol=symbol,
+            debit=debit,
+        )
         return EventTrade(
             symbol=symbol,
             report_date=report_date,
@@ -87,7 +144,13 @@ def simulate_event_trade(event: Mapping[str, Any]) -> EventTrade:
         debit = call_yield
         if debit <= 0:
             raise ValueError("long call requires call premium yield")
-        ret = max(-1.0, (realized - debit) / debit)
+        safe_debit = max(debit, MIN_DEBIT_RATIO)
+        ret = _clamp_return(
+            (realized - safe_debit) / safe_debit,
+            setup=setup,
+            symbol=symbol,
+            debit=debit,
+        )
         return EventTrade(
             symbol=symbol,
             report_date=report_date,
@@ -106,7 +169,13 @@ def simulate_event_trade(event: Mapping[str, Any]) -> EventTrade:
         debit = put_yield
         if debit <= 0:
             raise ValueError("long put requires put premium yield")
-        ret = max(-1.0, (-realized - debit) / debit)
+        safe_debit = max(debit, MIN_DEBIT_RATIO)
+        ret = _clamp_return(
+            (-realized - safe_debit) / safe_debit,
+            setup=setup,
+            symbol=symbol,
+            debit=debit,
+        )
         return EventTrade(
             symbol=symbol,
             report_date=report_date,
