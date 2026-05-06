@@ -383,12 +383,13 @@ export interface ContractSnapshot {
    *  of fabricated $0/$0 in green/red. Maverick FIX-2.1. */
   isUnavailable: boolean;
   /** Wave V V1-3 (2026-05-05): volume / OI ratio. Null only when both
-   *  are zero. */
-  volumeOiRatio: number | null;
+   *  are zero. Optional so legacy fixtures + older API responses don't
+   *  break the type contract. */
+  volumeOiRatio?: number | null;
   /** Wave V V1-4 (2026-05-05): 0..1 liquidity score (spread quality +
    *  volume floor + OI floor + relative-volume bonus). Null when the
-   *  upstream cannot be reached. */
-  liquidityScore: number | null;
+   *  upstream cannot be reached. Optional for the same reason. */
+  liquidityScore?: number | null;
 }
 
 /**
