@@ -36,6 +36,7 @@ function makeBaseResult(overrides: Partial<UseSymbolPageDataResult>): UseSymbolP
     analysis: null,
     ivData: null,
     bars: null,
+    earningsDetail: null,
     symbolMeta: null,
     isLoading: false,
     isError: false,
@@ -103,7 +104,7 @@ describe("SymbolPageClient gates", () => {
     expect(screen.getByTestId("symbol-page")).toBeInTheDocument();
   });
 
-  it("renders ETF placeholder aside (in lieu of sections 6+7) when isETF=true", () => {
+  it("renders OptionsThesisBand with ETF empty-state thesis copy when isETF=true and no claude data", () => {
     mockUseSymbolPageData.mockReturnValue(
       makeBaseResult({
         isETF: true,
@@ -119,12 +120,13 @@ describe("SymbolPageClient gates", () => {
     expect(screen.getByTestId("symbol-page")).toBeInTheDocument();
     expect(screen.getByTestId("sticky-band")).toBeInTheDocument();
     expect(screen.getByTestId("decision-strip")).toBeInTheDocument();
-    const aside = screen.getByTestId("etf-thesis-placeholder");
-    expect(aside).toBeInTheDocument();
-    expect(aside.textContent).toMatch(/AI thesis available for individual equities only/i);
+    expect(screen.getByTestId("options-thesis-band")).toBeInTheDocument();
+    expect(screen.queryByTestId("etf-thesis-placeholder")).toBeNull();
+    const empty = screen.getByTestId("thesis-empty-state");
+    expect(empty.textContent).toMatch(/AI thesis available for individual equities only/i);
   });
 
-  it("renders full equity layout (no ETF aside) when isETF=false and a known equity ticker resolves", () => {
+  it("renders full equity layout when isETF=false and a known equity ticker resolves", () => {
     mockUseSymbolPageData.mockReturnValue(
       makeBaseResult({
         symbolMeta: { symbol: "AAPL", name: "Apple Inc.", type: "CS", exchange: "NASDAQ", sector: "Technology" },
@@ -138,6 +140,7 @@ describe("SymbolPageClient gates", () => {
 
     expect(screen.getByTestId("symbol-page")).toBeInTheDocument();
     expect(screen.getByTestId("sticky-band")).toBeInTheDocument();
+    expect(screen.getByTestId("options-thesis-band")).toBeInTheDocument();
     expect(screen.queryByTestId("etf-thesis-placeholder")).toBeNull();
     expect(screen.queryByTestId("symbol-not-found")).toBeNull();
     expect(screen.queryByTestId("unsupported-asset")).toBeNull();

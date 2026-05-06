@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { getAnalysis, getBars, getIVData, searchSymbols } from "@/lib/api";
+import { ApiError, getAnalysis, getBars, getEarningsDetail, getIVData, searchSymbols } from "@/lib/api";
 import { useTickerContext } from "@/hooks/useQueries";
-import type { Analysis, OHLCVBar, TimeFrame } from "@/types";
+import type { Analysis, EarningsDetail, OHLCVBar, TimeFrame } from "@/types";
 
 export type SymbolMeta = Awaited<ReturnType<typeof searchSymbols>>[number];
 
@@ -19,6 +19,7 @@ export interface UseSymbolPageDataResult {
   analysis: Analysis | null;
   ivData: IVDataResult | null;
   bars: OHLCVBar[] | null;
+  earningsDetail: EarningsDetail | null;
   symbolMeta: SymbolMeta | null;
   isLoading: boolean;
   isError: boolean;
@@ -78,6 +79,32 @@ export function useSymbolPageData(sym: string): UseSymbolPageDataResult {
   const isCryptoForex =
     symbolMeta != null && (CRYPTO_FOREX_TYPES as readonly string[]).includes(symbolMeta.type);
 
+  // T7 / D-05: cached-only mount of the earnings detail payload. The
+  // /detail endpoint serves curated-universe symbols and 404s otherwise;
+  // we treat 404 as "no curated thesis" rather than a hard error so the
+  // band's analysis-summary fallback can render. ETFs are gated out
+  // because the curated universe excludes them.
+  //
+  // T7 P1 #2: narrow the swallow to ApiError with status === 404. The
+  // previous `.catch(() => null)` masked 5xx / network failures, leaving
+  // the symbol page silently degraded with no telemetry signal. Now any
+  // non-404 (5xx, network, RateLimitError, etc.) rethrows so React Query
+  // surfaces it via `isError` and our error boundaries.
+  const earningsEnabled = !!sym && !isETF && !isCryptoForex && symbolMeta != null;
+  const earningsQuery = useQuery<EarningsDetail | null>({
+    queryKey: ["earnings-detail", sym],
+    queryFn: () =>
+      getEarningsDetail(sym).catch((err: unknown) => {
+        if (err instanceof ApiError && err.status === 404) {
+          return null;
+        }
+        throw err;
+      }),
+    staleTime: 5 * 60 * 1000,
+    enabled: earningsEnabled,
+    retry: false,
+  });
+
   const isLoading =
     ctx.isLoading || analysisQuery.isLoading || ivQuery.isLoading || barsQuery.isLoading || searchQuery.isLoading;
   const isError =
@@ -88,6 +115,7 @@ export function useSymbolPageData(sym: string): UseSymbolPageDataResult {
     analysis: analysisQuery.data ?? null,
     ivData: ivQuery.data ?? null,
     bars: barsQuery.data ?? null,
+    earningsDetail: earningsQuery.data ?? null,
     symbolMeta,
     isLoading,
     isError,

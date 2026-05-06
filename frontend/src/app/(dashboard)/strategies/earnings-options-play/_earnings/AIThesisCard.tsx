@@ -47,11 +47,19 @@ export interface AIThesisCardProps {
    * stays backwards-compatible.
    */
   symbol?: string;
+  /**
+   * T7 P1 #1 — when `false`, suppress the FullResearchTrigger button so
+   * host surfaces (e.g. the symbol page's OptionsThesisBand) that don't
+   * yet wire a live `onRunFull` handler don't render a dead-click
+   * "▸ Run full research" CTA. Defaults to `true` for back-compat with
+   * the EOP card surface where the trigger is fully wired.
+   */
+  showRunControls?: boolean;
 }
 
 const LEGACY_UNSUPPORTED_PLAYS = new Set(["short call", "short strangle"]);
 
-export default function AIThesisCard({ structured, full, running, error = null, onRunFull, symbol }: AIThesisCardProps) {
+export default function AIThesisCard({ structured, full, running, error = null, onRunFull, symbol, showRunControls = true }: AIThesisCardProps) {
   if (!structured) {
     return (
       <section
@@ -82,14 +90,14 @@ export default function AIThesisCard({ structured, full, running, error = null, 
         <div className="mt-3 border-t border-[color:var(--border)] pt-3">
           {full ? (
             <FullResearchBlock full={full} />
-          ) : (
+          ) : showRunControls ? (
             <FullResearchTrigger
               running={running}
               error={error}
               onRunFull={onRunFull}
               symbol={symbol}
             />
-          )}
+          ) : null}
         </div>
       </section>
     );
@@ -150,14 +158,14 @@ export default function AIThesisCard({ structured, full, running, error = null, 
       <div className="mt-3 border-t border-[color:var(--border)] pt-3">
         {full ? (
           <FullResearchBlock full={full} />
-        ) : (
+        ) : showRunControls ? (
           <FullResearchTrigger
             running={running}
             error={error}
             onRunFull={onRunFull}
             symbol={symbol}
           />
-        )}
+        ) : null}
       </div>
     </section>
   );

@@ -102,6 +102,46 @@ describe("AIThesisCard", () => {
     expect(onRunFull).toHaveBeenCalledTimes(1);
   });
 
+  // T7 P1 #1: explicit back-compat — EOP usage omits showRunControls so
+  // it defaults to true and the trigger button still renders.
+  it("defaults showRunControls=true so EOP keeps the run-full-research button (back-compat)", () => {
+    const { getByRole } = render(
+      <AIThesisCard structured={structured} full={null} running={false} onRunFull={() => {}} />,
+    );
+    expect(getByRole("button", { name: /run full research/i })).not.toBeNull();
+  });
+
+  // T7 P1 #1: when the host surface lacks a wired onRunFull (e.g. the
+  // symbol page's OptionsThesisBand), passing showRunControls={false}
+  // suppresses the trigger so we don't ship a dead-click CTA.
+  it("hides the FullResearchTrigger button when showRunControls={false}", () => {
+    const { queryByRole } = render(
+      <AIThesisCard
+        structured={structured}
+        full={null}
+        running={false}
+        onRunFull={() => {}}
+        showRunControls={false}
+      />,
+    );
+    expect(queryByRole("button", { name: /run full research/i })).toBeNull();
+  });
+
+  // T7 P1 #1: also covers the no-structured-analysis branch — both
+  // FullResearchTrigger mounts must respect showRunControls.
+  it("hides FullResearchTrigger in the structured=null branch when showRunControls={false}", () => {
+    const { queryByRole } = render(
+      <AIThesisCard
+        structured={null}
+        full={null}
+        running={false}
+        onRunFull={() => {}}
+        showRunControls={false}
+      />,
+    );
+    expect(queryByRole("button", { name: /run full research/i })).toBeNull();
+  });
+
   it("renders full research when the structured thesis is missing", () => {
     const full: ClaudeFullResearch = {
       thesisParagraph: "Fallback full research content.",

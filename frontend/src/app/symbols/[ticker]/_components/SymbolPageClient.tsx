@@ -6,6 +6,7 @@ import { useSymbolPageData } from "../_hooks/useSymbolPageData";
 import { ChartBand } from "../_sections/ChartBand";
 import { DecisionStrip, type DecisionStripMarketRegime } from "../_sections/DecisionStrip";
 import { NotFound } from "../_sections/NotFound";
+import { OptionsThesisBand } from "../_sections/OptionsThesisBand";
 import { StickyBand, type StickyBandQuote } from "../_sections/StickyBand";
 import { UnsupportedAsset } from "../_sections/UnsupportedAsset";
 
@@ -76,12 +77,18 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
   const quote = envelopeToQuote(ctxData?.quote?.value);
   const marketRegime = envelopeToMarketRegime(ctxData?.marketRegime?.value);
 
+  const claudeStructured = data.earningsDetail?.claudeStructured ?? null;
+  const claudeFullResearch = data.earningsDetail?.claudeFullResearch ?? null;
+  const ivTermStructure = data.earningsDetail?.ivTermStructure ?? null;
+  const skew = data.earningsDetail?.skew ?? null;
+  const metrics = data.earningsDetail?.metrics ?? null;
+
   return (
     <main data-testid="symbol-page" data-sym={symbol}>
       <StickyBand symbol={symbol} quote={quote}>
         <DecisionStrip
           symbol={symbol}
-          claudeStructured={null}
+          claudeStructured={claudeStructured}
           analysis={data.analysis}
           marketRegime={marketRegime}
         />
@@ -94,15 +101,17 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
         quote={quote}
       />
 
-      {data.isETF ? (
-        <aside
-          data-testid="etf-thesis-placeholder"
-          data-slot="etf-thesis-placeholder"
-          className="mx-auto max-w-3xl px-4 py-8 text-center sm:px-6 t-mono u-muted"
-        >
-          AI thesis available for individual equities only. ETF analysis coming in a future update.
-        </aside>
-      ) : null}
+      <OptionsThesisBand
+        symbol={symbol}
+        ivData={data.ivData}
+        claudeStructured={claudeStructured}
+        claudeFullResearch={claudeFullResearch}
+        ivTermStructure={ivTermStructure}
+        skew={skew}
+        metrics={metrics}
+        analysisSummary={data.analysis?.summary ?? null}
+        isETF={data.isETF}
+      />
     </main>
   );
 }
