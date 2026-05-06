@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
+import { BottomTabBar } from "@/components/layout/BottomTabBar";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { AICopilot } from "@/components/layout/AICopilot";
 import { OnboardingTour } from "@/components/layout/OnboardingTour";
@@ -283,6 +284,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <AICopilot />
         {overlayOpen && <ShortcutOverlay onClose={() => setOverlayOpen(false)} />}
         <OnboardingTour />
+        {/* persona-mobile-only P2 (2026-05-05): fixed bottom-tab nav for
+            <sm: viewports. The desk's StatusBar (22px footer row in the
+            grid) renders above the bar; the bar lives in fixed-position
+            and uses safe-area-inset-bottom so the iOS home indicator
+            doesn't crowd the touch targets. Strict `sm:hidden` keeps
+            desktop layout unchanged. */}
+        <BottomTabBar />
       </div>
     );
   }
@@ -316,7 +324,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           wheel events from reaching the body when <main> had no internal
           overflow (common case: short page), so the page appeared unscrollable.
           Flex-1 still gives <main> the remaining column height. */}
-      <main id="main-content" role="main" className="relative z-0 flex-1" tabIndex={-1}>
+      {/* persona-mobile-only P2 (2026-05-05): pb-14 reserves 56px at
+          mobile so the fixed BottomTabBar (h-14) does not occlude the
+          last row of page content. Reset to 0 at sm+ where the bar is
+          hidden via `sm:hidden`. */}
+      <main id="main-content" role="main" className="relative z-0 flex-1 pb-14 sm:pb-0" tabIndex={-1}>
         {children}
       </main>
       {/* BUG-037: use the shared build version env so this footer and the
@@ -336,6 +348,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <AICopilot />
       {overlayOpen && <ShortcutOverlay onClose={() => setOverlayOpen(false)} />}
       <OnboardingTour />
+      {/* persona-mobile-only P2 (2026-05-05): see desk-branch comment. */}
+      <BottomTabBar />
     </div>
   );
 }
