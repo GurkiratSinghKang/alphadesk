@@ -267,6 +267,13 @@ export default function EarningsCalendarSidebar({
                         </span>
                       )}
                     </span>
+                    {/* EOP-AUDIT 2026-05-06 PR-4: render BOTH the edge
+                        chip and the IV row whenever there's any chip to
+                        show, so the column-aligned right edge stays
+                        visually consistent. When ivRank is null we
+                        render "IV —" instead of dropping the row — the
+                        absence of an IV chip on Monday rows looked like
+                        a layout bug rather than a data gap. */}
                     {(edgeScore != null || r.ivRank != null) && (
                       <span className="flex shrink-0 flex-col items-end gap-0.5 leading-none">
                         {edgeScore != null && (
@@ -278,11 +285,21 @@ export default function EarningsCalendarSidebar({
                             Edge {Math.round(edgeScore)}
                           </span>
                         )}
-                        {r.ivRank != null && (
-                          <span className="text-label tabular-nums text-[color:var(--fg-pos)]">
-                            IV {Math.round(r.ivRank)}
-                          </span>
-                        )}
+                        <span
+                          data-slot="iv-rank-chip"
+                          className={
+                            r.ivRank != null
+                              ? "text-label tabular-nums text-[color:var(--fg-pos)]"
+                              : "text-label tabular-nums u-muted"
+                          }
+                          title={
+                            r.ivRank != null
+                              ? `IV rank ${Math.round(r.ivRank)} · 0 = lowest, 100 = highest of trailing year`
+                              : "IV rank unavailable for this symbol"
+                          }
+                        >
+                          {r.ivRank != null ? `IV ${Math.round(r.ivRank)}` : "IV —"}
+                        </span>
                       </span>
                     )}
                   </button>

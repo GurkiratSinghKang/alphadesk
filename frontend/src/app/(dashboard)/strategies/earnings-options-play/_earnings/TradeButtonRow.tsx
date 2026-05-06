@@ -169,12 +169,27 @@ export default function TradeButtonRow({
   };
 
   return (
-    <div
-      data-slot="trade-button-row"
-      className="mt-4 grid grid-cols-1 gap-2 border-t border-[color:var(--border)] pt-3 sm:grid-cols-2 md:grid-cols-4"
-      onMouseLeave={previewLeave}
-      onBlur={handleGridBlur}
-    >
+    <>
+      {/* EOP-AUDIT 2026-05-06 PR-4: permanent (non-dismissible)
+          risk-context surface. The site has a localStorage-gated
+          intro card explaining that every trade caps max loss, but
+          once dismissed the page has no persistent risk-warning
+          surface — a user returning a week later sees no reminder
+          that a "long straddle" trade is still bounded. This chip
+          rides directly above the trade buttons so the assertion
+          travels with the action it qualifies. */}
+      <p
+        data-slot="trade-button-row-risk-anchor"
+        className="mt-4 rounded border border-[color:var(--brand)]/40 bg-[color:var(--brand-tint)] px-2 py-1 t-mono text-label u-brand"
+      >
+        ✓ Defined risk · every button below caps max loss at the displayed amount.
+      </p>
+      <div
+        data-slot="trade-button-row"
+        className="mt-2 grid grid-cols-1 gap-2 border-t border-[color:var(--border)] pt-3 sm:grid-cols-2 md:grid-cols-4"
+        onMouseLeave={previewLeave}
+        onBlur={handleGridBlur}
+      >
       {bullPutSpread && (
         <DefinedRiskTradeLink
           dataSlot="trade-button-bull-put-spread"
@@ -354,7 +369,8 @@ export default function TradeButtonRow({
           onHoverEnter={() => previewEnter("long straddle", null)}
         />
       )}
-    </div>
+      </div>
+    </>
   );
 }
 

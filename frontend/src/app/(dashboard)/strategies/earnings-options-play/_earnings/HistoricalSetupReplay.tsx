@@ -254,6 +254,21 @@ function ReplayResult({
         >
           {verdict.label}
         </span>
+        {/* EOP-AUDIT 2026-05-06 PR-4: prominent disclaimer chip beside
+            the verdict pill. Previously the "synthetic premium ·
+            ranking only" caveat sat in a 14-word footnote at the
+            bottom of the panel, where a user reading WIN 100% / AVG R
+            +167% / PF ∞ would form a confident view before the eye
+            ever reached the disclaimer. Promoting to chip-level so
+            the limitation reads at the same visual weight as the
+            metrics. */}
+        <span
+          data-slot="historical-setup-replay-disclaimer"
+          className="rounded border border-amber/50 bg-amber/10 px-1.5 py-0.5 uppercase text-amber"
+          title="Replay uses today's option premium against historical earnings-day moves to rank setups against each other. Not a point-in-time backtest."
+        >
+          ▲ Ranking only · synthetic premium
+        </span>
         <span className="u-muted">
           {metrics.events} suggested-play replay{metrics.events === 1 ? "" : "s"} using current
           premium and implied move.
