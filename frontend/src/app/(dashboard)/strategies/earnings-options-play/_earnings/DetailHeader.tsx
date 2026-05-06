@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { EarningsReportTime } from "@/types";
+import type { EarningsReportTime, Quote } from "@/types";
 import type { SelectionSource } from "../page";
-import { fmtCurrency, fmtDate, fmtPct } from "@/lib/intl";
-import { fmtRelativeTime, useTick } from "@/lib/time";
+import { fmtDate } from "@/lib/intl";
+import { fmtRelativeTime } from "@/lib/time";
+import TickerPriceDisplay from "@/components/primitives/TickerPriceDisplay";
 
 export interface DetailHeaderProps {
   symbol: string;
@@ -14,6 +15,11 @@ export interface DetailHeaderProps {
   reportDate: string | null;
   reportTime: EarningsReportTime;
   quote: { last: number; change: number; changePct: number; timestamp?: string } | null;
+  /** PM-B: when present, drives the after-hours / pre-market secondary
+   *  line under the regular-session price. ``Partial<Quote>`` because the
+   *  ticker-context envelope is the source of truth for extended-hours
+   *  fields and may omit any subset depending on broker availability. */
+  extendedQuote?: Partial<Quote> | null;
   /** ISO datetime of the most-recent detail snapshot. Surfaces as the
    *  "Updated 5 m ago" label in the header. */
   generatedAt?: string;
@@ -24,30 +30,20 @@ export interface DetailHeaderProps {
 }
 
 export default function DetailHeader({
-  symbol, company, sector, reportDate, reportTime, quote, generatedAt,
+  symbol, company, sector, reportDate, reportTime, quote, extendedQuote, generatedAt,
   selectionSource = null,
 }: DetailHeaderProps) {
   const change = quote?.change ?? null;
   const changePct = quote?.changePct ?? null;
-  const isNeg = (change ?? 0) < 0;
   const reportTiming = describeReportTiming(reportTime);
-  const quoteTimestamp = quote?.timestamp ?? generatedAt;
+  const quoteTimestamp = quote?.timestamp ?? generatedAt ?? null;
 
-  // Round-4 (CLUSTER E/14): 15s tick re-evaluates the freshness/relative
-  // text without refetching the detail payload. Don't tick MetricsStrip
-  // or StrikeLadder — those decay only on data refresh, not the wall
-  // clock.
+  // PM-B: TickerPriceDisplay owns the LIVE/DELAYED freshness pill, the
+  // 5s tick that drives it, and the regular-/extended-session two-line
+  // layout. Leaving the autofocus-on-symbol behaviour here because
+  // that's a header-level concern; the ticker primitive is purely
+  // about price rendering.
   //
-  // Round-7 / EP-4: the LIVE → DELAYED threshold sits at 30s but the
-  // 15s tick means the pill could lie for up to 15s past the boundary.
-  // The pill is positioned next to the price so a 40-45s-old quote
-  // still rendered "LIVE" was a real risk — at 5s tick we're never
-  // more than 5s stale around the 30s edge, which is below human
-  // perception for a price-decision affordance. Cost is one extra
-  // re-render every 5s of an unchanged header — negligible.
-  useTick(5_000);
-  const freshness = getFreshness(quoteTimestamp);
-
   // Round-4 (B-NEW-4): autofocus the H2 only on keyboard / URL selection
   // sources. Pointer-driven selections shouldn't rip focus off the
   // click target.
@@ -64,7 +60,11 @@ export default function DetailHeader({
   return (
     <header
       data-slot="detail-header"
-      className="flex flex-col gap-3 border-b border-[color:var(--border)] pb-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6"
+      // PM-B: switched ``sm:items-baseline`` → ``sm:items-start`` so the
+      // right column's optional after-hours secondary line doesn't push
+      // the left-column heading out of vertical alignment when an AH
+      // mark appears.
+      className="flex flex-col gap-3 border-b border-[color:var(--border)] pb-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6"
     >
       <div className="min-w-0">
         <p className="t-label">§ EARNINGS · OPTIONS PLAY</p>
@@ -95,67 +95,26 @@ export default function DetailHeader({
         )}
       </div>
       <div className="min-w-0 text-left sm:text-right">
-        <div className="flex min-w-0 flex-wrap items-center justify-start gap-2 sm:justify-end">
-          {freshness && (
-            <span
-              data-slot="freshness-pill"
-              title={quoteTimestamp}
-              aria-label={freshness.kind === "live" ? "Live price" : `Delayed price, ${freshness.age}`}
-              className={
-                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 t-mono text-label uppercase tracking-wide " +
-                (freshness.kind === "live"
-                  ? "border-[color:var(--profit)] text-[color:var(--profit)]"
-                  : "border-[color:var(--border)] u-muted")
-              }
-            >
-              <span
-                aria-hidden="true"
-                className={
-                  "h-1.5 w-1.5 rounded-full " +
-                  (freshness.kind === "live"
-                    ? "bg-[color:var(--profit)]"
-                    : "bg-[color:var(--fg-muted)]")
-                }
-              />
-              {freshness.kind === "live" ? "LIVE" : `DELAYED ${freshness.age}`}
-            </span>
-          )}
-          <div className="t-num-hero min-w-0 max-w-full text-numeric-hero tracking-[0]">
-            {quote ? fmtCurrency(quote.last, "USD") : "—"}
-          </div>
-        </div>
-        <div className={"t-mono text-body-sm " + (isNeg ? "u-loss" : "u-profit")}>
-          {change == null
-            ? "—"
-            : /* Round-8 visual-bug DH1: ``changePct`` is a percentage
-                 across the codebase (MarketMovers.tsx, LiveSignalFeed,
-                 SectorTreemap all treat ``2.15`` as "+2.15%"), but
-                 ``fmtPct`` uses ``Intl.NumberFormat({style:"percent"})``
-                 which multiplies the input by 100 (expects decimals).
-                 So a real 2.15% rendered as 215% — a $2.62 drop on a
-                 $121.75 stock landed as ``-211.00%`` on the live page,
-                 a clearly impossible value that erodes user trust. Pass
-                 the value through ``/100`` to convert to the decimal
-                 fraction the locale formatter expects. ``signDisplay``
-                 keeps the sign visible to match the dollar change. */
-              `${fmtCurrency(change, "USD", { signDisplay: "always" })} · ${fmtPct((changePct ?? 0) / 100, 2, { signDisplay: "always" })}`}
-        </div>
+        {quote ? (
+          <TickerPriceDisplay
+            last={quote.last}
+            change={change}
+            changePct={changePct}
+            timestamp={quoteTimestamp}
+            extendedPrice={extendedQuote?.extended_price ?? null}
+            extendedChange={extendedQuote?.extended_change ?? null}
+            extendedChangePct={extendedQuote?.extended_change_pct ?? null}
+            extendedSession={extendedQuote?.extended_session ?? null}
+            extendedTimestamp={extendedQuote?.last_trade_time ?? null}
+            layout="stacked"
+            className="sm:ml-auto sm:max-w-[24rem]"
+          />
+        ) : (
+          <div className="t-num-hero min-w-0 max-w-full text-numeric-hero tracking-[0]">—</div>
+        )}
       </div>
     </header>
   );
-}
-
-/**
- * Convert a generatedAt timestamp into a LIVE/DELAYED pill descriptor.
- * <30s old reads as live; otherwise shows the short relative age.
- */
-function getFreshness(iso: string | undefined): { kind: "live" | "delayed"; age: string } | null {
-  if (!iso) return null;
-  const then = new Date(iso).getTime();
-  if (!Number.isFinite(then)) return null;
-  const ageSec = (Date.now() - then) / 1000;
-  if (ageSec < 30) return { kind: "live", age: "just now" };
-  return { kind: "delayed", age: fmtRelativeTime(iso) };
 }
 
 function formatReportDate(iso: string): string {
