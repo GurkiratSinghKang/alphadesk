@@ -133,3 +133,101 @@ Out of scope for this layer (different concerns):
   to consider, not the strike within it.
 - The `empirical_pop` POP path and Kelly sizing — those operate on the
   finalised legs the selectors produce.
+
+## Strike preference (Wave V — V4)
+
+The selectors above pick a *target* delta. The actual contract chosen at
+that target comes from `find_strike_by_delta` (and, when liquidity gating
+is wired up via `find_liquid_strike_by_delta`, that picker too). Both
+pickers now apply preference scoring on top of delta matching.
+
+> **Strike preference**: When multiple strikes are within ±0.03Δ of
+> target, prefer the one with higher OI + volume. Rationale: established
+> OI means tighter spreads, faster fills, and easier exits — especially
+> on long protective wings of iron condors and verticals.
+
+### Scoring
+
+Each delta-acceptable candidate (within `RECOMMENDER_DELTA_TOLERANCE`,
+default ±0.03) gets a score in `[0, 1]`:
+
+```
+score = delta_closeness * 0.50  (default — tunable via Settings)
+      + oi_normalised   * 0.30
+      + volume_normalised * 0.20
+```
+
+| Component | Calculation | Notes |
+| --- | --- | --- |
+| `delta_closeness` | 1.0 at target, 0.0 at the ±tolerance boundary, linear | Floor at 0 outside tolerance |
+| `oi_normalised` | 0 → 0.0, 200 → 0.5, ≥1000 → 1.0 (piecewise linear) | Cap at 1000 stops mega-strikes from dominating |
+| `volume_normalised` | 0 → 0.0, 50 → 0.5, ≥200 → 1.0 (piecewise linear) | Volume is a same-session signal, lower thresholds |
+
+The highest score wins. **Score ties break by delta-closeness** so a
+chain with all-equal OI degenerates back to the legacy "closest delta"
+behaviour.
+
+### Edge cases
+
+| Case | Behaviour |
+| --- | --- |
+| No candidate within ±tolerance | Falls back to the legacy delta-closest pick — preserves picker output for sparse chains |
+| All candidates have OI=0 + volume=0 | OI/volume components score 0 across the board; delta-closeness breaks the tie |
+| Pre-Wave-V chain (no `open_interest`/`volume` field) | Same as above — graceful degradation, no behaviour change for legacy chains |
+| Single candidate within tolerance | That candidate wins regardless of OI/volume |
+
+### Weight choice rationale
+
+Default weights (50/30/20) were chosen so:
+
+1. **Delta-closeness still dominates by majority.** A 50% weight means
+   even a maxed-out OI+volume candidate (combined +50%) cannot beat an
+   exact-delta candidate that has *any* OI/volume of its own. This keeps
+   the picker behaving like a delta-targeting selector first — high-OI is
+   a tiebreaker among already-acceptable strikes, not an override.
+2. **OI is weighted more than volume.** OI is a stable cross-session
+   measure of "this strike is established"; volume is a same-session
+   noisy signal that can spike or zero on any given day. A 30/20 split
+   gives more credit to durable established interest.
+3. **Combined OI+volume = 50%, equal to delta-closeness.** This means
+   that *at the tolerance boundary* (where delta-closeness is 0) the OI
+   + volume signal has full discretion — exactly what we want for the
+   "the strike is just barely off-target but very tradeable" case.
+
+### Composition with liquidity gating (Agent 2)
+
+When Wave V Agent 2's `find_liquid_strike_by_delta` is in the picker
+pipeline:
+
+1. **Liquidity gate runs first** — strikes with `liquidity_score` below
+   `RECOMMENDER_MIN_LEG_LIQUIDITY_SCORE` are rejected outright.
+2. **V4 preference scoring runs second** — among *liquid* strikes the
+   walk-search produces, the highest preference score wins (delta-
+   closeness 50% + OI 30% + volume 20%).
+
+Pre-Agent-2 chains (no `liquidity_score` field) skip step 1 and the V4
+score handles strike selection directly via OI + volume.
+
+### Settings overrides
+
+```python
+RECOMMENDER_DELTA_TOLERANCE: float = 0.03   # ±0.03 of target delta
+RECOMMENDER_PREFER_HIGH_OI_WEIGHT: float = 0.30
+RECOMMENDER_PREFER_HIGH_VOLUME_WEIGHT: float = 0.20
+# delta-closeness weight is computed as 1 - OI - VOLUME (sums to 1.0).
+```
+
+To loosen the tolerance band (e.g. for thinly-traded weeklies where
+the chain doesn't have a strike at every delta increment):
+
+```bash
+export RECOMMENDER_DELTA_TOLERANCE=0.05
+```
+
+To bias the picker more aggressively toward established OI:
+
+```bash
+export RECOMMENDER_PREFER_HIGH_OI_WEIGHT=0.45
+export RECOMMENDER_PREFER_HIGH_VOLUME_WEIGHT=0.25
+# delta-closeness drops to 0.30; OI dominates within tolerance.
+```

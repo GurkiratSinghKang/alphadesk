@@ -320,6 +320,44 @@ class Settings(BaseSettings):
     RECOMMENDER_HIGH_IV_DELTA_TIGHTEN_FACTOR: float = 1.10
     RECOMMENDER_LOW_IV_DELTA_WIDEN_FACTOR: float = 0.85
 
+    # --- Recommender strike-preference scoring (Wave V — V4) ---
+    # Among multiple "delta-acceptable" strikes (within ±DELTA_TOLERANCE
+    # of the target), prefer the contract with established OI + volume.
+    # Established OI gives tighter mid, faster fills, and easier exits —
+    # particularly valuable on the long protective wings of iron condors
+    # and verticals. The picker scores each candidate as:
+    #
+    #     delta_closeness * (1 - PREFER_HIGH_OI_WEIGHT - PREFER_HIGH_VOLUME_WEIGHT)
+    #     + oi_norm        * PREFER_HIGH_OI_WEIGHT
+    #     + volume_norm    * PREFER_HIGH_VOLUME_WEIGHT
+    #
+    # delta_closeness scales 1.0 (exact match) → 0.0 (at ±tolerance).
+    # oi_norm scales 0.0 (OI=0) → 0.5 (OI=200) → 1.0 (OI≥1000).
+    # volume_norm scales 0.0 (vol=0) → 0.5 (vol=50) → 1.0 (vol≥200).
+    # Highest score wins. When no strike is within tolerance the picker
+    # falls back to the legacy delta-only selection. When all candidates
+    # have zero OI + volume (legacy chains) the scoring degenerates to
+    # delta-closeness only.
+    RECOMMENDER_DELTA_TOLERANCE: float = 0.03  # how far off target delta we'll wander
+    RECOMMENDER_PREFER_HIGH_OI_WEIGHT: float = 0.30
+    RECOMMENDER_PREFER_HIGH_VOLUME_WEIGHT: float = 0.20
+
+
+    # --- Slippage forecasting (Wave V — V5) ---
+    # Pre-trade fill estimator used by ``services.slippage_forecast`` to
+    # tell the user the EXPECTED entry cost (not just the theoretical
+    # mid). Per-leg expected fill = mid + spread × FRACTION × penalty,
+    # where penalty is 1.0 for liquid contracts (score >= HIGH), 1.5 for
+    # medium (score >= MEDIUM), and 2.5 for thin (score < MEDIUM).
+    #
+    # Fractions are calibrated to typical broker behaviour:
+    #   patient (mid-walker) — 10% of spread average fill cost.
+    #   immediate (market)   — 50% of spread (cross half).
+    SLIPPAGE_FORECAST_PATIENT_FRACTION: float = 0.10
+    SLIPPAGE_FORECAST_IMMEDIATE_FRACTION: float = 0.50
+    SLIPPAGE_FORECAST_HIGH_LIQUIDITY_THRESHOLD: float = 0.7
+    SLIPPAGE_FORECAST_MEDIUM_LIQUIDITY_THRESHOLD: float = 0.4
+
     # --- Claude Opus per-call cost estimate (Batch U — A-3) ---
     # Used solely for cost-ceiling telemetry; tracks Anthropic pricing.
     CLAUDE_OPUS_COST_PER_CALL_USD: float = 0.30

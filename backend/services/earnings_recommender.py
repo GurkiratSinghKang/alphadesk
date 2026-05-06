@@ -162,28 +162,122 @@ def nearest_event_spanning_expiry(
     return expirations[-1]
 
 
+def _normalise_oi(open_interest: float | int | None) -> float:
+    """Wave V V4 — piecewise-linear OI normalisation: 0 → 0.0, 200 → 0.5, ≥1000 → 1.0."""
+    if open_interest is None:
+        return 0.0
+    try:
+        oi = float(open_interest)
+    except (TypeError, ValueError):
+        return 0.0
+    if oi <= 0:
+        return 0.0
+    if oi >= 1000.0:
+        return 1.0
+    if oi >= 200.0:
+        return 0.5 + 0.5 * (oi - 200.0) / 800.0
+    return 0.5 * oi / 200.0
+
+
+def _normalise_volume(volume: float | int | None) -> float:
+    """Wave V V4 — piecewise-linear volume normalisation: 0 → 0.0, 50 → 0.5, ≥200 → 1.0."""
+    if volume is None:
+        return 0.0
+    try:
+        v = float(volume)
+    except (TypeError, ValueError):
+        return 0.0
+    if v <= 0:
+        return 0.0
+    if v >= 200.0:
+        return 1.0
+    if v >= 50.0:
+        return 0.5 + 0.5 * (v - 50.0) / 150.0
+    return 0.5 * v / 50.0
+
+
+def _strike_preference_score(
+    contract: Any, target_delta: float, tolerance: float,
+) -> float:
+    """Wave V V4 — score for picking among delta-acceptable strikes. Higher is better.
+
+    Components: closeness-to-target-delta + normalised OI + normalised volume.
+    Default weights: 50% / 30% / 20%, tunable via Settings. Returns score in [0, 1].
+    Returns 0.0 for contracts without a delta (defensive fallback).
+    """
+    from core.config import settings as _settings
+
+    raw_delta = getattr(contract, "delta", None)
+    if raw_delta is None:
+        return 0.0
+    try:
+        delta_dev = abs(abs(float(raw_delta)) - abs(target_delta))
+    except (TypeError, ValueError):
+        return 0.0
+
+    if tolerance <= 0:
+        delta_close = 1.0 if delta_dev == 0.0 else 0.0
+    else:
+        delta_close = max(0.0, 1.0 - (delta_dev / tolerance))
+
+    oi_weight = float(_settings.RECOMMENDER_PREFER_HIGH_OI_WEIGHT)
+    vol_weight = float(_settings.RECOMMENDER_PREFER_HIGH_VOLUME_WEIGHT)
+    delta_weight = max(0.0, 1.0 - oi_weight - vol_weight)
+
+    oi_norm = _normalise_oi(getattr(contract, "open_interest", None))
+    vol_norm = _normalise_volume(getattr(contract, "volume", None))
+
+    return (
+        delta_close * delta_weight
+        + oi_norm * oi_weight
+        + vol_norm * vol_weight
+    )
+
+
 def find_strike_by_delta(
     chain: Any, expiry: date | None, option_type: str, target_delta: float,
 ) -> Any | None:
-    """Pick the contract whose abs(delta) is closest to ``abs(target_delta)``.
+    """Pick the best contract for ``target_delta``. Wave V V4: prefer high-OI.
 
-    The OptionChain Greeks are pre-computed via Black-Scholes on the
-    server (see :class:`services.options.OptionContract`). For puts the
-    target_delta is conventionally negative (e.g. ``-0.20``); we compare
-    on absolute value.
+    Among "delta-acceptable" candidates (within ``RECOMMENDER_DELTA_TOLERANCE``,
+    default ±0.03 of target), pick the highest :func:`_strike_preference_score`
+    (delta-closeness 50% + OI 30% + volume 20%, weights tunable). Score
+    ties break by delta-closeness so the legacy delta-only behaviour wins
+    when OI/volume don't differentiate. If no candidate falls within
+    tolerance, fall back to the legacy delta-only selection.
+
+    Composes with Wave V Agent 2's liquidity gating: gating runs first
+    in the picker pipeline; among strikes that pass, V4 picks the one
+    with the most established OI. Pre-Wave-V chains without
+    ``open_interest`` / ``volume`` fields degenerate to delta-closest.
     """
+    from core.config import settings as _settings
+
     contracts = _filter_by_expiry_and_type(chain, expiry, option_type)
     if not contracts:
         return None
-    target_abs = abs(target_delta)
 
-    def _key(c: Any) -> float:
+    target_abs = abs(target_delta)
+    tolerance = float(_settings.RECOMMENDER_DELTA_TOLERANCE)
+
+    def _delta_dev(c: Any) -> float:
         d = getattr(c, "delta", None)
         if d is None:
             return float("inf")
         return abs(abs(float(d)) - target_abs)
 
-    return min(contracts, key=_key)
+    within: list[Any] = [c for c in contracts if _delta_dev(c) <= tolerance]
+
+    if within:
+        return max(
+            within,
+            key=lambda c: (
+                _strike_preference_score(c, target_delta, tolerance),
+                -_delta_dev(c),
+            ),
+        )
+
+    return min(contracts, key=_delta_dev)
 
 
 def find_strike_nearest(
@@ -618,6 +712,31 @@ def _compute_tail_risk_score(signals: TailRiskSignals) -> float:
         and float(signals.iv_term_steepness) > 0.30
     ):
         score += 0.10
+    # Wave V V3: underlying volume above 1.5× ADV = institutional flow.
+    # Real money behind the move makes it more likely to extend through
+    # the print and pierce short-vol wings.
+    if (
+        signals.underlying_relative_volume is not None
+        and float(signals.underlying_relative_volume) > 1.5
+    ):
+        score += 0.10
+    # Wave V V3: options call/put skew. Strong skew in either direction
+    # is options players signalling directional conviction the verdict
+    # / IV term may not have priced in — both upside (>2.0) and downside
+    # (<0.5) cases are tail-risk for the opposite-side short wing.
+    if signals.options_call_put_volume_skew is not None:
+        skew = float(signals.options_call_put_volume_skew)
+        if skew > 2.0 or skew < 0.5:
+            score += 0.10
+    # Wave V V3: unusual options activity = total chain volume > 3× the
+    # rolling 20-day average. Information-flow signal — someone is
+    # positioning aggressively; direction sorts itself out via the
+    # call/put skew above.
+    if signals.unusual_options_activity:
+        score += 0.10
+    # New max is ≥ 1.0 across all signals; min(1.0, score) clamps so the
+    # downstream demote (>=0.6) / skip (>=0.85) thresholds keep working
+    # without recalibration.
     return float(min(1.0, max(0.0, score)))
 
 
@@ -661,6 +780,29 @@ def _tail_risk_reasons(signals: TailRiskSignals) -> list[str]:
         reasons.append(
             f"IV term +{float(signals.iv_term_steepness):.0%}"
         )
+    # Wave V V3: volume-derived signals.
+    if (
+        signals.underlying_relative_volume is not None
+        and float(signals.underlying_relative_volume) > 1.5
+    ):
+        reasons.append(
+            f"relative volume {float(signals.underlying_relative_volume):.1f}× ADV → institutional flow"
+        )
+    if signals.options_call_put_volume_skew is not None:
+        skew = float(signals.options_call_put_volume_skew)
+        if skew > 2.0:
+            reasons.append(
+                f"call volume {skew:.1f}× put volume → bullish skew"
+            )
+        elif skew < 0.5:
+            # Express the inverse so the analyst reads "puts dominate"
+            # naturally; e.g. skew=0.3 → "put volume 3.3× call volume".
+            inv = 1.0 / skew if skew > 0 else float("inf")
+            reasons.append(
+                f"put volume {inv:.1f}× call volume → bearish skew"
+            )
+    if signals.unusual_options_activity:
+        reasons.append("unusual options activity → information flow")
     return reasons
 
 
