@@ -37,6 +37,7 @@ from api.routes import tradingagents
 from api.routes import broker as broker_routes
 from api.routes import earnings
 from api.routes import access_requests as access_requests_routes
+from api.routes import exit_rules as exit_rules_routes
 from api.routes import metrics as metrics_routes
 from api.routes import user as user_routes
 from api.middleware.skip_db_init_warning import SkipDbInitWarningMiddleware
@@ -437,6 +438,11 @@ app.include_router(broker_routes.router, prefix="/api/v1/broker", tags=["Broker"
 # rate-limit at the route layer keeps abuse bounded.
 app.include_router(metrics_routes.router, prefix="/api/v1/metrics", tags=["Metrics"])
 app.include_router(access_requests_routes.router, prefix="/api/v1/access-requests", tags=["Access Requests"])
+# PM-5 (audit/2026-05-05-position-management): admin CRUD for the
+# configurable exit-rules engine. Auth-required; rule edits are
+# sensitive (an enabled 21-DTE rule will close every position on
+# Friday-of-opex).
+app.include_router(exit_rules_routes.router, prefix="/api/v1/exit-rules", tags=["Exit Rules"], dependencies=[Depends(require_auth)])
 # Round-23 / persona-A P0: CSP violation report ingest. Public endpoint
 # (browsers POST without credentials when violation fires); validated +
 # per-IP rate-limited at the route layer. Used by the Report-Only CSP
