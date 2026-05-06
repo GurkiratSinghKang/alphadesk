@@ -2942,7 +2942,6 @@ async def _run_pipeline_inner(
                         AlertSeverity,
                         fire_alert,
                     )
-                    from datetime import datetime, timezone
 
                     await fire_alert(Alert(
                         severity=AlertSeverity.P0,
@@ -3359,7 +3358,6 @@ async def _run_pipeline_inner(
                 AlertSeverity,
                 fire_alert,
             )
-            from datetime import datetime, timezone
 
             await fire_alert(Alert(
                 severity=AlertSeverity.P0,

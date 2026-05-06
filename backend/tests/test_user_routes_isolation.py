@@ -62,6 +62,10 @@ class _FakeRow:
 
     def __init__(self, table: Any, **values: Any) -> None:
         self.__table__ = table
+        # Default every column to None so newly-added Trade fields don't
+        # break this fixture every time the schema grows.
+        for col in table.columns:
+            setattr(self, col.name, None)
         for k, v in values.items():
             setattr(self, k, v)
 
