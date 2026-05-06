@@ -166,9 +166,14 @@ export default function ClaudeThesisCard({ structured, full, running, error = nu
 /**
  * R6-8 / R5-B3: render Claude's bull/bear-case magnitude with a sane
  * display clamp. When the upstream value is outside the believable
- * ±100% band we still surface the rendered number (clamped) but show
- * an aria-described tooltip so a reviewer knows the source data was
- * out of range — silent clamping would mask a real upstream bug.
+ * ±100% band we render an em-dash (instead of "±100%" which looked
+ * like a real forecast on PLTR) and surface a hover tooltip with the
+ * raw value so a reviewer knows the source data was out of range.
+ *
+ * EOP-AUDIT 2026-05-06 / Bug 3: the prior "show clamped value with
+ * dotted underline" treatment was hover-only — invisible on mobile,
+ * easy to mis-read as a real ±100% forecast. Replaced with an
+ * em-dash + "data unavailable" inline copy.
  */
 function EstMoveLine({
   bullCasePct,
@@ -180,16 +185,18 @@ function EstMoveLine({
   const bull = clampForecast(bullCasePct);
   const bear = clampForecast(bearCasePct);
   const anyClamped = bull.clamped || bear.clamped;
+  const renderValue = (clamp: { display: number; clamped: boolean }) =>
+    clamp.clamped ? (
+      <span className="u-muted">—</span>
+    ) : (
+      <span>{fmtPct(clamp.display, 1, { signDisplay: "always" })}</span>
+    );
   const lineContent = (
     <>
-      est. move:{" "}
-      <span className={bull.clamped ? "u-muted underline decoration-dotted" : undefined}>
-        {fmtPct(bull.display, 1, { signDisplay: "always" })}
-      </span>
-      &nbsp;/&nbsp;
-      <span className={bear.clamped ? "u-muted underline decoration-dotted" : undefined}>
-        {fmtPct(bear.display, 1, { signDisplay: "always" })}
-      </span>
+      est. move: {renderValue(bull)}&nbsp;/&nbsp;{renderValue(bear)}
+      {anyClamped ? (
+        <span className="u-muted"> · data unavailable</span>
+      ) : null}
     </>
   );
   if (!anyClamped) return <p className="t-meta mt-1">{lineContent}</p>;
@@ -198,8 +205,9 @@ function EstMoveLine({
       <Tooltip>
         <TooltipTrigger render={<p className="t-meta mt-1" />}>{lineContent}</TooltipTrigger>
         <TooltipContent side="top">
-          Source data outside reliable range — clamped to ±100% for display.
-          Raw values: bull {fmtPct(bullCasePct, 1, { signDisplay: "always" })}, bear{" "}
+          Source data outside reliable range — model returned values bigger
+          than ±100% so the forecast is suppressed. Raw bull{" "}
+          {fmtPct(bullCasePct, 1, { signDisplay: "always" })}, bear{" "}
           {fmtPct(bearCasePct, 1, { signDisplay: "always" })}.
         </TooltipContent>
       </Tooltip>
