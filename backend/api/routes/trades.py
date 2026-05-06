@@ -508,6 +508,88 @@ class CreateOrderRequest(BaseModel):
         """
         return self
 
+    @model_validator(mode="after")
+    def _validate_bracket_sanity(self) -> "CreateOrderRequest":
+        """Sanity bounds on bracket distances (audit 2026-05-05 P1-5).
+
+        ``BracketSpec`` only enforces ``gt=0`` on each level — that lets
+        absurd values (stop=149.99 on a $150 entry; tp=999999) pass
+        validation and become a no-stop / unreachable-target after fill.
+        Trader audit's R5 rule requires a minimum sane distance.
+
+        Bounds (audit recommendation):
+          * 0.5% ≤ |entry - stop_loss| / entry ≤ 50%
+          * 0.5% ≤ |take_profit - entry| / entry ≤ 50%
+          * orientation: BUY ⇒ stop < entry < tp; SELL ⇒ tp < entry < stop
+
+        Validates only when (a) bracket is set, (b) exactly one leg, and
+        (c) that leg has a known limit_price. Multi-leg orders are
+        rejected later in the submit path (see ``_validate_multileg`` /
+        the bracket-rejection at trades.py:5773); market orders have no
+        entry price at validation time and are deferred to runtime.
+        """
+        if self.bracket is None:
+            return self
+        if len(self.legs) != 1:
+            return self  # multi-leg + bracket rejected later in submit path
+        leg = self.legs[0]
+        entry = leg.limit_price
+        if entry is None or entry <= 0:
+            return self  # market orders / unpriced legs — defer
+
+        stop = self.bracket.stop_loss
+        tp = self.bracket.take_profit
+
+        # Orientation by side
+        if leg.side == OrderSide.BUY:
+            if stop >= entry:
+                raise ValueError(
+                    f"bracket orientation: BUY entry {entry} requires stop_loss < entry "
+                    f"(got stop_loss={stop})"
+                )
+            if tp <= entry:
+                raise ValueError(
+                    f"bracket orientation: BUY entry {entry} requires take_profit > entry "
+                    f"(got take_profit={tp})"
+                )
+        elif leg.side == OrderSide.SELL:
+            if stop <= entry:
+                raise ValueError(
+                    f"bracket orientation: SELL entry {entry} requires stop_loss > entry "
+                    f"(got stop_loss={stop})"
+                )
+            if tp >= entry:
+                raise ValueError(
+                    f"bracket orientation: SELL entry {entry} requires take_profit < entry "
+                    f"(got take_profit={tp})"
+                )
+
+        # Distance bounds (after orientation so error messages are clear)
+        stop_dist_pct = abs(entry - stop) / entry
+        tp_dist_pct = abs(tp - entry) / entry
+        if stop_dist_pct < 0.005:
+            raise ValueError(
+                f"bracket stop_loss too tight: {stop_dist_pct*100:.3f}% from entry "
+                f"(min 0.5%); a stop closer than 50bps is functionally a no-stop"
+            )
+        if stop_dist_pct > 0.50:
+            raise ValueError(
+                f"bracket stop_loss too wide: {stop_dist_pct*100:.1f}% from entry "
+                f"(max 50%); use a separate child STOP order if you really want this"
+            )
+        if tp_dist_pct < 0.005:
+            raise ValueError(
+                f"bracket take_profit too tight: {tp_dist_pct*100:.3f}% from entry "
+                f"(min 0.5%); a target closer than 50bps will fill on noise"
+            )
+        if tp_dist_pct > 0.50:
+            raise ValueError(
+                f"bracket take_profit too wide: {tp_dist_pct*100:.1f}% from entry "
+                f"(max 50%); a target this far is unlikely to ever trigger"
+            )
+
+        return self
+
     @field_validator("combo_correlation_id")
     @classmethod
     def sanitize_combo_correlation_id(cls, v: str | None) -> str | None:
