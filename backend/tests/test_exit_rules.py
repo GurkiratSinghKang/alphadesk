@@ -1477,7 +1477,7 @@ def test_scaled_profit_close_seed_loads_in_migration_0020() -> None:
     degraded ruleset.
     """
     migration = (
-        BACKEND_ROOT / "alembic" / "versions" / "0020_exit_rule_scaled_profit_close.py"
+        BACKEND_ROOT / "alembic" / "versions" / "0020_scaled_profit_close.py"
     ).read_text(encoding="utf-8")
     # Iron condor ladder
     assert "'iron_condor'" in migration
