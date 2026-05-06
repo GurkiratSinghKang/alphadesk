@@ -319,6 +319,13 @@ class Settings(BaseSettings):
     # Strategies absent from the map use STRATEGY_ALLOC_CAPITAL_DEFAULT
     # ($100k). 0 disables Layer 2 for that strategy.
     STRATEGY_ALLOC_CAPITAL: dict[str, float] = {}
+    # Per-strategy kill-switch threshold overrides — negative fractions
+    # (e.g. -0.10 = -10%). Layer 1 = drawdown from peak NAV. Layer 2 =
+    # realized_today / alloc_capital. Strategies absent from a map fall
+    # back to the system-wide defaults defined below. Override via env
+    # JSON or PATCH /api/v1/trades/strategy-kill-switch-thresholds.
+    STRATEGY_LAYER1_THRESHOLD: dict[str, float] = {}
+    STRATEGY_LAYER2_THRESHOLD: dict[str, float] = {}
 
     # --- Derived helpers ---
     @property
@@ -506,6 +513,82 @@ def get_strategy_alloc_capital(strategy: str) -> float:
         return float(val)
     except (TypeError, ValueError):
         return STRATEGY_ALLOC_CAPITAL_DEFAULT
+
+
+# Per-strategy kill-switch threshold defaults + overlays. Same pattern
+# as alloc_capital above: in-memory operator overlay > env JSON > default.
+# Negative fractions (e.g. -0.08 = -8%).
+STRATEGY_LAYER1_THRESHOLD_DEFAULT: float = -0.08  # -8% drawdown from peak
+STRATEGY_LAYER2_THRESHOLD_DEFAULT: float = -0.02  # -2% realized / alloc
+
+_STRATEGY_LAYER1_THRESHOLD_OVERLAY: dict[str, float] = {}
+_STRATEGY_LAYER2_THRESHOLD_OVERLAY: dict[str, float] = {}
+
+
+def _resolve_strategy_threshold(
+    strategy: str,
+    overlay: dict[str, float],
+    env_attr: str,
+    default: float,
+) -> float:
+    if strategy in overlay:
+        return float(overlay[strategy])
+    try:
+        raw = getattr(settings, env_attr, None) or {}
+    except Exception:
+        return default
+    if not isinstance(raw, dict):
+        return default
+    val = raw.get(strategy)
+    if val is None:
+        return default
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def get_strategy_layer1_threshold(strategy: str) -> float:
+    """Per-strategy Layer-1 (drawdown) threshold. Negative fraction."""
+    return _resolve_strategy_threshold(
+        strategy,
+        _STRATEGY_LAYER1_THRESHOLD_OVERLAY,
+        "STRATEGY_LAYER1_THRESHOLD",
+        STRATEGY_LAYER1_THRESHOLD_DEFAULT,
+    )
+
+
+def get_strategy_layer2_threshold(strategy: str) -> float:
+    """Per-strategy Layer-2 (daily-PnL ratio) threshold. Negative fraction."""
+    return _resolve_strategy_threshold(
+        strategy,
+        _STRATEGY_LAYER2_THRESHOLD_OVERLAY,
+        "STRATEGY_LAYER2_THRESHOLD",
+        STRATEGY_LAYER2_THRESHOLD_DEFAULT,
+    )
+
+
+def set_strategy_layer1_threshold_overlay(strategy: str, value: float | None) -> None:
+    """Set or clear the Layer-1 threshold overlay. ``None`` clears."""
+    if value is None:
+        _STRATEGY_LAYER1_THRESHOLD_OVERLAY.pop(strategy, None)
+        return
+    _STRATEGY_LAYER1_THRESHOLD_OVERLAY[strategy] = float(value)
+
+
+def set_strategy_layer2_threshold_overlay(strategy: str, value: float | None) -> None:
+    if value is None:
+        _STRATEGY_LAYER2_THRESHOLD_OVERLAY.pop(strategy, None)
+        return
+    _STRATEGY_LAYER2_THRESHOLD_OVERLAY[strategy] = float(value)
+
+
+def get_strategy_layer1_threshold_overlay() -> dict[str, float]:
+    return dict(_STRATEGY_LAYER1_THRESHOLD_OVERLAY)
+
+
+def get_strategy_layer2_threshold_overlay() -> dict[str, float]:
+    return dict(_STRATEGY_LAYER2_THRESHOLD_OVERLAY)
 
 
 def is_live_alpaca_base_url(url: str | None = None) -> bool:
