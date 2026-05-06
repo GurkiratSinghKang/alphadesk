@@ -207,9 +207,23 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
         }}
       >
         <svg viewBox={`0 0 ${chart.width} ${chart.height}`} className="h-full w-full overflow-visible" role="img" aria-label="Options profit and loss at expiration">
+          {/* PM-A 2026-05-05: gradient zone fills replace flat
+              tints so profit/loss bands fade away from the zero
+              line — easier to read at a glance which side of zero
+              the curve lives on. */}
+          <defs>
+            <linearGradient id="payoff-profit-fill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="var(--profit-tint)" stopOpacity="0.3" />
+              <stop offset="100%" stopColor="var(--profit-tint)" stopOpacity="0.7" />
+            </linearGradient>
+            <linearGradient id="payoff-loss-fill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="var(--loss-tint)" stopOpacity="0.7" />
+              <stop offset="100%" stopColor="var(--loss-tint)" stopOpacity="0.3" />
+            </linearGradient>
+          </defs>
           <rect x="0" y="0" width={chart.width} height={chart.height} rx="10" fill="transparent" />
-          <rect x={chart.padding} y={chart.yTop} width={chart.innerWidth} height={Math.max(0, chart.zeroY - chart.yTop)} fill="var(--profit-tint)" opacity="0.55" />
-          <rect x={chart.padding} y={chart.zeroY} width={chart.innerWidth} height={Math.max(0, chart.yBottom - chart.zeroY)} fill="var(--loss-tint)" opacity="0.6" />
+          <rect x={chart.padding} y={chart.yTop} width={chart.innerWidth} height={Math.max(0, chart.zeroY - chart.yTop)} fill="url(#payoff-profit-fill)" />
+          <rect x={chart.padding} y={chart.zeroY} width={chart.innerWidth} height={Math.max(0, chart.yBottom - chart.zeroY)} fill="url(#payoff-loss-fill)" />
           {chart.gridYs.map((y) => (
             <line key={`grid-y-${y}`} x1={chart.padding} x2={chart.width - chart.padding} y1={y} y2={y} stroke="var(--border-hair)" />
           ))}
@@ -219,7 +233,15 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
           <line x1={chart.padding} x2={chart.width - chart.padding} y1={chart.zeroY} y2={chart.zeroY} stroke="var(--fg-muted)" strokeDasharray="4 5" opacity="0.85" />
           {summary.spotPrice != null ? (
             <g>
-              <line x1={chart.x(summary.spotPrice)} x2={chart.x(summary.spotPrice)} y1={chart.yTop} y2={chart.yBottom} stroke="var(--brand)" strokeDasharray="3 5" opacity="0.9" />
+              {/* PM-A 2026-05-05: solid spot indicator (was dashed,
+                  identical to breakevens). Adds a small triangular
+                  tick marker at the chart top edge — like a price
+                  ruler — so the spot stands out visually. */}
+              <line x1={chart.x(summary.spotPrice)} x2={chart.x(summary.spotPrice)} y1={chart.yTop} y2={chart.yBottom} stroke="var(--brand)" opacity="0.9" />
+              <polygon
+                points={`${chart.x(summary.spotPrice) - 4},${chart.yTop - 1} ${chart.x(summary.spotPrice) + 4},${chart.yTop - 1} ${chart.x(summary.spotPrice)},${chart.yTop + 5}`}
+                fill="var(--brand)"
+              />
               <circle cx={chart.x(summary.spotPrice)} cy={chart.zeroY} r="3.5" fill="var(--brand)" />
             </g>
           ) : null}
