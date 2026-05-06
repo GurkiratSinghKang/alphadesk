@@ -9,6 +9,8 @@ import type {
   TickerFactEnvelope,
   TickerFreshnessMeta,
   OptionsChain,
+  ContractSnapshot,
+  RawContractSnapshot,
   Position,
   Order,
   PortfolioSummary,
@@ -1605,6 +1607,54 @@ export async function getOptionsChain(symbol: string, expiration?: string): Prom
     fetchedAt: (raw.fetched_at as string | null | undefined) ?? null,
     isDemo: raw.is_demo === true,
   };
+}
+
+/**
+ * Project Maverick (PM-C): per-contract NBBO snapshot fetch. The backend
+ * ``GET /api/v1/options/contract-snapshot?symbol=<OCC>`` endpoint returns
+ * snake_case (``bid_size``, ``open_interest``, ``is_demo``); this mapper
+ * lifts it into the camelCase ``ContractSnapshot`` shape consumed by
+ * ``useContractSnapshot`` and ``<ContractNBBO />``.
+ *
+ * We code defensively: backend may emit nulls for last/IV/exchanges and
+ * may omit fields entirely if the provider misbehaves. Sizes coerce to 0,
+ * optional fields fall back to ``null`` so the UI shows em-dashes rather
+ * than fabricated values.
+ */
+function mapContractSnapshot(raw: Partial<RawContractSnapshot> & Record<string, unknown>): ContractSnapshot {
+  const num = (v: unknown): number =>
+    typeof v === "number" && Number.isFinite(v) ? v : 0;
+  const numOrNull = (v: unknown): number | null =>
+    typeof v === "number" && Number.isFinite(v) ? v : null;
+  const strOrNull = (v: unknown): string | null =>
+    typeof v === "string" && v.length > 0 ? v : null;
+  return {
+    symbol: typeof raw.symbol === "string" ? raw.symbol : "",
+    bid: num(raw.bid),
+    ask: num(raw.ask),
+    bidSize: num(raw.bid_size),
+    askSize: num(raw.ask_size),
+    bidExchange: strOrNull(raw.bid_exchange),
+    askExchange: strOrNull(raw.ask_exchange),
+    midpoint: num(raw.midpoint),
+    lastPrice: numOrNull(raw.last_price),
+    lastTimestamp: strOrNull(raw.last_timestamp),
+    volume: num(raw.volume),
+    openInterest: num(raw.open_interest),
+    impliedVolatility: numOrNull(raw.implied_volatility),
+    fetchedAt: typeof raw.fetched_at === "string" ? raw.fetched_at : new Date().toISOString(),
+    isDemo: raw.is_demo === true,
+  };
+}
+
+export async function getContractSnapshot(occSymbol: string): Promise<ContractSnapshot> {
+  // Defensive: backend may emit partial bodies on degraded broker; the
+  // mapper coerces missing fields. Type the wire as a record so the
+  // call site isn't load-bearing on the schema being complete.
+  const raw = await apiFetch<Record<string, unknown>>(
+    `/api/v1/options/contract-snapshot?symbol=${encodeURIComponent(occSymbol)}`,
+  );
+  return mapContractSnapshot(raw);
 }
 
 export async function getIVData(symbol: string) {
@@ -3380,4 +3430,82 @@ export async function getPipelinePositions(): Promise<{ positions: PipelinePosit
         : null,
     },
   };
+}
+
+// ============================================================
+// Admin Control Center — provider-agnostic key rotation, layout
+// config, and a deploy trigger. Backend routes self-gate via
+// require_admin (mutating calls) or require_auth (layout GET).
+// ============================================================
+
+export interface AdminBackendKey {
+  label: string;
+  key: string;
+  set: boolean;
+  masked: string;
+}
+
+export async function getAdminBackendKeys(): Promise<AdminBackendKey[]> {
+  const resp = await apiFetch<{ keys: AdminBackendKey[] }>(
+    "/api/v1/admin/control-center/keys",
+  );
+  return resp.keys ?? [];
+}
+
+export async function patchAdminBackendKeys(
+  body: { set?: Record<string, string>; clear?: string[] },
+): Promise<AdminBackendKey[]> {
+  const resp = await apiFetch<{ keys: AdminBackendKey[] }>(
+    "/api/v1/admin/control-center/keys",
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ set: body.set ?? {}, clear: body.clear ?? [] }),
+    },
+  );
+  return resp.keys ?? [];
+}
+
+export interface LayoutSection {
+  id: string;
+  visible: boolean;
+  order: number;
+}
+
+export interface LayoutConfig {
+  dashboard_sections: LayoutSection[];
+  version?: number;
+}
+
+export async function getLayoutConfig(): Promise<LayoutConfig> {
+  return apiFetch<LayoutConfig>("/api/v1/admin/control-center/layout");
+}
+
+export async function patchLayoutConfig(
+  config: Pick<LayoutConfig, "dashboard_sections">,
+): Promise<LayoutConfig> {
+  return apiFetch<LayoutConfig>("/api/v1/admin/control-center/layout", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+}
+
+export interface DeployResult {
+  ok: boolean;
+  ref?: string;
+  triggered_at?: string;
+  html_url?: string | null;
+}
+
+export async function triggerDeploy(): Promise<DeployResult> {
+  return apiFetch<DeployResult>("/api/v1/admin/control-center/deploy", {
+    method: "POST",
+  });
+}
+
+export async function getLastDeploy(): Promise<DeployResult & { actor?: string | null }> {
+  return apiFetch<DeployResult & { actor?: string | null }>(
+    "/api/v1/admin/control-center/deploy/last",
+  );
 }
