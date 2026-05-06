@@ -212,6 +212,43 @@ describe("AIThesisCard", () => {
     expect(alert?.textContent).toMatch(/network down/i);
   });
 
+  // ── T11: research-link gate ────────────────────────────────────────────
+  it("renders 'View full research →' link when showResearchLink={true}", () => {
+    const { container } = render(
+      <AIThesisCard
+        structured={structured}
+        full={null}
+        running={false}
+        onRunFull={() => {}}
+        symbol="NVDA"
+        showResearchLink
+      />,
+    );
+    const link = container.querySelector(
+      '[data-slot="ai-thesis-research-link"]',
+    ) as HTMLAnchorElement | null;
+    expect(link).not.toBeNull();
+    expect(link?.textContent).toMatch(/view full research/i);
+    expect(link?.getAttribute("href")).toBe(
+      "/symbols/NVDA?from=eop&section=thesis",
+    );
+  });
+
+  it("does NOT render the research link by default (showResearchLink omitted)", () => {
+    const { container } = render(
+      <AIThesisCard
+        structured={structured}
+        full={null}
+        running={false}
+        onRunFull={() => {}}
+        symbol="NVDA"
+      />,
+    );
+    expect(
+      container.querySelector('[data-slot="ai-thesis-research-link"]'),
+    ).toBeNull();
+  });
+
   // ── Round-5 (NEW-Y5 / E-8): countdown restart on duplicate retryAfter ──
   it("test_rate_limit_countdown_restarts_on_repeat_429: same retryAfter restarts the visible timer", () => {
     vi.useFakeTimers();

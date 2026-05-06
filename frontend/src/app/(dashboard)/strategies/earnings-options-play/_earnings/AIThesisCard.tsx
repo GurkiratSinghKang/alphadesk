@@ -55,11 +55,28 @@ export interface AIThesisCardProps {
    * the EOP card surface where the trigger is fully wired.
    */
   showRunControls?: boolean;
+  /**
+   * T11 — when true, render a "View full research →" deep-link in the
+   * card header that points at /symbols/{symbol}?from=eop&section=thesis.
+   * Off by default so the new ticker page (which mounts AIThesisCard
+   * itself) doesn't recurse into "view full research" inception.
+   * EOP turns it on at both call sites.
+   */
+  showResearchLink?: boolean;
 }
 
 const LEGACY_UNSUPPORTED_PLAYS = new Set(["short call", "short strangle"]);
 
-export default function AIThesisCard({ structured, full, running, error = null, onRunFull, symbol, showRunControls = true }: AIThesisCardProps) {
+export default function AIThesisCard({ structured, full, running, error = null, onRunFull, symbol, showRunControls = true, showResearchLink = false }: AIThesisCardProps) {
+  const researchLink = showResearchLink && symbol ? (
+    <a
+      href={`/symbols/${encodeURIComponent(symbol)}?from=eop&section=thesis`}
+      data-slot="ai-thesis-research-link"
+      className="t-meta u-brand hover:underline"
+    >
+      View full research →
+    </a>
+  ) : null;
   if (!structured) {
     return (
       <section
@@ -67,9 +84,12 @@ export default function AIThesisCard({ structured, full, running, error = null, 
         aria-busy={running}
         className="rounded border-l-2 border-[color:var(--brand)] bg-[color:var(--brand-tint)] p-3"
       >
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <p className="t-label u-brand">◇ AI · STRUCTURED</p>
-          <span className="t-meta">unavailable</span>
+          <div className="flex items-center gap-2">
+            {researchLink}
+            <span className="t-meta">unavailable</span>
+          </div>
         </div>
         {running ? (
           <div
@@ -109,9 +129,12 @@ export default function AIThesisCard({ structured, full, running, error = null, 
       aria-busy={false}
       className="rounded border-l-2 border-[color:var(--brand)] bg-[color:var(--brand-tint)] p-3"
     >
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <p className="t-label u-brand">◇ AI · STRUCTURED</p>
-        <span className="t-meta">{structured.model}</span>
+        <div className="flex items-center gap-2">
+          {researchLink}
+          <span className="t-meta">{structured.model}</span>
+        </div>
       </div>
       <div className="mt-2 flex items-center justify-between">
         <span className="t-mono text-body font-semibold u-brand">

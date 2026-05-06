@@ -370,6 +370,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
               running={runningFull} error={fullResearchError}
               onRunFull={onRunFullResearch}
               symbol={detail.symbol}
+              showResearchLink
             />
             <NewsFeed news={detail.news} />
           </div>
@@ -386,6 +387,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
             running={runningFull} error={fullResearchError}
             onRunFull={onRunFullResearch}
             symbol={detail.symbol}
+            showResearchLink
           />
           <StrikeLadder ladder={detail.strikeLadder} underlying={detail.symbol} />
           <IVTermSkew term={detail.ivTermStructure} skew={detail.skew} />
