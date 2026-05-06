@@ -3725,6 +3725,14 @@ async def get_detail(symbol: str) -> EarningsDetail:
         value = metrics.get(key)
         return value if value is not None else None
 
+    # PR-1 T6: surface vol_premium_score so the prompt's CONFIDENCE
+    # CALIBRATION block can anchor against the same number the
+    # recommender consumes. The metrics block already stores it
+    # (services.earnings_screener:_load_metrics computes it once).
+    # recent_5d_move_pct isn't computed in the detail-hydration path
+    # yet — left as ``None`` so the prompt simply omits the pre-rally
+    # guard line and falls back to vol-tier calibration alone.
+    _vol_premium_score = metrics.get("vol_premium_score") if metrics else None
     claude_ctx = {
         "symbol": symbol,
         "company": meta["company"],
@@ -3745,6 +3753,8 @@ async def get_detail(symbol: str) -> EarningsDetail:
         "headlines": _format_news_for_prompt(news),
         "market_regime": market_regime,
         "external_research": external_research,
+        "vol_premium_score": _vol_premium_score,
+        "recent_5d_move_pct": None,
     }
     try:
         claude = await _load_claude_structured(symbol, context=claude_ctx)

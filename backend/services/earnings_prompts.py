@@ -104,6 +104,33 @@ _EXPERT_SIGNAL_PROTOCOL = (
 )
 
 
+# PR-1 T6: confidence calibration. The downstream UI (T2-T5) tone-maps
+# the confidence chip and gates low-confidence directional trades behind
+# a warning modal. Mis-calibrated values defeat that gate, so the
+# system prompt now spells out explicit ceilings tied to
+# ``vol_premium_score`` and the named-catalyst rule for directional
+# setups. Aligned with ``earnings_recommender``'s own 0.05 / 0.15
+# thresholds so the model and the recommender agree on what counts as
+# vol-selling edge.
+_CONFIDENCE_CALIBRATION_PROTOCOL = (
+    "CONFIDENCE CALIBRATION — read carefully:\n\n"
+    "The `confidence` field is consumed downstream by a UI that shows tone-mapped chips and gates low-conviction directional trades behind a warning modal. Mis-calibrated confidence makes the system either too aggressive (false high) or invisible (false low). Calibrate strictly:\n\n"
+    "VOL-PREMIUM TIER drives the confidence ceiling for vol-selling setups (iron condor, bull put spread, bear call spread, long straddle):\n"
+    "  · vol_premium_score >= 0.15 → ceiling 0.85 (IV is meaningfully richer than realized history; selling premium has edge)\n"
+    "  · vol_premium_score 0.05–0.15 → ceiling 0.65 (modest edge)\n"
+    "  · vol_premium_score < 0.05 (or null when history is unknown) → ceiling 0.45 (IV ≈ realized; no harvestable edge)\n\n"
+    "DIRECTIONAL SETUPS (long call, long put, bull call spread, bear put spread) require a NAMED directional catalyst to exceed 0.55 confidence. A \"named catalyst\" is one of:\n"
+    "  · A specific recent news item with company-specific price-driving impact\n"
+    "  · Recent guidance / pre-announcement / analyst day\n"
+    "  · Sector momentum cited in the regime context\n"
+    "  · Last 4 quarters' beat-rate >= 75% AND the directional view aligns with that pattern\n"
+    "Without a named catalyst, cap directional confidence at 0.50 — even if the verdict feels strongly bullish or bearish.\n\n"
+    "PRE-RALLY GUARD: if the symbol has rallied >5% in the prior 5 sessions (passed as recent_5d_move_pct when available), subtract 0.10 from any directional-ALIGN confidence. The move is partly priced in. Iron condor confidence is not penalized.\n\n"
+    "BEAR-AGAINST-RALLY: a stock rallying into earnings is NOT a bearish signal on its own. Only suggest a bear-setup with confidence > 0.50 if there is a named bearish catalyst (analyst downgrade, missed pre-announcement, regulatory event). Otherwise prefer iron condor or no-edge fall-through.\n\n"
+    "INVARIANT: when you can't justify the confidence with named evidence, set it lower. The downstream UI surfaces low confidence honestly; it does not punish you for caution.\n\n"
+)
+
+
 # Tags that wrap untrusted scalars. Used by ``_escape_tags_in_untrusted``
 # to strip any literal tag-like substrings inside an untrusted value so
 # attackers cannot break out of the wrapper.
@@ -160,6 +187,8 @@ def build_structured_prompt(
     headlines: Sequence[str],
     market_regime: str,
     external_research: str | None = None,
+    vol_premium_score: float | None = None,
+    recent_5d_move_pct: float | None = None,
 ) -> dict:
     """Return a {'system': str, 'user': str} prompt dict.
 
@@ -181,6 +210,13 @@ def build_structured_prompt(
         if value is None or not math.isfinite(float(value)):
             return "unavailable"
         return f"{float(value):.2%}"
+
+    def _signed_pct_text(value: float | None) -> str:
+        # PR-1 T6: signed percent for the calibration-anchor fields so the
+        # model sees direction explicitly (a +7% rally vs a -7% drawdown).
+        if value is None or not math.isfinite(float(value)):
+            return "unavailable"
+        return f"{float(value):+.1%}"
 
     beats_block = "\n".join(f"  · {d}: {s}" for d, s in recent_beats_misses[:4])
     if headlines:
@@ -221,12 +257,32 @@ def build_structured_prompt(
         "If directional + IV cheap, prefer a long call/put or vertical debit spread.\n\n"
         "No markdown. No prose outside the JSON.\n\n"
         + _EXPERT_SIGNAL_PROTOCOL
+        + _CONFIDENCE_CALIBRATION_PROTOCOL
         + _DATA_TAG_PROTOCOL
     )
     hist_line = (
         f" Historical avg |move| last 8q: ±{hist_avg_abs_move_pct:.2%}."
         if hist_avg_abs_move_pct is not None
         else " Historical avg |move|: unavailable (treat realized-vol comparison as unknown)."
+    )
+    # PR-1 T6: surface the actual values the calibration rules reference
+    # so Claude can reason against them rather than guessing. Each line
+    # carries both the raw kwarg name (for explicit cross-reference with
+    # the calibration block) and a human-readable signed percent.
+    calibration_lines: list[str] = []
+    if vol_premium_score is not None and math.isfinite(float(vol_premium_score)):
+        calibration_lines.append(
+            f"Vol-premium edge: {_signed_pct_text(vol_premium_score)} "
+            f"(vol_premium_score={float(vol_premium_score):.2f}; "
+            f"IV vs realized history; >=15% = vol-selling edge present)"
+        )
+    if recent_5d_move_pct is not None and math.isfinite(float(recent_5d_move_pct)):
+        calibration_lines.append(
+            f"Recent 5d move: recent_5d_move_pct="
+            f"{_signed_pct_text(recent_5d_move_pct)} (pre-event drift)"
+        )
+    calibration_block = (
+        "\n".join(calibration_lines) + "\n" if calibration_lines else ""
     )
     user = (
         f"Earnings setup — {_wrap('company', str(company))} "
@@ -235,6 +291,7 @@ def build_structured_prompt(
         f"Price: {price:.2f}. IV rank: {_num_text(iv_rank)} · IV pctl: {_num_text(iv_percentile)}.\n"
         f"HV 20d: {_pct_text(hv_20)}. IV-implied expected move (straddle): ±{_pct_text(expected_move_pct)}."
         f"{hist_line}\n"
+        f"{calibration_block}"
         f"Recent earnings:\n{beats_block}\n"
         f"News context (corroborative only; do not overweight):\n{news_block}\n"
         f"Market regime context (risk/confidence modifier only): "
