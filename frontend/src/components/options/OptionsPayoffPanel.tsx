@@ -20,6 +20,39 @@ interface OptionsPayoffPanelProps {
   className?: string;
 }
 
+// PM-A 2026-05-05: per-comboType educational caption. Rendered as a
+// one-liner below the leg list so users learn "what does this
+// strategy actually win on" without leaving the panel.
+const STRATEGY_CAPTIONS: Record<string, string> = {
+  iron_condor: "Profits if the stock stays inside the breakevens; IV crush helps if you're short.",
+  iron_butterfly: "Profits if the stock pins near the body strike; IV crush is the main edge.",
+  short_strangle: "Profits if the stock stays inside the breakevens. Tail risk is uncapped.",
+  short_straddle: "Profits on a flat move; IV crush is the edge. Tail risk is uncapped.",
+  long_straddle: "Profits on a big move in either direction; IV crush works against you.",
+  long_strangle: "Profits on a big move beyond the strikes; IV crush works against you.",
+  bear_call_spread: "Profits if the stock falls or stays flat; defined max loss.",
+  bull_put_spread: "Profits if the stock rises or stays flat; defined max loss.",
+  bull_call_spread: "Profits if the stock rises through both strikes; defined max loss.",
+  bear_put_spread: "Profits if the stock falls through both strikes; defined max loss.",
+  long_call: "Profits on upside; pays for IV crush at expiration.",
+  long_put: "Profits on downside; pays for IV crush at expiration.",
+  calendar_spread: "Profits if the stock pins near the strike; IV crush asymmetry is the edge.",
+  diagonal_spread: "Profits if the stock pins near the strike; mixed IV-crush exposure.",
+};
+
+// PM-A 2026-05-05: credit comboTypes get a one-line IV-crush note
+// inside the leg list so traders entering before earnings see the
+// trade-off explicitly: the credit you collect must beat the
+// post-event vol compression.
+const CREDIT_STRATEGIES = new Set([
+  "iron_condor",
+  "iron_butterfly",
+  "short_strangle",
+  "short_straddle",
+  "bear_call_spread",
+  "bull_put_spread",
+]);
+
 export default function OptionsPayoffPanel({
   draft,
   title = "Options payoff",
@@ -71,12 +104,14 @@ export default function OptionsPayoffPanel({
             <span>{summary.reason}</span>
           </div>
           <LegList draft={draft} />
+          <StrategyCaption comboType={draft?.comboType} />
         </div>
       ) : (
         <div className="px-4 py-4">
           <MetricGrid summary={summary} compact={compact} />
           <PayoffChart summary={summary} />
           {!compact ? <LegList draft={draft} /> : null}
+          {!compact ? <StrategyCaption comboType={draft.comboType} /> : null}
         </div>
       )}
     </section>
@@ -297,6 +332,45 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
             );
           })}
           <path d={chart.path} fill="none" stroke="var(--brand)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+          {/* PM-A 2026-05-05: max-profit / max-loss markers on the
+              curve. Filled coloured circles + labelled text give
+              users the headline numbers without parsing the metric
+              grid above. "∞" replaces "+\$Infinity" when the
+              strategy is unbounded on that side. */}
+          {chart.maxProfitCoord ? (
+            <g>
+              <circle cx={chart.maxProfitCoord.x} cy={chart.maxProfitCoord.y} r="5" fill="var(--profit)" />
+              <text
+                x={chart.maxProfitCoord.x}
+                y={chart.maxProfitCoord.y - 8}
+                textAnchor="middle"
+                fontSize="9"
+                fill="var(--profit)"
+                fontWeight="600"
+              >
+                {chart.maxProfitCoord.label === "∞"
+                  ? "+∞"
+                  : `+${formatCurrency(chart.maxProfitCoord.pnl)}`}
+              </text>
+            </g>
+          ) : null}
+          {chart.maxLossCoord ? (
+            <g>
+              <circle cx={chart.maxLossCoord.x} cy={chart.maxLossCoord.y} r="5" fill="var(--loss)" />
+              <text
+                x={chart.maxLossCoord.x}
+                y={chart.maxLossCoord.y + 14}
+                textAnchor="middle"
+                fontSize="9"
+                fill="var(--loss)"
+                fontWeight="600"
+              >
+                {chart.maxLossCoord.label === "∞"
+                  ? "−∞"
+                  : `−${formatCurrency(Math.abs(chart.maxLossCoord.pnl))}`}
+              </text>
+            </g>
+          ) : null}
           {hovered ? (
             <g>
               <line x1={chart.x(hovered.underlyingPrice)} x2={chart.x(hovered.underlyingPrice)} y1={chart.yTop} y2={chart.yBottom} stroke="var(--fg)" opacity="0.18" />
@@ -345,6 +419,7 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
 }
 
 function LegList({ draft }: { draft: OptionStrategyDraft }) {
+  const isCredit = draft.comboType ? CREDIT_STRATEGIES.has(draft.comboType) : false;
   return (
     <div className="mt-4 grid gap-2">
       {draft.legs.map((leg, index) => (
@@ -358,8 +433,20 @@ function LegList({ draft }: { draft: OptionStrategyDraft }) {
           <span className="text-fg-muted">{leg.entryPrice == null ? "Unpriced" : formatCurrency(leg.entryPrice)}</span>
         </div>
       ))}
+      {isCredit ? (
+        <p className="t-label text-[var(--fg-muted)]">
+          Entering before earnings means selling IV crush; the credit must exceed the post-event compression.
+        </p>
+      ) : null}
     </div>
   );
+}
+
+function StrategyCaption({ comboType }: { comboType?: string | null }) {
+  if (!comboType) return null;
+  const text = STRATEGY_CAPTIONS[comboType];
+  if (!text) return null;
+  return <p className="text-[var(--fg-muted)] text-body-sm mt-2">{text}</p>;
 }
 
 function EmptyPayoff({ copy, compact = false }: { copy: string; compact?: boolean }) {
