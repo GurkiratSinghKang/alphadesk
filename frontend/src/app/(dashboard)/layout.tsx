@@ -23,7 +23,7 @@ const subscribeToHydration = (notify: () => void) => {
 const getClientSnapshot = () => true;
 const getServerSnapshot = () => false;
 
-type ApiServiceKey =
+export type ApiServiceKey =
   | "portfolio"
   | "market"
   | "orders"
@@ -34,7 +34,7 @@ type ApiServiceKey =
   | "assistant"
   | "backend";
 
-interface ApiServiceIssue {
+export interface ApiServiceIssue {
   key: ApiServiceKey;
   label: string;
   status?: number;
@@ -122,7 +122,7 @@ function writeDismissedAt(at: number | null): void {
   }
 }
 
-function ApiDegradedBanner({
+export function ApiDegradedBanner({
   issues,
   onDismiss,
   onRetry,
