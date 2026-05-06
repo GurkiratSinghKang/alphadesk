@@ -34,6 +34,7 @@ from data.calendar import USMarketCalendar
 from data.ingestion.daily_pipeline import (
     run_daily_pipeline,
     run_earnings_prewarm,
+    run_exit_monitor,
     run_position_check,
     get_pipeline_status,
 )
@@ -49,6 +50,24 @@ _CAL = USMarketCalendar()
 # 5 minutes is short enough to catch broker-side fills quickly, long enough
 # that it doesn't dominate API quota or step on the main scheduler cadence.
 LEDGER_SYNC_INTERVAL_SEC = 300
+
+# OE-3 (combo-exit hardening, 2026-05-05): exit-monitor cadence — separate
+# from the strategy/window scheduler so combo stops are checked far more
+# often than the daily pipeline runs. The 60-second tick during regular
+# market hours is the tightest cadence Alpaca's rate limits comfortably
+# accommodate (the per-tick work is only the open-trade loop, no chain
+# scan or strategy run). Extended-hours quotes are sparse, so the monitor
+# slows to 5-minute ticks pre/post; overnight (00:00-04:00 ET) it skips
+# entirely because there's no live OPRA data and the only actionable
+# events would be next-day-open orders which the daily pipeline picks up.
+EXIT_MONITOR_RTH_INTERVAL_SEC = 60
+EXIT_MONITOR_EXT_INTERVAL_SEC = 300
+# OE-4: alert when no exit-monitor heartbeat has landed within this many
+# seconds during market hours. The scheduler tick is 60 s, so 5 min of
+# silence is the smallest threshold that's not flappy under transient
+# DB blips. Above this, an ERROR is logged (alerts will hook in once
+# OPEN-2 lands per the audit plan).
+EXIT_MONITOR_STALE_AFTER_SEC = 300
 
 ET = ZoneInfo("America/New_York")
 
@@ -145,6 +164,10 @@ WINDOWS = {
 
 _scheduler_task: asyncio.Task | None = None
 _ledger_sync_task: asyncio.Task | None = None
+# OE-3: separate task so the exit monitor's 60 s cadence does not block
+# the main scheduler loop and does not get rolled in with the 5 min
+# ledger-sync cadence.
+_exit_monitor_task: asyncio.Task | None = None
 _should_stop = False
 
 
@@ -236,6 +259,136 @@ async def _ledger_sync_loop() -> None:
             await asyncio.sleep(min(30, LEDGER_SYNC_INTERVAL_SEC - slept))
             slept += 30
     logger.info("Ledger→Alpaca sync loop stopped")
+
+
+def _is_extended_hours() -> bool:
+    """Pre-market (04:00-09:30 ET) or post-market (16:00-20:00 ET).
+
+    The monitor uses this to slow its tick from 60 s to 5 min — OPRA data
+    is much sparser outside RTH and the additional 60 s cycles would only
+    burn rate-limit headroom. Holiday-aware (returns False for non-trading
+    days, including half-day post-close periods).
+    """
+    now = datetime.now(ET)
+    today = now.date()
+    if not _CAL.is_trading_day(today):
+        return False
+    pre_start = dt_time(4, 0)
+    pre_end = dt_time(9, 30)
+    post_start = dt_time(16, 0)
+    post_end = dt_time(20, 0)
+    t = now.time()
+    if pre_start <= t < pre_end:
+        return True
+    if post_start <= t < post_end:
+        return True
+    return False
+
+
+def _is_overnight_quiet() -> bool:
+    """00:00-04:00 ET — no OPRA quotes, no point ticking."""
+    now = datetime.now(ET)
+    return dt_time(0, 0) <= now.time() < dt_time(4, 0)
+
+
+async def _check_exit_monitor_heartbeat() -> None:
+    """OE-4 fail-safe: warn when ``exit_monitor:last_run`` is stale.
+
+    The exit checker stamps a Redis key on every successful tick. If the
+    most recent timestamp is older than ``EXIT_MONITOR_STALE_AFTER_SEC``
+    during market hours, log ERROR. Once OPEN-2 (alerting infra) lands,
+    the same callsite will route to PagerDuty / Slack / email — leaving
+    the log line in place keeps the heartbeat visible in stdout / Sentry
+    in the meantime.
+
+    Skips silently outside market hours since the monitor itself is
+    paused overnight and slower in extended hours; a "stale" heartbeat
+    at 03:00 ET is correct behaviour, not a bug.
+    """
+    if not _is_market_hours():
+        return
+    try:
+        from core.redis import cache_get
+    except Exception:
+        return
+    payload = await cache_get("exit_monitor:last_run")
+    if not payload:
+        logger.error(
+            "exit_monitor heartbeat: no last_run stamp in Redis — "
+            "monitor may have never started this session",
+        )
+        return
+    ts_str = payload.get("ts") if isinstance(payload, dict) else None
+    if not ts_str:
+        return
+    try:
+        last = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
+    except ValueError:
+        logger.warning("exit_monitor heartbeat: cannot parse ts=%s", ts_str)
+        return
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    age_sec = (datetime.now(timezone.utc) - last).total_seconds()
+    if age_sec > EXIT_MONITOR_STALE_AFTER_SEC:
+        logger.error(
+            "exit_monitor heartbeat: STALE — last run %.0f s ago "
+            "(threshold %d s); combo stops may not be enforcing",
+            age_sec, EXIT_MONITOR_STALE_AFTER_SEC,
+        )
+
+
+async def _exit_monitor_loop() -> None:
+    """OE-3 (combo-exit hardening): high-frequency stop-enforcement loop.
+
+    Runs every ``EXIT_MONITOR_RTH_INTERVAL_SEC`` (60 s) during regular
+    market hours, every ``EXIT_MONITOR_EXT_INTERVAL_SEC`` (300 s) during
+    pre/post-market, and skips overnight. ``run_exit_monitor`` performs
+    the actual ``_check_exits`` call; this loop is responsible only for
+    cadence and heartbeat health.
+
+    Dies-loud: any unexpected exception is logged at ERROR with traceback
+    so a missing-stop-enforcement bug surfaces in oncall before traders
+    see it. Cancellation during graceful shutdown is silent.
+    """
+    global _should_stop
+    logger.info(
+        "Exit monitor loop started (RTH=%ds, EXT=%ds, overnight=skip; "
+        "heartbeat staleness threshold=%ds)",
+        EXIT_MONITOR_RTH_INTERVAL_SEC,
+        EXIT_MONITOR_EXT_INTERVAL_SEC,
+        EXIT_MONITOR_STALE_AFTER_SEC,
+    )
+    while not _should_stop:
+        interval = EXIT_MONITOR_RTH_INTERVAL_SEC  # default tick when in doubt
+        try:
+            if _is_overnight_quiet():
+                interval = EXIT_MONITOR_EXT_INTERVAL_SEC
+            elif _is_market_hours():
+                await run_exit_monitor()
+                # Heartbeat sanity check (logs ERROR if stale).
+                await _check_exit_monitor_heartbeat()
+                interval = EXIT_MONITOR_RTH_INTERVAL_SEC
+            elif _is_extended_hours():
+                await run_exit_monitor()
+                interval = EXIT_MONITOR_EXT_INTERVAL_SEC
+            else:
+                # Off-hours, off-trading-day. Long sleep with frequent
+                # cancellation checks.
+                interval = EXIT_MONITOR_EXT_INTERVAL_SEC
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            logger.exception("Exit monitor loop error")
+            interval = EXIT_MONITOR_RTH_INTERVAL_SEC
+        # Sleep in small chunks so stop_pipeline_scheduler returns quickly.
+        slept = 0
+        while slept < interval and not _should_stop:
+            try:
+                await asyncio.sleep(min(15, interval - slept))
+            except asyncio.CancelledError:
+                break
+            slept += 15
+    logger.info("Exit monitor loop stopped")
 
 
 def _is_trading_day() -> bool:
@@ -584,7 +737,7 @@ async def start_pipeline_scheduler() -> None:
     """
     from core.supervised_task import create_supervised_task
 
-    global _scheduler_task, _ledger_sync_task, _should_stop
+    global _scheduler_task, _ledger_sync_task, _exit_monitor_task, _should_stop
     _should_stop = False
     _scheduler_task = create_supervised_task(
         _scheduler_loop(), name="pipeline_scheduler"
@@ -592,14 +745,26 @@ async def start_pipeline_scheduler() -> None:
     _ledger_sync_task = create_supervised_task(
         _ledger_sync_loop(), name="pipeline_ledger_sync"
     )
-    logger.info("Pipeline scheduler + ledger sync background tasks created")
+    # OE-3: high-frequency exit checker for combo stops. Independent
+    # task so a slow chain fetch on one combo doesn't pause the
+    # strategy scheduler or the ledger reconciler.
+    _exit_monitor_task = create_supervised_task(
+        _exit_monitor_loop(), name="pipeline_exit_monitor"
+    )
+    logger.info(
+        "Pipeline scheduler + ledger sync + exit monitor background tasks created"
+    )
 
 
 async def stop_pipeline_scheduler() -> None:
-    """Stop the scheduler + ledger sync gracefully."""
-    global _should_stop, _scheduler_task, _ledger_sync_task
+    """Stop the scheduler + ledger sync + exit monitor gracefully."""
+    global _should_stop, _scheduler_task, _ledger_sync_task, _exit_monitor_task
     _should_stop = True
-    for label, task_ref in (("scheduler", "_scheduler_task"), ("ledger_sync", "_ledger_sync_task")):
+    for label, task_ref in (
+        ("scheduler", "_scheduler_task"),
+        ("ledger_sync", "_ledger_sync_task"),
+        ("exit_monitor", "_exit_monitor_task"),
+    ):
         task = globals().get(task_ref)
         if task:
             task.cancel()
@@ -608,4 +773,4 @@ async def stop_pipeline_scheduler() -> None:
             except (asyncio.CancelledError, Exception):
                 pass
             globals()[task_ref] = None
-    logger.info("Pipeline scheduler + ledger sync stopped")
+    logger.info("Pipeline scheduler + ledger sync + exit monitor stopped")
