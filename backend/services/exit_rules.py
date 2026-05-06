@@ -8,18 +8,29 @@ responsible for actuating the decision — close the combo, fire an
 alert, or hand the trade to ``services.position_roller`` for an
 auto-roll attempt.
 
-The four seed rules (see ``alembic/versions/0016_exit_rules.py``):
+The seed rules (see ``alembic/versions/0016_exit_rules.py`` plus
+``0018_exit_rule_wing_capture.py``):
 
     1. iron_condor profit-take at 50% of max credit (close, priority 10)
     2. iron_butterfly profit-take at 25% (close, priority 10)
-    3. time-based exit at 21 DTE for any structure (close, priority 20)
-    4. loss alert at 2x max credit lost (alert, priority 5)
+    3. wing_capture early-close at 80% of max LOSS, DTE > 1, defined-risk
+       credits only (close, priority 15)
+    4. time-based exit at 21 DTE for any structure (close, priority 20)
+    5. loss alert at 2x max credit lost (alert, priority 5)
 
 Priority is ascending — the loss alert (priority 5) fires BEFORE any
 close action, so an operator gets notified the moment a trade goes
 deeply against the position. Rules are scoped by ``strategy`` (NULL =
 all strategies) and ``structure_type`` (NULL or ``"*"`` = all
 structures).
+
+The ``wing_capture`` rule (priority 15) sits between the take-profit
+close (10) and the time-based close (20) by design: when an iron condor
+or vertical credit spread breaks through one wing and the loss runs to
+near-max, holding to expiration locks in max loss while the protective
+long leg still has residual time value. Closing early harvests that
+residual — historical AMD-style postmortem (a $200 capture on a $338
+max-loss IC) drove the addition.
 
 Composition with siblings:
 
@@ -43,6 +54,19 @@ from typing import Any, Iterable
 logger = logging.getLogger(__name__)
 
 
+# Structures whose risk is bounded by a long protective wing — these are
+# the only ones for which ``wing_capture`` fires. Holding any of these
+# to expiration when already capped against the wing locks in max loss;
+# closing early captures residual time value on the long leg.
+DEFINED_RISK_CREDIT_STRUCTURES: frozenset[str] = frozenset({
+    "iron_condor",
+    "iron_butterfly",
+    "vertical_spread",
+    "bull_put_spread",
+    "bear_call_spread",
+})
+
+
 # ---------------------------------------------------------------------------
 # Public API surface
 # ---------------------------------------------------------------------------
@@ -59,7 +83,8 @@ class ExitDecision:
         close/alert audit event so the post-mortem can pivot back to the
         rule definition.
     rule_type:
-        One of ``profit_pct`` | ``time_dte`` | ``loss_pct`` | ``delta_breach``.
+        One of ``profit_pct`` | ``time_dte`` | ``loss_pct`` |
+        ``delta_breach`` | ``wing_capture``.
     action:
         One of ``close`` | ``alert`` | ``roll``.
     threshold:
@@ -219,6 +244,47 @@ def _rule_fires(
         meta["net_delta"] = net_delta
         return abs(net_delta) >= threshold, meta
 
+    if rule_type == "wing_capture":
+        # Early-close defined-risk credits when capped against a wing —
+        # capture residual time value on the protective long leg before
+        # expiration zeros it out. AMD postmortem 2026-05: an iron condor
+        # at $338 max loss / $270 unrealized loss (80%) with 3 DTE had
+        # ~$200 of long-wing time value the operator captured by closing
+        # at the open instead of holding to expiry.
+        max_loss = _safe_float(_trade_attr(trade, "max_loss"))
+        meta["max_loss"] = max_loss
+        if max_loss <= 0:
+            meta["reason"] = "max_loss_unset"
+            return False, meta
+        # Structure gate: only defined-risk credits have a long-wing to
+        # harvest. Long calls/puts, equity, futures — skip.
+        structure_type = str(_trade_attr(trade, "structure_type") or "")
+        meta["structure_type"] = structure_type
+        if structure_type not in DEFINED_RISK_CREDIT_STRUCTURES:
+            meta["reason"] = f"structure_not_defined_risk_credit:{structure_type}"
+            return False, meta
+        # DTE gate: too late to harvest meaningful theta on the long
+        # wing — let it expire. Threshold is "DTE strictly greater than
+        # min_dte". We hard-code min_dte=1 here; the rule_type already
+        # encodes the semantics. Keep a single tunable (threshold = loss%)
+        # so the rule stays composable with existing scope filters.
+        expiration = _trade_attr(trade, "expiration")
+        exp_date = _to_date(expiration)
+        if exp_date is None:
+            meta["reason"] = "expiration_unset"
+            return False, meta
+        dte = (exp_date - today).days
+        meta["dte"] = dte
+        if dte <= 1:
+            meta["reason"] = "dte_too_low"
+            return False, meta
+        # Loss-ratio gate.
+        current_pnl = _compute_combo_pnl(trade, current_marks)
+        meta["current_pnl"] = current_pnl
+        loss_pct = (-current_pnl / max_loss) if current_pnl < 0 else 0.0
+        meta["loss_pct"] = loss_pct
+        return loss_pct >= threshold, meta
+
     # Unknown rule_type — do not fire. (Schema CHECK-constraint should
     # already have rejected this row at insert time, but defensive.)
     meta["reason"] = f"unknown_rule_type:{rule_type}"
@@ -249,6 +315,13 @@ def _explain_rule_fire(rule: Any, meta: dict[str, Any]) -> str:
         )
     if rule_type == "delta_breach":
         return f"delta_breach: |net_delta|={abs(meta.get('net_delta', 0.0)):.4f} >= {threshold}"
+    if rule_type == "wing_capture":
+        return (
+            f"wing_capture: loss_pct={meta.get('loss_pct', 0.0):.2%} "
+            f">= {threshold:.2%} of max_loss={meta.get('max_loss', 0):.2f} "
+            f"(dte={meta.get('dte', '?')}, structure={meta.get('structure_type', '?')}) "
+            f"— close to harvest residual long-wing time value"
+        )
     return f"{rule_type} fired at threshold {threshold}"
 
 

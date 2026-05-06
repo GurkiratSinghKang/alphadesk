@@ -167,6 +167,23 @@ is HALTED until restart.
 3. Open an incident if the cause isn't an obvious transient (Redis
    blip, DNS hiccup).
 
+## Exit-rule engine — wing_capture
+
+Defined-risk credit structures (iron condors, iron butterflies,
+vertical credit spreads) reach near-max-loss when the underlying
+breaks through one wing. Holding to expiration locks in max loss, but
+the protective long wing still has residual time value that can be
+captured by closing early. The `wing_capture` rule (in
+`backend/services/exit_rules.py`, seeded by alembic
+`0018_exit_rule_wing_capture`) auto-closes when unrealized loss is
+≥ 80% of max loss AND DTE > 1, harvesting that residual value.
+Disable per-trade by setting the `structure_type` filter or adjusting
+`threshold` on the row in the `exit_rules` table — or flip
+`enabled=false` for a strategy-wide pause. The rule fires at priority
+15, between the take-profit close (10) and the time-based close (20),
+and AFTER the priority-5 `loss_pct` alert so the operator is paged
+before the auto-close runs.
+
 ## How to add a new alert hook
 
 The dispatcher is `services.alerts.fire_alert`. Keep alerts wrapped in

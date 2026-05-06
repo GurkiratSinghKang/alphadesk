@@ -780,10 +780,15 @@ def _define_models() -> dict[str, Any]:
 
         * ``rule_type`` — one of:
 
-          - ``profit_pct``   — fire when current pnl >= threshold * max_profit
-          - ``time_dte``     — fire when DTE <= threshold
-          - ``loss_pct``     — fire when current pnl <= -threshold * max_profit
-          - ``delta_breach`` — fire when |net combo delta| >= threshold
+          - ``profit_pct``    — fire when current pnl >= threshold * max_profit
+          - ``time_dte``      — fire when DTE <= threshold
+          - ``loss_pct``      — fire when current pnl <= -threshold * max_profit
+          - ``delta_breach``  — fire when |net combo delta| >= threshold
+          - ``wing_capture``  — fire when loss/max_loss >= threshold AND
+            DTE > 1 AND structure is a defined-risk credit (iron_condor,
+            iron_butterfly, vertical_spread, bull_put_spread,
+            bear_call_spread). Captures residual long-wing time value
+            instead of holding capped trades to expiration for max loss.
 
         * ``threshold`` — interpretation depends on ``rule_type`` (a fraction
           for profit/loss_pct, a day count for time_dte, a delta for
@@ -830,7 +835,7 @@ def _define_models() -> dict[str, Any]:
             Index("ix_exit_rules_scope", "strategy", "structure_type", "enabled"),
             Index("ix_exit_rules_priority", "priority", "enabled"),
             CheckConstraint(
-                "rule_type IN ('profit_pct','time_dte','loss_pct','delta_breach')",
+                "rule_type IN ('profit_pct','time_dte','loss_pct','delta_breach','wing_capture')",
                 name="ck_exit_rules_rule_type",
             ),
             CheckConstraint(

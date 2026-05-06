@@ -492,3 +492,245 @@ async def test_profit_pct_skipped_when_max_profit_unset() -> None:
     rule = _rule(structure_type="iron_condor", rule_type="profit_pct", threshold=0.50)
     decision = await evaluate_exit_rules(trade, marks, rules=[rule])
     assert decision is None
+
+
+# ---------------------------------------------------------------------------
+# wing_capture rule (AMD postmortem 2026-05)
+# ---------------------------------------------------------------------------
+#
+# Defined-risk credit structures (iron_condor, iron_butterfly,
+# vertical_spread, bull_put_spread, bear_call_spread) hit near-max-loss
+# when the underlying breaks through one wing. Holding to expiration
+# locks in max loss; the protective long wing still has residual time
+# value that's captured by closing early. Rule fires when:
+#
+#     loss / max_loss >= threshold (default 0.80) AND dte > 1
+#
+# Tests below cover: fires/doesn't fire matrix, structure gate,
+# priority composition with time_dte (15 < 20 — wing_capture wins),
+# and the AMD-style integration scenario.
+
+
+def _iron_condor_loss_marks(*, short_put_mark: float, long_put_mark: float) -> dict:
+    """Marks for a left-wing breach scenario.
+
+    Default IC entry (per ``_iron_condor_trade``):
+      short_put  entry $1.00, long_put  entry $0.50
+      short_call entry $1.00, long_call entry $0.50
+    Net credit = $1.00 (both call legs roll off so call legs at entry → 0 pnl).
+    Pnl when underlying gaps below short put strike:
+      short_put : (1.00 - short_put_mark) * 100
+      long_put  : (long_put_mark - 0.50)  * 100
+      short_call: (1.00 - 1.00) * 100 = 0
+      long_call : (0.50 - 0.50) * 100 = 0
+    """
+    return {
+        "AMD250620P145": short_put_mark, "AMD250620P140": long_put_mark,
+        "AMD250620C175": 1.00, "AMD250620C180": 0.50,
+    }
+
+
+@pytest.mark.asyncio
+async def test_wing_capture_fires_at_80pct_loss_dte_3() -> None:
+    """Iron condor at 80% of max loss with DTE=3 must fire close."""
+    from services.exit_rules import evaluate_exit_rules
+
+    today = date(2026, 5, 5)
+    trade = _iron_condor_trade(expiration=today + timedelta(days=3))
+    trade["max_loss"] = 400.0
+    # Construct -$320 pnl (80% of $400 max loss):
+    #   short_put : (1.00 - 5.00) * 100 = -$400
+    #   long_put  : (1.30 - 0.50) * 100 =  $80
+    #   net puts = -$320; calls contribute 0 → pnl = -$320 = 80% of max_loss
+    marks = _iron_condor_loss_marks(short_put_mark=5.00, long_put_mark=1.30)
+    rule = _rule(
+        structure_type="*",
+        rule_type="wing_capture",
+        threshold=0.80,
+        action="close",
+        priority=15,
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[rule], today=today)
+    assert decision is not None, "wing_capture must fire at 80% of max_loss with DTE=3"
+    assert decision.rule_type == "wing_capture"
+    assert decision.action == "close"
+    assert decision.metadata["dte"] == 3
+    assert decision.metadata["current_pnl"] == pytest.approx(-320.0, abs=0.01)
+    assert decision.metadata["loss_pct"] == pytest.approx(0.80, abs=0.001)
+
+
+@pytest.mark.asyncio
+async def test_wing_capture_does_not_fire_at_dte_1() -> None:
+    """DTE=1 is too late — let it expire, no residual to harvest."""
+    from services.exit_rules import evaluate_exit_rules
+
+    today = date(2026, 5, 5)
+    trade = _iron_condor_trade(expiration=today + timedelta(days=1))
+    trade["max_loss"] = 400.0
+    marks = _iron_condor_loss_marks(short_put_mark=5.00, long_put_mark=1.30)
+    rule = _rule(
+        structure_type="*", rule_type="wing_capture",
+        threshold=0.80, action="close", priority=15,
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[rule], today=today)
+    assert decision is None, "wing_capture must NOT fire at DTE=1 (too late to harvest)"
+
+
+@pytest.mark.asyncio
+async def test_wing_capture_does_not_fire_on_long_call() -> None:
+    """A long_call has no protective wing to harvest — rule is structure-gated."""
+    from services.exit_rules import evaluate_exit_rules
+
+    today = date(2026, 5, 5)
+    trade = _iron_condor_trade(expiration=today + timedelta(days=3))
+    trade["structure_type"] = "long_call"  # NOT a defined-risk credit
+    trade["max_loss"] = 400.0
+    marks = _iron_condor_loss_marks(short_put_mark=5.00, long_put_mark=1.30)
+    rule = _rule(
+        structure_type="*", rule_type="wing_capture",
+        threshold=0.80, action="close", priority=15,
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[rule], today=today)
+    assert decision is None, "wing_capture must NOT fire on long_call (no long wing to harvest)"
+
+
+@pytest.mark.asyncio
+async def test_wing_capture_does_not_fire_at_70pct_loss() -> None:
+    """At 70% of max loss the rule (threshold 0.80) does NOT fire."""
+    from services.exit_rules import evaluate_exit_rules
+
+    today = date(2026, 5, 5)
+    trade = _iron_condor_trade(expiration=today + timedelta(days=3))
+    trade["max_loss"] = 400.0
+    # Construct -$280 pnl (70% of $400 max loss):
+    #   short_put : (1.00 - 4.00) * 100 = -$300
+    #   long_put  : (0.70 - 0.50) * 100 =   $20
+    #   net puts = -$280; calls contribute 0 → pnl = -$280 = 70% of max_loss
+    marks = _iron_condor_loss_marks(short_put_mark=4.00, long_put_mark=0.70)
+    rule = _rule(
+        structure_type="*", rule_type="wing_capture",
+        threshold=0.80, action="close", priority=15,
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[rule], today=today)
+    assert decision is None, "wing_capture must NOT fire below threshold (70% < 80%)"
+
+
+@pytest.mark.asyncio
+async def test_wing_capture_priority_15_fires_before_time_dte_priority_20() -> None:
+    """When both wing_capture AND time_dte would match, wing_capture wins.
+
+    Critical for the AMD scenario: a credit spread at 80% loss with 3 DTE
+    is ALSO inside the 21 DTE time-exit window. wing_capture at priority
+    15 sits below time_dte at 20 — so the engine returns wing_capture
+    first. This is the whole point of the priority slot: harvest the
+    long-wing residual BEFORE the generic time exit closes the position.
+    """
+    from services.exit_rules import evaluate_exit_rules
+
+    today = date(2026, 5, 5)
+    trade = _iron_condor_trade(expiration=today + timedelta(days=3))
+    trade["max_loss"] = 400.0
+    marks = _iron_condor_loss_marks(short_put_mark=5.00, long_put_mark=1.30)
+    wing_capture = _rule(
+        id=1, structure_type="*", rule_type="wing_capture",
+        threshold=0.80, action="close", priority=15,
+    )
+    time_dte = _rule(
+        id=2, structure_type="*", rule_type="time_dte",
+        threshold=21.0, action="close", priority=20,
+    )
+    decision = await evaluate_exit_rules(
+        trade, marks, rules=[time_dte, wing_capture], today=today,
+    )
+    assert decision is not None
+    assert decision.rule_type == "wing_capture", (
+        "priority=15 wing_capture must fire BEFORE priority=20 time_dte"
+    )
+    assert decision.rule_id == 1
+
+
+@pytest.mark.asyncio
+async def test_wing_capture_amd_postmortem_integration() -> None:
+    """AMD-style scenario: $338 max loss, ~$280 unrealized loss (~83%), DTE=3.
+
+    Flagship integration test mirroring the postmortem: iron condor
+    capped against the UPPER wing after AMD spot ran past both call
+    strikes; max_loss = $338; current loss ~$280 (>= 80%); 3 DTE
+    remaining. Engine MUST return close — operator was right to close
+    at the open and capture residual long-wing time value.
+
+    Pnl calibration (each leg $1.00 short entry / $0.50 long entry):
+
+      put wing — both far OTM at AMD $403, marked at entry → $0 pnl
+      short_call: (1.00  - 28.00) * 100 = -$2700
+      long_call : (24.70 - 0.50)  * 100 =  $2420
+      total call wing = -$280; combined combo pnl = -$280
+
+      loss_pct = 280 / 338 ≈ 82.8% — above the 80% threshold.
+    """
+    from services.exit_rules import evaluate_exit_rules
+
+    today = date(2026, 5, 5)
+    trade = _iron_condor_trade(expiration=today + timedelta(days=3))
+    trade["max_loss"] = 338.0
+    trade["symbol"] = "AMD"
+    marks = {
+        # Put wing decayed to entry — contributes $0 to pnl (AMD at
+        # $403, put strikes 145/140 far OTM, time value gone).
+        "AMD250620P145": 1.00, "AMD250620P140": 0.50,
+        # Call wing breached — AMD blew through both call strikes.
+        "AMD250620C175": 28.00, "AMD250620C180": 24.70,
+    }
+    rule = _rule(
+        structure_type="*", rule_type="wing_capture",
+        threshold=0.80, action="close", priority=15,
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[rule], today=today)
+    assert decision is not None, (
+        "AMD postmortem: 80%+ of max loss with DTE=3 on iron condor MUST fire close"
+    )
+    assert decision.rule_type == "wing_capture"
+    assert decision.action == "close"
+    assert decision.metadata["current_pnl"] == pytest.approx(-280.0, abs=0.01)
+    assert decision.metadata["dte"] == 3
+    assert decision.metadata["loss_pct"] >= 0.80
+    assert decision.metadata["structure_type"] == "iron_condor"
+    # Rationale should mention residual long-wing time value harvest.
+    assert "residual" in decision.rationale.lower() or "long-wing" in decision.rationale.lower()
+
+
+@pytest.mark.asyncio
+async def test_wing_capture_skipped_when_max_loss_unset() -> None:
+    """Without max_loss the ratio is undefined — engine must NOT fire."""
+    from services.exit_rules import evaluate_exit_rules
+
+    today = date(2026, 5, 5)
+    trade = _iron_condor_trade(expiration=today + timedelta(days=3))
+    trade["max_loss"] = 0  # missing
+    marks = _iron_condor_loss_marks(short_put_mark=5.00, long_put_mark=1.30)
+    rule = _rule(
+        structure_type="*", rule_type="wing_capture",
+        threshold=0.80, action="close", priority=15,
+    )
+    decision = await evaluate_exit_rules(trade, marks, rules=[rule], today=today)
+    assert decision is None
+
+
+def test_wing_capture_seed_loads_in_migration_0018() -> None:
+    """Migration 0018 must seed the default wing_capture rule.
+
+    Mirrors the migration-contract assertion in
+    ``test_seed_rules_load_on_alembic_upgrade``: a refactor that drops
+    or alters the seed should fail CI rather than silently shipping a
+    degraded ruleset to prod.
+    """
+    migration = (
+        BACKEND_ROOT / "alembic" / "versions" / "0018_exit_rule_wing_capture.py"
+    ).read_text(encoding="utf-8")
+    assert "'wing_capture'" in migration
+    assert "0.80" in migration
+    assert "'close'" in migration
+    # Priority 15 is the documented slot — between profit_pct (10) and time_dte (20).
+    assert "15" in migration
+    # CHECK constraint must be widened.
+    assert "ck_exit_rules_rule_type" in migration
