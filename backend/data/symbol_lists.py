@@ -239,6 +239,102 @@ DEMO_BASE_IV: dict[str, float] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Sector cohort map (TR-2 — tail-risk signal plumbing)
+# ---------------------------------------------------------------------------
+#
+# For each high-edge symbol, list 4-9 related-sector peers whose intraday
+# move feeds ``TailRiskSignals.sector_cohort_momentum_avg``. The recommender
+# uses an aggregate cohort move > +2% as a tail-risk signal — when AI semis
+# all rip together, short-vol on top of a same-sector earnings event eats
+# tail risk that the chain hasn't fully priced.
+#
+# Inclusion rules:
+#   * Peers must be in CURATED_OPTIONABLE_UNIVERSE (we'll fetch their quotes
+#     via the same path; unknown tickers blow the cohort fetch budget for
+#     no gain).
+#   * 4-9 peers per cohort. Fewer than 4 doesn't average meaningfully;
+#     more than 9 dilutes the signal and burns API budget.
+#   * Symbols outside the map fall through to ``None`` — the recommender
+#     treats that as no-signal and does not penalise the recommendation.
+#
+# Last revision: 2026-05-05 (initial seed; expand as new high-edge names
+# enter the calendar).
+SECTOR_COHORT: dict[str, list[str]] = {
+    # AI / semiconductor cohort — the tightest co-movement on the tape.
+    "AMD": ["NVDA", "AVGO", "INTC", "MU", "TSM", "QCOM", "MRVL", "KLAC"],
+    "NVDA": ["AMD", "AVGO", "INTC", "MU", "TSM", "QCOM", "MRVL", "KLAC"],
+    "AVGO": ["AMD", "NVDA", "INTC", "MU", "QCOM", "MRVL"],
+    "INTC": ["AMD", "NVDA", "AVGO", "MU", "QCOM", "TSM"],
+    "MU": ["AMD", "NVDA", "AVGO", "INTC", "QCOM", "MRVL"],
+    "QCOM": ["AMD", "NVDA", "AVGO", "INTC", "MU", "MRVL"],
+    "MRVL": ["AMD", "NVDA", "AVGO", "INTC", "MU", "QCOM"],
+    "KLAC": ["AMD", "NVDA", "LRCX", "AMAT", "MU"],
+    "LRCX": ["AMD", "NVDA", "KLAC", "AMAT", "MU"],
+    "TSM": ["AMD", "NVDA", "AVGO", "INTC", "MU"],
+    # Mega-cap tech (cloud / advertising / consumer-tech)
+    "MSFT": ["GOOGL", "AAPL", "META", "ORCL", "CRM", "NOW"],
+    "AAPL": ["MSFT", "GOOGL", "META", "AMZN"],
+    "GOOGL": ["MSFT", "AAPL", "META", "AMZN"],
+    "GOOG": ["MSFT", "AAPL", "META", "AMZN"],
+    "META": ["MSFT", "GOOGL", "AAPL", "AMZN", "NFLX"],
+    "AMZN": ["MSFT", "GOOGL", "AAPL", "META"],
+    "NFLX": ["META", "GOOGL", "DIS", "AMZN"],
+    "ORCL": ["MSFT", "CRM", "NOW", "INTU"],
+    "CRM": ["MSFT", "ORCL", "NOW", "WDAY", "INTU"],
+    "NOW": ["MSFT", "CRM", "ORCL", "WDAY"],
+    "INTU": ["MSFT", "CRM", "ORCL", "ADBE"],
+    "ADBE": ["MSFT", "CRM", "INTU", "NOW"],
+    # Cybersecurity (high-IV, tightly correlated)
+    "PANW": ["CRWD", "FTNT", "ZS", "NET"],
+    "CRWD": ["PANW", "FTNT", "ZS", "NET", "DDOG"],
+    "FTNT": ["PANW", "CRWD", "ZS", "NET"],
+    "ZS": ["PANW", "CRWD", "FTNT", "NET"],
+    # Consumer / EV (TSLA cluster)
+    "TSLA": ["F", "GM", "NVDA", "RIVN", "NIO"],
+    # Banks (BMO cluster — earnings beats correlate)
+    "JPM": ["BAC", "WFC", "C", "GS", "MS"],
+    "BAC": ["JPM", "WFC", "C", "GS", "MS"],
+    "WFC": ["JPM", "BAC", "C", "GS", "MS"],
+    "C": ["JPM", "BAC", "WFC", "GS", "MS"],
+    "GS": ["JPM", "BAC", "WFC", "C", "MS"],
+    "MS": ["JPM", "BAC", "WFC", "C", "GS"],
+    # Mega-cap pharma
+    "LLY": ["JNJ", "PFE", "MRK", "ABBV", "BMY"],
+    "PFE": ["JNJ", "LLY", "MRK", "ABBV", "BMY"],
+    "MRK": ["JNJ", "LLY", "PFE", "ABBV", "BMY"],
+    "ABBV": ["JNJ", "LLY", "PFE", "MRK", "BMY"],
+    # Payments / fintech
+    "V": ["MA", "PYPL", "AXP", "FI"],
+    "MA": ["V", "PYPL", "AXP", "FI"],
+    "PYPL": ["V", "MA", "SQ", "COIN"],
+    # Ride-share / on-demand
+    "UBER": ["LYFT", "DASH", "ABNB"],
+    # Energy mega-cap
+    "XOM": ["CVX", "COP", "SLB", "EOG"],
+    "CVX": ["XOM", "COP", "SLB", "EOG"],
+    "COP": ["XOM", "CVX", "SLB", "EOG"],
+    # Retail / consumer staples
+    "WMT": ["COST", "TGT", "HD", "LOW"],
+    "COST": ["WMT", "TGT", "HD"],
+    "HD": ["LOW", "WMT", "COST"],
+    "LOW": ["HD", "WMT", "COST"],
+    # Streaming / media
+    "DIS": ["NFLX", "CMCSA", "WBD"],
+    # Disruptors / high-vol single-names
+    "SHOP": ["SQ", "PYPL", "COIN"],
+    "COIN": ["SQ", "PYPL", "SHOP", "HOOD"],
+    "PLTR": ["SNOW", "MDB", "NET"],
+    "SNOW": ["PLTR", "MDB", "DDOG", "NET"],
+    "DDOG": ["SNOW", "MDB", "NET", "CRWD"],
+    "MDB": ["SNOW", "PLTR", "DDOG"],
+    "NET": ["DDOG", "MDB", "SNOW", "ZS"],
+    # Semis adjacencies
+    "ANET": ["AVGO", "MRVL", "CSCO"],
+    "SMCI": ["AMD", "NVDA", "ANET"],
+}
+
+
 __all__ = [
     "CURATED_OPTIONABLE_UNIVERSE",
     "HEADLINE_EARNINGS_SYMBOLS",
@@ -249,4 +345,5 @@ __all__ = [
     "DEMO_DEFAULT_VOLATILITY",
     "DEMO_BASE_PRICES_OPTIONS",
     "DEMO_BASE_IV",
+    "SECTOR_COHORT",
 ]
