@@ -27,7 +27,15 @@ logger = logging.getLogger("alphadesk.exit_rules")
 router = APIRouter()
 
 
-RuleType = Literal["profit_pct", "time_dte", "loss_pct", "delta_breach"]
+RuleType = Literal[
+    "profit_pct",
+    "time_dte",
+    "loss_pct",
+    "delta_breach",
+    "wing_capture",
+    "adverse_momentum_close",
+    "scaled_profit_close",
+]
 RuleAction = Literal["close", "roll", "alert"]
 
 

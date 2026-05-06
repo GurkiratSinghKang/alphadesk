@@ -1981,6 +1981,24 @@ async def _dispatch_exit_decision(
     rule_type = getattr(decision, "rule_type", "")
     reason_label = f"exit_rule:{rule_type}"
 
+    # ── Scaled-profit close branch (M-O P) ──
+    # ``scaled_profit_close`` rules close only ``qty_fraction`` of the
+    # REMAINING qty, not the whole position. After a successful partial
+    # close we stamp ``Trade.partial_close_log`` so the same rule_id is
+    # filtered out of future ticks (idempotency lives in
+    # ``services.exit_rules.evaluate_exit_rules``). The runner (the
+    # final scale at qty_fraction=1.0) closes whatever is left and
+    # marks the trade fully closed via the normal close path.
+    if action == "close" and rule_type == "scaled_profit_close":
+        await _dispatch_scaled_profit_close(
+            client, ledger, trade, decision,
+            closed_orders=closed_orders,
+            reason_label=reason_label,
+            rationale=rationale,
+            username=username,
+        )
+        return
+
     # ── Close branch ──
     if action == "close":
         legs = trade.get("legs") or []
@@ -2085,6 +2103,160 @@ async def _dispatch_exit_decision(
         "reason": reason_label,
         "exit_rule_id": getattr(decision, "rule_id", None),
         "exit_rule_rationale": rationale,
+        "strategy": trade.get("strategy", "unknown"),
+    })
+
+
+async def _dispatch_scaled_profit_close(
+    client: httpx.AsyncClient,
+    ledger: TradeLedger,
+    trade: dict[str, Any],
+    decision: Any,
+    *,
+    closed_orders: list[dict[str, Any]],
+    reason_label: str,
+    rationale: str,
+    username: str | None = None,
+) -> None:
+    """Actuate a ``scaled_profit_close`` rule.
+
+    M-O P (2026-05-05). Closes ``qty_fraction`` of the REMAINING qty
+    (computed by ``services.exit_rules.compute_scaled_close_qty``)
+    rather than the full position, then stamps
+    ``Trade.partial_close_log`` so the same rule never re-fires.
+
+    Final scale (qty_fraction=1.0) closes the runner — the trade row
+    transitions to ``status=closed`` via the existing combo close
+    helper. Earlier scales submit per-leg offsetting orders sized to
+    ``close_qty`` and leave ``status=open`` so the next scale can fire
+    later in the lifecycle.
+    """
+    sym = trade.get("symbol")
+    legs = trade.get("legs") or []
+    rule_id = getattr(decision, "rule_id", 0) or 0
+    threshold = float(getattr(decision, "threshold", 0.0))
+    meta = getattr(decision, "metadata", {}) or {}
+    qty_fraction = float(meta.get("qty_fraction", 1.0))
+
+    # Construct a synthetic rule object so compute_scaled_close_qty has
+    # the qty_fraction without us re-loading the row from the DB.
+    _RuleProxy = type("RuleProxy", (), {})
+    rule_proxy = _RuleProxy()
+    rule_proxy.qty_fraction = qty_fraction  # type: ignore[attr-defined]
+
+    try:
+        from services.exit_rules import (
+            append_partial_close_fire as _append_fire,
+            compute_scaled_close_qty as _compute_close_qty,
+        )
+    except Exception:
+        logger.error(
+            "scaled_profit_close: helper import failed for %s — falling back to full close",
+            sym, exc_info=True,
+        )
+        _append_fire = None
+        _compute_close_qty = None
+
+    if _compute_close_qty is None:
+        # Fall through to the regular close branch by recursing into
+        # the dispatcher with a coerced action. Best-effort fail-safe;
+        # better to close the whole position than to silently skip.
+        return
+
+    close_qty = _compute_close_qty(trade, rule_proxy)
+    original_qty = trade.get("original_qty") or 0
+    closed_so_far = sum(
+        int((entry.get("qty_closed") or 0))
+        for entry in (((trade.get("partial_close_log") or {}).get("fires")) or [])
+        if isinstance(entry, dict)
+    )
+    remaining_qty_before = max(0, int(original_qty) - int(closed_so_far))
+    remaining_qty_after = max(0, remaining_qty_before - int(close_qty))
+
+    is_runner = qty_fraction >= 0.999 or remaining_qty_after == 0
+
+    # ── Submit offsetting orders for ``close_qty`` contracts ──
+    legs_closed: list[dict[str, Any]] = []
+    legs_failed: list[dict[str, Any]] = []
+    if legs and close_qty > 0:
+        for leg in legs:
+            occ = (
+                leg.get("occ_symbol") if isinstance(leg, dict)
+                else getattr(leg, "occ_symbol", None)
+            )
+            leg_side = (
+                leg.get("side") if isinstance(leg, dict)
+                else getattr(leg, "side", None)
+            )
+            if not occ or leg_side not in ("buy", "sell"):
+                legs_failed.append({"leg": leg, "error": "missing occ_symbol/side"})
+                continue
+            offset_side = "sell" if leg_side == "buy" else "buy"
+            try:
+                order = await _place_order(
+                    client, occ, int(close_qty), offset_side,
+                    strategy=trade.get("strategy", "unknown"),
+                    username=username,
+                )
+                legs_closed.append({
+                    "occ_symbol": occ,
+                    "side": offset_side,
+                    "quantity": int(close_qty),
+                    "order_id": order.get("id") if isinstance(order, dict) else None,
+                })
+            except Exception as exc:
+                logger.error(
+                    "scaled_profit_close: leg unwind failed for %s leg %s (%s %d): %s",
+                    sym, occ, offset_side, close_qty, exc, exc_info=True,
+                )
+                legs_failed.append({"occ_symbol": occ, "error": str(exc)})
+
+    # ── Stamp Trade.partial_close_log + Trade.status ──
+    fired_at_iso = datetime.now(timezone.utc).isoformat()
+    new_log = None
+    if _append_fire is not None:
+        new_log = _append_fire(
+            trade.get("partial_close_log"),
+            rule_id=int(rule_id),
+            threshold=threshold,
+            qty_fraction=qty_fraction,
+            qty_closed=int(close_qty),
+            remaining_qty=int(remaining_qty_after),
+            fired_at_iso=fired_at_iso,
+        )
+
+    trade_id = trade.get("id")
+    if trade_id is not None:
+        ledger_update: dict[str, Any] = {}
+        if new_log is not None:
+            ledger_update["partial_close_log"] = new_log
+        if is_runner:
+            ledger_update["status"] = "closed"
+            ledger_update["exit_reason"] = reason_label
+            ledger_update["exit_time"] = fired_at_iso
+        if ledger_update:
+            try:
+                ledger.update(int(trade_id), ledger_update)
+            except Exception:
+                logger.error(
+                    "scaled_profit_close: ledger update failed for id=%s",
+                    trade_id, exc_info=True,
+                )
+
+    closed_orders.append({
+        "symbol": sym,
+        "kind": "scaled_partial_close" if not is_runner else "scaled_runner_close",
+        "reason": reason_label,
+        "exit_rule_id": rule_id,
+        "exit_rule_rationale": rationale,
+        "qty_closed": int(close_qty),
+        "qty_fraction": qty_fraction,
+        "threshold": threshold,
+        "remaining_qty_after": int(remaining_qty_after),
+        "is_runner": bool(is_runner),
+        "legs_closed": legs_closed,
+        "legs_failed": legs_failed,
+        "trade_id": trade_id,
         "strategy": trade.get("strategy", "unknown"),
     })
 

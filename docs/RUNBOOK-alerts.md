@@ -241,6 +241,27 @@ is hard-coded in the rule body — change it there if you want a
 different cut-in level (raising it to 50% effectively turns the rule
 into a "early wing_capture at lower σ").
 
+## Exit-rule engine — scaled_profit_close (M-O P)
+
+A single-threshold profit close at 50% of max credit leaves money on
+the table when winners keep running. The `scaled_profit_close` rule
+(in `backend/services/exit_rules.py`, seeded by alembic
+`0020_exit_rule_scaled_profit_close`) replaces the iron condor 50%
+single-close and iron butterfly 25% single-close with a 3-step
+ladder: close 1/3 of the original lot at 25% of max profit, 1/3 more
+at 50%, and the runner at 75% (iron butterflies use the tighter
+0.15 / 0.30 / 0.50 thresholds). Each scale is one row in `exit_rules`
+with a `qty_fraction` column expressing "fraction of REMAINING qty"
+(so the seed uses 0.33, 0.50, 1.00 to ladder cleanly to 1/3 + 1/3 +
+1/3 of original). Idempotency is enforced by the JSONB
+`trades.partial_close_log` column — once a scale fires, its `rule_id`
+is stamped into the log and the evaluator filters that rule out of
+future ticks. The legacy single-threshold `profit_pct` rows are
+**soft-disabled** (`enabled=false`) by migration 0020, not deleted —
+flip `enabled=true` on those rows to revert. To pause the ladder for
+one strategy, flip `enabled=false` on the 3 rows scoped to that
+`structure_type` in the `exit_rules` table.
+
 ## How to add a new alert hook
 
 The dispatcher is `services.alerts.fire_alert`. Keep alerts wrapped in
