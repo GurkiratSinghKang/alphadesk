@@ -1,4 +1,4 @@
-"""Tests for ``services.earnings_recommender`` — Wave 4a / Batch Q.
+"""Tests for ``services.earnings_recommender`` — Wave 4a / Batch Q + SHR.
 
 Covers:
   * regime classification across IV rank / IV-to-HV / verdict / confidence
@@ -7,6 +7,12 @@ Covers:
   * POP for known lognormal cases (sanity-checked at 1-stdev intervals)
   * recommend_setups: high-IV neutral → iron_condor first; high-conf
     bullish in low-IV → bull_call_spread first
+  * SHR-1: empirical POP from prior_moves
+  * SHR-2: tail-risk score across signal combinations
+  * SHR-3: confidence + tail-risk Kelly overlay
+  * SHR-4: skip outcome when EV is poor
+  * SHR-7: AMD-regression — top setup is NOT iron_condor under elevated
+    intraday momentum + analyst raises + cohort
 """
 from __future__ import annotations
 
@@ -17,9 +23,13 @@ from types import SimpleNamespace
 
 import pytest
 
+from api.schemas.earnings import TailRiskSignals
 from services.earnings_recommender import (
     _classify_regime,
     _candidates_for_regime,
+    _compute_tail_risk_score,
+    _empirical_pop,
+    _lognormal_pop,
     compute_pop,
     find_strike_by_delta,
     find_strike_nearest,
@@ -472,3 +482,371 @@ def test_nearest_event_spanning_expiry_bmo_uses_same_day():
     )
     picked = nearest_event_spanning_expiry(chain, report_date=today, report_time="BMO")
     assert picked == today
+
+
+# ---------------------------------------------------------------------------
+# SHR-1: empirical POP
+# ---------------------------------------------------------------------------
+
+
+def test_empirical_pop_inside_breakeven_band():
+    """spot=100, breakevens 95/105, prior_moves all small (within band).
+
+    All projected prices land inside [95, 105]; expected POP = 1.0.
+    """
+    pm = [-0.03, -0.01, 0.0, 0.01, 0.02, 0.03, -0.02, 0.04]
+    pop = _empirical_pop(spot=100.0, breakevens=[95.0, 105.0], prior_moves=pm,
+                         profitable_zone="between")
+    assert pop == pytest.approx(1.0)
+
+
+def test_empirical_pop_with_fat_tail_observation():
+    """One historical move blows through both wings → POP < 1.0.
+
+    AMD-flavour: 7 small moves and 1 +21% gap. The condor wins on 7/8 = 0.875.
+    The lognormal (with similar IV) tends to overrate this — empirical
+    correctly captures the fat tail.
+    """
+    pm = [-0.02, +0.03, -0.05, +0.21, +0.04, -0.03, +0.02, -0.01]
+    pop_emp = _empirical_pop(spot=100.0, breakevens=[95.0, 110.0], prior_moves=pm,
+                             profitable_zone="between")
+    # 7 of 8 land in [95, 110]; the +21% gap exits at 121 > 110 → loss.
+    assert pop_emp == pytest.approx(7.0 / 8.0)
+
+
+def test_compute_pop_routes_to_empirical_when_prior_moves_present():
+    """≥6 prior_moves switches POP from lognormal to empirical."""
+    pm = [-0.02, +0.03, -0.05, +0.21, +0.04, -0.03, +0.02, -0.01]
+    pop_with = compute_pop(spot=100.0, breakevens=[95.0, 110.0], iv=0.40,
+                           dte_days=7, profitable_zone="between", prior_moves=pm)
+    # Empirical should give 7/8 = 0.875.
+    assert pop_with == pytest.approx(0.875)
+    pop_without = compute_pop(spot=100.0, breakevens=[95.0, 110.0], iv=0.40,
+                              dte_days=7, profitable_zone="between")
+    # Lognormal at IV=0.40 / 7d gives a different value; assert just that
+    # the two paths return different answers (proving the route).
+    assert pop_with != pytest.approx(pop_without)
+
+
+def test_compute_pop_falls_back_to_lognormal_with_few_moves():
+    """<6 prior_moves should fall through to lognormal."""
+    pm = [+0.01, -0.02, +0.03]
+    pop_with_few = compute_pop(spot=100.0, breakevens=[95.0, 105.0], iv=0.20,
+                               dte_days=7, profitable_zone="between", prior_moves=pm)
+    pop_lognormal = _lognormal_pop(spot=100.0, breakevens=[95.0, 105.0], iv=0.20,
+                                   dte_days=7, profitable_zone="between")
+    assert pop_with_few == pytest.approx(pop_lognormal)
+
+
+def test_empirical_pop_below_lower_zone():
+    """Profitable zone = below_lower (bear setup)."""
+    pm = [-0.10, -0.08, -0.06, -0.02, +0.02, +0.05]  # 4 of 6 below -0.05
+    # breakeven 95 → projected prices: 90, 92, 94, 98, 102, 105
+    # below 95: 90, 92, 94 → 3 wins.
+    pop = _empirical_pop(spot=100.0, breakevens=[95.0], prior_moves=pm,
+                        profitable_zone="below_lower")
+    assert pop == pytest.approx(3.0 / 6.0)
+
+
+# ---------------------------------------------------------------------------
+# SHR-2: tail-risk score
+# ---------------------------------------------------------------------------
+
+
+def test_tail_risk_score_zero_when_all_signals_none():
+    score = _compute_tail_risk_score(TailRiskSignals())
+    assert score == 0.0
+
+
+def test_tail_risk_score_intraday_momentum_alone():
+    """+4.3% intraday → +0.25 weight."""
+    score = _compute_tail_risk_score(TailRiskSignals(intraday_momentum_pct=0.043))
+    assert score == pytest.approx(0.25)
+
+
+def test_tail_risk_score_intraday_momentum_below_threshold():
+    """+1.5% (below 2.5% threshold) contributes nothing."""
+    score = _compute_tail_risk_score(TailRiskSignals(intraday_momentum_pct=0.015))
+    assert score == 0.0
+
+
+def test_tail_risk_score_signs_intraday_negative_also_counts():
+    """-3% intraday matches the abs-threshold."""
+    score = _compute_tail_risk_score(TailRiskSignals(intraday_momentum_pct=-0.03))
+    assert score == pytest.approx(0.25)
+
+
+def test_tail_risk_score_analyst_pt_raises():
+    score = _compute_tail_risk_score(TailRiskSignals(analyst_pt_changes_24h=2))
+    assert score == pytest.approx(0.15)
+
+
+def test_tail_risk_score_kurtosis_above_4():
+    score = _compute_tail_risk_score(TailRiskSignals(historical_move_kurtosis=4.5))
+    assert score == pytest.approx(0.15)
+
+
+def test_tail_risk_score_kurtosis_below_4_no_contribution():
+    score = _compute_tail_risk_score(TailRiskSignals(historical_move_kurtosis=3.5))
+    assert score == 0.0
+
+
+def test_tail_risk_score_iv_term_steep_above_30pct():
+    score = _compute_tail_risk_score(TailRiskSignals(iv_term_steepness=0.35))
+    assert score == pytest.approx(0.10)
+
+
+def test_tail_risk_score_amd_like_combined():
+    """AMD-flavour: +4.3% intraday + 2 PT raises + cohort up + kurtosis 4.5.
+
+    Score: 0.25 + 0.15 + 0.20 + 0.15 = 0.75. Above the 0.6 demote threshold.
+    """
+    signals = TailRiskSignals(
+        intraday_momentum_pct=0.043,
+        sector_cohort_momentum_avg=0.025,
+        analyst_pt_changes_24h=2,
+        historical_move_kurtosis=4.5,
+    )
+    score = _compute_tail_risk_score(signals)
+    assert score == pytest.approx(0.75)
+    assert score >= 0.6  # crosses demote
+
+
+def test_tail_risk_score_caps_at_one():
+    """All signals max out → cap at 1.0."""
+    signals = TailRiskSignals(
+        intraday_momentum_pct=0.10,
+        sector_cohort_momentum_avg=0.05,
+        analyst_pt_changes_24h=5,
+        news_sentiment=0.9,
+        historical_move_kurtosis=8.0,
+        iv_term_steepness=0.50,
+    )
+    score = _compute_tail_risk_score(signals)
+    assert score == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# SHR-3: confidence + tail-risk Kelly overlay
+# ---------------------------------------------------------------------------
+
+
+def test_kelly_with_low_confidence_shrinks():
+    """At full confidence b=1 POP=0.51 → Kelly = 0.02 (cap).
+
+    With confidence=0.55 the same case shrinks to 0.02 × 0.55 = 0.011.
+    """
+    f_full = kelly_fraction(pop=0.51, b=1.0, cap=0.02, confidence=1.0, tail_risk=0.0)
+    f_low = kelly_fraction(pop=0.51, b=1.0, cap=0.02, confidence=0.55, tail_risk=0.0)
+    assert f_full == pytest.approx(0.02)
+    assert f_low == pytest.approx(0.011, abs=1e-6)
+
+
+def test_kelly_with_tail_risk_shrinks():
+    """At full confidence + tail_risk=0.7 → multiplier 0.3."""
+    f = kelly_fraction(pop=0.51, b=1.0, cap=0.10, confidence=1.0, tail_risk=0.7)
+    # base = (0.51*2 - 1)/1 = 0.02; adjusted = 0.02 * 1.0 * 0.3 = 0.006
+    assert f == pytest.approx(0.006, abs=1e-6)
+
+
+def test_kelly_amd_scenario_near_zero():
+    """AMD case: pop=0.55, b=400/1100≈0.364, confidence=0.55, tail_risk=0.7.
+
+    base = (0.55 * 1.364 - 1) / 0.364 ≈ -0.249 → 0
+    Even before the overlay this Kelly is negative; assert it floors at 0.
+    """
+    f = kelly_fraction(pop=0.55, b=400.0 / 1100.0, confidence=0.55, tail_risk=0.7)
+    assert f == 0.0
+
+
+def test_kelly_amd_scenario_with_positive_edge_shrinks():
+    """Synthetic case: positive base Kelly that AMD-overlay shrinks to ~0.25%.
+
+    POP=0.65, b=1.0 → base = (0.65*2 - 1)/1 = 0.30 (raw, ignoring cap).
+    Apply 0.55 * 0.3 = 0.165 → 0.0495 → cap at 0.02.
+    Drop the cap to 1.0 to see the overlay in isolation:
+    0.30 * 0.165 = 0.0495.
+    """
+    f = kelly_fraction(pop=0.65, b=1.0, cap=1.0, confidence=0.55, tail_risk=0.7)
+    assert f == pytest.approx(0.0495, abs=1e-4)
+
+
+def test_kelly_clamps_extreme_tail_risk():
+    """tail_risk >= 1.0 zeros the bet entirely."""
+    f = kelly_fraction(pop=0.85, b=2.0, confidence=1.0, tail_risk=1.0)
+    assert f == 0.0
+
+
+# ---------------------------------------------------------------------------
+# SHR-4: skip outcome
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_recommend_setups_returns_skip_when_extreme_tail_risk():
+    """Tail-risk score >= 0.85 → top_setups[0].setup_id == "skip"."""
+    chain = _make_chain(spot=356.0, iv=1.19, dte_days=3)
+    # Force every signal so score = 1.0 ≥ 0.85.
+    signals = TailRiskSignals(
+        intraday_momentum_pct=0.06,
+        sector_cohort_momentum_avg=0.04,
+        analyst_pt_changes_24h=3,
+        news_sentiment=0.7,
+        historical_move_kurtosis=5.0,
+        iv_term_steepness=0.40,
+    )
+    setups = await recommend_setups(
+        symbol="AMD",
+        spot=356.0,
+        iv_rank=85,
+        iv_percentile=82,
+        current_iv=1.19,
+        hv_20=0.65,
+        expected_move_pct=0.066,
+        hist_avg_abs_move_pct=0.045,
+        claude_verdict="neutral-bear",
+        claude_confidence=0.55,
+        chain=chain,
+        report_date=date.today(),
+        report_time="AMC",
+        tail_risk_signals=signals,
+    )
+    assert setups, "expected at least the skip setup"
+    assert setups[0].setup_id == "skip"
+    assert setups[0].sizing_kelly_pct == 0.0
+    assert "Tail-risk" in setups[0].rationale or "tail" in setups[0].rationale.lower()
+
+
+@pytest.mark.asyncio
+async def test_recommend_setups_returns_skip_with_low_confidence_and_elevated_tail():
+    """Low confidence (<=0.40) + tail_risk >= 0.6 → skip."""
+    chain = _make_chain(spot=100.0, iv=0.70, dte_days=5)
+    signals = TailRiskSignals(
+        intraday_momentum_pct=0.04,
+        sector_cohort_momentum_avg=0.03,
+        analyst_pt_changes_24h=1,
+    )  # 0.25 + 0.20 + 0.15 = 0.60
+    setups = await recommend_setups(
+        symbol="XYZ",
+        spot=100.0,
+        iv_rank=85,
+        iv_percentile=82,
+        current_iv=0.70,
+        hv_20=0.40,
+        expected_move_pct=0.06,
+        hist_avg_abs_move_pct=0.04,
+        claude_verdict="neutral",
+        claude_confidence=0.30,  # below 0.40
+        chain=chain,
+        tail_risk_signals=signals,
+    )
+    assert setups
+    assert setups[0].setup_id == "skip"
+
+
+@pytest.mark.asyncio
+async def test_recommend_setups_no_skip_when_conditions_not_met():
+    """Without elevated signals, no skip — iron_condor or similar wins."""
+    chain = _make_chain(spot=356.0, iv=1.19, dte_days=3)
+    setups = await recommend_setups(
+        symbol="AMD",
+        spot=356.0,
+        iv_rank=85,
+        iv_percentile=82,
+        current_iv=1.19,
+        hv_20=0.65,
+        expected_move_pct=0.066,
+        hist_avg_abs_move_pct=0.045,
+        claude_verdict="neutral-bear",
+        claude_confidence=0.55,
+        chain=chain,
+        report_date=date.today(),
+        report_time="AMC",
+    )
+    assert setups
+    assert setups[0].setup_id != "skip"
+
+
+# ---------------------------------------------------------------------------
+# SHR-7: AMD regression — top setup is NOT iron_condor under tail-risk
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_amd_with_tail_risk_signals_does_not_pick_iron_condor():
+    """AMD intraday +4.3% + analyst raises + cohort up → top is skip OR long-vol.
+
+    This is the canonical AMD regression: pre-earnings momentum signals
+    fire (intraday +4.3%, 2 PT raises, sector cohort up) so the recommender
+    must NOT pick iron_condor — the +21% post-earnings gap that motivated
+    SHR would blow through both wings of any short-vol structure.
+    """
+    chain = _make_chain(underlying="AMD", spot=356.0, iv=1.19, dte_days=3)
+    signals = TailRiskSignals(
+        intraday_momentum_pct=0.043,
+        sector_cohort_momentum_avg=0.025,
+        analyst_pt_changes_24h=2,
+    )  # Score: 0.25 + 0.20 + 0.15 = 0.60 → demote, not skip.
+    setups = await recommend_setups(
+        symbol="AMD",
+        spot=356.0,
+        iv_rank=None,  # AMD case in production; iv_to_hv carries the regime
+        iv_percentile=None,
+        current_iv=1.19,
+        hv_20=0.65,
+        expected_move_pct=0.066,
+        hist_avg_abs_move_pct=0.045,
+        claude_verdict="neutral-bear",
+        claude_confidence=0.55,
+        chain=chain,
+        report_date=date.today(),
+        report_time="AMC",
+        tail_risk_signals=signals,
+    )
+    assert setups, "expected at least one setup"
+    top = setups[0]
+    # The hardened recommender must NOT lead with iron_condor here.
+    assert top.setup_id != "iron_condor", (
+        f"iron_condor is exactly the structure AMD's +21% gap blew through "
+        f"— the SHR overlay must demote it. Got setup_id={top.setup_id}"
+    )
+    # Acceptable: skip OR a long-vol structure.
+    assert top.setup_id in {
+        "skip", "long_strangle", "long_straddle", "diagonal_spread",
+    }, f"unexpected setup_id={top.setup_id}"
+
+
+@pytest.mark.asyncio
+async def test_recommend_setups_threads_prior_moves_into_pop():
+    """SHR-1 plumbing: prior_moves ≥6 should flip the POP path."""
+    chain = _make_chain(underlying="AMD", spot=356.0, iv=1.19, dte_days=3)
+    pm = [-0.02, +0.18, -0.05, +0.21, +0.12, -0.08, +0.13, -0.04]
+    setups = await recommend_setups(
+        symbol="AMD",
+        spot=356.0,
+        iv_rank=85,
+        iv_percentile=82,
+        current_iv=1.19,
+        hv_20=0.65,
+        expected_move_pct=0.066,
+        hist_avg_abs_move_pct=0.045,
+        claude_verdict="neutral-bear",
+        claude_confidence=0.55,
+        chain=chain,
+        report_date=date.today(),
+        report_time="AMC",
+        prior_moves=pm,
+    )
+    assert setups, "expected setups"
+    # The empirical POP given AMD's history (mostly fat tails) should be
+    # noticeably lower than the lognormal POP for the same condor.
+    # We assert pop_estimate is in [0, 1] and below 0.85 — a typical
+    # lognormal value for that condor band would be > 0.85.
+    top = setups[0]
+    assert 0.0 <= top.pop_estimate <= 1.0
+    # The empirical with that fat history should be < 0.7 — many gaps.
+    if top.setup_id != "skip" and top.pop_estimate > 0:
+        assert top.pop_estimate < 0.85, (
+            f"Empirical POP should down-weight from lognormal given fat-tail "
+            f"history; got {top.pop_estimate}"
+        )

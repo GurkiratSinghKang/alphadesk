@@ -1,4 +1,4 @@
-"""Earnings recommendation engine v2 — Wave 4a / Batch Q.
+"""Earnings recommendation engine v2 — Wave 4a / Batch Q + SHR hardening.
 
 The legacy ``top_setup`` field on each calendar row was a single string
 mapped from Claude's verdict (e.g. ``neutral-bear`` → ``"bear call
@@ -25,20 +25,24 @@ Decision flow:
      event-spanning expiry of the chain.
 
   3. Compute net credit/debit, max profit, max loss, breakevens,
-     probability of profit (lognormal), and expected value.
+     probability of profit (lognormal OR empirical), and expected value.
 
-  4. Rank by EV (or Sharpe-like ratio for unlimited-loss setups) and
-     return the top 3.
+  4. Apply tail-risk overlay (SHR-2): when auxiliary momentum / sentiment
+     signals indicate elevated tail risk, halve the EV of short-vol
+     setups and add long-vol candidates.
 
-POP estimation uses the lognormal terminal-distribution model:
+  5. Rank by EV (or Sharpe-like ratio for unlimited-loss setups) and
+     return the top 3. If all candidate EVs are negative (or tail-risk +
+     low-confidence trips the skip threshold), return a synthetic
+     ``setup_id="skip"`` setup at index 0 (SHR-4).
 
-    P(S_T in [a, b]) = Φ(d_b) - Φ(d_a)
+POP estimation (SHR-1): when the symbol has ≥6 prior post-earnings
+moves, use the empirical distribution — count the fraction of historical
+moves that would land between the breakevens. Falls back to the
+lognormal terminal-distribution model otherwise.
 
-with ``d_x = ln(x / S_0) / (σ √(T/365))`` and σ = current_iv.
-
-Kelly sizing is the classic ``f* = (p(b+1) - 1) / b`` where ``b =
-max_profit / max_loss``, capped at 2% of book (full Kelly assumes
-infinite trials).
+Kelly sizing (SHR-3) is the classic ``f* = (p(b+1) - 1) / b`` scaled by
+``confidence × (1 - tail_risk)`` and capped at 2% of book.
 """
 from __future__ import annotations
 
@@ -50,7 +54,7 @@ from typing import Any, Iterable, Sequence
 
 from scipy.stats import norm  # type: ignore[import-untyped]
 
-from api.schemas.earnings import EarningsSetup, OptionLeg, SetupId
+from api.schemas.earnings import EarningsSetup, OptionLeg, SetupId, TailRiskSignals
 
 log = logging.getLogger(__name__)
 
@@ -197,35 +201,16 @@ def find_strike_nearest(
 # ---------------------------------------------------------------------------
 
 
-def compute_pop(
+def _lognormal_pop(
     spot: float,
     breakevens: Sequence[float],
     iv: float,
     dte_days: float,
     profitable_zone: str,
 ) -> float:
-    """Probability that the underlying ends in the profitable zone.
+    """POP under the simple lognormal terminal-distribution model.
 
-    Uses the simple lognormal model with zero drift. ``iv`` is the
-    annualised implied volatility (e.g. 0.40 for 40%) and ``dte_days``
-    is calendar days to expiry.
-
-    Parameters
-    ----------
-    spot : float
-        Underlying price now.
-    breakevens : Sequence[float]
-        Breakeven prices (1 for single-sided, 2 for two-sided).
-    iv : float
-        Annualised implied volatility.
-    dte_days : float
-        Calendar days to expiration.
-    profitable_zone : {"between", "below_lower", "above_upper", "outside"}
-        Which side of the breakevens generates profit.
-
-    Returns
-    -------
-    float in [0, 1]
+    Zero-drift since r·τ ≈ 0 for event-driven horizons.
     """
     if iv <= 0 or dte_days <= 0 or spot <= 0 or not breakevens:
         return 0.0
@@ -235,9 +220,6 @@ def compute_pop(
     sorted_be = sorted(float(b) for b in breakevens if b is not None and b > 0)
     if not sorted_be:
         return 0.0
-    # Map breakevens to standardised log-returns under the lognormal model.
-    # We use zero drift (no rate / no carry) — appropriate for short-dated
-    # event-driven trades where r·tau is < 0.001 vs σ·√τ ≈ 0.10.
     z = [math.log(b / spot) / sigma for b in sorted_be]
 
     if profitable_zone == "between":
@@ -255,23 +237,235 @@ def compute_pop(
     return 0.0
 
 
+def _empirical_pop(
+    spot: float,
+    breakevens: Sequence[float],
+    prior_moves: Sequence[float],
+    profitable_zone: str,
+) -> float:
+    """SHR-1: POP from the symbol's own historical post-earnings moves.
+
+    Project where spot would land for each historical move
+    (``projected_spot = spot * (1 + move_pct)``), then count what
+    fraction of projections fall in the profitable zone. This captures
+    fat tails the lognormal model systematically underweights — the
+    AMD case (post-earnings +21% gap) is exactly the scenario the
+    lognormal underestimates.
+    """
+    if spot <= 0 or not prior_moves or not breakevens:
+        return 0.0
+    sorted_be = sorted(float(b) for b in breakevens if b is not None and b > 0)
+    if not sorted_be:
+        return 0.0
+
+    projected = [spot * (1.0 + float(m)) for m in prior_moves if m is not None]
+    if not projected:
+        return 0.0
+
+    def _wins(price: float) -> bool:
+        if profitable_zone == "between":
+            if len(sorted_be) < 2:
+                return False
+            return sorted_be[0] <= price <= sorted_be[1]
+        if profitable_zone == "outside":
+            if len(sorted_be) < 2:
+                return False
+            return price < sorted_be[0] or price > sorted_be[1]
+        if profitable_zone == "below_lower":
+            return price <= sorted_be[0]
+        if profitable_zone == "above_upper":
+            return price >= sorted_be[-1]
+        return False
+
+    wins = sum(1 for p in projected if _wins(p))
+    return wins / len(projected)
+
+
+def compute_pop(
+    spot: float,
+    breakevens: Sequence[float],
+    iv: float,
+    dte_days: float,
+    profitable_zone: str,
+    prior_moves: Sequence[float] | None = None,
+) -> float:
+    """Probability that the underlying ends in the profitable zone.
+
+    SHR-1: when ``prior_moves`` has ≥6 observations, use the empirical
+    distribution from the symbol's own history (captures fat tails).
+    Falls through to the lognormal model otherwise.
+
+    Parameters
+    ----------
+    spot : float
+        Underlying price now.
+    breakevens : Sequence[float]
+        Breakeven prices (1 for single-sided, 2 for two-sided).
+    iv : float
+        Annualised implied volatility.
+    dte_days : float
+        Calendar days to expiration.
+    profitable_zone : {"between", "below_lower", "above_upper", "outside"}
+        Which side of the breakevens generates profit.
+    prior_moves : Sequence[float] | None
+        Historical post-earnings move percentages (e.g.
+        ``[-0.02, +0.18, -0.05, +0.21, ...]``). When at least 6 moves
+        are present we switch from lognormal to empirical POP.
+
+    Returns
+    -------
+    float in [0, 1]
+    """
+    if prior_moves is not None and len(prior_moves) >= 6:
+        return _empirical_pop(spot, breakevens, prior_moves, profitable_zone)
+    return _lognormal_pop(spot, breakevens, iv, dte_days, profitable_zone)
+
+
 # ---------------------------------------------------------------------------
 # Kelly sizing
 # ---------------------------------------------------------------------------
 
 
-def kelly_fraction(pop: float, b: float, cap: float = 0.02) -> float:
-    """Kelly-criterion bet fraction.
+def kelly_fraction(
+    pop: float,
+    b: float,
+    cap: float = 0.02,
+    confidence: float = 1.0,
+    tail_risk: float = 0.0,
+) -> float:
+    """Kelly-criterion bet fraction with confidence and tail-risk overlays.
 
-    f* = (p(b+1) - 1) / b   where b = max_profit / max_loss
+    Base formula: ``f* = (p(b+1) - 1) / b`` where ``b = max_profit /
+    max_loss``. SHR-3 multiplies the result by ``confidence × (1 -
+    tail_risk)`` so:
+
+      * Low Claude confidence (0.55) shrinks position by ~45%.
+      * High tail-risk (0.7) shrinks position by another 70%.
 
     Capped at 2% of book — full Kelly assumes infinite trials and a
     stable edge, neither of which holds for one-shot earnings plays.
+
+    For AMD's case (confidence=0.55, tail_risk=0.7) the multiplier is
+    0.55 × 0.3 = 0.165, so a base 1.5% Kelly becomes ≈0.25% — a near-zero
+    position rather than a full 2% bet on a fat-tailed name.
     """
     if b <= 0 or pop <= 0 or pop >= 1:
         return 0.0
-    f = (pop * (b + 1.0) - 1.0) / b
-    return float(max(0.0, min(f, cap)))
+    base = (pop * (b + 1.0) - 1.0) / b
+    if base <= 0:
+        return 0.0
+    conf = max(0.0, min(1.0, float(confidence)))
+    tr = max(0.0, min(1.0, float(tail_risk)))
+    adjusted = base * conf * (1.0 - tr)
+    return float(max(0.0, min(adjusted, cap)))
+
+
+# ---------------------------------------------------------------------------
+# Tail-risk overlay (SHR-2)
+# ---------------------------------------------------------------------------
+
+
+# Setups that profit from vol crush / range-bound terminal — tail risk
+# in the underlying is the worst case for these. When tail risk is
+# elevated we halve their EV (SHR-2).
+_SHORT_VOL_SETUPS: frozenset[str] = frozenset(
+    {"iron_condor", "iron_butterfly", "short_strangle", "short_straddle"}
+)
+
+
+def _compute_tail_risk_score(signals: TailRiskSignals) -> float:
+    """SHR-2: 0..1 score from auxiliary momentum / sentiment signals.
+
+    Above 0.6 we demote short-vol setups (halve EV); above 0.85 (or
+    above 0.6 with low confidence) the recommender returns ``"skip"``.
+
+    Each signal contributes a small fixed weight when present and
+    extreme. Weights sum to 1.0 when every signal screams. ``None``
+    signals contribute 0 (graceful degradation when an upstream is
+    unavailable).
+    """
+    score = 0.0
+    # Intraday move INTO the event (today's session). >2.5% in either
+    # direction means the market is already pricing in something — short
+    # vol on top of that is asymmetric risk.
+    if signals.intraday_momentum_pct is not None and abs(
+        float(signals.intraday_momentum_pct)
+    ) > 0.025:
+        score += 0.25
+    # Sector cohort (related tickers) all up — momentum bleeds across
+    # cohort boundaries; AI-semi names move together.
+    if (
+        signals.sector_cohort_momentum_avg is not None
+        and float(signals.sector_cohort_momentum_avg) > 0.02
+    ):
+        score += 0.20
+    # Net analyst PT raises in last 24h — institutions positioning.
+    if signals.analyst_pt_changes_24h > 0:
+        score += 0.15
+    # Bullish news sentiment adds upside-tail risk for short-call wings.
+    if (
+        signals.news_sentiment is not None
+        and float(signals.news_sentiment) > 0.5
+    ):
+        score += 0.15
+    # Historical kurtosis > 4 = fat tails by sample (lognormal kurtosis
+    # is ~3 for σ→0 and grows with σ; 4 is "fatter than basic lognormal").
+    if (
+        signals.historical_move_kurtosis is not None
+        and float(signals.historical_move_kurtosis) > 4.0
+    ):
+        score += 0.15
+    # IV term steep = front-month event premium > 30% above back-month.
+    # That is the market sizing the event large relative to a baseline.
+    if (
+        signals.iv_term_steepness is not None
+        and float(signals.iv_term_steepness) > 0.30
+    ):
+        score += 0.10
+    return float(min(1.0, max(0.0, score)))
+
+
+def _tail_risk_reasons(signals: TailRiskSignals) -> list[str]:
+    """Human-readable explanations for which signals fired (SHR-6 plumb)."""
+    reasons: list[str] = []
+    if signals.intraday_momentum_pct is not None and abs(
+        float(signals.intraday_momentum_pct)
+    ) > 0.025:
+        sign = "+" if float(signals.intraday_momentum_pct) > 0 else ""
+        reasons.append(
+            f"intraday {sign}{float(signals.intraday_momentum_pct):.1%}"
+        )
+    if (
+        signals.sector_cohort_momentum_avg is not None
+        and float(signals.sector_cohort_momentum_avg) > 0.02
+    ):
+        reasons.append(
+            f"cohort +{float(signals.sector_cohort_momentum_avg):.1%}"
+        )
+    if signals.analyst_pt_changes_24h > 0:
+        reasons.append(
+            f"analyst PT raises ×{int(signals.analyst_pt_changes_24h)}"
+        )
+    if (
+        signals.news_sentiment is not None
+        and float(signals.news_sentiment) > 0.5
+    ):
+        reasons.append(f"news sentiment +{float(signals.news_sentiment):.2f}")
+    if (
+        signals.historical_move_kurtosis is not None
+        and float(signals.historical_move_kurtosis) > 4.0
+    ):
+        reasons.append(
+            f"kurtosis {float(signals.historical_move_kurtosis):.1f}"
+        )
+    if (
+        signals.iv_term_steepness is not None
+        and float(signals.iv_term_steepness) > 0.30
+    ):
+        reasons.append(
+            f"IV term +{float(signals.iv_term_steepness):.0%}"
+        )
+    return reasons
 
 
 # ---------------------------------------------------------------------------
@@ -338,6 +532,12 @@ class _BuildContext:
     claude_verdict: str | None
     claude_confidence: float | None
     dte_days: float
+    # SHR-1: empirical POP gets the symbol's prior post-earnings moves.
+    prior_moves: list[float] | None = None
+    # SHR-3: confidence + tail-risk feed into Kelly. Defaults are the
+    # neutral-overlay values (no shrinkage) so legacy callers get the
+    # original behaviour.
+    tail_risk_score: float = 0.0
 
 
 def _make_leg(
@@ -351,6 +551,52 @@ def _make_leg(
         qty=1,
         mid=_option_mid(contract),
     )
+
+
+def _ctx_pop(
+    ctx: _BuildContext, breakevens: Sequence[float], zone: str,
+) -> float:
+    """SHR-1: thread prior_moves through the POP computation."""
+    return compute_pop(
+        spot=ctx.spot,
+        breakevens=breakevens,
+        iv=ctx.current_iv,
+        dte_days=ctx.dte_days,
+        profitable_zone=zone,
+        prior_moves=ctx.prior_moves,
+    )
+
+
+def _ctx_kelly(ctx: _BuildContext, pop: float, b: float) -> float:
+    """SHR-3: thread confidence + tail_risk through the Kelly sizing."""
+    confidence = (
+        float(ctx.claude_confidence) if ctx.claude_confidence is not None else 1.0
+    )
+    return kelly_fraction(
+        pop=pop,
+        b=b,
+        confidence=confidence,
+        tail_risk=ctx.tail_risk_score,
+    )
+
+
+def _ctx_kelly_long_premium(ctx: _BuildContext, max_loss: float) -> float:
+    """SHR-3: long-premium sizing scales with confidence × (1 - tail_risk).
+
+    Long premium structures use a debit/spot heuristic instead of Kelly
+    (no probability is multiplied through). Apply the same overlays so
+    long-vol setups also shrink in low-confidence high-tail-risk regimes.
+    """
+    if ctx.spot <= 0 or max_loss <= 0:
+        return 0.0
+    base = max_loss / 100.0 / ctx.spot
+    confidence = (
+        float(ctx.claude_confidence) if ctx.claude_confidence is not None else 1.0
+    )
+    confidence = max(0.0, min(1.0, confidence))
+    tr = max(0.0, min(1.0, ctx.tail_risk_score))
+    adjusted = base * confidence * (1.0 - tr)
+    return float(max(0.0, min(0.02, adjusted)))
 
 
 def _summary_iv_vs_hv(ctx: _BuildContext) -> str:
@@ -406,7 +652,7 @@ def _build_iron_condor(ctx: _BuildContext) -> EarningsSetup | None:
         short_put.strike - net_credit,
         short_call.strike + net_credit,
     ]
-    pop = compute_pop(ctx.spot, breakevens, ctx.current_iv, ctx.dte_days, "between")
+    pop = _ctx_pop(ctx, breakevens, "between")
     ev = pop * max_profit - (1.0 - pop) * max_loss
     rr = max_profit / max_loss if max_loss > 0 else None
     rationale = (
@@ -423,7 +669,7 @@ def _build_iron_condor(ctx: _BuildContext) -> EarningsSetup | None:
         expected_value=ev,
         risk_reward=rr,
         rationale=rationale,
-        sizing_kelly_pct=kelly_fraction(pop, max_profit / max_loss),
+        sizing_kelly_pct=_ctx_kelly(ctx, pop, max_profit / max_loss),
         is_defined_risk=True,
     )
 
@@ -464,7 +710,7 @@ def _build_iron_butterfly(ctx: _BuildContext) -> EarningsSetup | None:
     if max_loss <= 0 or max_profit <= 0:
         return None
     breakevens = [atm_put.strike - net_credit, atm_call.strike + net_credit]
-    pop = compute_pop(ctx.spot, breakevens, ctx.current_iv, ctx.dte_days, "between")
+    pop = _ctx_pop(ctx, breakevens, "between")
     ev = pop * max_profit - (1.0 - pop) * max_loss
     return EarningsSetup(
         setup_id="iron_butterfly",
@@ -480,7 +726,7 @@ def _build_iron_butterfly(ctx: _BuildContext) -> EarningsSetup | None:
             f"{_summary_iv_vs_hv(ctx)}. ATM-anchored short premium for a "
             f"sub-implied move." + _summary_implied_vs_hist(ctx)
         ),
-        sizing_kelly_pct=kelly_fraction(pop, max_profit / max_loss),
+        sizing_kelly_pct=_ctx_kelly(ctx, pop, max_profit / max_loss),
         is_defined_risk=True,
     )
 
@@ -502,7 +748,7 @@ def _build_short_strangle(ctx: _BuildContext) -> EarningsSetup | None:
     if max_profit <= 0:
         return None
     breakevens = [short_put.strike - net_credit, short_call.strike + net_credit]
-    pop = compute_pop(ctx.spot, breakevens, ctx.current_iv, ctx.dte_days, "between")
+    pop = _ctx_pop(ctx, breakevens, "between")
     # Margin proxy: 20% of underlying minus OTM amount per side, +
     # premium received. Very rough.
     margin = max(
@@ -550,7 +796,7 @@ def _build_short_straddle(ctx: _BuildContext) -> EarningsSetup | None:
     if max_profit <= 0:
         return None
     breakevens = [atm_put.strike - net_credit, atm_call.strike + net_credit]
-    pop = compute_pop(ctx.spot, breakevens, ctx.current_iv, ctx.dte_days, "between")
+    pop = _ctx_pop(ctx, breakevens, "between")
     sigma = ctx.current_iv * math.sqrt(ctx.dte_days / 365.0)
     tail_loss = ctx.spot * (math.exp(3.0 * sigma) - 1.0) * 100.0
     ev = pop * max_profit - (1.0 - pop) * tail_loss
@@ -596,7 +842,7 @@ def _build_bear_call_spread(ctx: _BuildContext) -> EarningsSetup | None:
     if max_profit <= 0 or max_loss <= 0:
         return None
     breakevens = [short_call.strike + net_credit]
-    pop = compute_pop(ctx.spot, breakevens, ctx.current_iv, ctx.dte_days, "below_lower")
+    pop = _ctx_pop(ctx, breakevens, "below_lower")
     ev = pop * max_profit - (1.0 - pop) * max_loss
     return EarningsSetup(
         setup_id="bear_call_spread",
@@ -612,7 +858,7 @@ def _build_bear_call_spread(ctx: _BuildContext) -> EarningsSetup | None:
             f"Bearish bias + {_summary_iv_vs_hv(ctx)}. Defined-risk credit "
             f"spread above ${short_call.strike:.0f}." + _summary_implied_vs_hist(ctx)
         ),
-        sizing_kelly_pct=kelly_fraction(pop, max_profit / max_loss),
+        sizing_kelly_pct=_ctx_kelly(ctx, pop, max_profit / max_loss),
         is_defined_risk=True,
     )
 
@@ -638,7 +884,7 @@ def _build_bull_put_spread(ctx: _BuildContext) -> EarningsSetup | None:
     if max_profit <= 0 or max_loss <= 0:
         return None
     breakevens = [short_put.strike - net_credit]
-    pop = compute_pop(ctx.spot, breakevens, ctx.current_iv, ctx.dte_days, "above_upper")
+    pop = _ctx_pop(ctx, breakevens, "above_upper")
     ev = pop * max_profit - (1.0 - pop) * max_loss
     return EarningsSetup(
         setup_id="bull_put_spread",
@@ -654,7 +900,7 @@ def _build_bull_put_spread(ctx: _BuildContext) -> EarningsSetup | None:
             f"Bullish bias + {_summary_iv_vs_hv(ctx)}. Defined-risk credit "
             f"spread below ${short_put.strike:.0f}." + _summary_implied_vs_hist(ctx)
         ),
-        sizing_kelly_pct=kelly_fraction(pop, max_profit / max_loss),
+        sizing_kelly_pct=_ctx_kelly(ctx, pop, max_profit / max_loss),
         is_defined_risk=True,
     )
 
@@ -682,7 +928,7 @@ def _build_bull_call_spread(ctx: _BuildContext) -> EarningsSetup | None:
     if max_profit <= 0:
         return None
     breakevens = [long_call.strike + net_debit]
-    pop = compute_pop(ctx.spot, breakevens, ctx.current_iv, ctx.dte_days, "above_upper")
+    pop = _ctx_pop(ctx, breakevens, "above_upper")
     ev = pop * max_profit - (1.0 - pop) * max_loss
     return EarningsSetup(
         setup_id="bull_call_spread",
@@ -699,7 +945,7 @@ def _build_bull_call_spread(ctx: _BuildContext) -> EarningsSetup | None:
             f"debit spread targeting upside through ${short_call.strike:.0f}."
             + _summary_implied_vs_hist(ctx)
         ),
-        sizing_kelly_pct=kelly_fraction(pop, max_profit / max_loss),
+        sizing_kelly_pct=_ctx_kelly(ctx, pop, max_profit / max_loss),
         is_defined_risk=True,
     )
 
@@ -727,7 +973,7 @@ def _build_bear_put_spread(ctx: _BuildContext) -> EarningsSetup | None:
     if max_profit <= 0:
         return None
     breakevens = [long_put.strike - net_debit]
-    pop = compute_pop(ctx.spot, breakevens, ctx.current_iv, ctx.dte_days, "below_lower")
+    pop = _ctx_pop(ctx, breakevens, "below_lower")
     ev = pop * max_profit - (1.0 - pop) * max_loss
     return EarningsSetup(
         setup_id="bear_put_spread",
@@ -744,7 +990,7 @@ def _build_bear_put_spread(ctx: _BuildContext) -> EarningsSetup | None:
             f"debit spread targeting downside through ${short_put.strike:.0f}."
             + _summary_implied_vs_hist(ctx)
         ),
-        sizing_kelly_pct=kelly_fraction(pop, max_profit / max_loss),
+        sizing_kelly_pct=_ctx_kelly(ctx, pop, max_profit / max_loss),
         is_defined_risk=True,
     )
 
@@ -762,7 +1008,7 @@ def _build_long_call(ctx: _BuildContext) -> EarningsSetup | None:
         return None
     max_loss = debit * 100.0
     breakevens = [long_call.strike + debit]
-    pop = compute_pop(ctx.spot, breakevens, ctx.current_iv, ctx.dte_days, "above_upper")
+    pop = _ctx_pop(ctx, breakevens, "above_upper")
     sigma = ctx.current_iv * math.sqrt(ctx.dte_days / 365.0)
     expected_terminal_up = ctx.spot * math.exp(2.0 * sigma)
     expected_profit = max(0.0, (expected_terminal_up - long_call.strike) * 100.0 - max_loss)
@@ -781,7 +1027,7 @@ def _build_long_call(ctx: _BuildContext) -> EarningsSetup | None:
             f"Bullish bias + cheap vol ({_summary_iv_vs_hv(ctx)}). Long single "
             f"call for asymmetric upside." + _summary_implied_vs_hist(ctx)
         ),
-        sizing_kelly_pct=min(0.02, max(0.0, max_loss / 100.0 / ctx.spot)),
+        sizing_kelly_pct=_ctx_kelly_long_premium(ctx, max_loss),
         is_defined_risk=True,
     )
 
@@ -796,7 +1042,7 @@ def _build_long_put(ctx: _BuildContext) -> EarningsSetup | None:
         return None
     max_loss = debit * 100.0
     breakevens = [long_put.strike - debit]
-    pop = compute_pop(ctx.spot, breakevens, ctx.current_iv, ctx.dte_days, "below_lower")
+    pop = _ctx_pop(ctx, breakevens, "below_lower")
     sigma = ctx.current_iv * math.sqrt(ctx.dte_days / 365.0)
     expected_terminal_dn = ctx.spot * math.exp(-2.0 * sigma)
     expected_profit = max(0.0, (long_put.strike - expected_terminal_dn) * 100.0 - max_loss)
@@ -815,7 +1061,7 @@ def _build_long_put(ctx: _BuildContext) -> EarningsSetup | None:
             f"Bearish bias + cheap vol ({_summary_iv_vs_hv(ctx)}). Long single "
             f"put for asymmetric downside." + _summary_implied_vs_hist(ctx)
         ),
-        sizing_kelly_pct=min(0.02, max(0.0, max_loss / 100.0 / ctx.spot)),
+        sizing_kelly_pct=_ctx_kelly_long_premium(ctx, max_loss),
         is_defined_risk=True,
     )
 
@@ -837,7 +1083,7 @@ def _build_long_straddle(ctx: _BuildContext) -> EarningsSetup | None:
         return None
     max_loss = debit * 100.0
     breakevens = [atm_put.strike - debit, atm_call.strike + debit]
-    pop = compute_pop(ctx.spot, breakevens, ctx.current_iv, ctx.dte_days, "outside")
+    pop = _ctx_pop(ctx, breakevens, "outside")
     sigma = ctx.current_iv * math.sqrt(ctx.dte_days / 365.0)
     avg_winning_move = ctx.spot * math.exp(2.0 * sigma) - atm_call.strike
     expected_profit = max(0.0, avg_winning_move * 100.0 - max_loss)
@@ -856,7 +1102,7 @@ def _build_long_straddle(ctx: _BuildContext) -> EarningsSetup | None:
             f"{_summary_iv_vs_hv(ctx)}. Long straddle pays for a sub-implied "
             f"explosion either direction." + _summary_implied_vs_hist(ctx)
         ),
-        sizing_kelly_pct=min(0.02, max(0.0, max_loss / 100.0 / ctx.spot)),
+        sizing_kelly_pct=_ctx_kelly_long_premium(ctx, max_loss),
         is_defined_risk=True,
     )
 
@@ -877,7 +1123,7 @@ def _build_long_strangle(ctx: _BuildContext) -> EarningsSetup | None:
         return None
     max_loss = debit * 100.0
     breakevens = [long_put.strike - debit, long_call.strike + debit]
-    pop = compute_pop(ctx.spot, breakevens, ctx.current_iv, ctx.dte_days, "outside")
+    pop = _ctx_pop(ctx, breakevens, "outside")
     sigma = ctx.current_iv * math.sqrt(ctx.dte_days / 365.0)
     avg_winning_move = ctx.spot * math.exp(2.0 * sigma) - long_call.strike
     expected_profit = max(0.0, avg_winning_move * 100.0 - max_loss)
@@ -896,7 +1142,7 @@ def _build_long_strangle(ctx: _BuildContext) -> EarningsSetup | None:
             f"{_summary_iv_vs_hv(ctx)}. OTM strangle for a cheaper big-move "
             f"play." + _summary_implied_vs_hist(ctx)
         ),
-        sizing_kelly_pct=min(0.02, max(0.0, max_loss / 100.0 / ctx.spot)),
+        sizing_kelly_pct=_ctx_kelly_long_premium(ctx, max_loss),
         is_defined_risk=True,
     )
 
@@ -935,7 +1181,7 @@ def _build_calendar_spread(ctx: _BuildContext) -> EarningsSetup | None:
     sigma = ctx.current_iv * math.sqrt(ctx.dte_days / 365.0)
     band = ctx.spot * sigma
     breakevens = [front_call.strike - band, front_call.strike + band]
-    pop = compute_pop(ctx.spot, breakevens, ctx.current_iv, ctx.dte_days, "between")
+    pop = _ctx_pop(ctx, breakevens, "between")
     # Heuristic max profit: ~30% of debit at peak. Real value depends on
     # post-front-expiry vol crush.
     estimated_max_profit = debit * 100.0 * 0.30
@@ -954,7 +1200,7 @@ def _build_calendar_spread(ctx: _BuildContext) -> EarningsSetup | None:
             f"{_summary_iv_vs_hv(ctx)}. Calendar long vega — front-month event "
             f"IV crushes faster than back-month."
         ),
-        sizing_kelly_pct=min(0.02, max(0.0, max_loss / 100.0 / ctx.spot)),
+        sizing_kelly_pct=_ctx_kelly_long_premium(ctx, max_loss),
         is_defined_risk=True,
     )
 
@@ -993,7 +1239,7 @@ def _build_diagonal_spread(ctx: _BuildContext) -> EarningsSetup | None:
     band = ctx.spot * sigma
     direction = "above_upper" if is_bullish else "below_lower"
     breakevens = [front.strike + band] if is_bullish else [front.strike - band]
-    pop = compute_pop(ctx.spot, breakevens, ctx.current_iv, ctx.dte_days, direction)
+    pop = _ctx_pop(ctx, breakevens, direction)
     estimated_max_profit = debit * 100.0 * 0.40
     ev = pop * estimated_max_profit - (1.0 - pop) * max_loss
     return EarningsSetup(
@@ -1010,7 +1256,7 @@ def _build_diagonal_spread(ctx: _BuildContext) -> EarningsSetup | None:
             f"{_summary_iv_vs_hv(ctx)}. Diagonal — directional lean with a "
             f"long-vega tail." + _summary_implied_vs_hist(ctx)
         ),
-        sizing_kelly_pct=min(0.02, max(0.0, max_loss / 100.0 / ctx.spot)),
+        sizing_kelly_pct=_ctx_kelly_long_premium(ctx, max_loss),
         is_defined_risk=True,
     )
 
@@ -1078,6 +1324,43 @@ def _candidates_for_regime(regime: str, verdict: str | None) -> list[Any]:
 # ---------------------------------------------------------------------------
 
 
+def _build_skip_setup(
+    *,
+    tail_risk_score: float,
+    confidence: float | None,
+    reasons: list[str] | None = None,
+) -> EarningsSetup:
+    """SHR-4: synthetic ``setup_id="skip"`` setup signalling no trade.
+
+    Returned at ``top_setups[0]`` when EV is poor across the candidate
+    set or when tail-risk + low confidence trip the skip thresholds.
+    Carries 0 sizing, empty legs, and a rationale that explains why
+    the recommender bailed.
+    """
+    conf_str = f"{confidence:.2f}" if confidence is not None else "n/a"
+    rationale = (
+        f"Tail-risk score {tail_risk_score:.2f} + confidence {conf_str} → "
+        f"no setup has favorable risk-adjusted EV. Skip this earnings event."
+    )
+    if reasons:
+        rationale += " Signals: " + ", ".join(reasons) + "."
+    return EarningsSetup(
+        setup_id="skip",
+        legs=[],
+        net_credit_or_debit=0.0,
+        max_profit=0.0,
+        max_loss=0.0,
+        breakevens=[],
+        pop_estimate=0.0,
+        expected_value=0.0,
+        risk_reward=None,
+        rationale=rationale,
+        sizing_kelly_pct=0.0,
+        is_defined_risk=True,
+        requires_margin_estimate=None,
+    )
+
+
 async def recommend_setups(
     *,
     symbol: str,
@@ -1093,13 +1376,30 @@ async def recommend_setups(
     chain: Any,
     report_date: date | None = None,
     report_time: str | None = None,
+    prior_moves: Sequence[float] | None = None,
+    tail_risk_signals: TailRiskSignals | None = None,
 ) -> list[EarningsSetup]:
-    """Return ranked top-3 setups by expected value.
+    """Return ranked top-3 setups by expected value, with SHR hardening.
 
     Synchronous in spirit (no awaits), but kept ``async`` so the
     screener can call it from the existing :func:`asyncio.gather` flow
     without an extra thread. If the chain is empty or vol inputs are
     missing, returns an empty list.
+
+    SHR additions:
+
+      * ``prior_moves`` (SHR-1) — historical post-earnings move pcts
+        threaded through ``compute_pop`` so symbols with ≥6 prints
+        use empirical (fat-tail-aware) POP instead of lognormal.
+      * ``tail_risk_signals`` (SHR-2) — auxiliary momentum / sentiment
+        signals scored 0..1; when ≥0.6 short-vol setups have their EV
+        halved, ≥0.85 forces a ``"skip"`` outcome.
+      * Confidence-aware Kelly (SHR-3) — every builder threads
+        ``claude_confidence × (1 - tail_risk)`` through Kelly sizing
+        via :func:`_ctx_kelly`.
+      * Skip signal (SHR-4) — when all candidates have EV ≤ 0, or
+        tail-risk ≥ 0.85, or low confidence (≤0.40) AND tail-risk
+        ≥0.6, ``top_setups[0]`` becomes a skip marker.
     """
     if chain is None or spot <= 0 or current_iv <= 0:
         return []
@@ -1112,10 +1412,23 @@ async def recommend_setups(
     dte_days = max(1.0, float((expiry - today).days))
     iv_to_hv = (current_iv / hv_20) if (hv_20 and hv_20 > 0) else None
     regime = _classify_regime(iv_rank, iv_to_hv, claude_verdict, claude_confidence)
+    # SHR-2: compute the tail-risk score once up front so every builder
+    # observes the same context (sizing) and the post-build EV demotion
+    # can use it.
+    tr_signals = tail_risk_signals or TailRiskSignals()
+    tail_risk_score = _compute_tail_risk_score(tr_signals)
+    tail_risk_reasons = _tail_risk_reasons(tr_signals)
     log.debug(
-        "recommender regime=%s for %s (iv_rank=%s ratio=%s verdict=%s conf=%s)",
+        "recommender regime=%s for %s (iv_rank=%s ratio=%s verdict=%s conf=%s tail_risk=%.2f)",
         regime, symbol, iv_rank, iv_to_hv, claude_verdict, claude_confidence,
+        tail_risk_score,
     )
+    # Normalise prior_moves to a list[float] for the empirical POP path.
+    pm_list: list[float] | None = None
+    if prior_moves:
+        pm_list = [float(m) for m in prior_moves if m is not None]
+        if not pm_list:
+            pm_list = None
     ctx = _BuildContext(
         symbol=symbol,
         spot=spot,
@@ -1130,9 +1443,22 @@ async def recommend_setups(
         claude_verdict=claude_verdict,
         claude_confidence=claude_confidence,
         dte_days=dte_days,
+        prior_moves=pm_list,
+        tail_risk_score=tail_risk_score,
     )
+    # SHR-2: when tail risk is elevated, also evaluate long-vol setups
+    # so they can compete with the regime defaults. We don't rewrite the
+    # regime — just augment the candidate list with long_strangle/
+    # long_straddle/diagonal so a short-vol regime can still surface a
+    # long-vol structure when the auxiliary signals scream.
+    builder_list: list[Any] = list(_candidates_for_regime(regime, claude_verdict))
+    if tail_risk_score >= 0.6 and regime in ("rich_neutral", "rich_directional"):
+        for extra in (_build_long_strangle, _build_long_straddle, _build_diagonal_spread):
+            if extra not in builder_list:
+                builder_list.append(extra)
+
     candidates: list[EarningsSetup] = []
-    for builder in _candidates_for_regime(regime, claude_verdict):
+    for builder in builder_list:
         try:
             setup = builder(ctx)
         except Exception as e:  # noqa: BLE001
@@ -1140,6 +1466,24 @@ async def recommend_setups(
             setup = None
         if setup is not None:
             candidates.append(setup)
+
+    # SHR-2: tail-risk overlay — halve EV for short-vol setups when the
+    # score crosses the demote threshold. This rebalances the ranking
+    # without dropping the setup outright (the analyst still sees the
+    # demoted choice for transparency, with its EV derated).
+    if tail_risk_score >= 0.6 and candidates:
+        derated: list[EarningsSetup] = []
+        for s in candidates:
+            if s.setup_id in _SHORT_VOL_SETUPS:
+                # EV/2 captures the asymmetric risk; floor at original EV
+                # so we don't accidentally turn a positive EV into more
+                # positive (only halve magnitudes).
+                new_ev = s.expected_value / 2.0
+                derated.append(s.model_copy(update={"expected_value": new_ev}))
+            else:
+                derated.append(s)
+        candidates = derated
+
     # Rank: prefer defined-risk setups with positive EV. Within
     # defined-risk, rank by EV-per-dollar-at-risk (Sharpe-like) so
     # condors (higher POP, wider profitable range) beat butterflies
@@ -1156,8 +1500,10 @@ async def recommend_setups(
         else:
             ev_per_risk = -1.0  # naked setups sink
         # Structural preference: condor > butterfly in rich_neutral; in
-        # all other regimes the bonuses are zero.
-        if regime == "rich_neutral":
+        # all other regimes the bonuses are zero. SHR-2: when tail risk
+        # is elevated, suppress the structural bonus so derated short-vol
+        # setups don't piggyback on it past long-vol candidates.
+        if regime == "rich_neutral" and tail_risk_score < 0.6:
             structural = {
                 "iron_condor": 2,
                 "iron_butterfly": 1,
@@ -1170,6 +1516,32 @@ async def recommend_setups(
         return (defined_bonus, structural, ev_per_risk, rr)
 
     candidates.sort(key=_sort_key, reverse=True)
+
+    # SHR-4: emit a "skip" outcome when EV is poor across the board OR
+    # tail risk is extreme OR (low confidence AND elevated tail risk).
+    # The skip is inserted at index 0 with the best-of-bad alternatives
+    # following so the FE renders a "no trade" callout but keeps the
+    # alternatives visible for transparency.
+    confidence = claude_confidence
+    all_ev_negative = bool(candidates) and all(
+        s.expected_value <= 0 for s in candidates
+    )
+    extreme_tail = tail_risk_score >= 0.85
+    low_conf_with_tail = (
+        confidence is not None
+        and confidence <= 0.40
+        and tail_risk_score >= 0.6
+    )
+    if all_ev_negative or extreme_tail or low_conf_with_tail:
+        skip_setup = _build_skip_setup(
+            tail_risk_score=tail_risk_score,
+            confidence=confidence,
+            reasons=tail_risk_reasons,
+        )
+        # Top-3 = skip + best-of-bad alternatives so the analyst sees
+        # WHAT we'd have picked if forced.
+        return [skip_setup] + candidates[:2]
+
     return candidates[:3]
 
 
@@ -1193,6 +1565,9 @@ _SETUP_ID_TO_LEGACY: dict[str, str] = {
     "long_strangle": "long straddle",  # legacy literal lacks long_strangle
     "calendar_spread": "calendar spread",
     "diagonal_spread": "diagonal spread",
+    # SHR-4 / SHR-6: skip flows through to the legacy ``top_setup``
+    # so the existing FE renders a no-trade callout when this is set.
+    "skip": "skip",
 }
 
 

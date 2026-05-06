@@ -674,6 +674,8 @@ def _build_analysis(
 
     # ── Top setups (pulled from the calendar row when available) ──
     top_setups = None
+    tail_risk_score: float | None = None
+    tail_risk_reasons: list[str] = []
     if isinstance(meta, dict):
         raw_setups = meta.get("top_setups") or []
         if raw_setups:
@@ -689,6 +691,13 @@ def _build_analysis(
                         continue
             if built_setups:
                 top_setups = built_setups[:setups_n]
+        # SHR-6: surface tail-risk score + reasons from the screener row.
+        trs = meta.get("tail_risk_score")
+        if isinstance(trs, (int, float)):
+            tail_risk_score = float(trs)
+        trr = meta.get("tail_risk_reasons")
+        if isinstance(trr, list):
+            tail_risk_reasons = [str(r) for r in trr]
 
     # ── Claude thesis ──
     if claude_verdict is not None or claude_confidence is not None:
@@ -739,6 +748,8 @@ def _build_analysis(
         edge_score=edge_score,
         edge_score_components=edge_score_components,
         top_setups=top_setups,
+        tail_risk_score=tail_risk_score,
+        tail_risk_reasons=tail_risk_reasons,
         news=news_articles,
         chain_expirations=chain_expirations,
         front_month_chain_summary=front_summary,

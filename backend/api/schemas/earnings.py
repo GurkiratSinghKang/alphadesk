@@ -49,6 +49,11 @@ TopSetup = Literal[
     # deserialise — fresh prompts forbid them via ``_VALID_SETUPS``.
     "short call",
     "short strangle",
+    # Recommender hardening (SHR-4 / SHR-6): explicit "no trade" signal
+    # surfaced when tail risk + confidence overlay forces the engine to
+    # decline a recommendation. The FE renders a skip callout when the
+    # legacy field carries this value.
+    "skip",
 ]
 # Round-4 CLUSTER 1 #5: a row's display state for the day-of report.
 # The frontend dims rows based on this; backend never filters >= today_done
@@ -80,7 +85,43 @@ SetupId = Literal[
     "long_strangle",
     "calendar_spread",
     "diagonal_spread",
+    # Recommender hardening (SHR): an explicit "no setup" outcome when EV
+    # is poor across the board or tail risk is too high. Returning
+    # setup_id="skip" at top_setups[0] tells the FE to render a
+    # "skip this earnings event" callout while still listing the
+    # best-of-bad alternatives below for transparency.
+    "skip",
 ]
+
+
+class TailRiskSignals(BaseModel):
+    """Auxiliary inputs to the tail-risk score (SHR-2).
+
+    The fields are independent — any subset may be populated based on
+    upstream availability. ``None`` values are treated as no-signal by
+    :func:`services.earnings_recommender._compute_tail_risk_score`.
+
+    Sources:
+
+      * ``intraday_momentum_pct`` — current spot vs previous close
+        (spot move INTO the event during today's session).
+      * ``sector_cohort_momentum_avg`` — average of related-sector
+        tickers' intraday move; not yet plumbed (left ``None`` for now).
+      * ``analyst_pt_changes_24h`` — net count of price-target raises
+        minus cuts in the last 24 hours.
+      * ``news_sentiment`` — -1 (bearish) to +1 (bullish); not yet
+        plumbed.
+      * ``historical_move_kurtosis`` — sample kurtosis of prior_moves;
+        > 3 indicates fat tails.
+      * ``iv_term_steepness`` — front-month vs back-month event premium
+        (``IV[front]/IV[back] - 1``); higher = more event premium.
+    """
+    intraday_momentum_pct: float | None = None
+    sector_cohort_momentum_avg: float | None = None
+    analyst_pt_changes_24h: int = 0
+    news_sentiment: float | None = None
+    historical_move_kurtosis: float | None = None
+    iv_term_steepness: float | None = None
 
 
 class OptionLeg(BaseModel):
@@ -155,6 +196,13 @@ class CalendarRow(BaseModel):
     # ``"days_until"``). Optional with empty default so older cached rows
     # stay valid.
     edge_score_components: dict[str, float] = Field(default_factory=dict)
+    # Recommender hardening (SHR-6): the tail-risk score (0..1) computed
+    # from the auxiliary signals plumbed by the screener. >=0.6 demotes
+    # short-vol setups; >=0.85 forces a "skip" outcome. Optional so older
+    # cached rows still validate. Reasons are short human-readable
+    # phrases (e.g. ``"intraday +4.3%"``).
+    tail_risk_score: float | None = Field(default=None, ge=0, le=1)
+    tail_risk_reasons: list[str] = Field(default_factory=list)
 
 
 class CalendarResponse(BaseModel):
@@ -485,6 +533,12 @@ class EarningsAnalysis(BaseModel):
     edge_score: float | None = None
     edge_score_components: dict[str, float] | None = None
     top_setups: list[EarningsSetup] | None = None  # ranked top-N
+    # Recommender hardening (SHR-6): tail-risk score + reasons
+    # surfaced for the analyst. Score > 0.6 → short-vol setups demoted;
+    # score > 0.85 (or low confidence + score > 0.6) → top_setups[0]
+    # is a "skip" recommendation. Reasons are short readable phrases.
+    tail_risk_score: float | None = None
+    tail_risk_reasons: list[str] = Field(default_factory=list)
 
     # News (from Batch T alias)
     news: list[NewsArticle] | None = None  # last N=5 articles

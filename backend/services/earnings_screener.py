@@ -1208,6 +1208,126 @@ def _option_mid(contract: Any | None) -> float:
     return last if last > 0 else 0.0
 
 
+def _prior_moves_from_metrics(metrics: Mapping[str, Any] | None) -> list[float] | None:
+    """SHR-5: extract historical post-earnings move pcts from metrics.
+
+    The historical-quarters payload (loaded by ``_load_historical_earnings``)
+    carries ``next_day_move_pct`` per quarter; that's the post-earnings
+    reaction. Convert to a flat ``list[float]`` for the recommender's
+    empirical-POP path.
+    """
+    if not metrics:
+        return None
+    quarters = metrics.get("historical_quarters") or []
+    if not isinstance(quarters, (list, tuple)) or not quarters:
+        return None
+    out: list[float] = []
+    for q in quarters:
+        if not isinstance(q, Mapping):
+            continue
+        m = q.get("next_day_move_pct")
+        if m is None:
+            continue
+        try:
+            out.append(float(m))
+        except (TypeError, ValueError):
+            continue
+    return out or None
+
+
+def _sample_kurtosis(xs: Sequence[float]) -> float | None:
+    """Plain-old sample excess-kurtosis estimator. ``None`` if n<4.
+
+    Returns the *non-excess* kurtosis (m4/m2^2). A pure normal sample
+    converges to 3. The recommender's threshold (>4) is "fatter than
+    that". Avoids importing scipy.stats.kurtosis here to keep this file
+    light.
+    """
+    if not xs or len(xs) < 4:
+        return None
+    n = len(xs)
+    mean = sum(xs) / n
+    m2 = sum((x - mean) ** 2 for x in xs) / n
+    if m2 <= 0:
+        return None
+    m4 = sum((x - mean) ** 4 for x in xs) / n
+    return float(m4 / (m2 * m2))
+
+
+def _iv_term_steepness(metrics: Mapping[str, Any] | None) -> float | None:
+    """SHR-5: ``IV[front] / IV[back] - 1`` if a 2-point term is available.
+
+    Uses the smallest-DTE expiry as front and the next as back. Only
+    interpretable when there are at least 2 expiries; returns None otherwise.
+    """
+    if not metrics:
+        return None
+    term = metrics.get("term_structure") if isinstance(metrics, Mapping) else None
+    if not isinstance(term, Mapping) or not term:
+        return None
+    parsed: list[tuple[date, float]] = []
+    for k, v in term.items():
+        try:
+            d = date.fromisoformat(str(k))
+            parsed.append((d, float(v)))
+        except (TypeError, ValueError):
+            continue
+    if len(parsed) < 2:
+        return None
+    parsed.sort(key=lambda p: p[0])
+    front_iv = parsed[0][1]
+    back_iv = parsed[1][1]
+    if back_iv <= 0:
+        return None
+    return float(front_iv / back_iv - 1.0)
+
+
+def _build_tail_risk_signals(
+    *,
+    quote: Mapping[str, Any] | None,
+    metrics: Mapping[str, Any] | None,
+    prior_moves: Sequence[float] | None,
+) -> Any:
+    """SHR-5: assemble :class:`TailRiskSignals` from already-loaded data.
+
+    Sources used:
+      * ``intraday_momentum_pct`` — derived from ``quote["change_pct"]``
+        which is in 0-100 scale (1.45 → 1.45%). We convert to fraction
+        (0.0145).
+      * ``historical_move_kurtosis`` — sample kurtosis of prior_moves
+        when n≥4; ``None`` otherwise.
+      * ``iv_term_steepness`` — front/back IV ratio from metrics.
+
+    Sector cohort, analyst PT, and news sentiment require additional
+    upstream calls and aren't plumbed here yet — the recommender's
+    score function gracefully treats them as zero-contribution.
+    """
+    from api.schemas.earnings import TailRiskSignals
+
+    intraday: float | None = None
+    if isinstance(quote, Mapping):
+        cp = quote.get("change_pct")
+        if cp is not None:
+            try:
+                # Quote.changePct is in 0-100 scale (1.45 = 1.45%); convert.
+                intraday = float(cp) / 100.0
+            except (TypeError, ValueError):
+                intraday = None
+
+    kurt: float | None = None
+    if prior_moves and len(prior_moves) >= 4:
+        try:
+            kurt = _sample_kurtosis([float(m) for m in prior_moves])
+        except (TypeError, ValueError):
+            kurt = None
+
+    return TailRiskSignals(
+        intraday_momentum_pct=intraday,
+        historical_move_kurtosis=kurt,
+        iv_term_steepness=_iv_term_steepness(metrics),
+    )
+
+
 async def _load_metrics(
     symbol: str,
     report_date: date | None = None,
@@ -1396,6 +1516,9 @@ async def _compute_metrics_uncached(
             "expected_move_dollars": em_pct * underlying if em_pct is not None else None,
             "premium_yield_call_atm": premium_yield_call_atm,
             "premium_yield_put_atm": premium_yield_put_atm,
+            # SHR-5: surface IV term so the recommender can compute
+            # `iv_term_steepness` for the tail-risk overlay.
+            "term_structure": dict(iv.term_structure or {}),
             "hist_avg_abs_move_pct": historical_stats.get("avg_abs_move_pct"),
             "beat_rate": historical_stats.get("surprise_beat_rate"),
             "historical_stats": historical_stats,
@@ -2421,6 +2544,8 @@ async def _hydrate_row(
     # full leg structure / EV / Kelly sizing.
     top_setups: list = []
     legacy_top_setup = claude.get("suggested_play") if claude else None
+    tail_risk_score: float | None = None
+    tail_risk_reasons: list[str] = []
     if (
         metrics
         and not synthetic_ranking_inputs
@@ -2429,12 +2554,22 @@ async def _hydrate_row(
     ):
         try:
             from services.earnings_recommender import (
+                _compute_tail_risk_score,
+                _tail_risk_reasons,
                 recommend_setups,
                 setup_id_to_legacy_top_setup,
             )
             from services.options import fetch_chain
 
             chain = await fetch_chain(symbol)
+            # SHR-5: pull prior_moves + tail-risk signals from already-
+            # loaded metrics so the recommender has the full picture.
+            prior_moves = _prior_moves_from_metrics(metrics)
+            tr_signals = _build_tail_risk_signals(
+                quote=quote, metrics=metrics, prior_moves=prior_moves,
+            )
+            tail_risk_score = _compute_tail_risk_score(tr_signals)
+            tail_risk_reasons = _tail_risk_reasons(tr_signals)
             top_setups = await recommend_setups(
                 symbol=symbol,
                 spot=float(quote["last"]),
@@ -2449,6 +2584,8 @@ async def _hydrate_row(
                 chain=chain,
                 report_date=report_date_obj,
                 report_time=row.get("report_time", "DMT"),
+                prior_moves=prior_moves,
+                tail_risk_signals=tr_signals,
             )
             if top_setups:
                 # Override the legacy top_setup with the recommender's
@@ -2481,6 +2618,8 @@ async def _hydrate_row(
         "claude_confidence": claude.get("confidence") if claude else None,
         "top_setup": legacy_top_setup,
         "top_setups": top_setups,
+        "tail_risk_score": tail_risk_score,
+        "tail_risk_reasons": tail_risk_reasons,
         **edge,
         "days_until": days_until,
         "report_state": report_state,

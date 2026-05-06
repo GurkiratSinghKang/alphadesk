@@ -1,9 +1,11 @@
 """Route + orchestration tests for /api/v1/earnings/{symbol}/analysis.
 
 Wave 4 / Batch S — single-round-trip endpoint orchestrating quote, IV,
-calendar entry, chain, news, and prior-moves. Tests:
+calendar entry, chain, news, and prior-moves. SHR hardening update:
 
-  * AMD case asserts iron_condor first (high IV, neutral verdict)
+  * AMD case (high IV + high tail-risk signals) asserts the top setup
+    is NOT iron_condor — recommender now demotes short-vol structures
+    in fat-tail regimes.
   * partial-failure tolerance (one upstream throws → others populate)
   * setups query param caps (1, 5)
   * caching (second call within 60s doesn't re-call upstreams)
@@ -152,16 +154,39 @@ def _amd_iv():
 
 
 def _amd_meta_hydrated() -> dict:
-    """Hydrated calendar row carrying the recommender's top_setups + edge."""
+    """Hydrated calendar row reflecting SHR-hardening output.
+
+    AMD presents with intraday +4.3% momentum + analyst PT raises +
+    elevated kurtosis → tail-risk score lands above 0.6, so the
+    recommender returns ``setup_id="skip"`` at index 0 with the
+    "best of bad" iron_condor demoted to index 1.
+    """
     from api.schemas.earnings import EarningsSetup, OptionLeg
 
+    skip_setup = EarningsSetup(
+        setup_id="skip",
+        legs=[],
+        net_credit_or_debit=0.0,
+        max_profit=0.0,
+        max_loss=0.0,
+        breakevens=[],
+        pop_estimate=0.0,
+        expected_value=0.0,
+        risk_reward=None,
+        rationale=(
+            "Tail-risk score 0.70 + confidence 0.55 → no setup has "
+            "favorable risk-adjusted EV. Skip this earnings event."
+        ),
+        sizing_kelly_pct=0.0,
+        is_defined_risk=True,
+    )
     legs = [
         OptionLeg(side="buy", contract_type="put", strike=305.0, expiry=date.today() + timedelta(days=3), mid=2.0),
         OptionLeg(side="sell", contract_type="put", strike=320.0, expiry=date.today() + timedelta(days=3), mid=4.0),
         OptionLeg(side="sell", contract_type="call", strike=395.0, expiry=date.today() + timedelta(days=3), mid=4.5),
         OptionLeg(side="buy", contract_type="call", strike=415.0, expiry=date.today() + timedelta(days=3), mid=2.5),
     ]
-    setup = EarningsSetup(
+    derated_condor = EarningsSetup(
         setup_id="iron_condor",
         legs=legs,
         net_credit_or_debit=4.0,
@@ -169,10 +194,10 @@ def _amd_meta_hydrated() -> dict:
         max_loss=1100.0,
         breakevens=[316.0, 399.0],
         pop_estimate=0.55,
-        expected_value=15.0,
+        expected_value=7.5,  # halved by tail-risk overlay
         risk_reward=400.0 / 1100.0,
         rationale="IV 119% vs HV 65% (1.8x). Defined-risk short premium.",
-        sizing_kelly_pct=0.01,
+        sizing_kelly_pct=0.0025,  # confidence × (1 - tail_risk) shrink
         is_defined_risk=True,
     )
     return {
@@ -193,11 +218,13 @@ def _amd_meta_hydrated() -> dict:
         "hist_avg_abs_move_pct": 0.045,
         "claude_verdict": "neutral-bear",
         "claude_confidence": 0.55,
-        "top_setup": "iron condor",
-        "top_setups": [setup],
+        "top_setup": "skip",
+        "top_setups": [skip_setup, derated_condor],
         "edge_score": 78.5,
         "edge_score_reasons": ["IV rank 85 keeps premium rich"],
         "edge_score_components": {"iv_rank": 29.75, "premium_yield": 14.0, "implied_vs_historical": 23.5, "confidence": 8.25, "days_until": 5.0},
+        "tail_risk_score": 0.70,
+        "tail_risk_reasons": ["intraday +4.3%", "analyst PT raises ×2", "kurtosis 4.5"],
     }
 
 
@@ -314,11 +341,14 @@ def amd_mocks(authed_client):
 
 
 # ---------------------------------------------------------------------------
-# AMD case — iron_condor first
+# AMD case — SHR-8 hardening: top setup is NOT iron_condor under elevated
+# tail-risk signals. The hardened recommender returns "skip" (or a long-vol
+# alternative) when intraday momentum + analyst raises + kurtosis push the
+# tail-risk score above the demote threshold.
 # ---------------------------------------------------------------------------
 
 
-def test_amd_analysis_returns_iron_condor_first(amd_mocks):
+def test_amd_analysis_does_not_return_iron_condor_under_tail_risk(amd_mocks):
     client = amd_mocks["client"]
     r = client.get("/api/v1/earnings/AMD/analysis")
     assert r.status_code == 200, r.text
@@ -328,9 +358,18 @@ def test_amd_analysis_returns_iron_condor_first(amd_mocks):
     assert body["hv_20"] == pytest.approx(0.65, rel=1e-6)
     # IV/HV ratio derived in the assembler.
     assert body["iv_to_hv_ratio"] == pytest.approx(1.19 / 0.65, rel=1e-6)
-    # Top setup must be the recommender's iron_condor.
+    # SHR-8: top setup is NOT iron_condor — recommender demotes short-vol
+    # setups when the tail-risk signals are elevated. Acceptable top
+    # outcomes are "skip" or a long-vol structure.
     assert body["top_setups"], "expected at least one setup"
-    assert body["top_setups"][0]["setup_id"] == "iron_condor"
+    assert body["top_setups"][0]["setup_id"] != "iron_condor"
+    assert body["top_setups"][0]["setup_id"] in {
+        "skip", "long_strangle", "long_straddle", "diagonal_spread",
+    }
+    # Tail-risk score + reasons surfaced for the analyst.
+    assert body["tail_risk_score"] is not None
+    assert body["tail_risk_score"] >= 0.6
+    assert body["tail_risk_reasons"], "expected reasons for the tail-risk demotion"
     # Spot bar fields populated.
     assert body["spot"] == pytest.approx(356.0)
     assert body["day_volume"] == 28_400_000
