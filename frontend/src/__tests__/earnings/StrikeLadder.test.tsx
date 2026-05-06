@@ -81,7 +81,7 @@ describe("StrikeLadder", () => {
     expect(region?.className).toMatch(/overflow-x-auto/);
   });
 
-  // ── PM-C row-expand additions ─────────────────────────────────
+  // ── PM-C row-expand + Maverick FIX-E: chevron-button a11y ─────
 
   it("does NOT make rows interactive when underlying prop is missing (graceful degrade)", () => {
     const { container } = render(<StrikeLadder ladder={ladder} />);
@@ -91,55 +91,78 @@ describe("StrikeLadder", () => {
       expect(row.getAttribute("role")).not.toBe("button");
       expect(row.getAttribute("aria-expanded")).toBeNull();
     });
+    // FIX-E: no chevron-button rendered when there's nothing to expand.
+    expect(container.querySelectorAll('[data-slot="ladder-row-toggle"]').length).toBe(0);
   });
 
-  it("makes rows clickable + role=button when underlying prop is provided", () => {
+  // Maverick FIX-E (new-trader P0 #4): role=button + tabIndex moved off
+  // <tr> onto a real <button> wrapping the chevron in the STRIKE cell.
+  // Row stays a plain <tr> so SR table navigation works cell-by-cell.
+  it("keeps <tr> a plain table row (FIX-E) — no role=button on the row itself", () => {
     const { container } = render(<StrikeLadder ladder={ladder} underlying="NVDA" />);
-    const dataRows = container.querySelectorAll('tr[role="button"]');
+    const dataRows = container.querySelectorAll("tr.t-ladder-row.t-ladder-row--data");
     expect(dataRows.length).toBe(ladder.rows.length);
     dataRows.forEach((row) => {
-      expect(row.getAttribute("aria-expanded")).toBe("false");
-      expect(row.getAttribute("aria-controls")).toMatch(/^nbbo-NVDA/);
-      expect(row.getAttribute("tabIndex")).toBe("0");
+      expect(row.getAttribute("role")).toBeNull();
+      expect(row.getAttribute("tabIndex")).toBeNull();
+      expect(row.getAttribute("aria-expanded")).toBeNull();
     });
   });
 
-  it("toggles aria-expanded + mounts the NBBO row on click", () => {
+  it("renders a chevron <button> per row with aria-expanded / aria-controls / aria-label (FIX-E)", () => {
     const { container } = render(<StrikeLadder ladder={ladder} underlying="NVDA" />);
-    const firstRow = container.querySelector('tr[role="button"]') as HTMLElement;
-    expect(firstRow.getAttribute("aria-expanded")).toBe("false");
+    const buttons = container.querySelectorAll('[data-slot="ladder-row-toggle"]');
+    expect(buttons.length).toBe(ladder.rows.length);
+    buttons.forEach((btn, i) => {
+      expect(btn.tagName).toBe("BUTTON");
+      expect(btn.getAttribute("type")).toBe("button");
+      expect(btn.getAttribute("aria-expanded")).toBe("false");
+      expect(btn.getAttribute("aria-controls")).toMatch(/^nbbo-NVDA/);
+      const row = ladder.rows[i];
+      expect(btn.getAttribute("aria-label")).toBe(
+        `Toggle NBBO for ${row.strike} ${row.side}`,
+      );
+    });
+  });
+
+  it("toggles aria-expanded + mounts the NBBO row when the chevron button is clicked", () => {
+    const { container } = render(<StrikeLadder ladder={ladder} underlying="NVDA" />);
+    const firstButton = container.querySelector('[data-slot="ladder-row-toggle"]') as HTMLButtonElement;
+    expect(firstButton.getAttribute("aria-expanded")).toBe("false");
     expect(container.querySelector('[data-slot="strike-ladder-nbbo-row"]')).toBeNull();
-    fireEvent.click(firstRow);
-    expect(firstRow.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(firstButton);
+    expect(firstButton.getAttribute("aria-expanded")).toBe("true");
     expect(container.querySelector('[data-slot="strike-ladder-nbbo-row"]')).not.toBeNull();
   });
 
-  it("collapses again when the same row is clicked twice", () => {
+  it("collapses when the same chevron button is clicked twice", () => {
     const { container } = render(<StrikeLadder ladder={ladder} underlying="NVDA" />);
-    const firstRow = container.querySelector('tr[role="button"]') as HTMLElement;
-    fireEvent.click(firstRow);
-    fireEvent.click(firstRow);
-    expect(firstRow.getAttribute("aria-expanded")).toBe("false");
+    const firstButton = container.querySelector('[data-slot="ladder-row-toggle"]') as HTMLButtonElement;
+    fireEvent.click(firstButton);
+    fireEvent.click(firstButton);
+    expect(firstButton.getAttribute("aria-expanded")).toBe("false");
     expect(container.querySelector('[data-slot="strike-ladder-nbbo-row"]')).toBeNull();
   });
 
-  it("only one row can be expanded at a time", () => {
+  it("only one row can be expanded at a time (single-expansion model preserved)", () => {
     const { container } = render(<StrikeLadder ladder={ladder} underlying="NVDA" />);
-    const rows = container.querySelectorAll('tr[role="button"]');
-    fireEvent.click(rows[0]);
-    fireEvent.click(rows[1]);
-    expect(rows[0].getAttribute("aria-expanded")).toBe("false");
-    expect(rows[1].getAttribute("aria-expanded")).toBe("true");
-    // Single NBBO row mounted
+    const buttons = container.querySelectorAll('[data-slot="ladder-row-toggle"]');
+    fireEvent.click(buttons[0]);
+    fireEvent.click(buttons[1]);
+    expect(buttons[0].getAttribute("aria-expanded")).toBe("false");
+    expect(buttons[1].getAttribute("aria-expanded")).toBe("true");
     expect(container.querySelectorAll('[data-slot="strike-ladder-nbbo-row"]').length).toBe(1);
   });
 
-  it("Enter and Space keys toggle expansion", () => {
+  // FIX-E: keyboard activation now comes for free via the native <button>
+  // (Enter and Space both fire onClick), so no custom onKeyDown path.
+  it("Enter / Space activate the chevron button via native semantics", () => {
     const { container } = render(<StrikeLadder ladder={ladder} underlying="NVDA" />);
-    const firstRow = container.querySelector('tr[role="button"]') as HTMLElement;
-    fireEvent.keyDown(firstRow, { key: "Enter" });
-    expect(firstRow.getAttribute("aria-expanded")).toBe("true");
-    fireEvent.keyDown(firstRow, { key: " " });
-    expect(firstRow.getAttribute("aria-expanded")).toBe("false");
+    const firstButton = container.querySelector('[data-slot="ladder-row-toggle"]') as HTMLButtonElement;
+    // Native <button> dispatches click on Enter/Space — simulate the
+    // outcome rather than synthesising the Enter event (jsdom skips
+    // the implicit click).
+    fireEvent.click(firstButton);
+    expect(firstButton.getAttribute("aria-expanded")).toBe("true");
   });
 });

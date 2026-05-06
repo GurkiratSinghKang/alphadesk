@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import type { StrikeLadder as LadderShape, LadderRow } from "@/types";
 import { fmtCurrency, fmtNumber, fmtPct } from "@/lib/intl";
 import { formatOccSymbol } from "@/lib/occ";
+import { cn } from "@/lib/utils";
 import ContractNBBO from "@/components/options/ContractNBBO";
 
 export interface StrikeLadderProps {
@@ -194,49 +195,51 @@ function LadderDataRow({
     <td>{fmtCurrency(row.mid, "USD")}</td>
   );
   const expandable = !!occSymbol;
-  // PM-C: keyboard parity with the click target — Enter and Space both
-  // toggle (Space is the conventional toggle key for button-role rows
-  // and we need to preventDefault to keep the table region from
-  // scrolling on space).
-  const onKeyDown = expandable
-    ? (e: React.KeyboardEvent<HTMLTableRowElement>) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onToggleExpand();
-        }
-      }
-    : undefined;
-  const interactiveProps = expandable
-    ? {
-        role: "button" as const,
-        tabIndex: 0,
-        onClick: onToggleExpand,
-        onKeyDown,
-        "aria-expanded": isExpanded,
-        "aria-controls": occSymbol ? `nbbo-${occSymbol}` : undefined,
-        // Reasonable touch target without disrupting the table layout —
-        // mobile users get a row that's at least ~44px tall thanks to
-        // the existing t-ladder-row line-height + padding tokens, and
-        // cursor-pointer signals interactivity on hover.
-        className: "t-ladder-row t-ladder-row--data cursor-pointer hover:bg-[color:var(--bg-elev-2)]",
-      }
-    : { className: "t-ladder-row t-ladder-row--data" };
+  // Maverick FIX-E (new-trader P0 #4): the entire <tr> used to carry
+  // role="button" + tabIndex, which collapses the row's table semantics
+  // for screen readers — VoiceOver / NVDA could not navigate cell by
+  // cell. Move the interactive affordance onto the chevron itself
+  // (a real <button> inside the STRIKE cell). The row goes back to
+  // being a plain <tr>, the button gets aria-expanded / aria-controls
+  // / aria-label, and the chevron's hit area is padded out to meet
+  // the 44px mobile touch-target requirement.
   return (
     <>
-      <tr {...interactiveProps}>
+      <tr
+        data-slot="ladder-data-row"
+        data-expandable={expandable || undefined}
+        data-expanded={isExpanded || undefined}
+        className={cn(
+          "t-ladder-row t-ladder-row--data",
+          expandable && "hover:bg-[color:var(--bg-elev-2)]",
+        )}
+      >
         <th scope="row" className="text-left font-normal">
-          {expandable && (
-            <span
-              aria-hidden="true"
-              className="inline-flex align-middle mr-1 u-muted"
+          {expandable && occSymbol ? (
+            <button
+              type="button"
+              data-slot="ladder-row-toggle"
+              onClick={onToggleExpand}
+              aria-expanded={isExpanded}
+              aria-controls={`nbbo-${occSymbol}`}
+              aria-label={`Toggle NBBO for ${row.strike} ${row.side}`}
+              className={cn(
+                // ≥44px touch target on mobile via min-h/min-w; padding
+                // expands the chevron's hit area without disturbing the
+                // tabular layout (the visible glyph stays small).
+                "inline-flex items-center justify-center align-middle mr-1",
+                "min-h-touch min-w-touch p-1.5 -m-1.5",
+                "rounded u-muted hover:u-brand",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand)]",
+              )}
             >
               {isExpanded ? (
-                <ChevronDown size={12} />
+                <ChevronDown size={12} aria-hidden="true" />
               ) : (
-                <ChevronRight size={12} />
+                <ChevronRight size={12} aria-hidden="true" />
               )}
-            </span>
-          )}
+            </button>
+          ) : null}
           {fmtNumber(row.strike, { maximumFractionDigits: 0 })}
         </th>
         <td>
