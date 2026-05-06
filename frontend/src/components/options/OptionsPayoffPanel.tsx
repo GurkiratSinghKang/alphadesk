@@ -245,12 +245,57 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
               <circle cx={chart.x(summary.spotPrice)} cy={chart.zeroY} r="3.5" fill="var(--brand)" />
             </g>
           ) : null}
-          {summary.breakevens.map((breakeven) => (
-            <g key={`be-${breakeven}`}>
-              <line x1={chart.x(breakeven)} x2={chart.x(breakeven)} y1={chart.yTop} y2={chart.yBottom} stroke="var(--fg-muted)" strokeDasharray="2 4" opacity="0.7" />
-              <circle cx={chart.x(breakeven)} cy={chart.zeroY} r="3" fill="var(--bg)" stroke="var(--fg-muted)" />
-            </g>
+          {/* PM-A 2026-05-05: dollar-valued Y-axis tick labels. The
+              old chart had unlabelled gridlines so users had to
+              hover to read pnl magnitudes. yAxisTicks is computed
+              by buildSvgModel and always includes $0 when the
+              range straddles zero. */}
+          {chart.yAxisTicks.map((tick) => (
+            <text
+              key={`y-tick-${tick.label}-${tick.y.toFixed(2)}`}
+              x={chart.padding - 4}
+              y={tick.y + 3}
+              textAnchor="end"
+              fontSize="9"
+              fill="var(--fg-hint)"
+            >
+              {tick.label}
+            </text>
           ))}
+          {summary.breakevens.map((breakeven, idx) => {
+            const leader = chart.breakevenLeader[idx];
+            return (
+              <g key={`be-${breakeven}`}>
+                <line x1={chart.x(breakeven)} x2={chart.x(breakeven)} y1={chart.yTop} y2={chart.yBottom} stroke="var(--fg-muted)" strokeDasharray="2 4" opacity="0.7" />
+                <circle cx={chart.x(breakeven)} cy={chart.zeroY} r="3" fill="var(--bg)" stroke="var(--fg-muted)" />
+                {/* PM-A 2026-05-05: in-chart breakeven callout. The
+                    leader line connects label → vertical so users
+                    don't have to map text to gridline position. */}
+                {leader ? (
+                  <g>
+                    <line
+                      x1={leader.labelX}
+                      x2={leader.x}
+                      y1={leader.labelY + 2}
+                      y2={chart.yTop + 14}
+                      stroke="var(--fg-muted)"
+                      strokeDasharray="1 2"
+                      opacity="0.6"
+                    />
+                    <text
+                      x={leader.labelX}
+                      y={leader.labelY}
+                      textAnchor="middle"
+                      fontSize="9"
+                      fill="var(--fg-muted)"
+                    >
+                      {`BE ${formatCurrency(breakeven)}`}
+                    </text>
+                  </g>
+                ) : null}
+              </g>
+            );
+          })}
           <path d={chart.path} fill="none" stroke="var(--brand)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
           {hovered ? (
             <g>
