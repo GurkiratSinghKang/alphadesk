@@ -3,6 +3,7 @@
 import type { Quote } from "@/types";
 
 import { useSymbolPageData } from "../_hooks/useSymbolPageData";
+import { ChartBand } from "../_sections/ChartBand";
 import { DecisionStrip, type DecisionStripMarketRegime } from "../_sections/DecisionStrip";
 import { NotFound } from "../_sections/NotFound";
 import { StickyBand, type StickyBandQuote } from "../_sections/StickyBand";
@@ -85,6 +86,13 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
           marketRegime={marketRegime}
         />
       </StickyBand>
+
+      <ChartBand
+        symbol={symbol}
+        bars={data.bars}
+        name={data.symbolMeta?.name ?? null}
+        quote={quote}
+      />
 
       {data.isETF ? (
         <aside
