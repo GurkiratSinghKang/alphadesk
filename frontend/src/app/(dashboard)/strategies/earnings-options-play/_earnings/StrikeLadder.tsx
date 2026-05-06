@@ -1,15 +1,31 @@
 "use client";
 
 import { useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { StrikeLadder as LadderShape, LadderRow } from "@/types";
 import { fmtCurrency, fmtNumber, fmtPct } from "@/lib/intl";
+import { formatOccSymbol } from "@/lib/occ";
+import ContractNBBO from "@/components/options/ContractNBBO";
 
 export interface StrikeLadderProps {
   ladder: LadderShape | null;
+  /**
+   * Underlying ticker — required for the row-expand NBBO panel because
+   * OCC symbols are built from underlying + expiry + side + strike.
+   * When omitted, the ladder gracefully degrades to read-only (no
+   * chevrons, no expand). PM-C wires this from EarningsDetailPanel
+   * via ``detail.symbol``.
+   */
+  underlying?: string;
 }
 
-export default function StrikeLadder({ ladder }: StrikeLadderProps) {
+export default function StrikeLadder({ ladder, underlying }: StrikeLadderProps) {
   const [showGreeks, setShowGreeks] = useState(false);
+  // PM-C: track which row's NBBO panel is expanded. Single-expansion
+  // model — expanding one row collapses any other; this keeps the
+  // 2s-poll volume to one contract at a time and avoids the
+  // visual noise of stacked NBBO panels in a narrow column.
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   if (!ladder || ladder.rows.length === 0) {
     return (
@@ -26,6 +42,15 @@ export default function StrikeLadder({ ladder }: StrikeLadderProps) {
   const hasGreeks = ladder.rows.some(
     (r) => Number.isFinite(r.theta) || Number.isFinite(r.gamma) || Number.isFinite(r.vega),
   );
+  // Column count for the expanded NBBO row's colSpan. Static columns:
+  // STRIKE / Δ / MID / IV / YLD / POP / SIDE = 7. Greeks adds 3 (θ γ ν).
+  // The new "expand chevron" lives inside the STRIKE cell so it doesn't
+  // claim its own column.
+  const colCount = 7 + (showGreeks ? 3 : 0);
+  // Expansion is only meaningful when we know the underlying — without
+  // it we can't build an OCC symbol to query. Pass through to data
+  // rows so they can hide the chevron + skip the click handler.
+  const canExpand = !!underlying;
   return (
     <section data-slot="strike-ladder">
       <div className="mt-4 flex items-baseline justify-between gap-2">
@@ -101,13 +126,37 @@ export default function StrikeLadder({ ladder }: StrikeLadderProps) {
             </tr>
           </thead>
           <tbody>
-            {ladder.rows.map((r) => (
-              <LadderDataRow
-                key={`${r.side}-${r.bucket}-${r.strike}`}
-                row={r}
-                showGreeks={showGreeks}
-              />
-            ))}
+            {ladder.rows.map((r) => {
+              // Build an OCC symbol per row when we have an underlying.
+              // ``formatOccSymbol`` returns null on malformed input —
+              // missing underlying, bad expiry shape, non-finite strike.
+              // We treat that as "row cannot be expanded" rather than
+              // crashing the ladder: the chevron disappears and the
+              // click handler is wired to a no-op for that row.
+              const occ = canExpand
+                ? formatOccSymbol({
+                    symbol: underlying!,
+                    expiry: r.expiry ?? ladder.expiry,
+                    side: r.side,
+                    strike: r.strike,
+                  })
+                : null;
+              const isExpanded = !!occ && expandedRow === occ;
+              return (
+                <LadderDataRow
+                  key={`${r.side}-${r.bucket}-${r.strike}`}
+                  row={r}
+                  showGreeks={showGreeks}
+                  occSymbol={occ}
+                  isExpanded={isExpanded}
+                  colCount={colCount}
+                  onToggleExpand={() => {
+                    if (!occ) return;
+                    setExpandedRow((prev) => (prev === occ ? null : occ));
+                  }}
+                />
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -115,7 +164,23 @@ export default function StrikeLadder({ ladder }: StrikeLadderProps) {
   );
 }
 
-function LadderDataRow({ row, showGreeks }: { row: LadderRow; showGreeks: boolean }) {
+interface LadderDataRowProps {
+  row: LadderRow;
+  showGreeks: boolean;
+  occSymbol: string | null;
+  isExpanded: boolean;
+  colCount: number;
+  onToggleExpand: () => void;
+}
+
+function LadderDataRow({
+  row,
+  showGreeks,
+  occSymbol,
+  isExpanded,
+  colCount,
+  onToggleExpand,
+}: LadderDataRowProps) {
   const sideLabel = `${row.side} ${row.bucket}`;
   // Flag wide bid/ask spreads (>10% of mid). Guard against zero-side
   // quotes which aren't real two-sided markets.
@@ -128,31 +193,85 @@ function LadderDataRow({ row, showGreeks }: { row: LadderRow; showGreeks: boolea
   ) : (
     <td>{fmtCurrency(row.mid, "USD")}</td>
   );
+  const expandable = !!occSymbol;
+  // PM-C: keyboard parity with the click target — Enter and Space both
+  // toggle (Space is the conventional toggle key for button-role rows
+  // and we need to preventDefault to keep the table region from
+  // scrolling on space).
+  const onKeyDown = expandable
+    ? (e: React.KeyboardEvent<HTMLTableRowElement>) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onToggleExpand();
+        }
+      }
+    : undefined;
+  const interactiveProps = expandable
+    ? {
+        role: "button" as const,
+        tabIndex: 0,
+        onClick: onToggleExpand,
+        onKeyDown,
+        "aria-expanded": isExpanded,
+        "aria-controls": occSymbol ? `nbbo-${occSymbol}` : undefined,
+        // Reasonable touch target without disrupting the table layout —
+        // mobile users get a row that's at least ~44px tall thanks to
+        // the existing t-ladder-row line-height + padding tokens, and
+        // cursor-pointer signals interactivity on hover.
+        className: "t-ladder-row t-ladder-row--data cursor-pointer hover:bg-[color:var(--bg-elev-2)]",
+      }
+    : { className: "t-ladder-row t-ladder-row--data" };
   return (
-    <tr className="t-ladder-row t-ladder-row--data">
-      <th scope="row" className="text-left font-normal">
-        {fmtNumber(row.strike, { maximumFractionDigits: 0 })}
-      </th>
-      <td>
-        {fmtNumber(row.delta, {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-          signDisplay: "always",
-        })}
-      </td>
-      {midCell}
-      <td>{fmtPct(row.iv, 0)}</td>
-      <td className="u-profit">{fmtPct(row.yieldPct, 1)}</td>
-      <td>{fmtPct(row.pop, 0)}</td>
-      {showGreeks && (
-        <>
-          <td>{fmtGreek(row.theta)}</td>
-          <td>{fmtGreek(row.gamma)}</td>
-          <td>{fmtGreek(row.vega)}</td>
-        </>
+    <>
+      <tr {...interactiveProps}>
+        <th scope="row" className="text-left font-normal">
+          {expandable && (
+            <span
+              aria-hidden="true"
+              className="inline-flex align-middle mr-1 u-muted"
+            >
+              {isExpanded ? (
+                <ChevronDown size={12} />
+              ) : (
+                <ChevronRight size={12} />
+              )}
+            </span>
+          )}
+          {fmtNumber(row.strike, { maximumFractionDigits: 0 })}
+        </th>
+        <td>
+          {fmtNumber(row.delta, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+            signDisplay: "always",
+          })}
+        </td>
+        {midCell}
+        <td>{fmtPct(row.iv, 0)}</td>
+        <td className="u-profit">{fmtPct(row.yieldPct, 1)}</td>
+        <td>{fmtPct(row.pop, 0)}</td>
+        {showGreeks && (
+          <>
+            <td>{fmtGreek(row.theta)}</td>
+            <td>{fmtGreek(row.gamma)}</td>
+            <td>{fmtGreek(row.vega)}</td>
+          </>
+        )}
+        <td className="text-right u-dim">{sideLabel}</td>
+      </tr>
+      {isExpanded && occSymbol && (
+        <tr data-slot="strike-ladder-nbbo-row">
+          <td
+            colSpan={colCount}
+            className="p-0 border-b border-[color:var(--border)]"
+          >
+            <div className="px-3 py-2 bg-[color:var(--bg-elev-2)]">
+              <ContractNBBO occSymbol={occSymbol} />
+            </div>
+          </td>
+        </tr>
       )}
-      <td className="text-right u-dim">{sideLabel}</td>
-    </tr>
+    </>
   );
 }
 
