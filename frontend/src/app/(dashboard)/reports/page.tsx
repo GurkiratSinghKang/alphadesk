@@ -11,11 +11,13 @@ import {
   ChevronRight,
   ChevronUp,
   ChevronsUpDown,
+  Activity,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { DashboardPageLayout } from "@/components/layouts";
 import SavedViewsBar from "@/components/primitives/SavedViewsBar";
+import { SlippagePanel } from "@/components/dashboard/SlippagePanel";
 import {
   getPortfolioSummary,
   getPositions,
@@ -1543,6 +1545,11 @@ export default function ReportsPage() {
         <SectionCard title="Strategy performance" eyebrow="§ STRATEGIES" icon={BarChart3}>
           <StrategyPerformanceReport strategies={strategies} trades={filteredTrades} />
         </SectionCard>
+
+        {/* M-O S — Execution-quality / slippage telemetry. Panel renders
+            its own header + empty state, so no SectionCard wrapper. */}
+        <SlippagePanel />
+
 
         {/* Tax Report */}
         <SectionCard title="Tax report (simplified)" eyebrow="§ TAX YEAR" icon={Calculator} defaultOpen={false}>

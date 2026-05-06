@@ -3539,3 +3539,48 @@ export async function getLastDeploy(): Promise<DeployResult & { actor?: string |
     "/api/v1/admin/control-center/deploy/last",
   );
 }
+
+// ─── Slippage analytics (M-O S) ─────────────────────────────
+
+/** Per-bucket slippage roll-up — used for the by-strategy / by-structure
+ * tables and the patient-vs-immediate comparison block. Mirrors
+ * ``services.slippage_analytics.SlippageBreakdown`` on the backend. */
+export interface SlippageBreakdown {
+  trades: number;
+  avg_slippage_pct: number | null;
+  median_slippage_pct: number | null;
+  p90_slippage_pct: number | null;
+  total_dollars_leaked: number;
+}
+
+/** Top-level execution-quality response. ``slippage_pct`` values are
+ * fractional (0.025 = 2.5%). Positive percentages mean the trader did
+ * WORSE than mid (paid more than mid as a buyer, collected less than
+ * mid as a seller). ``total_dollars_leaked`` is always positive (sum
+ * of |actual - target| × qty × multiplier). */
+export interface SlippageSummary {
+  total_trades: number;
+  avg_slippage_pct: number | null;
+  median_slippage_pct: number | null;
+  p90_slippage_pct: number | null;
+  total_dollars_leaked: number;
+  by_strategy: Record<string, SlippageBreakdown>;
+  by_structure_type: Record<string, SlippageBreakdown>;
+  fill_mode_comparison: Record<string, SlippageBreakdown>;
+  trades_without_target: number;
+}
+
+export async function getSlippageSummary(opts?: {
+  startDate?: string;
+  endDate?: string;
+  strategy?: string;
+}): Promise<SlippageSummary> {
+  const params = new URLSearchParams();
+  if (opts?.startDate) params.set("start_date", opts.startDate);
+  if (opts?.endDate) params.set("end_date", opts.endDate);
+  if (opts?.strategy) params.set("strategy", opts.strategy);
+  const qs = params.toString();
+  return apiFetch<SlippageSummary>(
+    `/api/v1/analytics/slippage${qs ? `?${qs}` : ""}`,
+  );
+}
