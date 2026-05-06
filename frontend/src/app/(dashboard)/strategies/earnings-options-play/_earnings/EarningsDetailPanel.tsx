@@ -365,7 +365,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
           </div>
           {/* Right column: ladder + term/skew */}
           <div className="min-w-0 space-y-3">
-            <StrikeLadder ladder={detail.strikeLadder} />
+            <StrikeLadder ladder={detail.strikeLadder} underlying={detail.symbol} />
             <IVTermSkew term={detail.ivTermStructure} skew={detail.skew} />
           </div>
         </div>
@@ -377,7 +377,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
             onRunFull={onRunFullResearch}
             symbol={detail.symbol}
           />
-          <StrikeLadder ladder={detail.strikeLadder} />
+          <StrikeLadder ladder={detail.strikeLadder} underlying={detail.symbol} />
           <IVTermSkew term={detail.ivTermStructure} skew={detail.skew} />
           <NewsFeed news={detail.news} />
         </div>
