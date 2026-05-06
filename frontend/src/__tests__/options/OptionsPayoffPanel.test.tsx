@@ -43,4 +43,16 @@ describe("OptionsPayoffPanel", () => {
     render(<OptionsPayoffPanel draft={null} />);
     expect(screen.getByText(/open the builder/i)).toBeInTheDocument();
   });
+
+  // ── EOP-AUDIT 2026-05-06 / B1.10 — placeholder placement ────
+  it("renders the 'Hover or focus' hint inline above the chart, not in the chart corner (B1.10)", () => {
+    const { container } = render(<OptionsPayoffPanel draft={draft} />);
+    const hint = container.querySelector('[data-slot="payoff-chart-hint"]');
+    expect(hint).not.toBeNull();
+    expect(hint!.textContent).toMatch(/hover or focus/i);
+    // The chart-corner readout should start invisible until first hover.
+    const readout = container.querySelector('[data-slot="payoff-chart-readout"]');
+    expect(readout).not.toBeNull();
+    expect(readout!.className).toMatch(/opacity-0/);
+  });
 });

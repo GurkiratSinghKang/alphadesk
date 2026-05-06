@@ -151,6 +151,13 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
   // pointer users get from hovering. Pointer activity overrides
   // keyboard selection (and vice versa) via setHovered.
   const [keyboardActive, setKeyboardActive] = useState(false);
+  // EOP-AUDIT 2026-05-06 / B1.10: track whether the user has hovered
+  // at least once. Pre-fix the "Hover or focus for P/L" overlay sat
+  // in the chart's upper-left corner blocking the gridlines + max-
+  // profit/loss callouts; once the user moves the cursor inside, the
+  // overlay disappears for good (until next mount). Re-shown only on
+  // a fresh page render.
+  const [hasHoveredOnce, setHasHoveredOnce] = useState(false);
   const points = summary.payoffPoints;
   const chart = useMemo(() => buildSvgModel(points, summary), [points, summary]);
   if (!chart) {
@@ -194,6 +201,19 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
 
   return (
     <div className="mt-4 rounded-md border border-border-hair bg-bg px-3 py-3">
+      {/* EOP-AUDIT 2026-05-06 / B1.10: inline hint sits above the chart
+          so the chart body stays uncluttered. Fades out once the user
+          has interacted, since they no longer need the prompt. */}
+      <p
+        data-slot="payoff-chart-hint"
+        aria-hidden={hasHoveredOnce ? "true" : undefined}
+        className={cn(
+          "mb-2 font-mono text-eyebrow u-muted transition-opacity",
+          hasHoveredOnce ? "opacity-0" : "opacity-100",
+        )}
+      >
+        Hover or focus the chart for per-price P/L.
+      </p>
       <div
         className="relative h-[220px] w-full rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary"
         role="application"
@@ -201,6 +221,7 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
         tabIndex={0}
         onFocus={() => {
           setKeyboardActive(true);
+          setHasHoveredOnce(true);
           if (!hovered && points.length > 0) {
             const spotIdx = summary.spotPrice != null
               ? points.findIndex((p) => p.underlyingPrice === nearestPoint(points, summary.spotPrice!)?.underlyingPrice)
@@ -217,6 +238,7 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
           if (!keyboardActive) setHovered(null);
         }}
         onMouseMove={(event) => {
+          if (!hasHoveredOnce) setHasHoveredOnce(true);
           // EOP-AUDIT 2026-05-06 Bug 2c: the SVG has chart.padding=28
           // horizontal padding on each side, so mapping cursor.x
           // directly through (rect.width) over-states the price by
@@ -370,14 +392,22 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
             </g>
           ) : null}
         </svg>
+        {/* EOP-AUDIT 2026-05-06 / B1.10: live readout only renders
+            once a price is hovered/focused. The static "Hover or
+            focus for P/L" placeholder moved out of the chart body
+            into an inline hint above (see ``payoff-chart-hint``). */}
         <div
           aria-live="polite"
           aria-atomic="true"
-          className="pointer-events-none absolute left-2 top-2 rounded border border-border-hair bg-bg-elev-1/95 px-2 py-1 font-mono text-label text-fg-muted shadow-[0_10px_24px_-18px_rgba(16,22,17,0.55)]"
+          data-slot="payoff-chart-readout"
+          className={cn(
+            "pointer-events-none absolute left-2 top-2 rounded border border-border-hair bg-bg-elev-1/95 px-2 py-1 font-mono text-label text-fg-muted shadow-[0_10px_24px_-18px_rgba(16,22,17,0.55)] transition-opacity",
+            hovered ? "opacity-100" : "opacity-0",
+          )}
         >
           {hovered
             ? `${formatCurrency(hovered.underlyingPrice)} -> ${formatCurrency(hovered.pnl)}`
-            : "Hover or focus for P/L"}
+            : ""}
         </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-eyebrow text-fg-muted">
