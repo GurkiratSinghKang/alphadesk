@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { ArrowUpCircle, Bookmark, X } from "lucide-react";
-import type { CalendarRow, EarningsCandidateDecision, EarningsDetail, EarningsErrorCode, TickerContext, TickerFactEnvelope } from "@/types";
+import type { CalendarRow, EarningsCandidateDecision, EarningsDetail, EarningsErrorCode, Quote, TickerContext, TickerFactEnvelope } from "@/types";
 import CalendarWeekHeatmap from "./CalendarWeekHeatmap";
 import type { SelectionSource } from "../page";
 import { cn } from "@/lib/utils";
@@ -267,6 +267,14 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         reportDate={detail.reportDate} reportTime={detail.reportTime}
         quote={detail.quote} generatedAt={detail.generatedAt}
         selectionSource={selectionSource}
+        // PM-B: hand the (possibly null) ticker-context quote envelope to
+        // DetailHeader so the after-hours / pre-market secondary line can
+        // render. The cast is safe because the envelope's ``value`` is
+        // the backend's quote payload (snake_case keys mirroring the
+        // ``Quote`` interface — see types/index.ts EH-1 contract); it
+        // arrives as ``Record<string, unknown>`` because the envelope is
+        // schema-version-agnostic.
+        extendedQuote={(tickerContext?.quote?.value ?? null) as Partial<Quote> | null}
       />
       <div
         data-slot="candidate-swipe-card"
