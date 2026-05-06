@@ -245,7 +245,148 @@ describe("HistoricalSetupReplay", () => {
     expect(container.textContent).toMatch(/Thin sample/);
     expect(container.textContent).toMatch(/Setup comparison/);
     expect(container.textContent).toMatch(/long call/);
-    expect(container.textContent).toMatch(/not point-in-time historical option-chain fills/);
+    // B2.18 — inline plain-language explainer (not hover-only tooltip)
+    expect(container.textContent).toMatch(/Ranks setups against past earnings moves/);
+    // B2.13 — synthetic-premium reminder under metric grid
+    expect(container.textContent).toMatch(/Synthetic premium . for ranking only/);
     expect(container.textContent).toMatch(/realized move stayed inside expected move/);
+  });
+
+  // B2.17 — REPLAY PASS replaced with neutral "Replay · completed"
+  it("does not render the green REPLAY PASS pill when the rank is positive", async () => {
+    vi.mocked(postEarningsBacktest).mockResolvedValueOnce({
+      trades: [
+        {
+          symbol: "NVDA",
+          reportDate: "2026-01-30",
+          setup: "iron condor",
+          returnPct: 0.45,
+          win: true,
+          edgeScore: null,
+          reason: "realized move stayed inside expected move",
+        },
+        {
+          symbol: "NVDA",
+          reportDate: "2025-10-30",
+          setup: "iron condor",
+          returnPct: 0.4,
+          win: true,
+          edgeScore: null,
+          reason: "realized move stayed inside expected move",
+        },
+        {
+          symbol: "NVDA",
+          reportDate: "2025-07-30",
+          setup: "iron condor",
+          returnPct: 0.35,
+          win: true,
+          edgeScore: null,
+          reason: "realized move stayed inside expected move",
+        },
+        {
+          symbol: "NVDA",
+          reportDate: "2025-04-30",
+          setup: "iron condor",
+          returnPct: 0.3,
+          win: true,
+          edgeScore: null,
+          reason: "realized move stayed inside expected move",
+        },
+      ],
+      skipped: [],
+      metrics: {
+        events: 4,
+        winRate: 1,
+        avgTradeReturnPct: 0.375,
+        totalReturnPct: 0.015,
+        maxDrawdownPct: 0,
+        profitFactor: null,
+      },
+    });
+
+    const { container } = render(<HistoricalSetupReplay detail={detail} />);
+
+    await waitFor(() =>
+      expect(container.querySelector('[data-slot="historical-setup-replay-verdict"]')).not.toBeNull(),
+    );
+    // Old behavior would have rendered "Replay pass" — that string should
+    // no longer appear since the green pill conflicted with the synthetic
+    // premium warning. The new neutral state reads "Replay · completed".
+    expect(container.textContent).not.toMatch(/Replay pass/i);
+    expect(container.textContent).toMatch(/Replay . completed/);
+  });
+
+  // B2.10 / B2.13 — defensive display caps on extreme AVG R / PF.
+  // Backend now caps per-trade returns at 10x but stale cached payloads
+  // could still surface extreme values; the FE clamps as a second layer.
+  it("clamps absurd AVG R and PF values at the display ceiling", async () => {
+    vi.mocked(postEarningsBacktest).mockResolvedValueOnce({
+      trades: [
+        // Three large wins and one small loss: gross_wins / gross_losses
+        // produces a PF >> 99.99 even though the new backend cap would
+        // prevent the underlying ratios. Tests the FE belt-and-suspenders.
+        {
+          symbol: "PENNY",
+          reportDate: "2026-01-30",
+          setup: "long put",
+          returnPct: 50, // simulates a stale pre-cap payload
+          win: true,
+          edgeScore: null,
+          reason: "post-report selloff cleared debit hurdle",
+        },
+        {
+          symbol: "PENNY",
+          reportDate: "2025-10-30",
+          setup: "long put",
+          returnPct: 60,
+          win: true,
+          edgeScore: null,
+          reason: "post-report selloff cleared debit hurdle",
+        },
+        {
+          symbol: "PENNY",
+          reportDate: "2025-07-30",
+          setup: "long put",
+          returnPct: 40,
+          win: true,
+          edgeScore: null,
+          reason: "post-report selloff cleared debit hurdle",
+        },
+        {
+          symbol: "PENNY",
+          reportDate: "2025-04-30",
+          setup: "long put",
+          returnPct: -0.001, // tiny loss → enormous PF ratio
+          win: false,
+          edgeScore: null,
+          reason: "post-report selloff did not clear debit hurdle",
+        },
+      ],
+      skipped: [],
+      metrics: {
+        events: 4,
+        winRate: 0.75,
+        avgTradeReturnPct: 37.5, // would render as "+3,750.0%"
+        totalReturnPct: 0.5,
+        maxDrawdownPct: 0,
+        profitFactor: 150000,
+      },
+    });
+
+    const { container } = render(<HistoricalSetupReplay detail={detail} />);
+
+    await waitFor(() =>
+      expect(container.querySelector('[data-slot="historical-setup-replay-verdict"]')).not.toBeNull(),
+    );
+    // The metric grid (computed from trades) must clamp AVG R at >+999.9%.
+    // Note: per-trade rows still display raw values — the cap is on aggregate
+    // metrics where degenerate inputs produced the original "+242,990.8%" cell.
+    const verdict = container.querySelector('[data-slot="historical-setup-replay-verdict"]');
+    expect(verdict).not.toBeNull();
+    // Match the metric-grid AVG R stat (under <dl>), should NOT contain
+    // the raw "+3,750.0%" or "+15,000.0%" but the clamped indicator.
+    expect(container.textContent).toMatch(/>.999\.9%/);
+    // PF must be clamped at >99.99 in either the stat block or comparison row.
+    expect(container.textContent).toMatch(/>99\.99/);
   });
 });

@@ -43,6 +43,15 @@ type SetupReplaySummary = {
 const REPLAY_RISK_FRACTION = 0.01;
 const MAX_REPLAY_EVENTS = 64;
 
+// B2.10 / B2.13 display caps. Backend now caps per-trade returns at 10x debit
+// (1000% ratio), so the aggregate AVG R should stay within ~±10. We still
+// apply belt-and-suspenders display caps here so that any future calc bug or
+// stale cached payload can't render the "+242,990.8%" / "PF 19,440.27" cells
+// that started this audit. We render the value with a leading ">" so the user
+// sees that it's clamped, not the literal extreme.
+const DISPLAY_AVG_R_CAP_RATIO = 9.999; // → "+999.9%"
+const DISPLAY_PF_CAP = 99.99;
+
 export default function HistoricalSetupReplay({ detail }: HistoricalSetupReplayProps) {
   const request = useMemo(() => buildHistoricalReplayComparisonRequest(detail), [detail]);
   const requestKey = useMemo(() => (request ? JSON.stringify(request) : ""), [request]);
@@ -211,11 +220,39 @@ function hasRequiredPremium(
   return callYield != null && putYield != null;
 }
 
+// B2.17 / B2.18 / B2.12 — co-locate the synthetic-premium caveat with the
+// title and surface the methodology inline (instead of the previous
+// hover-only tooltip). Two consequences:
+//  1. The amber warning sits on the same line as the title so the eye doesn't
+//     read "Setup replay" and form a confident view before noticing the
+//     caveat one row below.
+//  2. The plain-language explanation lives directly under the title in
+//     muted-color body copy. The phrase "8 suggested-play replays using
+//     current premium and implied move" was opaque — replaced with one
+//     sentence on what's being computed and one sentence on the limitation.
 function ReplayHeader({ setup }: { setup: string }) {
   return (
-    <h3 className="t-section-cap italic">
-      Setup replay <span className="t-label u-muted">· {setup}</span>
-    </h3>
+    <>
+      <h3 className="t-section-cap italic">
+        Setup replay <span className="t-label u-muted">· {setup}</span>
+        <span
+          data-slot="historical-setup-replay-disclaimer-inline"
+          className="ml-2 inline-block rounded border border-amber/50 bg-amber/10 px-1.5 py-0.5 text-label uppercase not-italic text-amber"
+          title="Replay uses today's option premium against historical earnings-day moves to rank setups against each other. Not a point-in-time backtest."
+        >
+          ▲ Ranking only — synthetic premium
+        </span>
+      </h3>
+      <p
+        data-slot="historical-setup-replay-explainer"
+        className="mt-1 t-mono text-label u-muted"
+      >
+        Ranks setups against past earnings moves using TODAY&apos;s option
+        premium. Not a real backtest — past dates didn&apos;t have these
+        premiums available. Use to compare setups against each other, not as
+        forward-EV.
+      </p>
+    </>
   );
 }
 
@@ -238,6 +275,12 @@ function ReplayResult({
   const verdict = getReplayVerdict(metrics);
   return (
     <>
+      {/* B2.17 — neutral status pill. The previous "Replay pass" green pill
+          conflicted with the amber synthetic-premium warning. Since the
+          data is "ranking only" by design, no positive forward-EV verdict is
+          justified; we surface "Replay · completed" / "Thin sample" in
+          neutral gray, and only use the red "Avoid" tone for genuinely
+          negative ranking patterns. */}
       <div
         data-slot="historical-setup-replay-verdict"
         className="mt-2 flex flex-wrap items-center gap-2 t-mono text-label"
@@ -245,55 +288,54 @@ function ReplayResult({
         <span
           className={
             "rounded border px-1.5 py-0.5 uppercase " +
-            (verdict.tone === "pos"
-              ? "border-[color:var(--fg-pos)] u-profit"
-              : verdict.tone === "neg"
+            (verdict.tone === "neg"
               ? "border-[color:var(--fg-neg)] u-loss"
               : "border-[color:var(--border)] u-muted")
           }
         >
           {verdict.label}
         </span>
-        {/* EOP-AUDIT 2026-05-06 PR-4: prominent disclaimer chip beside
-            the verdict pill. Previously the "synthetic premium ·
-            ranking only" caveat sat in a 14-word footnote at the
-            bottom of the panel, where a user reading WIN 100% / AVG R
-            +167% / PF ∞ would form a confident view before the eye
-            ever reached the disclaimer. Promoting to chip-level so
-            the limitation reads at the same visual weight as the
-            metrics. */}
-        <span
-          data-slot="historical-setup-replay-disclaimer"
-          className="rounded border border-amber/50 bg-amber/10 px-1.5 py-0.5 uppercase text-amber"
-          title="Replay uses today's option premium against historical earnings-day moves to rank setups against each other. Not a point-in-time backtest."
-        >
-          ▲ Ranking only · synthetic premium
-        </span>
         <span className="u-muted">
-          {metrics.events} suggested-play replay{metrics.events === 1 ? "" : "s"} using current
-          premium and implied move.
+          {metrics.events} replay{metrics.events === 1 ? "" : "s"} ·{" "}
+          {suggestedSummary ? suggestedSummary.setup : suggestedSetup}
         </span>
       </div>
+      {/* B2.13 — soften the metric tones. Previously AVG R / EQUITY rendered
+          in u-profit green when positive; combined with synthetic-premium
+          inputs that's a misleading "this strategy works" signal. Hold all
+          numerics at neutral foreground; loss tone (red) is preserved as
+          asymmetric warning so users still see when the synthetic ranking
+          is bad. */}
       <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <ReplayStat label="WIN" value={fmtPct(metrics.winRate, 0)} />
         <ReplayStat
           label="AVG R"
-          value={fmtPct(metrics.avgTradeReturnPct, 1, { signDisplay: "always" })}
-          tone={metrics.avgTradeReturnPct >= 0 ? "pos" : "neg"}
+          value={formatAvgR(metrics.avgTradeReturnPct)}
+          tone={metrics.avgTradeReturnPct < 0 ? "neg" : undefined}
         />
         <ReplayStat
           label="EQUITY"
           value={fmtPct(metrics.totalReturnPct, 2, { signDisplay: "always" })}
-          tone={metrics.totalReturnPct >= 0 ? "pos" : "neg"}
+          tone={metrics.totalReturnPct < 0 ? "neg" : undefined}
         />
         <ReplayStat label="PF" value={formatProfitFactor(metrics.profitFactor, metrics.events)} />
       </dl>
+      {/* B2.13 — inline reminder directly below the metric grid (not just
+          the chip in the title). Without this, a reader scanning numbers
+          could form a confident view before context. */}
+      <p
+        data-slot="historical-setup-replay-synthetic-note"
+        className="mt-1 t-mono text-label u-muted"
+      >
+        Synthetic premium — for ranking only. Past dates didn&apos;t have
+        today&apos;s option chain.
+      </p>
       {rankedSummaries.length > 1 && (
         <div
           data-slot="historical-setup-replay-comparison"
           className="mt-3 border-t border-[color:var(--border)] pt-2"
         >
-          <div className="grid grid-cols-[minmax(0,1.4fr)_3.25rem_4.25rem_3.5rem] gap-2 t-label u-muted">
+          <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(3.5rem,3.5rem)_minmax(5rem,5rem)_minmax(4rem,4rem)] gap-2 t-label u-muted">
             <span>Setup comparison</span>
             <span className="text-right">WIN</span>
             <span className="text-right">AVG R</span>
@@ -328,9 +370,6 @@ function ReplayResult({
           {data.skipped.length} skipped
         </p>
       )}
-      <p className="mt-2 t-mono text-label u-muted">
-        Setup replay only: not point-in-time historical option-chain fills.
-      </p>
     </>
   );
 }
@@ -395,18 +434,20 @@ function compareSetupSummaries(a: SetupReplaySummary, b: SetupReplaySummary): nu
   return a.setup.localeCompare(b.setup);
 }
 
+// B2.17 — change "Replay pass" → "Replay · completed" (neutral). The original
+// green pass pill conflicted with the amber synthetic-premium warning since
+// the data isn't a real backtest. We still surface "Avoid" in red for
+// genuinely-negative ranking patterns so users get warned, but a positive
+// ranking gets a neutral state, not a green forward-EV-style endorsement.
 function getReplayVerdict(metrics: EarningsBacktestResponse["metrics"]): {
   label: string;
-  tone?: "pos" | "neg";
+  tone?: "neg";
 } {
   if (metrics.events < 3) return { label: "Thin sample" };
   if (metrics.avgTradeReturnPct < 0 || metrics.winRate < 0.45) {
     return { label: "Avoid", tone: "neg" };
   }
-  if (metrics.avgTradeReturnPct > 0 && metrics.winRate >= 0.6) {
-    return { label: "Replay pass", tone: "pos" };
-  }
-  return { label: "Watch" };
+  return { label: "Replay · completed" };
 }
 
 function ReplayStat({
@@ -445,12 +486,17 @@ function SetupComparisonRow({
   const metrics = summary.metrics;
   const verdict = getReplayVerdict(metrics);
   return (
-    <li className="grid grid-cols-[minmax(0,1.4fr)_3.25rem_4.25rem_3.5rem] items-center gap-2 py-1.5 t-mono text-label">
+    // B2.11 — explicit min-w on numeric columns + tabular-nums everywhere.
+    // Previously AVG R at 4.25rem couldn't fit "+999.9%" without colliding
+    // with the PF column. The "best" row had a green emphasis tone that
+    // doubled as a positive-EV endorsement; trimmed to brand color so the
+    // ranking signal remains without implying real-money confidence.
+    <li className="grid grid-cols-[minmax(0,1.4fr)_minmax(3.5rem,3.5rem)_minmax(5rem,5rem)_minmax(4rem,4rem)] items-center gap-2 py-1.5 t-mono text-label">
       <span className="min-w-0 truncate">
         <span
           className={cn(
             "inline-block max-w-[9rem] truncate align-bottom",
-            best ? "u-profit" : suggested ? "u-brand" : "u-muted",
+            best || suggested ? "u-brand" : "u-muted",
           )}
         >
           {summary.setup}
@@ -463,10 +509,10 @@ function SetupComparisonRow({
       <span
         className={
           "text-right tabular-nums " +
-          (metrics.avgTradeReturnPct >= 0 ? "u-profit" : "u-loss")
+          (metrics.avgTradeReturnPct < 0 ? "u-loss" : "")
         }
       >
-        {fmtPct(metrics.avgTradeReturnPct, 1, { signDisplay: "always" })}
+        {formatAvgR(metrics.avgTradeReturnPct)}
       </span>
       <span className="text-right tabular-nums">
         {formatProfitFactor(metrics.profitFactor, metrics.events)}
@@ -489,8 +535,31 @@ function ReplayTradeRow({ trade }: { trade: EarningsBacktestTrade }) {
   );
 }
 
+// B2.10 / B2.13 — defensive display caps. Backend caps per-trade returns at
+// 10x debit (1000% ratio) but stale cached payloads or future regressions
+// could still produce extreme cells. We render ">+999.9%" for AVG R and
+// ">99.99" for PF as a clear "this is clamped" signal, not the literal
+// blown-up value.
+function formatAvgR(value: number): string {
+  if (!Number.isFinite(value)) return "—";
+  if (value > DISPLAY_AVG_R_CAP_RATIO) {
+    return `>${fmtPct(DISPLAY_AVG_R_CAP_RATIO, 1, { signDisplay: "always" })}`;
+  }
+  if (value < -DISPLAY_AVG_R_CAP_RATIO) {
+    return `<${fmtPct(-DISPLAY_AVG_R_CAP_RATIO, 1, { signDisplay: "always" })}`;
+  }
+  return fmtPct(value, 1, { signDisplay: "always" });
+}
+
 function formatProfitFactor(value: number | null, events: number): string {
   if (value == null) return events > 0 ? "∞" : "—";
+  if (!Number.isFinite(value)) return "∞";
+  if (value > DISPLAY_PF_CAP) {
+    return `>${fmtNumber(DISPLAY_PF_CAP, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  }
   return fmtNumber(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
