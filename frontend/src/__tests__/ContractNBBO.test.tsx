@@ -36,6 +36,7 @@ function snapshot(overrides: Partial<ContractSnapshot> = {}): ContractSnapshot {
     impliedVolatility: 0.42,
     fetchedAt: '2026-04-25T15:00:00Z',
     isDemo: false,
+    isUnavailable: false,
     ...overrides,
   };
 }
@@ -74,13 +75,13 @@ describe('ContractNBBO', () => {
   it('renders the synthetic-data warning when isDemo is true', () => {
     mockReturn({ data: snapshot({ isDemo: true }) });
     render(<ContractNBBO occSymbol="NVDA260425C00205000" />);
-    expect(screen.getByText(/SYNTHETIC DATA/)).toBeInTheDocument();
+    expect(screen.getByText(/NO LIVE QUOTE/)).toBeInTheDocument();
   });
 
   it('hides the synthetic-data warning when isDemo is false', () => {
     mockReturn({ data: snapshot({ isDemo: false }) });
     render(<ContractNBBO occSymbol="NVDA260425C00205000" />);
-    expect(screen.queryByText(/SYNTHETIC DATA/)).toBeNull();
+    expect(screen.queryByText(/NO LIVE QUOTE/)).toBeNull();
   });
 
   it('attaches the panel id derived from the OCC symbol', () => {

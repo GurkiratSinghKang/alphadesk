@@ -34,7 +34,7 @@ export default function ContractNBBO({ occSymbol, className }: ContractNBBOProps
       aria-label={`NBBO for ${occSymbol}`}
     >
       {isLoading && !snapshot && <SkeletonNBBO />}
-      {error && !snapshot && (
+      {(error || snapshot?.isUnavailable) && !isLoading && (
         <span
           className="t-mono text-label u-loss"
           role="status"
@@ -43,9 +43,28 @@ export default function ContractNBBO({ occSymbol, className }: ContractNBBOProps
           NBBO unavailable
         </span>
       )}
-      {snapshot && (
+      {snapshot && !snapshot.isUnavailable && (
         <>
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 mt-2">
+          {/* Maverick FIX-2.2: when synthetic, show prominent warning at TOP
+              before the user reads any numbers, dim the data, and suppress
+              fabricated last-price / last-timestamp entirely. */}
+          {snapshot.isDemo && (
+            <div
+              role="alert"
+              className="mb-2 rounded border px-2 py-1 t-mono text-label"
+              style={{
+                borderColor: "var(--state-warning)",
+                background: "color-mix(in oklab, var(--state-warning) 12%, transparent)",
+                color: "var(--state-warning)",
+              }}
+            >
+              ⚠ NO LIVE QUOTE — Showing synthetic estimates. NOT for trading decisions.
+            </div>
+          )}
+          <div
+            className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 mt-2"
+            style={snapshot.isDemo ? { opacity: 0.5 } : undefined}
+          >
             <BidSide
               price={snapshot.bid}
               size={snapshot.bidSize}
@@ -67,16 +86,12 @@ export default function ContractNBBO({ occSymbol, className }: ContractNBBOProps
             askSize={snapshot.askSize}
             className="mt-2"
           />
-          <MetaStrip snapshot={snapshot} />
-          {snapshot.isDemo && (
-            <p
-              className="mt-1 t-mono text-label"
-              style={{ color: "var(--state-warning)" }}
-              role="status"
-            >
-              ⚠ SYNTHETIC DATA — NBBO is estimated, not OPRA
-            </p>
-          )}
+          {/* Suppress last_price + last_timestamp on demo — fabricated trades
+              are worse than no information. */}
+          <MetaStrip
+            snapshot={snapshot}
+            suppressLastTrade={snapshot.isDemo}
+          />
         </>
       )}
     </section>
@@ -241,14 +256,20 @@ export function AskSide({ price, size, exchange }: SideProps) {
   );
 }
 
-function MetaStrip({ snapshot }: { snapshot: ContractSnapshot }) {
+function MetaStrip({
+  snapshot,
+  suppressLastTrade = false,
+}: {
+  snapshot: ContractSnapshot;
+  suppressLastTrade?: boolean;
+}) {
   return (
     <div
       data-slot="contract-nbbo-meta"
       className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 t-mono text-label u-muted tabular-nums"
     >
       <span>Mid {fmtCurrency(snapshot.midpoint)}</span>
-      {snapshot.lastPrice != null && (
+      {snapshot.lastPrice != null && !suppressLastTrade && (
         <span>Last {fmtCurrency(snapshot.lastPrice)}</span>
       )}
       <span>Vol {snapshot.volume}</span>

@@ -351,6 +351,10 @@ export interface ContractSnapshot {
   impliedVolatility: number | null;
   fetchedAt: string;
   isDemo: boolean;
+  /** True when the upstream returned no usable quote (both bid and ask 0
+   *  or missing). Frontend should render the unavailable state instead
+   *  of fabricated $0/$0 in green/red. Maverick FIX-2.1. */
+  isUnavailable: boolean;
 }
 
 /**

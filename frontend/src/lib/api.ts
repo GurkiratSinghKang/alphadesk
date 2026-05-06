@@ -1628,10 +1628,17 @@ function mapContractSnapshot(raw: Partial<RawContractSnapshot> & Record<string, 
     typeof v === "number" && Number.isFinite(v) ? v : null;
   const strOrNull = (v: unknown): string | null =>
     typeof v === "string" && v.length > 0 ? v : null;
+  const bid = num(raw.bid);
+  const ask = num(raw.ask);
+  // Maverick FIX-2.1: when both sides come back 0 or missing, the
+  // upstream had no quote — surface as unavailable instead of rendering
+  // a fabricated $0/$0 bid/ask pair in green/red.
+  const isUnavailable =
+    (raw.bid == null && raw.ask == null) || (bid === 0 && ask === 0);
   return {
     symbol: typeof raw.symbol === "string" ? raw.symbol : "",
-    bid: num(raw.bid),
-    ask: num(raw.ask),
+    bid,
+    ask,
     bidSize: num(raw.bid_size),
     askSize: num(raw.ask_size),
     bidExchange: strOrNull(raw.bid_exchange),
@@ -1644,6 +1651,7 @@ function mapContractSnapshot(raw: Partial<RawContractSnapshot> & Record<string, 
     impliedVolatility: numOrNull(raw.implied_volatility),
     fetchedAt: typeof raw.fetched_at === "string" ? raw.fetched_at : new Date().toISOString(),
     isDemo: raw.is_demo === true,
+    isUnavailable,
   };
 }
 
