@@ -34,4 +34,36 @@ describe("HistoricalMoves", () => {
     expect(positive.length).toBe(3);
     expect(negative.length).toBe(1);
   });
+
+  // B2.7: x-axis labels + per-bar tooltip
+  describe("B2.7 — labels and per-bar tooltip", () => {
+    it("renders one label per bar with quarter format", () => {
+      const { container } = render(<HistoricalMoves historical={historical} />);
+      const labels = container.querySelectorAll('[data-slot="hist-bar-label"]');
+      expect(labels.length).toBe(4);
+      // Q1 25 (Jan 2025), Q4 24 (Oct 2024), Q3 24 (Jul 2024), Q2 24 (Apr 2024)
+      const labelTexts = Array.from(labels).map((l) => l.textContent ?? "");
+      expect(labelTexts).toContain("Q1 25");
+      expect(labelTexts).toContain("Q4 24");
+      expect(labelTexts).toContain("Q3 24");
+      expect(labelTexts).toContain("Q2 24");
+    });
+
+    it("each bar has a rich tooltip with surprise + 1-day + 5-day", () => {
+      const { container } = render(<HistoricalMoves historical={historical} />);
+      const firstBar = container.querySelector('[data-slot="hist-bar"]');
+      const tooltip = firstBar?.getAttribute("title") ?? "";
+      expect(tooltip).toMatch(/Report:/);
+      expect(tooltip).toMatch(/EPS surprise:/);
+      expect(tooltip).toMatch(/1-day move:/);
+      expect(tooltip).toMatch(/5-day move:/);
+    });
+
+    it("bars are interactive (cursor-pointer + tabindex)", () => {
+      const { container } = render(<HistoricalMoves historical={historical} />);
+      const bar = container.querySelector('[data-slot="hist-bar"]');
+      expect(bar?.getAttribute("tabindex")).toBe("0");
+      expect(bar?.className ?? "").toMatch(/cursor-pointer/);
+    });
+  });
 });
