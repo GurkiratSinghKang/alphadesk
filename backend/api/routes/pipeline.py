@@ -30,6 +30,11 @@ class PipelineStatus(BaseModel):
     drift out of sync with reality (persona-7 #1). The remaining fields
     are written by the running pipeline as it crosses stage boundaries
     — they are ``None`` while idle.
+
+    B3.6: ``halted_by_admin`` and ``kill_switch_layers`` are typed
+    non-nullable with sensible defaults so consumers can rely on
+    boolean / list semantics without a ``null`` short-circuit (e.g.
+    ``if status.halted_by_admin`` no longer needs an ``is None`` guard).
     """
     running: bool
     stage: str | None = None
@@ -39,6 +44,11 @@ class PipelineStatus(BaseModel):
     current_strategy: str | None = None
     last_run: str | None = None
     last_result: str | None = None
+    # B3.6: never-null defaults so ``status.halted_by_admin`` short-
+    # circuits cleanly. Populated from the running pipeline globals when
+    # the pipeline is active; ``False`` / empty list while idle.
+    halted_by_admin: bool = False
+    kill_switch_layers: list[dict[str, Any]] = []
 
 
 class SchedulerState(BaseModel):
@@ -194,10 +204,22 @@ async def pipeline_status() -> PipelineStatus:
     level globals. They're ``None`` while idle. `last_run` and
     `last_result` carry over from the previous completed run so an
     operator landing on the page sees what last happened.
+
+    B3.6: ``halted_by_admin`` and ``kill_switch_layers`` are normalized
+    so a ``null`` upstream becomes ``False`` / ``[]`` — Pydantic's
+    default-factory takes over on missing keys.
     """
     from data.ingestion.daily_pipeline import get_pipeline_status
 
-    return PipelineStatus(**get_pipeline_status())
+    raw = get_pipeline_status()
+    # Defensive normalization: even if upstream emits explicit ``None``
+    # for these keys (rather than omitting them), coerce to the
+    # contract defaults so the response shape is stable.
+    if raw.get("halted_by_admin") is None:
+        raw["halted_by_admin"] = False
+    if raw.get("kill_switch_layers") is None:
+        raw["kill_switch_layers"] = []
+    return PipelineStatus(**raw)
 
 
 # ---- GET /scheduler_state — persisted scheduler state (persona-7 #8) ----

@@ -1859,30 +1859,76 @@ async def search_symbols(
     return _search_local(q, limit)
 
 
+def _rank_symbols(symbols: list[SymbolInfo], query: str, limit: int) -> list[SymbolInfo]:
+    """Rank symbols against query using a tiered scoring system.
+
+    B2.20 / B2.36: leveraged ETFs were outranking canonical stocks
+    (e.g. ``q=AAPL`` returned ``[AAPB, AAPD, AAPL, ...]`` because the
+    sort fell through to alphabetical inside the prefix-match tier).
+    The fix gives an exact symbol match an unbeatable score so AAPL is
+    always the top result for ``q=AAPL`` and NVDA always tops ANV for
+    ``q=NVDA``. Within each tier, plain stocks rank ahead of ETFs.
+
+    Tier scoring (higher is better):
+      4. Exact symbol match  (always #1)
+      3. Symbol prefix match (e.g. ``AAPL`` for ``q=AAP``)
+      2. Symbol substring match
+      1. Name substring match
+      0. No match (filtered out)
+
+    Within a tier the sort key is ``(-tier, type_penalty, len(symbol),
+    symbol)`` so:
+      * stocks (penalty 0) beat ETFs (penalty 1)
+      * shorter symbols beat longer (e.g. AAPL beats AAPLX in prefix tier)
+      * remaining ties broken alphabetically for stability.
+    """
+    q_upper = query.upper()
+    q_lower = query.lower()
+
+    scored: list[tuple[int, int, int, str, SymbolInfo]] = []
+    for s in symbols:
+        sym_upper = s.symbol.upper()
+        if sym_upper == q_upper:
+            tier = 4
+        elif sym_upper.startswith(q_upper):
+            tier = 3
+        elif q_upper in sym_upper:
+            tier = 2
+        elif q_lower in s.name.lower():
+            tier = 1
+        else:
+            continue
+        type_penalty = 1 if s.type == "etf" else 0
+        scored.append((-tier, type_penalty, len(s.symbol), s.symbol, s))
+
+    scored.sort()
+    return [item[4] for item in scored[:limit]]
+
+
 def _search_local(q: str, limit: int) -> SymbolSearchResponse:
     """Search the local demo symbol database."""
-    symbols = _get_demo_symbols()
-
     if not q.strip():
-        # No query — return first N symbols (popular large-caps first)
-        results = symbols[:limit]
-    else:
-        query = q.strip().upper()
-        # Exact symbol prefix match first, then name substring match
-        prefix_matches: list[SymbolInfo] = []
-        name_matches: list[SymbolInfo] = []
-        for s in symbols:
-            if s.symbol.upper().startswith(query):
-                prefix_matches.append(s)
-            elif query.lower() in s.name.lower():
-                name_matches.append(s)
-        results = (prefix_matches + name_matches)[:limit]
+        # B2.21: empty query used to fall through to the alphabetically
+        # first N symbols (Agilent, etc.). Return an empty list so the
+        # FE can render a "type a symbol" hint rather than a misleading
+        # alphabetical roll-call.
+        return SymbolSearchResponse(count=0, results=[])
 
+    symbols = _get_demo_symbols()
+    results = _rank_symbols(symbols, q.strip(), limit)
     return SymbolSearchResponse(count=len(results), results=results)
 
 
 async def _search_polygon(q: str, limit: int, api_key: str) -> SymbolSearchResponse:
-    """Search via Polygon.io reference tickers API."""
+    """Search via Polygon.io reference tickers API.
+
+    B2.21: empty query short-circuits to an empty result so we don't
+    burn a Polygon round-trip on what is almost always the controlled
+    component's "no input yet" state.
+    """
+    if not q.strip():
+        return SymbolSearchResponse(count=0, results=[])
+
     import httpx
     from core.config import settings as _settings_w
 
@@ -1890,7 +1936,11 @@ async def _search_polygon(q: str, limit: int, api_key: str) -> SymbolSearchRespo
     params = {
         "search": q,
         "active": "true",
-        "limit": limit,
+        # Pull a wider window than ``limit`` so the local re-ranker has
+        # a real candidate pool to choose from. Polygon's own relevance
+        # is alphabetical, which is what produced the AAPB/AAPD/AAPL
+        # ordering bug in B2.20.
+        "limit": min(max(limit * 5, 50), 500),
         "apiKey": api_key,
     }
 
@@ -1900,16 +1950,19 @@ async def _search_polygon(q: str, limit: int, api_key: str) -> SymbolSearchRespo
             resp.raise_for_status()
             data = resp.json()
 
-        results = []
+        candidates: list[SymbolInfo] = []
         for t in data.get("results", []):
-            results.append(SymbolInfo(
+            candidates.append(SymbolInfo(
                 symbol=t.get("ticker", ""),
                 name=t.get("name", ""),
                 type=_map_polygon_type(t.get("type", "")),
                 exchange=t.get("primary_exchange", ""),
                 sector=None,  # Polygon tickers endpoint doesn't include sector
             ))
-        return SymbolSearchResponse(count=len(results), results=results)
+        # B2.20: re-rank Polygon's alphabetical results so exact matches
+        # always top the list (AAPL > AAPB for q=AAPL).
+        ranked = _rank_symbols(candidates, q.strip(), limit)
+        return SymbolSearchResponse(count=len(ranked), results=ranked)
     except Exception:
         # Fallback to local on any error
         return _search_local(q, limit)
@@ -1918,3 +1971,39 @@ async def _search_polygon(q: str, limit: int, api_key: str) -> SymbolSearchRespo
 def _map_polygon_type(polygon_type: str) -> str:
     mapping = {"CS": "stock", "ETF": "etf", "INDEX": "index", "ADRC": "stock"}
     return mapping.get(polygon_type, "stock")
+
+
+# ---------------------------------------------------------------------------
+# Watchlist stub (B2.43) — the FE's ``useWatchlist`` hook + DataPipelineBridge
+# probed ``/api/v1/symbols/watchlist`` and got a 404, which surfaced as a
+# "symbol watchlist unavailable" toast at every page load. The persistent
+# watchlist storage lives elsewhere (``services.watchlist`` is the planned
+# home, but at this writing the schema/migration is still in flight). Until
+# that lands we serve an empty watchlist with a deprecation hint so callers
+# can detect the stub and stop logging the error. Returning a structured
+# 200 keeps frontends happy while the persistence layer is finished.
+# ---------------------------------------------------------------------------
+
+
+class WatchlistResponse(BaseModel):
+    symbols: list[str]
+    deprecated: bool = True
+    note: str = (
+        "Watchlist storage is not wired through the symbols router yet — "
+        "expect this endpoint to move to /api/v1/user/watchlist when "
+        "persistence ships. Returning an empty list to unblock the UI."
+    )
+
+
+@router.get("/watchlist", response_model=WatchlistResponse)
+async def get_watchlist() -> WatchlistResponse:
+    """Stub watchlist endpoint (B2.43).
+
+    Returns an empty list with a deprecation note so the FE's
+    ``useWatchlist`` hook + ``DataPipelineBridge`` import stop emitting
+    the "symbols watchlist unavailable" 404 error on every page load.
+    The real persistence layer will live under
+    ``/api/v1/user/watchlist`` (or a dedicated watchlists router) once
+    the migration ships.
+    """
+    return WatchlistResponse(symbols=[])

@@ -676,7 +676,12 @@ def _build_analysis(
     top_setups = None
     tail_risk_score: float | None = None
     tail_risk_reasons: list[str] = []
-    if isinstance(meta, dict):
+    # B2.39: SHOP / PLTR were getting ``top_setup_id: "skip"`` returned
+    # despite having no upcoming calendar entry — the recommender's
+    # cached/stale row from a previous run was bleeding through. Gate
+    # the entire recommender block on ``next_report_date`` so the FE
+    # only sees setups when there's an actual earnings event to play.
+    if isinstance(meta, dict) and next_report_date is not None:
         raw_setups = meta.get("top_setups") or []
         if raw_setups:
             from api.schemas.earnings import EarningsSetup as _ES
@@ -957,6 +962,34 @@ async def get_analysis(
         news_t=news_t,
         history_t=history_t,
     )
+
+    # B2.37: NKLA / RIVN style all-null payloads (delisted or thin
+    # tickers). When EVERY upstream RESOLVED CLEANLY but returned no
+    # data — quote was None, meta was None (no calendar entry), and
+    # chain came back without expirations — surface a 404 rather than
+    # a misleading "success" stub that the FE has to special-case.
+    #
+    # We deliberately exclude the transient-failure case (any upstream
+    # raised an Exception) because that's a partial-degradation 200
+    # the FE already knows how to render via ``error_codes``. We only
+    # 404 when the providers told us, definitively, that the symbol
+    # has no data — not when they failed to answer.
+    upstream_results = (quote_t, iv_t, meta_t, chain_t, history_t)
+    any_upstream_raised = any(isinstance(x, Exception) for x in upstream_results)
+    if not any_upstream_raised:
+        # Everything resolved; check whether anything was actually populated.
+        quote_was_none = quote_t is None
+        meta_was_none = meta_t is None
+        chain_empty = (
+            chain_t is None
+            or not getattr(chain_t, "expirations", None)
+        )
+        if quote_was_none and meta_was_none and chain_empty:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Ticker {sym!r} not found or has no available data",
+            )
+
     await _set_cached_analysis(cache_key, analysis)
 
     logger.info(

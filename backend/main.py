@@ -20,7 +20,7 @@ from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from fastapi import FastAPI, Depends, Request
+from fastapi import FastAPI, Depends, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, ORJSONResponse
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
@@ -317,6 +317,18 @@ app = FastAPI(
     # pydantic model without an explicit ``response_class``) onto the
     # faster serializer. ``orjson`` is already a declared dependency.
     default_response_class=ORJSONResponse,
+    # B3.1: keep the default ``redirect_slashes=True`` behaviour explicit.
+    # Routers like /api/v1/strategies declare their root at ``"/"`` so a
+    # caller hitting ``/api/v1/strategies`` (no trailing slash) gets a 307
+    # redirect to ``/api/v1/strategies/``. The 307 carries an empty body
+    # (the report's "0 bytes" symptom); curl-like clients that follow
+    # redirects pick up the JSON, while clients that don't see an empty
+    # 307. Setting this flag True is the documented FastAPI default but
+    # we declare it explicitly so the behaviour can't drift if a future
+    # refactor flips it. The strategies router additionally registers
+    # an explicit slash-less alias below to short-circuit the redirect
+    # round-trip for callers that bail on 307.
+    redirect_slashes=True,
 )
 
 # Round-4 CLUSTER 6 #25: tighten CORS in production. The localhost
@@ -415,6 +427,56 @@ async def _unhandled_exception(request: Request, exc: Exception) -> JSONResponse
     )
 
 
+# B2.22: Pydantic v2's default ``string_pattern_mismatch`` error leaks the
+# raw regex (``"String should match pattern '^[A-Z]{1,6}(\\.[A-Z])?$'"``)
+# into the user-facing ``detail`` blob. Override the handler for the
+# symbol-pattern paths so users see a clean "Ticker symbols must be 1-6
+# uppercase letters (optionally followed by .X)" message instead.
+from fastapi.exceptions import RequestValidationError  # noqa: E402
+from fastapi.exception_handlers import (
+    request_validation_exception_handler as _default_validation_handler,
+)  # noqa: E402
+
+_TICKER_PATTERN_RAW = r"^[A-Z]{1,6}(\.[A-Z])?$"
+_TICKER_FRIENDLY_MSG = (
+    "Ticker symbols must be 1-6 uppercase letters "
+    "(optionally followed by .X, e.g. BRK.B)"
+)
+
+
+@app.exception_handler(RequestValidationError)
+async def _friendly_validation_error(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Rewrite ticker-pattern validation errors with a human-readable msg.
+
+    Only touches errors whose ``ctx.pattern`` matches the canonical ticker
+    regex; everything else falls through to FastAPI's default handler so
+    other validation errors keep their existing shape.
+    """
+    rewrote = False
+    cleaned: list[dict[str, Any]] = []
+    for err in exc.errors():
+        ctx = err.get("ctx") or {}
+        pattern = ctx.get("pattern") if isinstance(ctx, dict) else None
+        if (
+            err.get("type") == "string_pattern_mismatch"
+            and pattern == _TICKER_PATTERN_RAW
+        ):
+            rewrote = True
+            cleaned.append({
+                "type": "ticker_format_invalid",
+                "loc": err.get("loc"),
+                "msg": _TICKER_FRIENDLY_MSG,
+                "input": err.get("input"),
+            })
+        else:
+            cleaned.append(err)
+    if rewrote:
+        return JSONResponse(status_code=422, content={"detail": cleaned})
+    return await _default_validation_handler(request, exc)
+
+
 # --- Routers ---
 app.include_router(market.router, prefix="/api/v1/market", tags=["Market Data"], dependencies=[Depends(require_auth)])
 app.include_router(screener.router, prefix="/api/v1/screener", tags=["Screener"], dependencies=[Depends(require_auth)])
@@ -427,6 +489,86 @@ app.include_router(agents.router, prefix="/api/v1/agents", tags=["Agents"], depe
 app.include_router(webhooks.router, prefix="/api/v1/webhooks", tags=["Webhooks"])
 app.include_router(symbols.router, prefix="/api/v1/symbols", tags=["Symbols"], dependencies=[Depends(require_auth)])
 app.include_router(strategies.router, prefix="/api/v1/strategies", tags=["Strategies"], dependencies=[Depends(require_auth)])
+
+# B3.1: explicit slash-less alias so callers hitting ``/api/v1/strategies``
+# (no trailing slash) get the JSON list directly instead of a 307 to
+# ``/api/v1/strategies/`` with an empty body. The redirect was reported as
+# "0 bytes" by HTTP clients that don't follow redirects automatically.
+@app.get(
+    "/api/v1/strategies",
+    tags=["Strategies"],
+    include_in_schema=False,
+    dependencies=[Depends(require_auth)],
+)
+async def _list_strategies_no_slash():  # pragma: no cover - thin alias
+    """Slash-less alias for ``GET /api/v1/strategies/`` (B3.1).
+
+    Re-uses the canonical handler from the strategies router so the
+    response shape stays in lockstep.
+    """
+    return await strategies.list_strategies()
+
+
+# B3.2: alerts live under the trades router (``/api/v1/trades/alerts``)
+# but observability/ops dashboards probe ``/api/v1/alerts`` looking for
+# system-level alerts and currently get a 404. Surface a top-level alias
+# that proxies to the canonical handler so the path-discovery succeeds
+# without relocating the underlying route.
+@app.get(
+    "/api/v1/alerts",
+    tags=["Trades"],
+    include_in_schema=False,
+)
+async def _alerts_alias(  # pragma: no cover - thin alias
+    response: Response,
+    symbol: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0, le=1000),
+    username: str = Depends(require_auth),
+):
+    """Top-level alias for ``GET /api/v1/trades/alerts`` (B3.2)."""
+    return await trades.list_alerts(
+        response=response,
+        symbol=symbol,
+        limit=limit,
+        offset=offset,
+        username=username,
+    )
+
+
+# B3.7: HALT lives at /api/v1/trades/halt-status and /api/v1/trades/halt
+# but the global halt is conceptually a risk control, not a trade. Alias
+# both verbs under /api/v1/risk/* so ops dashboards / observability looking
+# for a system-level halt endpoint find it. The trades-prefixed paths stay
+# in place for back-compat — the aliases simply re-dispatch into the same
+# canonical handlers.
+@app.get(
+    "/api/v1/risk/halt-status",
+    tags=["Risk"],
+    include_in_schema=False,
+)
+async def _halt_status_risk_alias(  # pragma: no cover - thin alias
+    username: str = Depends(require_auth),
+):
+    """Risk-prefixed alias for ``GET /api/v1/trades/halt-status`` (B3.7)."""
+    return await trades.get_halt_status(username=username)
+
+
+@app.post(
+    "/api/v1/risk/halt",
+    tags=["Risk"],
+    include_in_schema=False,
+)
+async def _halt_post_risk_alias(  # pragma: no cover - thin alias
+    req: Request,
+    flatten: bool = Query(True),
+    reason: str | None = Query(None, max_length=256),
+    username: str = Depends(require_auth),
+):
+    """Risk-prefixed alias for ``POST /api/v1/trades/halt`` (B3.7)."""
+    return await trades.halt_trading(
+        req=req, flatten=flatten, reason=reason, username=username,
+    )
 app.include_router(market_overview.router, prefix="/api/v1/market-overview", tags=["Market Overview"], dependencies=[Depends(require_auth)])
 app.include_router(risk.router, prefix="/api/v1/risk", tags=["Risk"], dependencies=[Depends(require_auth)])
 app.include_router(pipeline.router, prefix="/api/v1/pipeline", tags=["Pipeline"], dependencies=[Depends(require_auth)])
