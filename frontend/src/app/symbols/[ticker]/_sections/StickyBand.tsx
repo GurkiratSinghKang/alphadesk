@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 import { TickerPriceDisplay } from "@/components/primitives/TickerPriceDisplay";
 import type { Quote } from "@/types";
 
@@ -9,9 +11,10 @@ export interface StickyBandProps {
   symbol: string;
   quote: Quote | null | undefined;
   extendedQuote?: Quote | null;
+  children?: ReactNode;
 }
 
-export function StickyBand({ symbol, quote, extendedQuote }: StickyBandProps) {
+export function StickyBand({ symbol, quote, extendedQuote, children }: StickyBandProps) {
   const isLoading = quote == null;
   const eh = extendedQuote ?? quote ?? null;
 
@@ -54,6 +57,7 @@ export function StickyBand({ symbol, quote, extendedQuote }: StickyBandProps) {
           <HeroCTAs symbol={symbol} />
         </div>
       </div>
+      {children ? <div className="mt-3 sm:mt-4">{children}</div> : null}
     </section>
   );
 }
