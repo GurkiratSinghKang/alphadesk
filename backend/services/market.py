@@ -94,6 +94,27 @@ class Quote(BaseModel):
     extended_volume: int | None = None
     last_trade_time: datetime | None = None
     session: Literal["pre", "regular", "post", "closed"] = "regular"
+    # Wave V V1-1 (2026-05-05): volume signals.
+    # ---------------------------------------------------------------
+    # ``avg_daily_volume_20d`` is the trailing 20-trading-day mean of
+    # daily session volume (Polygon /v2/aggs daily bars). Cached per
+    # symbol for 1h — ADV moves slowly relative to the quote, so a
+    # one-hour TTL collapses ~3,600 quote calls into a single ADV
+    # roundtrip without staleness affecting screening decisions.
+    #
+    # ``relative_volume`` = ``volume`` / ``avg_daily_volume_20d`` and is
+    # the strategy-relevant signal: > 1.5 means today is meaningfully
+    # busier than usual ("a-day"); < 0.5 means it's a quiet tape.
+    #
+    # Edge cases:
+    #   * Newly listed symbol with < 20 day history -> ``avg_daily_volume_20d``
+    #     is ``None`` and ``relative_volume`` is also ``None``. Don't
+    #     fabricate; consumers must handle the missing case explicitly.
+    #   * Demo / Alpaca-only paths leave both fields ``None`` because
+    #     ADV requires Polygon's daily aggs endpoint. Frontend renders
+    #     em-dash for ``None``.
+    avg_daily_volume_20d: int | None = None
+    relative_volume: float | None = None
 
 
 class Bar(BaseModel):
@@ -455,6 +476,119 @@ def _compute_extended_fields(
 
 
 # ---------------------------------------------------------------------------
+# Wave V V1-1: trailing 20-day average daily volume (ADV)
+# ---------------------------------------------------------------------------
+# Polygon's ``/v2/aggs/ticker/{symbol}/range/1/day/{from}/{to}`` endpoint
+# returns up to ~30 daily bars; we sum the most recent 20 trading-day bars
+# and divide by 20. Cached for 1h per symbol because ADV changes slowly
+# relative to a 5s-cached quote — without the cache, every quote roundtrip
+# would also pay an aggs-history roundtrip.
+#
+# Returns ``None`` when:
+#   * Polygon key is missing.
+#   * Polygon returns < 20 daily bars (newly listed symbols).
+#   * The aggs endpoint errors. Callers translate ``None`` into
+#     ``avg_daily_volume_20d=None`` on the Quote.
+
+_ADV_CACHE_TTL_SECONDS = 3600  # 1 hour
+_ADV_LOOKBACK_DAYS = 20  # trailing trading days
+
+
+async def _fetch_avg_daily_volume_20d(symbol: str) -> int | None:
+    """Return the trailing 20-trading-day average daily volume.
+
+    Returns ``None`` when Polygon is unavailable, the symbol has < 20
+    daily bars (newly listed), or any parse / network error fires. The
+    caller (``fetch_quote``) translates a missing ADV into
+    ``avg_daily_volume_20d=None`` and ``relative_volume=None`` rather
+    than fabricating a ratio against a guessed denominator.
+    """
+    s = symbol.upper().strip()
+    if _polygon_key_empty():
+        return None
+
+    cache_key = f"adv20:{s}"
+    try:
+        from core.redis import cache_get
+
+        cached = await cache_get(cache_key)
+        if isinstance(cached, dict) and "value" in cached:
+            v = cached["value"]
+            return int(v) if isinstance(v, (int, float)) and v > 0 else None
+        if isinstance(cached, (int, float)) and cached > 0:
+            return int(cached)
+    except Exception:
+        pass
+
+    try:
+        import httpx
+        from core.config import settings
+
+        # Pull a 45-calendar-day window so we comfortably collect 20
+        # trading days even across weekends / holidays.
+        end_date = date.today()
+        start_date = end_date - timedelta(days=45)
+        url = (
+            f"{settings.POLYGON_BASE_URL}/v2/aggs/ticker/{s}/range/1/day"
+            f"/{start_date.isoformat()}/{end_date.isoformat()}"
+        )
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                url,
+                params={
+                    "apiKey": settings.POLYGON_API_KEY.get_secret_value(),
+                    "adjusted": "true",
+                    "sort": "desc",
+                    "limit": 50,
+                },
+            )
+            if resp.status_code != 200:
+                log.debug(
+                    "Polygon ADV20 fetch HTTP %s for %s",
+                    resp.status_code, s,
+                )
+                return None
+            data = resp.json() or {}
+        results = data.get("results") or []
+        if not isinstance(results, list):
+            return None
+        # Take the most recent 20 daily bars. ``v`` is the day's volume.
+        volumes = [
+            int(r.get("v") or 0)
+            for r in results[:_ADV_LOOKBACK_DAYS]
+            if isinstance(r, dict) and (r.get("v") or 0) > 0
+        ]
+        if len(volumes) < _ADV_LOOKBACK_DAYS:
+            # Newly listed symbol or sparse history — return None rather
+            # than averaging over fewer days (would inflate the ratio).
+            return None
+        adv = int(round(sum(volumes) / _ADV_LOOKBACK_DAYS))
+        try:
+            from core.redis import cache_set
+
+            await cache_set(cache_key, {"value": adv}, ttl_seconds=_ADV_CACHE_TTL_SECONDS)
+        except Exception:
+            pass
+        return adv
+    except Exception:
+        log.debug("ADV20 fetch failed for %s", s, exc_info=True)
+        return None
+
+
+def _compute_relative_volume(
+    today_volume: int | None, adv_20d: int | None
+) -> float | None:
+    """Return ``today_volume / adv_20d`` rounded to 4 dp, or None if either
+    is missing / non-positive. Centralised so callers don't divide-by-zero."""
+    if not today_volume or not adv_20d or adv_20d <= 0:
+        return None
+    try:
+        return round(float(today_volume) / float(adv_20d), 4)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Data-fetching entry points (formerly in api.routes.market)
 # ---------------------------------------------------------------------------
 
@@ -696,6 +830,10 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
                         last_trade_dt=ts,
                         regular_close=regular_close,
                     )
+                    # Wave V V1-1: ADV20 + relative_volume.
+                    today_vol = int(day.get("v") or 0)
+                    adv_20d = await _fetch_avg_daily_volume_20d(symbol)
+                    rel_vol = _compute_relative_volume(today_vol, adv_20d)
                     quote = Quote(
                         symbol=symbol.upper(),
                         bid=lq.get("p", 0),
@@ -705,8 +843,10 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
                         bidExchange=str(lq.get("x") or lq.get("bid_exchange") or "") or None,
                         askExchange=str(lq.get("X") or lq.get("ask_exchange") or "") or None,
                         last=last_price,
-                        volume=day.get("v", 0),
+                        volume=today_vol,
                         timestamp=ts,
+                        avg_daily_volume_20d=adv_20d,
+                        relative_volume=rel_vol,
                         **eh,
                     )
                     await cache_set(cache_key, quote.model_dump(mode="json"), ttl_seconds=5)
@@ -772,6 +912,13 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
                         last_trade_dt=ts,
                         regular_close=regular_close,
                     )
+                    # Wave V V1-1: ADV20 + relative_volume. ADV uses
+                    # Polygon's daily aggs even when the snapshot came
+                    # from Alpaca — both fields stay None when the
+                    # Polygon key is absent. Don't fabricate.
+                    today_vol = int(daily.get("v", 0))
+                    adv_20d = await _fetch_avg_daily_volume_20d(symbol)
+                    rel_vol = _compute_relative_volume(today_vol, adv_20d)
                     quote = Quote(
                         symbol=symbol.upper(),
                         bid=lq.get("bp", 0),
@@ -781,7 +928,7 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
                         bidExchange=lq.get("bx"),
                         askExchange=lq.get("ax"),
                         last=last_price,
-                        volume=int(daily.get("v", 0)),
+                        volume=today_vol,
                         timestamp=ts,
                         change=change,
                         changePct=change_pct,
@@ -789,6 +936,8 @@ async def fetch_quote(symbol: str, client_host: str | None = None) -> Quote:
                         low=daily.get("l", 0),
                         open=daily.get("o", 0),
                         close=prev_close,
+                        avg_daily_volume_20d=adv_20d,
+                        relative_volume=rel_vol,
                         **eh,
                     )
 

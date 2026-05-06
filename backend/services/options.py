@@ -77,6 +77,17 @@ class OptionContract(BaseModel):
     extended_change: float | None = None
     extended_session: Literal["pre", "post"] | None = None
     last_trade_time: datetime | None = None
+    # Wave V V1-3 (2026-05-05): volume / OI ratio per contract.
+    # ---------------------------------------------------------------
+    # ``volume_oi_ratio`` = volume / max(open_interest, 1). Reads
+    # "fresh activity vs. existing positioning":
+    #   * 0.0 — no fresh trades today; OI carrying.
+    #   * ~1.0 — about as much trading today as resting OI.
+    #   * >2.0 — heavy fresh activity vs. positioning (often a flow
+    #     signal: a market-mover is adding/removing exposure).
+    # Returns ``None`` only when both volume AND open_interest are
+    # zero (no information either way) — otherwise a numeric ratio.
+    volume_oi_ratio: float | None = None
 
 
 class OptionChain(BaseModel):
@@ -88,6 +99,19 @@ class OptionChain(BaseModel):
     # Round-4 CLUSTER 3 #12: silent demo fallback was a data-correctness
     # lie. The frontend now gets a flag so it can label demo chains.
     is_demo: bool = False
+    # Wave V V1-2 (2026-05-05): chain-level volume / OI aggregates.
+    # ---------------------------------------------------------------
+    # Computed at chain-fetch time by ``_compute_chain_aggregates``.
+    # Sums every contract in ``contracts`` so the same numbers appear
+    # whether the chain came from Alpaca (real) or the demo path.
+    #   * ``call_put_volume_ratio``: total_call_volume / max(total_put_volume, 1).
+    #     Common contrarian signal — > 1.0 = call-heavy, < 1.0 = put-heavy.
+    #   * Aggregates default to 0 / 1.0 for shape parity, never None.
+    total_call_volume: int = 0
+    total_put_volume: int = 0
+    call_put_volume_ratio: float = 1.0
+    total_call_oi: int = 0
+    total_put_oi: int = 0
 
 
 class IVData(BaseModel):
@@ -161,6 +185,152 @@ class ContractSnapshot(BaseModel):
     implied_volatility: float | None = None
     fetched_at: str
     is_demo: bool = False
+    # Wave V V1-3 (2026-05-05): volume / OI ratio. None only when both
+    # volume and open_interest are zero. See ``OptionContract.volume_oi_ratio``.
+    volume_oi_ratio: float | None = None
+    # Wave V V1-4 (2026-05-05): 0..1 liquidity score derived from
+    # spread quality + volume floor + OI floor + relative-volume bonus.
+    # See ``compute_liquidity_score`` for the weighted formula.
+    liquidity_score: float | None = None
+
+
+# ---------------------------------------------------------------------------
+# Wave V V1-3 / V1-2 / V1-4: volume primitives & liquidity score
+# ---------------------------------------------------------------------------
+
+
+def _compute_volume_oi_ratio(volume: int, open_interest: int) -> float | None:
+    """Return ``volume / max(open_interest, 1)``, rounded to 4 dp.
+
+    Returns ``None`` only when BOTH ``volume`` and ``open_interest`` are
+    zero (no information either way). Otherwise emits the numeric ratio
+    even when ``open_interest == 0`` and ``volume > 0`` — the divisor
+    is clamped to 1 so a brand-new strike with fresh prints reports a
+    very large but finite ratio rather than silently swallowing the
+    "fresh activity, no carry" signal.
+    """
+    v = int(volume or 0)
+    oi = int(open_interest or 0)
+    if v == 0 and oi == 0:
+        return None
+    return round(float(v) / max(float(oi), 1.0), 4)
+
+
+def _compute_chain_aggregates(
+    contracts: list["OptionContract"],
+) -> tuple[int, int, float, int, int]:
+    """Sum call vs. put volume + OI across every contract.
+
+    Returns ``(total_call_volume, total_put_volume, call_put_volume_ratio,
+    total_call_oi, total_put_oi)``. The ratio uses ``max(total_put_volume, 1)``
+    as the denominator so an all-call chain returns the call total instead
+    of dividing by zero. Defaults to ``1.0`` when both sides are 0
+    (degenerate empty chain) — the field stays a finite float so
+    downstream callers don't have to special-case None.
+    """
+    call_vol = 0
+    put_vol = 0
+    call_oi = 0
+    put_oi = 0
+    for c in contracts:
+        if c.option_type == OptionType.CALL:
+            call_vol += int(c.volume or 0)
+            call_oi += int(c.open_interest or 0)
+        elif c.option_type == OptionType.PUT:
+            put_vol += int(c.volume or 0)
+            put_oi += int(c.open_interest or 0)
+    if call_vol == 0 and put_vol == 0:
+        ratio = 1.0
+    else:
+        ratio = round(float(call_vol) / max(float(put_vol), 1.0), 4)
+    return call_vol, put_vol, ratio, call_oi, put_oi
+
+
+def compute_liquidity_score(
+    bid: float,
+    ask: float,
+    volume: int,
+    open_interest: int,
+    relative_volume: float | None,
+) -> float:
+    """Return a 0..1 liquidity score for an option contract.
+
+    Components (weighted average):
+      * Spread quality (50%): 1.0 when bid/ask spread < 5% of midpoint;
+        scales linearly to 0 at 30% spread.
+      * Volume floor (25%): 1.0 when volume >= 100 contracts traded;
+        scales linearly to 0 at volume = 0.
+      * OI floor (25%): 1.0 when open_interest >= 500 contracts;
+        scales linearly to 0 at OI = 0.
+
+    Bonus:
+      * +0.1 if ``relative_volume`` is provided AND > 1.5 (today's
+        underlying volume is materially busier than usual). Capped to
+        keep the result in [0, 1].
+
+    Rationale for the 50/25/25 split:
+      * Spread is the *single* most important liquidity dimension —
+        a contract you can't fill at a reasonable price is untradeable
+        regardless of how much volume printed earlier.
+      * Volume + OI together constitute the "interest" signal; we split
+        them evenly because each is half the story (volume = today's
+        flow, OI = resting positioning) and one without the other is
+        ambiguous (huge OI with no volume = stale; huge volume with
+        no OI = could be a one-off dump).
+      * The relative-volume bonus is small (+0.1) because it's an
+        underlying-level signal, not a contract-level one — it nudges
+        the score, doesn't dominate it.
+
+    Returns 0.0 when both bid and ask are 0 (no two-sided market).
+    """
+    b = float(bid or 0)
+    a = float(ask or 0)
+    if b <= 0 and a <= 0:
+        return 0.0
+
+    # ---- Spread quality (50% weight) ----
+    mid = (b + a) / 2.0 if (b > 0 and a > 0) else max(b, a)
+    if mid <= 0:
+        spread_score = 0.0
+    else:
+        spread_pct = (a - b) / mid if (b > 0 and a > 0) else 1.0
+        if spread_pct <= 0.05:
+            spread_score = 1.0
+        elif spread_pct >= 0.30:
+            spread_score = 0.0
+        else:
+            # Linear from (0.05, 1.0) to (0.30, 0.0).
+            spread_score = max(0.0, 1.0 - (spread_pct - 0.05) / 0.25)
+
+    # ---- Volume floor (25% weight) ----
+    v = float(volume or 0)
+    if v >= 100:
+        volume_score = 1.0
+    elif v <= 0:
+        volume_score = 0.0
+    else:
+        volume_score = max(0.0, min(1.0, v / 100.0))
+
+    # ---- OI floor (25% weight) ----
+    oi = float(open_interest or 0)
+    if oi >= 500:
+        oi_score = 1.0
+    elif oi <= 0:
+        oi_score = 0.0
+    else:
+        oi_score = max(0.0, min(1.0, oi / 500.0))
+
+    base = 0.50 * spread_score + 0.25 * volume_score + 0.25 * oi_score
+
+    # ---- Relative-volume bonus (+0.1 cap) ----
+    bonus = 0.0
+    if relative_volume is not None and relative_volume > 1.5:
+        bonus = 0.10
+
+    score = base + bonus
+    # Clamp to [0, 1] — bonus could push slightly above 1.0.
+    score = max(0.0, min(1.0, score))
+    return round(score, 4)
 
 
 # ---------------------------------------------------------------------------
@@ -423,8 +593,12 @@ async def _demo_chain(symbol: str, expiry_filter: date | None,
                     gamma=gamma,
                     theta=theta,
                     vega=vega,
+                    # Wave V V1-3: per-contract volume/OI ratio.
+                    volume_oi_ratio=_compute_volume_oi_ratio(volume, oi),
                 ))
 
+    # Wave V V1-2: chain-level call/put volume + OI aggregates.
+    call_vol, put_vol, cp_ratio, call_oi, put_oi = _compute_chain_aggregates(contracts)
     return OptionChain(
         underlying=s,
         spot_price=spot,
@@ -434,6 +608,11 @@ async def _demo_chain(symbol: str, expiry_filter: date | None,
         # Round-4 CLUSTER 3 #12: silent demo fallback was a data-correctness
         # lie. Tag synthetic chains so the UI can label them.
         is_demo=True,
+        total_call_volume=call_vol,
+        total_put_volume=put_vol,
+        call_put_volume_ratio=cp_ratio,
+        total_call_oi=call_oi,
+        total_put_oi=put_oi,
     )
 
 
@@ -794,6 +973,8 @@ async def _fetch_real_chain(
                         extended_change=eh_change,
                         extended_session=eh_session,
                         last_trade_time=last_trade_dt,
+                        # Wave V V1-3: per-contract volume/OI ratio.
+                        volume_oi_ratio=_compute_volume_oi_ratio(int(volume), int(oi)),
                     ))
                     expirations.add(expiry_date)
 
@@ -816,6 +997,8 @@ async def _fetch_real_chain(
         # /greeks/... round-trip.
         _fill_missing_greeks(contracts, spot_price)
 
+        # Wave V V1-2: chain-level call/put volume + OI aggregates.
+        call_vol, put_vol, cp_ratio, call_oi, put_oi = _compute_chain_aggregates(contracts)
         chain = OptionChain(
             underlying=s,
             spot_price=spot_price,
@@ -825,6 +1008,11 @@ async def _fetch_real_chain(
             # Round-4 CLUSTER 3 #12: explicit so callers can rely on this
             # being a real-data chain.
             is_demo=False,
+            total_call_volume=call_vol,
+            total_put_volume=put_vol,
+            call_put_volume_ratio=cp_ratio,
+            total_call_oi=call_oi,
+            total_put_oi=put_oi,
         )
         _ttl_lru_set(_chain_cache, ckey, chain, time.time(), _CHAIN_CACHE_TTL)
         return chain
@@ -1218,13 +1406,21 @@ async def fetch_chain(
     demo = await _demo_chain(symbol, expiry, strike_min, strike_max, option_type)
     # Trim demo to chain_limit for shape parity with real chains.
     if len(demo.contracts) > chain_limit:
+        trimmed = demo.contracts[:chain_limit]
+        # Wave V V1-2: aggregates must reflect the trimmed set.
+        call_vol, put_vol, cp_ratio, call_oi, put_oi = _compute_chain_aggregates(trimmed)
         demo = OptionChain(
             underlying=demo.underlying,
             spot_price=demo.spot_price,
             expirations=demo.expirations,
-            contracts=demo.contracts[:chain_limit],
+            contracts=trimmed,
             fetched_at=demo.fetched_at,
             is_demo=demo.is_demo,
+            total_call_volume=call_vol,
+            total_put_volume=put_vol,
+            call_put_volume_ratio=cp_ratio,
+            total_call_oi=call_oi,
+            total_put_oi=put_oi,
         )
     return _normalise_chain_shape(demo, expiry_filter=expiry)
 
@@ -1250,6 +1446,10 @@ def _normalise_chain_shape(chain: OptionChain, expiry_filter: date | None) -> Op
         # Trust the filter — provider already pinned the expiry. Keep the
         # ``expirations`` field at the requested expiry to match the
         # narrowed view of contracts.
+        # Wave V V1-2: re-aggregate volume/OI on the narrowed contract set
+        # so the chain-level totals reflect what the caller actually
+        # received (mismatched aggregates would mislead UI consumers).
+        call_vol, put_vol, cp_ratio, call_oi, put_oi = _compute_chain_aggregates(chain.contracts)
         return OptionChain(
             underlying=chain.underlying,
             spot_price=chain.spot_price,
@@ -1257,6 +1457,11 @@ def _normalise_chain_shape(chain: OptionChain, expiry_filter: date | None) -> Op
             contracts=chain.contracts,
             fetched_at=chain.fetched_at,
             is_demo=chain.is_demo,
+            total_call_volume=call_vol,
+            total_put_volume=put_vol,
+            call_put_volume_ratio=cp_ratio,
+            total_call_oi=call_oi,
+            total_put_oi=put_oi,
         )
 
     # No expiry filter — pin contracts to the nearest expiry and keep
@@ -1268,6 +1473,8 @@ def _normalise_chain_shape(chain: OptionChain, expiry_filter: date | None) -> Op
     # Always include the nearest expiry in the ladder, even if the
     # provider's expirations list was empty.
     expirations = sorted(set(chain.expirations) | {nearest})
+    # Wave V V1-2: aggregates re-computed on the pinned slice.
+    call_vol, put_vol, cp_ratio, call_oi, put_oi = _compute_chain_aggregates(pinned)
     return OptionChain(
         underlying=chain.underlying,
         spot_price=chain.spot_price,
@@ -1275,6 +1482,11 @@ def _normalise_chain_shape(chain: OptionChain, expiry_filter: date | None) -> Op
         contracts=pinned,
         fetched_at=chain.fetched_at,
         is_demo=chain.is_demo,
+        total_call_volume=call_vol,
+        total_put_volume=put_vol,
+        call_put_volume_ratio=cp_ratio,
+        total_call_oi=call_oi,
+        total_put_oi=put_oi,
     )
 
 
@@ -1533,6 +1745,15 @@ async def _fetch_polygon_contract_snapshot(occ_symbol: str) -> ContractSnapshot 
         except (TypeError, ValueError):
             implied_volatility = None
 
+    # Wave V V1-3 / V1-4: volume/OI ratio + liquidity score.
+    # ``relative_volume`` is an underlying-level signal we don't have on
+    # the per-contract path here — pass None so the bonus stays unapplied.
+    vol_oi = _compute_volume_oi_ratio(volume, open_interest)
+    liq_score = compute_liquidity_score(
+        bid=bid, ask=ask,
+        volume=volume, open_interest=open_interest,
+        relative_volume=None,
+    )
     return ContractSnapshot(
         symbol=occ_symbol,
         bid=round(bid, 2),
@@ -1549,6 +1770,8 @@ async def _fetch_polygon_contract_snapshot(occ_symbol: str) -> ContractSnapshot 
         implied_volatility=round(implied_volatility, 4) if implied_volatility is not None else None,
         fetched_at=datetime.now(timezone.utc).isoformat(),
         is_demo=False,
+        volume_oi_ratio=vol_oi,
+        liquidity_score=liq_score,
     )
 
 
@@ -1635,6 +1858,13 @@ async def _fetch_alpaca_contract_snapshot(occ_symbol: str) -> ContractSnapshot |
         except (TypeError, ValueError):
             implied_volatility = None
 
+    # Wave V V1-3 / V1-4: volume/OI ratio + liquidity score.
+    vol_oi = _compute_volume_oi_ratio(volume, open_interest)
+    liq_score = compute_liquidity_score(
+        bid=bid, ask=ask,
+        volume=volume, open_interest=open_interest,
+        relative_volume=None,
+    )
     return ContractSnapshot(
         symbol=occ_symbol,
         bid=round(bid, 2),
@@ -1652,6 +1882,8 @@ async def _fetch_alpaca_contract_snapshot(occ_symbol: str) -> ContractSnapshot |
         implied_volatility=round(implied_volatility, 4) if implied_volatility is not None else None,
         fetched_at=datetime.now(timezone.utc).isoformat(),
         is_demo=False,
+        volume_oi_ratio=vol_oi,
+        liquidity_score=liq_score,
     )
 
 
@@ -1704,6 +1936,13 @@ async def _demo_contract_snapshot(occ_symbol: str) -> ContractSnapshot:
 
     midpoint = round((bid + ask) / 2, 4)
 
+    # Wave V V1-3 / V1-4: volume/OI ratio + liquidity score.
+    vol_oi = _compute_volume_oi_ratio(volume, open_interest)
+    liq_score = compute_liquidity_score(
+        bid=bid, ask=ask,
+        volume=volume, open_interest=open_interest,
+        relative_volume=None,
+    )
     return ContractSnapshot(
         symbol=occ_symbol,
         bid=bid,
@@ -1720,6 +1959,8 @@ async def _demo_contract_snapshot(occ_symbol: str) -> ContractSnapshot:
         implied_volatility=iv,
         fetched_at=datetime.now(timezone.utc).isoformat(),
         is_demo=True,
+        volume_oi_ratio=vol_oi,
+        liquidity_score=liq_score,
     )
 
 

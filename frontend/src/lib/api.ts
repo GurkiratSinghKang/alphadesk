@@ -1579,6 +1579,8 @@ export async function getOptionsChain(symbol: string, expiration?: string): Prom
       gamma: pickGreek(c.gamma),
       theta: pickGreek(c.theta),
       vega: pickGreek(c.vega),
+      // Wave V V1-3: per-contract volume/OI ratio.
+      volumeOiRatio: pickNullableNumber(c.volume_oi_ratio),
     }));
   const puts = contracts
     .filter((c) => c.option_type === "put")
@@ -1597,7 +1599,16 @@ export async function getOptionsChain(symbol: string, expiration?: string): Prom
       gamma: pickGreek(c.gamma),
       theta: pickGreek(c.theta),
       vega: pickGreek(c.vega),
+      // Wave V V1-3: per-contract volume/OI ratio.
+      volumeOiRatio: pickNullableNumber(c.volume_oi_ratio),
     }));
+  // Wave V V1-2: chain-level aggregates. Defaults preserve shape for
+  // older fixtures that don't emit the keys.
+  const totalCallVolume = pickNumber(raw.total_call_volume);
+  const totalPutVolume = pickNumber(raw.total_put_volume);
+  const callPutVolumeRatio = pickNullableNumber(raw.call_put_volume_ratio) ?? 1.0;
+  const totalCallOi = pickNumber(raw.total_call_oi);
+  const totalPutOi = pickNumber(raw.total_put_oi);
   return {
     symbol: (raw.underlying as string) ?? symbol,
     spotPrice: pickNullableNumber(raw.spot_price),
@@ -1606,6 +1617,11 @@ export async function getOptionsChain(symbol: string, expiration?: string): Prom
     puts,
     fetchedAt: (raw.fetched_at as string | null | undefined) ?? null,
     isDemo: raw.is_demo === true,
+    totalCallVolume,
+    totalPutVolume,
+    callPutVolumeRatio,
+    totalCallOi,
+    totalPutOi,
   };
 }
 
@@ -1652,6 +1668,9 @@ function mapContractSnapshot(raw: Partial<RawContractSnapshot> & Record<string, 
     fetchedAt: typeof raw.fetched_at === "string" ? raw.fetched_at : new Date().toISOString(),
     isDemo: raw.is_demo === true,
     isUnavailable,
+    // Wave V V1-3 / V1-4: pass through volume signals.
+    volumeOiRatio: numOrNull(raw.volume_oi_ratio),
+    liquidityScore: numOrNull(raw.liquidity_score),
   };
 }
 

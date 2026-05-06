@@ -35,6 +35,16 @@ export interface Quote {
   extended_volume?: number | null;
   last_trade_time?: string | null;
   session?: "pre" | "regular" | "post" | "closed" | null;
+  // ─── Volume signals (Wave V V1-1 backend contract) ────────
+  // Backend-derived volume primitives. ADV is the trailing 20
+  // trading-day average daily session volume (cached 1h per symbol);
+  // ``relative_volume`` is today's ``volume`` divided by ADV. Both
+  // are nullable because newly-listed symbols have < 20 days of
+  // history and the demo / Alpaca-only paths can't compute them
+  // (ADV uses Polygon's daily aggs). UI must render em-dash for
+  // null rather than fabricating a 1.0x ratio.
+  avg_daily_volume_20d?: number | null;
+  relative_volume?: number | null;
 }
 
 export interface OHLCVBar {
@@ -310,6 +320,12 @@ export interface OptionsContract {
   extended_change_pct?: number | null;
   extended_session?: "pre" | "post" | null;
   last_trade_time?: string | null;
+  /**
+   * Wave V V1-3 (2026-05-05): volume / OI ratio. ``volume`` divided by
+   * ``max(open_interest, 1)``. ``null`` only when both volume and OI
+   * are zero. Consumers should render em-dash for null.
+   */
+  volumeOiRatio?: number | null;
 }
 
 export interface OptionsChain {
@@ -320,6 +336,17 @@ export interface OptionsChain {
   puts: OptionsContract[];
   fetchedAt?: string | null;
   isDemo?: boolean;
+  /**
+   * Wave V V1-2 (2026-05-05): chain-level volume/OI aggregates. Optional
+   * because older fixtures and demo paths in tests may not include them.
+   * Defaults: 0 / 0 / 1.0 for shape parity. UI consumers should treat
+   * 1.0 as the "neutral" call/put ratio.
+   */
+  totalCallVolume?: number;
+  totalPutVolume?: number;
+  callPutVolumeRatio?: number;
+  totalCallOi?: number;
+  totalPutOi?: number;
 }
 
 /**
@@ -355,6 +382,13 @@ export interface ContractSnapshot {
    *  or missing). Frontend should render the unavailable state instead
    *  of fabricated $0/$0 in green/red. Maverick FIX-2.1. */
   isUnavailable: boolean;
+  /** Wave V V1-3 (2026-05-05): volume / OI ratio. Null only when both
+   *  are zero. */
+  volumeOiRatio: number | null;
+  /** Wave V V1-4 (2026-05-05): 0..1 liquidity score (spread quality +
+   *  volume floor + OI floor + relative-volume bonus). Null when the
+   *  upstream cannot be reached. */
+  liquidityScore: number | null;
 }
 
 /**
@@ -380,6 +414,10 @@ export interface RawContractSnapshot {
   implied_volatility: number | null;
   fetched_at: string;
   is_demo: boolean;
+  /** Wave V V1-3 (2026-05-05): wire field — volume / OI ratio. */
+  volume_oi_ratio?: number | null;
+  /** Wave V V1-4 (2026-05-05): wire field — 0..1 liquidity score. */
+  liquidity_score?: number | null;
 }
 
 // ─── Analysis ─────────────────────────────────────────────────
@@ -636,6 +674,9 @@ export interface LadderRow {
   vega: number;
   oi: number;
   volume: number;
+  /** Wave V V1-3 (2026-05-05): volume / OI ratio. Null only when both
+   *  volume and OI are zero. */
+  volumeOiRatio?: number | null;
 }
 
 export interface StrikeLadder {
