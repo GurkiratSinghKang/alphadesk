@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { ArrowUpCircle, Bookmark, X } from "lucide-react";
-import type { CalendarRow, EarningsCandidateDecision, EarningsDetail, EarningsErrorCode, Quote, TickerContext, TickerFactEnvelope } from "@/types";
+import type { CalendarRow, EarningsCandidateDecision, EarningsDetail, EarningsErrorCode, Quote, TickerContext } from "@/types";
 import CalendarWeekHeatmap from "./CalendarWeekHeatmap";
 import type { SelectionSource } from "../page";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,7 @@ import HistoricalMoves from "./HistoricalMoves";
 import HistoricalSetupReplay from "./HistoricalSetupReplay";
 import IVTermSkew from "./IVTermSkew";
 import NewsFeed from "./NewsFeed";
+import TickerFreshnessStrip from "./TickerFreshnessStrip";
 import TradeButtonRow from "./TradeButtonRow";
 import PnLZones from "@/components/primitives/PnLZones";
 import OptionsPayoffPanel from "@/components/options/OptionsPayoffPanel";
@@ -133,6 +134,25 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
   >(null);
   const [hoveredPayoffDraft, setHoveredPayoffDraft] =
     useState<OptionStrategyDraft | null>(null);
+  // EOP-AUDIT 2026-05-06 / B1.2 (sticky-after-hover): the payoff chart
+  // used to revert to the default suggestion the moment the cursor
+  // left a card. Users couldn't compare cards because the chart only
+  // held shape while pointer was inside one. Now we track
+  // ``lastPayoffDraft`` separately — set on every hover, NEVER cleared
+  // on un-hover — and resolve the displayed draft as
+  // ``hovered ?? lastPayoffDraft ?? defaultPayoffDraft``. Default is
+  // shown only on initial render before any hover.
+  const [lastPayoffDraft, setLastPayoffDraft] =
+    useState<OptionStrategyDraft | null>(null);
+  const handleHoverPayoffDraft = (draft: OptionStrategyDraft | null) => {
+    // Set transient hovered draft for the immediate update.
+    setHoveredPayoffDraft(draft);
+    // When a card is hovered (draft != null), persist as the "last"
+    // draft so un-hover keeps showing it. Hovering a different card
+    // simply overwrites both. Mouse-leave fires with null and we
+    // intentionally don't clear ``lastPayoffDraft``.
+    if (draft) setLastPayoffDraft(draft);
+  };
   const defaultPayoffDraft = useMemo(
     () =>
       detail
@@ -397,14 +417,14 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         symbol={detail.symbol}
         ladder={detail.strikeLadder}
         onHoverStrategy={setHoveredStrategyZone}
-        onHoverPayoffDraft={setHoveredPayoffDraft}
+        onHoverPayoffDraft={handleHoverPayoffDraft}
         recommendedSetup={detail.claudeStructured?.suggestedPlay ?? null}
         reportState={detail.reportState}
         syntheticChain={detail.errorCodes?.includes("chain_demo") ?? false}
       />
 
       <OptionsPayoffPanel
-        draft={hoveredPayoffDraft ?? defaultPayoffDraft}
+        draft={hoveredPayoffDraft ?? lastPayoffDraft ?? defaultPayoffDraft}
         title="Earnings payoff"
         className="mt-4"
       />
@@ -491,59 +511,6 @@ function isInteractiveSwipeTarget(target: EventTarget | null): boolean {
       'a,button,input,select,textarea,[role="button"],[contenteditable="true"]',
     ),
   );
-}
-
-function TickerFreshnessStrip({ context }: { context: TickerContext | null }) {
-  if (!context) return null;
-  const items: Array<[string, TickerFactEnvelope<Record<string, unknown>> | null | undefined]> = [
-    ["Quote", context.quote],
-    ["Options", context.optionsSummary],
-    ["Earnings", context.earnings],
-    ["Research", context.research],
-  ];
-  const visible = items.filter(([, fact]) => fact?.freshness);
-  if (!visible.length) return null;
-  return (
-    <div
-      data-slot="ticker-freshness-strip"
-      className="mb-3 flex flex-wrap items-center gap-2 rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-elev-1)] px-3 py-2"
-    >
-      {visible.map(([label, fact]) => (
-        <span
-          key={label}
-          className="inline-flex items-center gap-1.5 rounded-pill border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] px-2.5 py-1 font-mono text-eyebrow text-[color:var(--fg-muted)]"
-        >
-          <span className="uppercase tracking-[0.08em]">{label}</span>
-          <span className={freshnessClass(fact!.freshness.quality)}>
-            {fact!.freshness.quality}
-          </span>
-          {fact!.freshness.asOf && (
-            <span className="text-[color:var(--fg-hint)]">
-              {formatFreshnessTime(fact!.freshness.asOf)}
-            </span>
-          )}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function freshnessClass(quality: string) {
-  if (quality === "fresh") return "text-profit";
-  if (quality === "demo") return "text-amber";
-  if (quality === "stale" || quality === "expired") return "text-amber";
-  return "text-loss";
-}
-
-function formatFreshnessTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
 }
 
 function CandidateDecisionBar({
