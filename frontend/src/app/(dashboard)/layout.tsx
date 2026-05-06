@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { TopBar } from "@/components/layout/TopBar";
 import { BottomTabBar } from "@/components/layout/BottomTabBar";
 import { CommandPalette } from "@/components/layout/CommandPalette";
@@ -263,6 +264,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isDeskRoute = pathname === "/";
 
+  const queryClient = useQueryClient();
   const { overlayOpen, setOverlayOpen } = useKeyboardShortcuts();
   const { toast } = useToast();
   const recentApiErrorsRef = useRef<Map<string, number>>(new Map());
@@ -303,18 +305,22 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }, []);
   const retryBanner = useCallback(() => {
     // Clear in-memory + persisted dismiss + the issue list, then fire
-    // the retry event so data hooks can refetch. If the refetch fails
-    // again the api-error handler above will repopulate apiIssues and
-    // the banner will reappear with the fresh error message; if the
-    // refetch succeeds the issue list stays empty and the banner
-    // stays hidden.
+    // the retry event AND refetch every active react-query so data
+    // hooks reload. If the refetch fails again the api-error handler
+    // above will repopulate apiIssues and the banner will reappear
+    // with the fresh error message; if the refetch succeeds the
+    // issue list stays empty and the banner stays hidden.
     setBannerDismissedAt(null);
     writeDismissedAt(null);
     setApiIssues({});
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("alphadesk:api-retry"));
     }
-  }, []);
+    // refetchQueries({ type: "active" }) only re-runs the queries the
+    // user is currently subscribed to — avoids waking dozens of cached
+    // queries the user isn't looking at.
+    void queryClient.refetchQueries({ type: "active" });
+  }, [queryClient]);
   // EOP-AUDIT 2026-05-06 / B1.21: hydrate dismissed-at on mount. We do
   // this in an effect rather than the initial useState because reading
   // localStorage during initial render breaks SSR-streaming.
