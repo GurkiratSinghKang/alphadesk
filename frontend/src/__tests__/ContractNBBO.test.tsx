@@ -1,7 +1,21 @@
 import './setup-mocks';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import type { ContractSnapshot } from '@/types';
+
+// Pin Date.now so the FIX-A relative-time strings + freshness dot
+// thresholds are deterministic across CI / local runs. The fixture
+// timestamps below are written relative to NOW.
+const NOW = new Date('2026-04-25T15:00:30.000Z');
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(NOW);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 // Mock the hook BEFORE importing the component so the import-time
 // React Query reference resolves to our spy.
@@ -88,6 +102,62 @@ describe('ContractNBBO', () => {
     mockReturn({ data: snapshot() });
     const { container } = render(<ContractNBBO occSymbol="NVDA260425C00205000" />);
     expect(container.querySelector('#nbbo-NVDA260425C00205000')).toBeTruthy();
+  });
+
+  // ── Maverick FIX-A: last-trade timestamp + freshness ─────────────
+  // The default fixture timestamps are 30 s before NOW — fresh window
+  // for the dot (< 60 s = ok / green) and "30s ago" for the caption.
+  it('renders "Last $X (Ns ago)" with the relative time when lastTimestamp is present', () => {
+    mockReturn({ data: snapshot() });
+    const { container } = render(<ContractNBBO occSymbol="NVDA260425C00205000" />);
+    const last = container.querySelector('[data-slot="contract-nbbo-last"]');
+    expect(last).toBeTruthy();
+    // "Last $1.02 (30s ago)" — tolerate the formatter quirks but the age
+    // suffix must be present.
+    expect(last?.textContent).toMatch(/Last \$1\.0[2]/);
+    expect(last?.textContent).toMatch(/30s ago/);
+  });
+
+  it('renders the "Quoted Ns ago" freshness caption with a green dot when fetchedAt < 60s', () => {
+    mockReturn({ data: snapshot() });
+    const { container } = render(<ContractNBBO occSymbol="NVDA260425C00205000" />);
+    const cap = container.querySelector('[data-slot="contract-nbbo-freshness"]');
+    expect(cap).toBeTruthy();
+    expect(cap?.getAttribute('data-tone')).toBe('ok');
+    expect(cap?.textContent).toMatch(/Quoted/);
+    expect(cap?.textContent).toMatch(/30s ago/);
+  });
+
+  it('uses the amber freshness dot when fetchedAt is between 60s and 5min', () => {
+    // 90 s before NOW — middle of the amber band.
+    mockReturn({
+      data: snapshot({
+        fetchedAt: '2026-04-25T14:59:00.000Z',
+        lastTimestamp: '2026-04-25T14:59:00.000Z',
+      }),
+    });
+    const { container } = render(<ContractNBBO occSymbol="NVDA260425C00205000" />);
+    const cap = container.querySelector('[data-slot="contract-nbbo-freshness"]');
+    expect(cap?.getAttribute('data-tone')).toBe('warn');
+  });
+
+  it('uses the red freshness dot when fetchedAt is older than 5 min', () => {
+    // 10 min before NOW — well past the 5-minute red threshold.
+    mockReturn({
+      data: snapshot({
+        fetchedAt: '2026-04-25T14:50:30.000Z',
+        lastTimestamp: '2026-04-25T14:50:30.000Z',
+      }),
+    });
+    const { container } = render(<ContractNBBO occSymbol="NVDA260425C00205000" />);
+    const cap = container.querySelector('[data-slot="contract-nbbo-freshness"]');
+    expect(cap?.getAttribute('data-tone')).toBe('bad');
+  });
+
+  it('suppresses the freshness caption on synthetic / demo snapshots', () => {
+    mockReturn({ data: snapshot({ isDemo: true }) });
+    const { container } = render(<ContractNBBO occSymbol="NVDA260425C00205000" />);
+    expect(container.querySelector('[data-slot="contract-nbbo-freshness"]')).toBeNull();
   });
 });
 

@@ -3,8 +3,46 @@
 import * as React from "react";
 import { useContractSnapshot } from "@/hooks/useContractSnapshot";
 import { fmtCurrency, fmtPct } from "@/lib/intl";
+import { useTick } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import type { ContractSnapshot } from "@/types";
+
+/**
+ * Maverick FIX-A — short relative-time formatter for the NBBO panel's
+ * "Last $4.20 (3s ago)" + "Quoted Xs ago" captions. Mirrors the helper
+ * shape called out in the pro-trader audit P0 #3 (compact "Ns/Nm/Nh"
+ * suffixes; not the locale-aware Intl.RelativeTimeFormat used elsewhere
+ * because the surface is a compact metadata strip, not prose).
+ *
+ * Returns "" for null/non-finite input so callers can suppress the
+ * caption without an explicit guard.
+ */
+function formatRelativeTime(iso: string | null | undefined, now: number): string {
+  if (!iso) return "";
+  const ms = now - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "";
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s ago`;
+  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m ago`;
+  return `${Math.round(ms / 3_600_000)}h ago`;
+}
+
+/**
+ * Maverick FIX-A — colour bucket for the freshness dot adjacent to the
+ * "Quoted Ns ago" caption. Green if the quote is < 60 s old, amber for
+ * 60–300 s, red beyond 5 min. Returns null when there is no timestamp.
+ */
+function freshnessTone(
+  iso: string | null | undefined,
+  now: number,
+): { tone: "ok" | "warn" | "bad"; ageMs: number } | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return null;
+  const ageMs = now - t;
+  if (ageMs < 60_000) return { tone: "ok", ageMs };
+  if (ageMs < 300_000) return { tone: "warn", ageMs };
+  return { tone: "bad", ageMs };
+}
 
 /**
  * Project Maverick (PM-C): per-contract NBBO panel mounted under an
@@ -24,6 +62,12 @@ export interface ContractNBBOProps {
 
 export default function ContractNBBO({ occSymbol, className }: ContractNBBOProps) {
   const { data: snapshot, isLoading, error } = useContractSnapshot(occSymbol);
+  // Maverick FIX-A (pro-trader P0 #3): keep the relative-time strings
+  // "Last $X (Ns ago)" + "Quoted Ns ago" + the freshness dot fresh
+  // without re-fetching. 5 s cadence is fast enough for a desk operator
+  // to see the colour cross 60 s / 5 min thresholds within one tick.
+  // ``useTick`` already pauses on hidden tabs so this is cheap.
+  useTick(5_000);
   const panelId = `nbbo-${occSymbol}`;
 
   return (
@@ -70,11 +114,22 @@ export default function ContractNBBO({ occSymbol, className }: ContractNBBOProps
               size={snapshot.bidSize}
               exchange={snapshot.bidExchange}
             />
-            <SpreadBadge
-              bid={snapshot.bid}
-              ask={snapshot.ask}
-              midpoint={snapshot.midpoint}
-            />
+            <div className="flex flex-col items-center gap-0.5">
+              <SpreadBadge
+                bid={snapshot.bid}
+                ask={snapshot.ask}
+                midpoint={snapshot.midpoint}
+              />
+              {/* Maverick FIX-A (pro-trader P0 #3): "Quoted Ns ago" caption
+                  with a colored freshness dot. Backed by fetchedAt — that's
+                  the timestamp the backend stamped when it pulled the NBBO
+                  from the upstream provider. Suppressed on synthetic data
+                  because the dot would advertise a freshness that doesn't
+                  apply. */}
+              {!snapshot.isDemo && (
+                <FreshnessCaption iso={snapshot.fetchedAt} />
+              )}
+            </div>
             <AskSide
               price={snapshot.ask}
               size={snapshot.askSize}
@@ -263,6 +318,11 @@ function MetaStrip({
   snapshot: ContractSnapshot;
   suppressLastTrade?: boolean;
 }) {
+  // Maverick FIX-A: render the last-trade timestamp as a relative-time
+  // suffix beside the price ("Last $4.20 (3s ago)") so an operator can
+  // tell whether the print is current at a glance. Recomputed on each
+  // render — the parent's useTick(5_000) keeps Date.now() ticking.
+  const lastAge = formatRelativeTime(snapshot.lastTimestamp, Date.now());
   return (
     <div
       data-slot="contract-nbbo-meta"
@@ -270,7 +330,12 @@ function MetaStrip({
     >
       <span>Mid {fmtCurrency(snapshot.midpoint)}</span>
       {snapshot.lastPrice != null && !suppressLastTrade && (
-        <span>Last {fmtCurrency(snapshot.lastPrice)}</span>
+        <span data-slot="contract-nbbo-last">
+          Last {fmtCurrency(snapshot.lastPrice)}
+          {lastAge && (
+            <span className="ml-1 u-muted">({lastAge})</span>
+          )}
+        </span>
       )}
       <span>Vol {snapshot.volume}</span>
       <span>OI {snapshot.openInterest}</span>
@@ -278,5 +343,43 @@ function MetaStrip({
         <span>IV {fmtPct(snapshot.impliedVolatility, 1)}</span>
       )}
     </div>
+  );
+}
+
+/**
+ * Maverick FIX-A (pro-trader P0 #3): tiny "Quoted Ns ago" caption + a
+ * colored dot that turns amber after 60 s and red after 5 min. Lives
+ * under the SpreadBadge so the freshness signal sits next to the
+ * price-derived chip the operator is already reading.
+ *
+ * The component reads ``Date.now()`` directly — the parent panel ticks
+ * every 5 s via ``useTick`` so this re-renders on the same cadence
+ * without needing its own subscription.
+ */
+function FreshnessCaption({ iso }: { iso: string | null | undefined }) {
+  const tone = freshnessTone(iso, Date.now());
+  if (!tone) return null;
+  const dotColor =
+    tone.tone === "ok"
+      ? "var(--profit)"
+      : tone.tone === "warn"
+        ? "var(--state-warning)"
+        : "var(--loss)";
+  const ageText = formatRelativeTime(iso, Date.now()) || "just now";
+  return (
+    <span
+      data-slot="contract-nbbo-freshness"
+      data-tone={tone.tone}
+      className="inline-flex items-center gap-1 t-mono text-label u-muted tabular-nums"
+      title={iso ?? undefined}
+      aria-label={`Quoted ${ageText}`}
+    >
+      <span
+        aria-hidden="true"
+        className="h-1.5 w-1.5 rounded-full"
+        style={{ background: dotColor }}
+      />
+      Quoted {ageText}
+    </span>
   );
 }
