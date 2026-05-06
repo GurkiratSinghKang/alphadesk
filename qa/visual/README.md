@@ -39,11 +39,13 @@ Then `git add qa/visual/baseline/ && git commit -m "qa(visual): refresh baseline
 - To make a failing diff "go away" without reading the diff first
 - During an unrelated PR where the diff is collateral damage
 
-## Coverage (23 cases)
+## Coverage (27 cases)
 
 **Authenticated app (11):** dashboard, trade, strategies (list), strategies-detail, strategies-earnings, strategies-tar, analytics, alerts, pipeline, reports, settings
 
 **Public / auth-adjacent (10):** login, login-reset, request-access, about, contact, docs, help-earnings, privacy, terms, risk
+
+**Symbols ticker research (4):** symbols-nvda-desktop (full equity), symbols-nvda-mobile, symbols-spy-desktop (ETF degraded), symbols-spy-mobile
 
 **Mobile (2):** dashboard-mobile, trade-mobile
 

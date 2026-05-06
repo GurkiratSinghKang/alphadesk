@@ -55,6 +55,15 @@ const CASES = [
   { name: "privacy-desktop", path: "/privacy", viewport: "desktop-1440" },
   { name: "terms-desktop", path: "/terms", viewport: "desktop-1440" },
   { name: "risk-desktop", path: "/risk", viewport: "desktop-1440" },
+  // Symbols ticker research page — full equity (NVDA) + ETF degraded (SPY).
+  // T12: baseline before any v1 work; SPY locks the ETF degraded variant
+  // (UI-SPEC §5) which is currently the only end-to-end ETF render check.
+  // Harness has no tablet-820 viewport; spec called for one but only
+  // desktop-1440 + mobile-390 exist, so we cover both available sizes.
+  { name: "symbols-nvda-desktop", path: "/symbols/NVDA", viewport: "desktop-1440" },
+  { name: "symbols-nvda-mobile", path: "/symbols/NVDA", viewport: "mobile-390" },
+  { name: "symbols-spy-desktop", path: "/symbols/SPY", viewport: "desktop-1440" },
+  { name: "symbols-spy-mobile", path: "/symbols/SPY", viewport: "mobile-390" },
   // Mobile spot-checks for the highest-traffic surfaces
   { name: "dashboard-mobile", path: "/", viewport: "mobile-390" },
   { name: "trade-mobile", path: "/trade", viewport: "mobile-390" },
