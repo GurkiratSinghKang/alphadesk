@@ -1064,6 +1064,17 @@ async def create_order(
             "configured admin user. The bypass is logged at WARN."
         ),
     ),
+    fill_mode: str | None = Query(
+        None,
+        description=(
+            "M-O F-2 (2026-05-05) — execution-mode toggle. ``patient`` "
+            "routes multi-leg combos through "
+            "``services.order_management.submit_combo_at_mid`` which works "
+            "the order at MID and walks toward the worse side every 30s "
+            "until filled or the 120s deadline. Any other value (or omitted) "
+            "uses the legacy immediate-limit path."
+        ),
+    ),
 ) -> OrderResponse:
     """Submit a new order through the broker (Alpaca).
 
@@ -1561,30 +1572,139 @@ async def create_order(
             },
         )
 
-    # Submit to broker (pass client_order_id down). On broker failure the
-    # PENDING sentinel must be cleared so a retry can proceed — without this,
-    # a transient broker error would lock the user out of resubmitting until
-    # the 600s TTL expired.
-    try:
-        order_id = await _submit_to_broker(
-            payload,
-            settings,
-            client_order_id=client_order_id,
-            broker_credentials=broker_creds,
+    # M-O F-2 (2026-05-05) — patient mid-pricing branch. ``fill_mode=patient``
+    # opts the caller into ``services.order_management.submit_combo_at_mid``
+    # for multi-leg option combos. Single-leg orders fall through to the
+    # legacy immediate-limit path (the patient walker only adds value when
+    # there is a meaningful combo spread to walk across). When patient mode
+    # fills, ``patient_fill_quality`` is captured and stamped onto the
+    # ``trades`` row below for the F-3 dashboards.
+    patient_fill_quality = None
+    use_patient = (
+        (fill_mode or "").strip().lower() == "patient"
+        and len(payload.legs) > 1
+        and all((leg.asset_class or "").lower() == "option" for leg in payload.legs)
+    )
+    if use_patient:
+        from services.order_management import (
+            OrderResult as _PatientResult,
+            submit_combo_at_mid as _patient_submit,
         )
-    except Exception:
-        if idem_cache_key is not None:
+
+        async def _patient_submit_fn(_legs: list[Any], limit_price: float) -> str:
+            """Submit one walk: rebuild a CreateOrderRequest with the new
+            limit price and reuse ``_submit_to_broker``. The legs come
+            straight from the original payload — only the per-leg
+            ``limit_price`` is updated to express the new net price."""
+            patched = payload.model_copy()
+            walk_legs: list[OrderLeg] = []
+            # Distribute the net combo limit across legs proportionally.
+            # We pin the per-leg price by scaling the original per-leg
+            # limit by (new_combo_limit / original_combo_limit). Falls
+            # back to the leg's existing price when scaling is degenerate.
             try:
-                from core.redis import get_redis
-                _r = await get_redis()
-                if _r is not None:
-                    await _r.delete(idem_cache_key)
-            except Exception:
-                logger.debug(
-                    "Failed to clear PENDING idem sentinel after broker error",
-                    exc_info=True,
+                _, ratios = _alpaca_mleg_ratio_qtys(list(patched.legs))
+                _, original_net = _alpaca_mleg_order_type(list(patched.legs), ratios)
+            except HTTPException:
+                original_net = None
+            scale = 1.0
+            if original_net is not None and abs(original_net) > 1e-6:
+                scale = float(limit_price) / float(original_net)
+            for leg in patched.legs:
+                new_leg = leg.model_copy()
+                if new_leg.limit_price is not None:
+                    new_leg = new_leg.model_copy(
+                        update={"limit_price": round(float(new_leg.limit_price) * scale, 2)},
+                    )
+                walk_legs.append(new_leg)
+            patched = patched.model_copy(update={"legs": walk_legs})
+            return await _submit_to_broker(
+                patched,
+                settings,
+                client_order_id=client_order_id,
+                broker_credentials=broker_creds,
+            )
+
+        async def _patient_cancel_fn(broker_id: str) -> None:
+            import httpx as _httpx
+            async with _httpx.AsyncClient(timeout=10.0) as _client:
+                await _client.delete(
+                    f"{broker_creds.base_url}/v2/orders/{broker_id}",
+                    headers=broker_creds.headers,
                 )
-        raise
+
+        async def _patient_poll_fn(broker_id: str) -> dict[str, Any]:
+            import httpx as _httpx
+            async with _httpx.AsyncClient(timeout=5.0) as _client:
+                resp = await _client.get(
+                    f"{broker_creds.base_url}/v2/orders/{broker_id}",
+                    headers=broker_creds.headers,
+                )
+                if resp.status_code != 200:
+                    return {"status": "unknown", "filled_avg_price": None}
+                row = resp.json()
+                return {
+                    "status": (row.get("status") or "").lower(),
+                    "filled_avg_price": row.get("filled_avg_price"),
+                }
+
+        try:
+            patient_result: _PatientResult = await _patient_submit(
+                list(payload.legs),
+                chain=None,  # leg-stored mid is the single source of truth here
+                submit_fn=_patient_submit_fn,
+                cancel_fn=_patient_cancel_fn,
+                poll_fn=_patient_poll_fn,
+            )
+        except Exception:
+            if idem_cache_key is not None:
+                try:
+                    from core.redis import get_redis
+                    _r = await get_redis()
+                    if _r is not None:
+                        await _r.delete(idem_cache_key)
+                except Exception:
+                    logger.debug(
+                        "Failed to clear PENDING idem sentinel after patient error",
+                        exc_info=True,
+                    )
+            raise
+
+        if patient_result.status not in ("filled", "unfilled"):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Patient combo submit terminated: {patient_result.status}"
+                    + (f" — {patient_result.reason}" if patient_result.reason else "")
+                ),
+            )
+        order_id = patient_result.broker_order_id or ""
+        patient_fill_quality = patient_result.fill_quality
+    else:
+        # Submit to broker (pass client_order_id down). On broker failure the
+        # PENDING sentinel must be cleared so a retry can proceed — without this,
+        # a transient broker error would lock the user out of resubmitting until
+        # the 600s TTL expired.
+        try:
+            order_id = await _submit_to_broker(
+                payload,
+                settings,
+                client_order_id=client_order_id,
+                broker_credentials=broker_creds,
+            )
+        except Exception:
+            if idem_cache_key is not None:
+                try:
+                    from core.redis import get_redis
+                    _r = await get_redis()
+                    if _r is not None:
+                        await _r.delete(idem_cache_key)
+                except Exception:
+                    logger.debug(
+                        "Failed to clear PENDING idem sentinel after broker error",
+                        exc_info=True,
+                    )
+            raise
 
     # Observability: log every submitted order with the acting user.
     #
@@ -1757,19 +1877,30 @@ async def create_order(
 
             factory = _get_session_factory()
             async with factory() as db:
+                # M-O F-3 (2026-05-05) — fill-quality fields stamped at
+                # insert time when the patient walker reported a fill
+                # so the row is self-contained from the start. Legacy
+                # immediate-limit orders leave these NULL — the
+                # fill_reconciler stamps fills there via filled_avg_price.
+                _fq = locals().get("patient_fill_quality")
                 trade = Trade(
                     username=username,
                     symbol=payload.legs[0].symbol,
                     strategy=payload.strategy,
                     legs=legs_payload,
                     entry_time=datetime.now(timezone.utc),
-                    status="submitted",
+                    status=("filled" if _fq is not None else "submitted"),
                     notes=payload.notes,
                     side=persisted_side,
                     trade_kind=trade_kind,
                     client_order_id=client_order_id,
                     broker_order_id=order_id,
                     account_env=broker_creds.account_env or _env,
+                    target_price=(_fq.target_price if _fq is not None else None),
+                    actual_fill_price=(
+                        _fq.actual_fill_price if _fq is not None else None
+                    ),
+                    slippage_pct=(_fq.slippage_pct if _fq is not None else None),
                 )
                 db.add(trade)
                 await db.flush()

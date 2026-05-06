@@ -459,6 +459,20 @@ def _define_models() -> dict[str, Any]:
         # through to the existing single-leg logic".
         stop_loss_combo_mark = Column(Float, nullable=True)
 
+        # M-O F-3 (2026-05-05) — fill-quality columns. Captured by the
+        # patient mid-pricing helper (services.order_management) when the
+        # caller submits an order with ?fill_mode=patient. ``target_price``
+        # is the combo mid at submit time; ``actual_fill_price`` is the
+        # broker's reported fill (per share); ``slippage_pct`` is the
+        # signed fraction (actual - target) / target with the sign
+        # normalised so positive == "trader did worse than mid". NULL on
+        # every row pre-this-feature and on every order that didn't use
+        # ?fill_mode=patient (the legacy immediate-limit path keeps its
+        # own avg_fill_price separately).
+        target_price = Column(Float, nullable=True)
+        actual_fill_price = Column(Float, nullable=True)
+        slippage_pct = Column(Float, nullable=True)
+
         __mapper_args__ = {
             "version_id_col": version,
         }
