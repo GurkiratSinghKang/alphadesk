@@ -438,4 +438,141 @@ describe("TradeButtonRow (Round-12 DR-1: defined-risk only)", () => {
       expect(container.querySelector('[data-slot="trade-button-fill-forecast"]')).toBeNull();
     });
   });
+
+  // ─── PR-1 / T3: per-button confidence chip ───────────────
+  describe("PR-1 T3 — per-button confidence chip", () => {
+    it("renders a brand-tone chip when confidence is ≥ 0.65 (high conviction)", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          setupConfidenceMap={{ "bull put spread": 0.65 }}
+        />,
+      );
+      const card = container.querySelector(
+        'a[data-slot="trade-button-bull-put-spread"]',
+      ) as HTMLAnchorElement;
+      const chip = card.querySelector('[data-slot="confidence-chip"]');
+      expect(chip).not.toBeNull();
+      expect(chip!.textContent).toBe("65% conf");
+      expect(chip!.className).toContain("u-brand");
+    });
+
+    it("renders a muted-tone chip when confidence is in [0.40, 0.65)", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          setupConfidenceMap={{ "bear call spread": 0.42 }}
+        />,
+      );
+      const card = container.querySelector(
+        'a[data-slot="trade-button-bear-call-spread"]',
+      ) as HTMLAnchorElement;
+      const chip = card.querySelector('[data-slot="confidence-chip"]');
+      expect(chip).not.toBeNull();
+      expect(chip!.textContent).toBe("42% conf");
+      expect(chip!.className).toContain("u-muted");
+      expect(chip!.className).not.toContain("u-brand");
+    });
+
+    it("renders a warn-tone chip when confidence is < 0.40 (low conviction)", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          setupConfidenceMap={{ "iron condor": 0.30 }}
+        />,
+      );
+      const card = container.querySelector(
+        'a[data-slot="trade-button-iron-condor"]',
+      ) as HTMLAnchorElement;
+      const chip = card.querySelector('[data-slot="confidence-chip"]');
+      expect(chip).not.toBeNull();
+      expect(chip!.textContent).toBe("30% conf");
+      expect(chip!.className).toContain("text-state-warning-fg");
+    });
+
+    it("does NOT render a chip when confidence is null", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          setupConfidenceMap={{ "long straddle": null }}
+        />,
+      );
+      const card = container.querySelector(
+        'a[data-slot="trade-button-long-straddle"]',
+      ) as HTMLAnchorElement;
+      expect(card.querySelector('[data-slot="confidence-chip"]')).toBeNull();
+    });
+
+    it("does NOT render a chip when the setup is missing from the map (back-compat)", () => {
+      const { container } = render(
+        <TradeButtonRow symbol="NVDA" ladder={ladder} setupConfidenceMap={{}} />,
+      );
+      // No keys means no chips on any of the cards.
+      expect(
+        container.querySelectorAll('[data-slot="confidence-chip"]').length,
+      ).toBe(0);
+    });
+
+    it("does NOT render any chip when setupConfidenceMap is omitted entirely", () => {
+      const { container } = render(<TradeButtonRow symbol="NVDA" ladder={ladder} />);
+      expect(
+        container.querySelectorAll('[data-slot="confidence-chip"]').length,
+      ).toBe(0);
+    });
+
+    it("renders different confidence values across multiple buttons from one map", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          setupConfidenceMap={{
+            "bull put spread": 0.72,
+            "bear call spread": 0.48,
+            "iron condor": 0.18,
+            // long straddle deliberately omitted
+          }}
+        />,
+      );
+      const bps = container
+        .querySelector('a[data-slot="trade-button-bull-put-spread"]')!
+        .querySelector('[data-slot="confidence-chip"]');
+      const bcs = container
+        .querySelector('a[data-slot="trade-button-bear-call-spread"]')!
+        .querySelector('[data-slot="confidence-chip"]');
+      const ic = container
+        .querySelector('a[data-slot="trade-button-iron-condor"]')!
+        .querySelector('[data-slot="confidence-chip"]');
+      const ls = container
+        .querySelector('a[data-slot="trade-button-long-straddle"]')!
+        .querySelector('[data-slot="confidence-chip"]');
+
+      expect(bps?.textContent).toBe("72% conf");
+      expect(bps?.className).toContain("u-brand");
+      expect(bcs?.textContent).toBe("48% conf");
+      expect(bcs?.className).toContain("u-muted");
+      expect(ic?.textContent).toBe("18% conf");
+      expect(ic?.className).toContain("text-state-warning-fg");
+      expect(ls).toBeNull();
+    });
+
+    it("hides the chip for non-finite confidence values (NaN, Infinity)", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          setupConfidenceMap={{
+            "bull put spread": Number.NaN,
+            "bear call spread": Number.POSITIVE_INFINITY,
+          }}
+        />,
+      );
+      expect(
+        container.querySelectorAll('[data-slot="confidence-chip"]').length,
+      ).toBe(0);
+    });
+  });
 });

@@ -645,6 +645,14 @@ export interface EarningsSetup {
    * renders the "Expected fill" line only when this is present.
    */
   fillForecast?: ComboFillForecast | null;
+  /**
+   * PR-1 / T2 (earnings discipline gates): per-setup credibility score
+   * (0..1) blending PoP × vol_premium_score × Claude confidence ×
+   * direction alignment. ``null`` when the recommender couldn't compute
+   * (e.g. ``skip`` setups with missing PoP). Surfaced as a per-button
+   * "% conf" chip on TradeButtonRow (T3).
+   */
+  confidence: number | null;
 }
 
 export interface CalendarRow {

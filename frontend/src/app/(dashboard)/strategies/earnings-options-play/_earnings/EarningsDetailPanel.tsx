@@ -10,7 +10,16 @@ import {
   type ReactNode,
 } from "react";
 import { ArrowUpCircle, Bookmark, X } from "lucide-react";
-import type { CalendarRow, EarningsCandidateDecision, EarningsDetail, EarningsErrorCode, Quote, TickerContext } from "@/types";
+import type {
+  CalendarRow,
+  EarningsCandidateDecision,
+  EarningsDetail,
+  EarningsErrorCode,
+  EarningsSetup,
+  EarningsTopSetup,
+  Quote,
+  TickerContext,
+} from "@/types";
 import CalendarWeekHeatmap from "./CalendarWeekHeatmap";
 import type { SelectionSource } from "../page";
 import { cn } from "@/lib/utils";
@@ -55,6 +64,14 @@ export interface EarningsDetailPanelProps {
   calendarRows?: CalendarRow[];
   /** PR-2 / BUG-04: handler for heatmap row clicks. */
   onSelectSymbol?: (symbol: string) => void;
+  /**
+   * PR-1 / T3 (earnings discipline gates): ranked recommended setups
+   * from the analysis endpoint. Each setup's ``confidence`` is keyed by
+   * its ``setupId`` (= ``EarningsTopSetup``) into a map TradeButtonRow
+   * uses to render per-button credibility chips. Null/empty hides the
+   * chips entirely (back-compat).
+   */
+  recommendedSetups?: EarningsSetup[] | null;
 }
 
 /**
@@ -91,6 +108,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
       selectionSource = null,
       calendarRows = [],
       onSelectSymbol,
+      recommendedSetups = null,
     },
     ref,
   ) {
@@ -164,6 +182,20 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         : null,
     [detail],
   );
+
+  // PR-1 / T3: collapse the ranked setups list into a map keyed by
+  // setup_id so TradeButtonRow can look up each card's confidence
+  // without iterating the array per render. setup_id strings are the
+  // ``EarningsTopSetup`` literal union; non-matching ids (legacy or
+  // ``skip`` placeholders) fall through and won't be queried by name.
+  const setupConfidenceMap = useMemo(() => {
+    if (!recommendedSetups || recommendedSetups.length === 0) return undefined;
+    const map: Partial<Record<EarningsTopSetup, number | null>> = {};
+    for (const setup of recommendedSetups) {
+      map[setup.setupId as EarningsTopSetup] = setup.confidence;
+    }
+    return map;
+  }, [recommendedSetups]);
 
   // Escape clears the selection — dispatches a custom event the parent
   // page listens for. Ignored while focus is inside a text input so
@@ -423,6 +455,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         recommendedSetup={detail.claudeStructured?.suggestedPlay ?? null}
         reportState={detail.reportState}
         syntheticChain={detail.errorCodes?.includes("chain_demo") ?? false}
+        setupConfidenceMap={setupConfidenceMap}
       />
 
       <OptionsPayoffPanel

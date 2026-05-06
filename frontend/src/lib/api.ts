@@ -3213,6 +3213,10 @@ export function mapEarningsSetup(raw: unknown): EarningsSetup | null {
       typeof r.worst_leg_liquidity_score === "number" ? r.worst_leg_liquidity_score : null,
     liquidityWarning: r.liquidity_warning === true,
     fillForecast: mapFillForecast(r.fill_forecast),
+    // PR-1 / T3: pass through per-setup confidence (0..1). Backend emits
+    // null for setups missing PoP (skip / extreme-tail demotions); we
+    // preserve null so the UI can omit the chip rather than render 0%.
+    confidence: typeof r.confidence === "number" ? r.confidence : null,
   };
 }
 
