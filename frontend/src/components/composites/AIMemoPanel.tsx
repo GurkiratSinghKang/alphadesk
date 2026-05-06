@@ -48,7 +48,7 @@ export default function AIMemoPanel({ memo, className }: AIMemoPanelProps) {
   return (
     <section
       data-slot="ai-memo-panel"
-      aria-label="Claude memo"
+      aria-label="AI memo"
       className={cn(
         "px-4 py-4 sm:px-[18px] sm:py-[18px] border-t border-border bg-ink-100",
         className
@@ -57,7 +57,7 @@ export default function AIMemoPanel({ memo, className }: AIMemoPanelProps) {
       <header className="flex items-center gap-2 mb-2.5">
         <StatusDot tone="brand" pulse size={8} />
         <span className="t-label uppercase tracking-wider text-primary">
-          Claude · Pre-trade memo
+          AI · Pre-trade memo
         </span>
         <span className="ml-auto t-meta text-fg-hint">
           {memo?.timestamp}

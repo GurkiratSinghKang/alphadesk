@@ -130,6 +130,39 @@ class Greeks(BaseModel):
     extrinsic_value: float
 
 
+class ContractSnapshot(BaseModel):
+    """PM-C: per-contract NBBO snapshot polled at ~2s by the frontend.
+
+    Provider waterfall (see ``fetch_contract_snapshot``):
+      1. Polygon ``/v3/snapshot/options/{underlying}/{contract}`` — preferred
+         because the response carries top-of-book bid/ask exchange IDs which
+         Alpaca does not expose.
+      2. Alpaca ``/v1beta1/options/snapshots/{contract}`` — fallback when
+         Polygon errors / is rate-limited / key missing. Bid/ask exchange
+         IDs end up null because Alpaca returns aggregated NBBO without
+         the originating venue.
+      3. Demo synthesis from the existing ``_DEMO_BASE_IV`` table — final
+         fallback so the route never 503s. ``is_demo=True`` so the FE can
+         render a "demo" badge and the bid/ask exchanges stay null
+         (fabricating "CBOE" on synthetic quotes would be a data lie).
+    """
+    symbol: str
+    bid: float
+    ask: float
+    bid_size: int
+    ask_size: int
+    bid_exchange: str | None = None
+    ask_exchange: str | None = None
+    midpoint: float
+    last_price: float | None = None
+    last_timestamp: str | None = None
+    volume: int
+    open_interest: int
+    implied_volatility: float | None = None
+    fetched_at: str
+    is_demo: bool = False
+
+
 # ---------------------------------------------------------------------------
 # Demo data helpers
 # ---------------------------------------------------------------------------
@@ -1312,3 +1345,425 @@ async def fetch_iv_analysis(symbol: str, client_host: str | None = None) -> IVDa
     except Exception:
         log.warning("Failed to compute IV analysis for %s, falling back to demo", symbol, exc_info=True)
         return await _demo_iv(symbol)
+
+
+# ---------------------------------------------------------------------------
+# PM-C: per-contract NBBO snapshot
+# ---------------------------------------------------------------------------
+#
+# The frontend NBBO display polls a single contract every ~2 seconds. Without
+# caching, a single open row generates 30 backend calls / minute and forwards
+# all of them to Polygon. The 2s TTL collapses that to ~1-2 upstream calls per
+# minute per contract while keeping the displayed NBBO fresh enough that a
+# 2-tick spread move shows up in the UI within a polling interval.
+#
+# Provider waterfall: Polygon -> Alpaca -> demo. Polygon is preferred because
+# its ``/v3/snapshot/options/{underlying}/{contract}`` response includes
+# numeric exchange IDs for both top-of-book quotes (``bid_exchange`` /
+# ``ask_exchange``) - information Alpaca does not surface. The numeric IDs
+# are mapped to OPRA-style exchange names via ``_OPTIONS_EXCHANGE_MAP``;
+# unknown IDs stay null rather than being fabricated.
+#
+# Demo fallback synthesises a realistic-looking quote from ``_DEMO_BASE_IV``
+# and the demo spot for the underlying - same approach as ``_demo_chain`` so
+# the snapshot is internally consistent with the demo strike-ladder. The
+# ``is_demo`` flag is the truthy signal for callers / tests.
+
+# OCC option symbol format: AAPL250418C00250000 (no leading "O:").
+# 1-6 letter underlying, YYMMDD expiry, C/P, 8-digit strike (x1000).
+_OCC_SYMBOL_PATTERN = re.compile(r"^[A-Z]{1,6}\d{6}[CP]\d{8}$")
+
+# Polygon options exchange ID -> OPRA participant code. Sourced from
+# Polygon's reference (``/v3/reference/exchanges?asset_class=options``)
+# captured 2026-05. Map entries are intentionally minimal - only the
+# OPRA-recognised options venues so an unknown numeric ID maps to None
+# instead of an invented label.
+_OPTIONS_EXCHANGE_MAP: dict[int, str] = {
+    300: "ARCA",       # NYSE Arca Options
+    301: "BATS",       # Cboe BZX Options
+    302: "BOX",        # BOX Options Exchange
+    303: "C2",         # Cboe C2
+    304: "CBOE",       # Cboe Options Exchange
+    309: "GEMINI",     # Nasdaq GEMX
+    312: "ISE",        # Nasdaq ISE
+    313: "MIAX",       # MIAX Options
+    322: "PHLX",       # Nasdaq PHLX
+    323: "MRX",        # Nasdaq MRX
+    325: "EMERALD",    # MIAX Emerald
+    326: "PEARL",      # MIAX Pearl Options
+    327: "EDGX",       # Cboe EDGX Options
+    328: "NOM",        # Nasdaq Options Market
+}
+
+
+def _polygon_exchange_id_to_name(exchange_id: int | None) -> str | None:
+    """Map Polygon's numeric options-exchange ID to the OPRA-style label.
+
+    Returns None for unknown IDs so callers leave the field nullable
+    rather than invent a venue. The map covers the 14 OPRA participants
+    Polygon currently routes; new venues should be added as Polygon
+    starts emitting their IDs.
+    """
+    if exchange_id is None:
+        return None
+    try:
+        return _OPTIONS_EXCHANGE_MAP.get(int(exchange_id))
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_contract_underlying(occ_symbol: str) -> str | None:
+    """Extract the underlying ticker from a validated OCC symbol.
+
+    Returns None if the symbol does not match ``_OCC_SYMBOL_PATTERN``.
+    """
+    if not _OCC_SYMBOL_PATTERN.fullmatch(occ_symbol):
+        return None
+    m = re.match(r"^([A-Z]{1,6})", occ_symbol)
+    return m.group(1) if m else None
+
+
+# Cache: occ_symbol -> (ContractSnapshot, timestamp). 2-second TTL collapses
+# 30/min frontend polling to ~1-2 upstream calls per minute per contract.
+_contract_snapshot_cache: "_OrderedDict[str, tuple[ContractSnapshot, float]]" = _OrderedDict()
+_CONTRACT_SNAPSHOT_CACHE_TTL = 2.0  # seconds
+
+
+def _polygon_headers() -> dict[str, str]:
+    """Polygon REST API expects the key in an ``Authorization: Bearer`` header.
+
+    Kept private to this module - the existing :class:`PolygonHTTP` client
+    in ``data.providers._polygon_http`` uses query-string auth, which we
+    avoid here because the snapshot path is hit synchronously from a
+    request handler and we want to reuse :mod:`httpx`'s async stack.
+    """
+    from core.config import settings
+    return {
+        "Authorization": f"Bearer {settings.POLYGON_API_KEY.get_secret_value()}",
+    }
+
+
+async def _fetch_polygon_contract_snapshot(occ_symbol: str) -> ContractSnapshot | None:
+    """Fetch a single-contract NBBO snapshot from Polygon.
+
+    Polygon endpoint: ``/v3/snapshot/options/{underlying}/{contract}``
+
+    Returns None on missing key, HTTP failure, missing ``last_quote`` (empty
+    snapshot - the contract may exist but have no quote yet), or any parse
+    error. Callers fall through to the Alpaca / demo paths.
+    """
+    if _polygon_key_empty():
+        return None
+
+    underlying = _parse_contract_underlying(occ_symbol)
+    if underlying is None:
+        return None
+
+    from core.config import settings
+    url = f"{settings.POLYGON_BASE_URL}/v3/snapshot/options/{underlying}/{occ_symbol}"
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(url, headers=_polygon_headers())
+        if resp.status_code != 200:
+            log.debug(
+                "Polygon contract-snapshot HTTP %s for %s",
+                resp.status_code, occ_symbol,
+            )
+            return None
+        data = resp.json() or {}
+    except httpx.TimeoutException:
+        log.warning("Polygon contract-snapshot timed out for %s", occ_symbol)
+        return None
+    except Exception:
+        log.warning("Polygon contract-snapshot failed for %s", occ_symbol, exc_info=True)
+        return None
+
+    results = data.get("results") or {}
+    if not isinstance(results, dict) or not results:
+        return None
+
+    last_quote = results.get("last_quote") or {}
+    if not isinstance(last_quote, dict) or not last_quote:
+        # Contract exists but no NBBO yet (very illiquid or pre-open).
+        return None
+
+    bid = float(last_quote.get("bid") or 0.0)
+    ask = float(last_quote.get("ask") or 0.0)
+    bid_size = int(last_quote.get("bid_size") or 0)
+    ask_size = int(last_quote.get("ask_size") or 0)
+    midpoint = last_quote.get("midpoint")
+    if midpoint is None:
+        midpoint = (bid + ask) / 2 if (bid > 0 and ask > 0) else max(bid, ask)
+    midpoint = float(midpoint)
+
+    bid_exchange = _polygon_exchange_id_to_name(last_quote.get("bid_exchange"))
+    ask_exchange = _polygon_exchange_id_to_name(last_quote.get("ask_exchange"))
+
+    last_trade = results.get("last_trade") or {}
+    last_price: float | None = None
+    last_timestamp: str | None = None
+    if isinstance(last_trade, dict):
+        lp = last_trade.get("price")
+        if lp is not None:
+            try:
+                last_price = float(lp)
+            except (TypeError, ValueError):
+                last_price = None
+        # Polygon's ``sip_timestamp`` is nanoseconds since epoch - convert
+        # to ISO 8601 so the FE can render it consistently with Alpaca's
+        # already-ISO timestamps.
+        sip_ts = last_trade.get("sip_timestamp")
+        if sip_ts is not None:
+            try:
+                ns = int(sip_ts)
+                dt = datetime.fromtimestamp(ns / 1_000_000_000, tz=timezone.utc)
+                last_timestamp = dt.isoformat()
+            except (TypeError, ValueError, OSError):
+                last_timestamp = None
+
+    day = results.get("day") or {}
+    volume = int((day.get("volume") if isinstance(day, dict) else 0) or 0)
+    open_interest = int(results.get("open_interest") or 0)
+    iv_raw = results.get("implied_volatility")
+    implied_volatility: float | None = None
+    if iv_raw is not None:
+        try:
+            implied_volatility = float(iv_raw)
+        except (TypeError, ValueError):
+            implied_volatility = None
+
+    return ContractSnapshot(
+        symbol=occ_symbol,
+        bid=round(bid, 2),
+        ask=round(ask, 2),
+        bid_size=bid_size,
+        ask_size=ask_size,
+        bid_exchange=bid_exchange,
+        ask_exchange=ask_exchange,
+        midpoint=round(midpoint, 4),
+        last_price=round(last_price, 2) if last_price is not None else None,
+        last_timestamp=last_timestamp,
+        volume=volume,
+        open_interest=open_interest,
+        implied_volatility=round(implied_volatility, 4) if implied_volatility is not None else None,
+        fetched_at=datetime.now(timezone.utc).isoformat(),
+        is_demo=False,
+    )
+
+
+async def _fetch_alpaca_contract_snapshot(occ_symbol: str) -> ContractSnapshot | None:
+    """Fetch a single-contract NBBO snapshot from Alpaca OPRA.
+
+    Endpoint: ``/v1beta1/options/snapshots/{symbol}`` (the singular path
+    accepts the OCC symbol directly and returns the same envelope shape
+    used by the chain endpoint).
+
+    Returns None on missing keys / HTTP failure / missing ``latestQuote``.
+    Alpaca does NOT expose the originating venue per quote, so
+    ``bid_exchange`` / ``ask_exchange`` are always None on this path -
+    callers should treat the missing exchange info as "Alpaca answered".
+    """
+    if _alpaca_keys_empty():
+        return None
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"{_ALPACA_OPTIONS_BASE}/snapshots/{occ_symbol}",
+                headers=_alpaca_headers(),
+            )
+        if resp.status_code != 200:
+            log.debug(
+                "Alpaca contract-snapshot HTTP %s for %s",
+                resp.status_code, occ_symbol,
+            )
+            return None
+        data = resp.json() or {}
+    except httpx.TimeoutException:
+        log.warning("Alpaca contract-snapshot timed out for %s", occ_symbol)
+        return None
+    except Exception:
+        log.warning("Alpaca contract-snapshot failed for %s", occ_symbol, exc_info=True)
+        return None
+
+    # Alpaca's singular-snapshot endpoint returns either the snapshot
+    # envelope directly or wraps it in ``{"snapshots": {SYM: {...}}}``
+    # depending on the call site - defensive handling for both shapes.
+    snap: dict = {}
+    if isinstance(data, dict):
+        if "snapshots" in data and isinstance(data["snapshots"], dict):
+            snap = data["snapshots"].get(occ_symbol) or {}
+        else:
+            snap = data
+    if not isinstance(snap, dict) or not snap:
+        return None
+
+    quote = snap.get("latestQuote") or {}
+    trade = snap.get("latestTrade") or {}
+    daily_bar = snap.get("dailyBar") or {}
+    greeks_data = snap.get("greeks") or {}
+
+    bid = float(quote.get("bp") or 0.0)
+    ask = float(quote.get("ap") or 0.0)
+    if bid == 0 and ask == 0:
+        # No two-sided market - better to fall through than emit a 0/0 quote.
+        return None
+    bid_size = int(quote.get("bs") or 0)
+    ask_size = int(quote.get("as") or 0)
+    midpoint = (bid + ask) / 2 if (bid > 0 and ask > 0) else max(bid, ask)
+
+    last_price_raw = trade.get("p") if isinstance(trade, dict) else None
+    last_price: float | None = None
+    if last_price_raw:
+        try:
+            last_price = float(last_price_raw)
+        except (TypeError, ValueError):
+            last_price = None
+
+    last_timestamp = trade.get("t") if isinstance(trade, dict) else None
+    if last_timestamp is not None:
+        last_timestamp = str(last_timestamp)
+
+    volume = int((daily_bar.get("v") if isinstance(daily_bar, dict) else 0) or 0)
+    open_interest = int(snap.get("openInterest") or snap.get("open_interest") or 0)
+    iv_raw = snap.get("impliedVolatility") or (greeks_data.get("iv") if isinstance(greeks_data, dict) else None)
+    implied_volatility: float | None = None
+    if iv_raw is not None:
+        try:
+            implied_volatility = float(iv_raw)
+        except (TypeError, ValueError):
+            implied_volatility = None
+
+    return ContractSnapshot(
+        symbol=occ_symbol,
+        bid=round(bid, 2),
+        ask=round(ask, 2),
+        bid_size=bid_size,
+        ask_size=ask_size,
+        # Alpaca aggregates NBBO without venue attribution. Leave None.
+        bid_exchange=None,
+        ask_exchange=None,
+        midpoint=round(midpoint, 4),
+        last_price=round(last_price, 2) if last_price is not None else None,
+        last_timestamp=last_timestamp,
+        volume=volume,
+        open_interest=open_interest,
+        implied_volatility=round(implied_volatility, 4) if implied_volatility is not None else None,
+        fetched_at=datetime.now(timezone.utc).isoformat(),
+        is_demo=False,
+    )
+
+
+async def _demo_contract_snapshot(occ_symbol: str) -> ContractSnapshot:
+    """Synthesize a NBBO snapshot from the demo IV / spot tables.
+
+    Mirrors the bid/ask synthesis used by ``_demo_chain``: BSM-priced
+    midpoint with a 2-8 % spread, clamped to a 1c floor. Volume/OI are
+    deterministic from the symbol seed so re-polling produces stable
+    numbers (no UI flicker on cache miss). ``bid_exchange`` /
+    ``ask_exchange`` are deliberately None - fabricating "CBOE" on
+    synthetic quotes would mislead callers about data provenance.
+    """
+    underlying = _parse_contract_underlying(occ_symbol) or occ_symbol[:4]
+    rng = random.Random(_symbol_seed(occ_symbol))
+
+    parsed = _parse_alpaca_option_symbol(occ_symbol) or {
+        "expiry": market_today() + timedelta(days=14),
+        "strike": 100.0,
+        "option_type": OptionType.CALL,
+    }
+    expiry = parsed["expiry"]
+    strike = float(parsed["strike"])
+    is_call = parsed["option_type"] == OptionType.CALL
+
+    spot = await _demo_spot(underlying)
+    base_iv = _DEMO_BASE_IV.get(underlying, 0.30)
+    moneyness = abs(math.log(spot / strike)) if strike > 0 and spot > 0 else 0.0
+    iv = round(base_iv * (1 + 1.5 * moneyness) + rng.uniform(-0.02, 0.02), 4)
+
+    today = market_today()
+    T = max((expiry - today).days / 365.0, 1 / 365)
+    from core.config import settings as _settings
+    r = float(_settings.GREEK_CALCULATION_RISK_FREE_RATE)
+    price = max(round(_approx_bsm_price(spot, strike, T, max(iv, 0.01), r, is_call), 2), 0.01)
+
+    spread = max(round(price * rng.uniform(0.02, 0.08), 2), 0.01)
+    bid = round(max(price - spread / 2, 0.01), 2)
+    ask = round(price + spread / 2, 2)
+    # Guarantee ask > bid even after Python's banker's rounding flattens
+    # the spread on a 1c-floor contract (deep OTM demo strikes).
+    if ask <= bid:
+        ask = round(bid + 0.01, 2)
+    bid_size = rng.randint(1, 50)
+    ask_size = rng.randint(1, 50)
+
+    atm_factor = max(0.1, 1 - moneyness * 5)
+    volume = int(rng.randint(10, 5000) * atm_factor)
+    open_interest = int(rng.randint(100, 30000) * atm_factor)
+
+    midpoint = round((bid + ask) / 2, 4)
+
+    return ContractSnapshot(
+        symbol=occ_symbol,
+        bid=bid,
+        ask=ask,
+        bid_size=bid_size,
+        ask_size=ask_size,
+        bid_exchange=None,
+        ask_exchange=None,
+        midpoint=midpoint,
+        last_price=round(price, 2),
+        last_timestamp=datetime.now(timezone.utc).isoformat(),
+        volume=volume,
+        open_interest=open_interest,
+        implied_volatility=iv,
+        fetched_at=datetime.now(timezone.utc).isoformat(),
+        is_demo=True,
+    )
+
+
+async def fetch_contract_snapshot(occ_symbol: str) -> ContractSnapshot:
+    """PM-C entry point: per-contract NBBO snapshot with Polygon -> Alpaca ->
+    demo waterfall and a 2-second TTL cache.
+
+    The 2s TTL is sized to the frontend polling cadence: a single open
+    NBBO row generates 30 backend calls / minute, so the cache collapses
+    that to ~1-2 upstream calls per minute per contract. Cache hits within
+    the TTL window return the same ContractSnapshot reference (Pydantic
+    models are immutable enough for this read-only pattern).
+    """
+    s = occ_symbol.upper()
+    if not _OCC_SYMBOL_PATTERN.fullmatch(s):
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid OCC option symbol: {occ_symbol!r}",
+        )
+
+    now = time.time()
+    cached = _contract_snapshot_cache.get(s)
+    if cached:
+        snap, ts = cached
+        if now - ts < _CONTRACT_SNAPSHOT_CACHE_TTL:
+            return snap
+
+    # 1. Polygon (preferred - surfaces bid/ask exchange IDs).
+    snap = await _fetch_polygon_contract_snapshot(s)
+
+    # 2. Alpaca fallback.
+    if snap is None:
+        snap = await _fetch_alpaca_contract_snapshot(s)
+
+    # 3. Demo fallback - never 503.
+    if snap is None:
+        log.info(
+            "Contract-snapshot demo fallback for %s - both Polygon and Alpaca unavailable",
+            s,
+        )
+        snap = await _demo_contract_snapshot(s)
+
+    _ttl_lru_set(
+        _contract_snapshot_cache, s, snap, now, _CONTRACT_SNAPSHOT_CACHE_TTL,
+    )
+    return snap

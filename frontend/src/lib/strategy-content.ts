@@ -208,9 +208,9 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
 
   "claude-alpha": {
     thesis:
-      "Claude Alpha is a planned research concept, not a live backend strategy. The intended design is systematic equity selection powered by large language model reasoning: Claude would synthesize fundamentals, technical structure, sentiment, catalyst context, and options-flow clues into a scored thesis for each candidate.\n\nThe theoretical basis for the concept draws from information aggregation literature, particularly Grossman & Stiglitz (1980), which argues that prices cannot fully reflect all available information when information acquisition is costly. A model that can rapidly process earnings transcripts, management commentary, industry reports, and macro context could reduce that processing cost, especially in names with thinner analyst coverage.\n\nBefore this becomes autonomous, AlphaDesk still needs a backend strategy package, prompt/version controls, point-in-time data contracts, a replayable backtest harness, risk-manager gates, and live monitoring for model drift. Until those exist, Claude Alpha should be treated as roadmap/design material rather than an active book.",
+      "AI Alpha is a planned research concept, not a live backend strategy. The intended design is systematic equity selection powered by large language model reasoning: the AI would synthesize fundamentals, technical structure, sentiment, catalyst context, and options-flow clues into a scored thesis for each candidate.\n\nThe theoretical basis for the concept draws from information aggregation literature, particularly Grossman & Stiglitz (1980), which argues that prices cannot fully reflect all available information when information acquisition is costly. A model that can rapidly process earnings transcripts, management commentary, industry reports, and macro context could reduce that processing cost, especially in names with thinner analyst coverage.\n\nBefore this becomes autonomous, AlphaDesk still needs a backend strategy package, prompt/version controls, point-in-time data contracts, a replayable backtest harness, risk-manager gates, and live monitoring for model drift. Until those exist, AI Alpha should be treated as roadmap/design material rather than an active book.",
     edge:
-      "Planned edge: use Claude to synthesize unstructured fundamental, technical, sentiment, and flow data into unified stock-level views, then validate those views with replayable point-in-time backtests before any capital is allocated.",
+      "Planned edge: use AI to synthesize unstructured fundamental, technical, sentiment, and flow data into unified stock-level views, then validate those views with replayable point-in-time backtests before any capital is allocated.",
     riskProfile: {
       level: "High",
       description:
@@ -223,14 +223,14 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
       positionSizing:
         "Not live. Target design: conviction-weighted 1-3% per position with hard portfolio-level risk caps",
       entryCriteria:
-        "Not live. Target design: Claude composite score in top quintile with explicit catalyst, thesis, uncertainty, and invalidation criteria",
+        "Not live. Target design: AI composite score in top quintile with explicit catalyst, thesis, uncertainty, and invalidation criteria",
       exitCriteria:
         "Not live. Target design: thesis invalidation, risk stop, or stale catalyst timeout after model-reviewed holding period",
       maxPositions: "0 live; target 15 after implementation",
     },
     howItWorks: [
       "Build a point-in-time candidate dataset first: fundamentals, transcripts, price/volume, news, estimates, and options-flow proxies.",
-      "Version every prompt and model setting so a backtest can replay exactly what Claude saw at the time.",
+      "Version every prompt and model setting so a backtest can replay exactly what the AI saw at the time.",
       "Require structured output: score, catalyst, thesis, uncertainty, invalidation, and max holding period.",
       "Run the output through risk gates and a paper-trade ledger before any autonomous sizing is allowed.",
       "Only after replay + paper results are stable should the strategy graduate from planned to research or autonomous.",
@@ -239,9 +239,9 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
       "Most promising in markets with active stock-level dispersion and abundant catalysts -- earnings seasons, sector rotations, and periods of policy uncertainty where fundamental analysis drives returns. It is not active today.",
     risks: [
       "No backend implementation or live track record yet; all performance claims must be withheld until point-in-time replay exists.",
-      "Model opacity: Claude's reasoning is not fully interpretable, making it difficult to understand why specific positions are selected during drawdown periods.",
-      "AI model evolution: changes to Claude's reasoning capabilities between versions could alter the strategy's characteristics without explicit calibration.",
-      "Concentration risk: if Claude's analysis converges on a narrow set of themes, the portfolio may be less diversified than intended.",
+      "Model opacity: the AI's reasoning is not fully interpretable, making it difficult to understand why specific positions are selected during drawdown periods.",
+      "AI model evolution: changes to the underlying model's reasoning capabilities between versions could alter the strategy's characteristics without explicit calibration.",
+      "Concentration risk: if the AI's analysis converges on a narrow set of themes, the portfolio may be less diversified than intended.",
     ],
   },
 
@@ -477,7 +477,7 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
 
   "manual-discretionary": {
     thesis:
-      "The Manual/Discretionary strategy bucket captures all trades placed directly on Alpaca outside of the automated pipeline. These positions represent personal conviction trades, hedging adjustments, or opportunistic entries that don't fit neatly into any systematic strategy framework. Every trade placed in this bucket receives a post-execution review from Claude, providing objective analysis of what went right or wrong.\n\nThe rationale for tracking discretionary trades alongside systematic strategies is twofold. First, it provides complete portfolio attribution -- every dollar of P&L is assigned to a strategy, preventing orphaned positions from distorting the performance of automated strategies. Second, by logging discretionary trades with the same rigor as systematic entries, the trader builds a decision journal that can be analyzed for behavioral patterns: overtrading tendencies, timing biases, position sizing errors, and conviction calibration.\n\nResearch on discretionary trading performance by Barber & Odean (2000, 2001) consistently shows that individual traders underperform due to behavioral biases including overconfidence, the disposition effect (holding losers too long, selling winners too early), and excessive trading frequency. By subjecting each discretionary trade to Claude's analytical review, the strategy aims to mitigate these biases through structured post-trade analysis.",
+      "The Manual/Discretionary strategy bucket captures all trades placed directly on Alpaca outside of the automated pipeline. These positions represent personal conviction trades, hedging adjustments, or opportunistic entries that don't fit neatly into any systematic strategy framework. Every trade placed in this bucket receives a post-execution review from the AI, providing objective analysis of what went right or wrong.\n\nThe rationale for tracking discretionary trades alongside systematic strategies is twofold. First, it provides complete portfolio attribution -- every dollar of P&L is assigned to a strategy, preventing orphaned positions from distorting the performance of automated strategies. Second, by logging discretionary trades with the same rigor as systematic entries, the trader builds a decision journal that can be analyzed for behavioral patterns: overtrading tendencies, timing biases, position sizing errors, and conviction calibration.\n\nResearch on discretionary trading performance by Barber & Odean (2000, 2001) consistently shows that individual traders underperform due to behavioral biases including overconfidence, the disposition effect (holding losers too long, selling winners too early), and excessive trading frequency. By subjecting each discretionary trade to the AI's analytical review, the strategy aims to mitigate these biases through structured post-trade analysis.",
     edge:
       "Combines human intuition and market awareness with AI-powered post-trade analysis, creating a feedback loop that systematically identifies and corrects behavioral trading biases over time.",
     riskProfile: {
@@ -490,14 +490,14 @@ export const STRATEGY_CONTENT: Record<string, StrategyContent> = {
       universe: "Any US equity available on Alpaca (no restrictions)",
       positionSizing: "Trader discretion, recommended max 5% per position",
       entryCriteria: "Trader conviction (no systematic filter)",
-      exitCriteria: "Trader discretion + Claude post-trade review recommendations",
+      exitCriteria: "Trader discretion + AI post-trade review recommendations",
       maxPositions: "No limit (portfolio-level risk controls apply)",
     },
     howItWorks: [
       "Place trades directly on Alpaca through the AlphaDesk trade interface or the Alpaca dashboard. Orders are routed to the broker immediately.",
       "AlphaDesk detects untracked Alpaca positions during its periodic sync and automatically creates ledger entries with the 'manual' strategy tag.",
-      "Claude reviews each position periodically, analyzing entry timing, fundamental context, technical setup, and prevailing sentiment at time of entry.",
-      "On position close, Claude generates a post-trade report evaluating the quality of the trade decision, identifying behavioral patterns, and suggesting improvements.",
+      "The AI reviews each position periodically, analyzing entry timing, fundamental context, technical setup, and prevailing sentiment at time of entry.",
+      "On position close, the AI generates a post-trade report evaluating the quality of the trade decision, identifying behavioral patterns, and suggesting improvements.",
       "All discretionary trades contribute to the portfolio-level performance dashboard, providing complete attribution of every dollar of P&L.",
     ],
     whenToUse:

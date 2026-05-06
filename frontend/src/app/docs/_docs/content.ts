@@ -46,7 +46,7 @@ export const DOC_SECTIONS: DocSection[] = [
     title: "Strategies",
     content: [
       "AlphaDesk runs nineteen catalogued strategies (twelve currently active) across fundamental, technical, and options books. All share the same execution layer, risk policy, and audit trail.",
-      "Fundamental / regime books: Cross-Sectional Momentum + Quality (momentum-quality), Post-Earnings Announcement Drift (PEAD), Systematic VRP Harvesting, Earnings Volatility Premium, HMM Regime-Adaptive Allocation, and Claude Alpha — the AI-driven adaptive sleeve.",
+      "Fundamental / regime books: Cross-Sectional Momentum + Quality (momentum-quality), Post-Earnings Announcement Drift (PEAD), Systematic VRP Harvesting, Earnings Volatility Premium, HMM Regime-Adaptive Allocation, and AI Alpha — the AI-driven adaptive sleeve.",
       "Technical books: Time-Series Momentum (ts-momentum), RSI-2 Mean Reversion (rsi2-reversal), Dual Momentum, Statistical Arbitrage Pairs (pairs-trading), KAMA + ATR Breakout (kama-breakout), Opening Range Breakout (ORB), and VWAP Bounce / Breakout.",
       "The full registry with descriptions and regime notes lives in lib/strategies.ts and is the source of truth. Toggle any strategy on or off from the Strategy Grid. Click a card to open its detail page: full performance history, open positions, monthly return heatmap, correlations, conviction distribution, and hold-time statistics.",
     ],
@@ -56,7 +56,7 @@ export const DOC_SECTIONS: DocSection[] = [
     index: "05",
     title: "Pipeline",
     content: [
-      "The Pipeline page shows each scheduled run and its stage-level status: data collection, Claude analysis, signal generation, risk checks, and order execution.",
+      "The Pipeline page shows each scheduled run and its stage-level status: data collection, AI analysis, signal generation, risk checks, and order execution.",
       "Runs execute automatically on the trading-day schedule and can also be triggered manually from the Pipeline page.",
       "The history table shows each run's duration, signals generated, and orders placed. All signals pass risk-management checks before any order is submitted.",
     ],
@@ -73,13 +73,13 @@ export const DOC_SECTIONS: DocSection[] = [
     ],
   },
   {
-    id: "how-claude-works",
+    id: "how-ai-works",
     index: "07",
-    title: "How Claude Analysis Works",
+    title: "How AI Analysis Works",
     content: [
-      "Each pipeline run packages relevant market data and sends it to Claude. The model evaluates technical indicators (moving averages, RSI, MACD, volume profiles), fundamental data (earnings, revenue growth, valuation multiples), and sentiment signals (news flow, analyst revisions), then returns a per-strategy trade thesis.",
+      "Each pipeline run packages relevant market data and sends it to the AI. The model evaluates technical indicators (moving averages, RSI, MACD, volume profiles), fundamental data (earnings, revenue growth, valuation multiples), and sentiment signals (news flow, analyst revisions), then returns a per-strategy trade thesis.",
       "Each thesis carries a conviction score (0–100). The score reflects alignment across the indicator set — a high score means the technical, fundamental, and sentiment signals point the same direction; it is not a probability estimate.",
-      "Claude's output is one stage in the pipeline. Risk-management rules, position-sizing constraints, and portfolio-level checks run after scoring before any order is placed.",
+      "The AI's output is one stage in the pipeline. Risk-management rules, position-sizing constraints, and portfolio-level checks run after scoring before any order is placed.",
     ],
   },
   {

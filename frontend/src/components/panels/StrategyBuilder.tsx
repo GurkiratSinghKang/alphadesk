@@ -224,7 +224,7 @@ export function StrategyBuilder() {
         <div className="flex gap-2">
           <Button onClick={handleAiRefine} variant="outline" size="sm" className="text-label gap-1.5" disabled={aiThinking}>
             {aiThinking ? <Sparkles className="h-3 w-3 animate-spin" /> : <Brain className="h-3 w-3" />}
-            {aiThinking ? "Analyzing with Claude..." : "Refine with AI"}
+            {aiThinking ? "Analyzing with AI..." : "Refine with AI"}
           </Button>
           <Button
             size="sm"

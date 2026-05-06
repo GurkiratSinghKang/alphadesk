@@ -47,6 +47,8 @@ import {
 } from "@/components/ui/dialog";
 import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
 import { useDestructiveAction } from "@/components/destructive/useDestructiveAction";
+// PM-C: live NBBO strip when the user has exactly one option leg staged.
+import ContractNBBO from "@/components/options/ContractNBBO";
 
 // ─── Trade Builder ───────────────────────────────────────────
 
@@ -471,6 +473,19 @@ function TradeBuilderTab() {
           </div>
         ))}
       </div>
+
+      {/* PM-C: live NBBO strip — only for the single-option-leg case so
+          we don't try to project a multi-leg combo onto one contract.
+          ``buildOccSymbol`` returns null on stock legs / malformed
+          input; we only mount the panel when we have a real OCC. */}
+      {legs.length === 1 && legs[0].type !== "stock" && (() => {
+        const occ = buildOccSymbol(legs[0]);
+        return occ ? (
+          <div className="mb-3" data-slot="trade-panel-nbbo">
+            <ContractNBBO occSymbol={occ} />
+          </div>
+        ) : null;
+      })()}
 
       <button
         onClick={addLeg}

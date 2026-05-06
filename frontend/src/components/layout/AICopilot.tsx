@@ -310,7 +310,7 @@ export function AICopilot() {
           (result as unknown as { response?: string }).response ||
           "No response";
         if (/error|Error code:/i.test(content)) {
-          content = "Claude is offline. Check `/pipeline` for upstream status.";
+          content = "AI is offline. Check `/pipeline` for upstream status.";
         }
 
         // Capture the conversation_id on first-ever response. The backend
@@ -342,7 +342,7 @@ export function AICopilot() {
               id: `a-${Date.now()}`,
               role: "assistant" as const,
               content:
-                "Lost the connection to Claude. The desk's pipeline retries automatically — check status at `/pipeline`.",
+                "Lost the connection to the AI. The desk's pipeline retries automatically — check status at `/pipeline`.",
               provenance: buildCopilotProvenance({
                 symbol: selectedSymbol,
                 quoteTimestamp: selectedQuote?.timestamp,
@@ -542,7 +542,7 @@ export function AICopilot() {
               placeholder="Ask anything..."
               /* BUG-023 — WCAG 4.1.2: placeholder is not an accessible name.
                  Explicit aria-label so screen readers announce the field. */
-              aria-label="Ask Claude a question"
+              aria-label="Ask the AI a question"
               disabled={loading}
               className="min-w-0 flex-1 bg-transparent text-base sm:text-label text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
             />

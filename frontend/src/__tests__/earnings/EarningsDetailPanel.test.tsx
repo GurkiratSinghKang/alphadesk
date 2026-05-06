@@ -30,7 +30,7 @@ describe("EarningsDetailPanel", () => {
     );
     expect(container.querySelector('[data-slot="detail-header"]')).not.toBeNull();
     expect(container.querySelector('[data-slot="metrics-strip"]')).not.toBeNull();
-    expect(container.querySelector('[data-slot="claude-thesis"]')).not.toBeNull();
+    expect(container.querySelector('[data-slot="ai-thesis"]')).not.toBeNull();
     expect(container.querySelector('[data-slot="strike-ladder"]')).not.toBeNull();
     expect(container.querySelector('[data-slot="historical-moves"]')).not.toBeNull();
     expect(container.querySelector('[data-slot="news-feed"]')).not.toBeNull();

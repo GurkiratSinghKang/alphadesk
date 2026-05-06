@@ -584,7 +584,7 @@ describe("Earnings Options Play — full flow", () => {
     ) as HTMLButtonElement;
     fireEvent.click(nvdaBtn);
     await waitFor(() => {
-      expect(container.querySelector('[data-slot="claude-thesis"]')?.textContent).toMatch(/NEUTRAL-BULL/);
+      expect(container.querySelector('[data-slot="ai-thesis"]')?.textContent).toMatch(/NEUTRAL-BULL/);
       expect(container.querySelector('[data-slot="strike-ladder"]')).not.toBeNull();
       // Round-12 / DR-1: defined-risk-only buttons. Bear-call-spread sells
       // ATM call (205) + buys 30Δ call as the protective wing. Bull-put-spread
@@ -612,7 +612,7 @@ describe("Earnings Options Play — full flow", () => {
     // waitFor resolving and the next synchronous querySelector, so poll for
     // the button to be present.
     const btn = await waitFor(() => {
-      const el = container.querySelector('[data-slot="claude-thesis"] button') as HTMLButtonElement | null;
+      const el = container.querySelector('[data-slot="ai-thesis"] button') as HTMLButtonElement | null;
       if (!el) throw new Error("thesis button not rendered yet");
       return el;
     });

@@ -1,6 +1,14 @@
 import "../setup-mocks";
-import { describe, it, expect } from "vitest";
-import { render } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { render, fireEvent } from "@testing-library/react";
+
+// PM-C row-expand mounts ContractNBBO inside expanded rows; that pulls
+// in the React Query hook. Stub it out so the existing render-only
+// tests don't need a QueryClientProvider.
+vi.mock("@/hooks/useContractSnapshot", () => ({
+  useContractSnapshot: () => ({ data: undefined, isLoading: false, error: null }),
+}));
+
 import StrikeLadder from "@/app/(dashboard)/strategies/earnings-options-play/_earnings/StrikeLadder";
 import type { StrikeLadder as LadderShape } from "@/types";
 
@@ -71,5 +79,67 @@ describe("StrikeLadder", () => {
     expect(region?.getAttribute("aria-label")).toMatch(/scrollable/i);
     expect(region?.getAttribute("tabIndex")).toBe("0");
     expect(region?.className).toMatch(/overflow-x-auto/);
+  });
+
+  // ── PM-C row-expand additions ─────────────────────────────────
+
+  it("does NOT make rows interactive when underlying prop is missing (graceful degrade)", () => {
+    const { container } = render(<StrikeLadder ladder={ladder} />);
+    const dataRows = container.querySelectorAll("tr.t-ladder-row.t-ladder-row--data");
+    expect(dataRows.length).toBeGreaterThan(0);
+    dataRows.forEach((row) => {
+      expect(row.getAttribute("role")).not.toBe("button");
+      expect(row.getAttribute("aria-expanded")).toBeNull();
+    });
+  });
+
+  it("makes rows clickable + role=button when underlying prop is provided", () => {
+    const { container } = render(<StrikeLadder ladder={ladder} underlying="NVDA" />);
+    const dataRows = container.querySelectorAll('tr[role="button"]');
+    expect(dataRows.length).toBe(ladder.rows.length);
+    dataRows.forEach((row) => {
+      expect(row.getAttribute("aria-expanded")).toBe("false");
+      expect(row.getAttribute("aria-controls")).toMatch(/^nbbo-NVDA/);
+      expect(row.getAttribute("tabIndex")).toBe("0");
+    });
+  });
+
+  it("toggles aria-expanded + mounts the NBBO row on click", () => {
+    const { container } = render(<StrikeLadder ladder={ladder} underlying="NVDA" />);
+    const firstRow = container.querySelector('tr[role="button"]') as HTMLElement;
+    expect(firstRow.getAttribute("aria-expanded")).toBe("false");
+    expect(container.querySelector('[data-slot="strike-ladder-nbbo-row"]')).toBeNull();
+    fireEvent.click(firstRow);
+    expect(firstRow.getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelector('[data-slot="strike-ladder-nbbo-row"]')).not.toBeNull();
+  });
+
+  it("collapses again when the same row is clicked twice", () => {
+    const { container } = render(<StrikeLadder ladder={ladder} underlying="NVDA" />);
+    const firstRow = container.querySelector('tr[role="button"]') as HTMLElement;
+    fireEvent.click(firstRow);
+    fireEvent.click(firstRow);
+    expect(firstRow.getAttribute("aria-expanded")).toBe("false");
+    expect(container.querySelector('[data-slot="strike-ladder-nbbo-row"]')).toBeNull();
+  });
+
+  it("only one row can be expanded at a time", () => {
+    const { container } = render(<StrikeLadder ladder={ladder} underlying="NVDA" />);
+    const rows = container.querySelectorAll('tr[role="button"]');
+    fireEvent.click(rows[0]);
+    fireEvent.click(rows[1]);
+    expect(rows[0].getAttribute("aria-expanded")).toBe("false");
+    expect(rows[1].getAttribute("aria-expanded")).toBe("true");
+    // Single NBBO row mounted
+    expect(container.querySelectorAll('[data-slot="strike-ladder-nbbo-row"]').length).toBe(1);
+  });
+
+  it("Enter and Space keys toggle expansion", () => {
+    const { container } = render(<StrikeLadder ladder={ladder} underlying="NVDA" />);
+    const firstRow = container.querySelector('tr[role="button"]') as HTMLElement;
+    fireEvent.keyDown(firstRow, { key: "Enter" });
+    expect(firstRow.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.keyDown(firstRow, { key: " " });
+    expect(firstRow.getAttribute("aria-expanded")).toBe("false");
   });
 });

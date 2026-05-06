@@ -74,7 +74,7 @@ export default function DecisionStrip({ structured, metrics }: DecisionStripProp
             aria-valuenow={confPct}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-label={`Claude confidence ${confPct}%`}
+            aria-label={`AI confidence ${confPct}%`}
           >
             <div
               className={

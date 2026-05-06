@@ -20,6 +20,39 @@ interface OptionsPayoffPanelProps {
   className?: string;
 }
 
+// PM-A 2026-05-05: per-comboType educational caption. Rendered as a
+// one-liner below the leg list so users learn "what does this
+// strategy actually win on" without leaving the panel.
+const STRATEGY_CAPTIONS: Record<string, string> = {
+  iron_condor: "Profits if the stock stays inside the breakevens; IV crush helps if you're short.",
+  iron_butterfly: "Profits if the stock pins near the body strike; IV crush is the main edge.",
+  short_strangle: "Profits if the stock stays inside the breakevens. Tail risk is uncapped.",
+  short_straddle: "Profits on a flat move; IV crush is the edge. Tail risk is uncapped.",
+  long_straddle: "Profits on a big move in either direction; IV crush works against you.",
+  long_strangle: "Profits on a big move beyond the strikes; IV crush works against you.",
+  bear_call_spread: "Profits if the stock falls or stays flat; defined max loss.",
+  bull_put_spread: "Profits if the stock rises or stays flat; defined max loss.",
+  bull_call_spread: "Profits if the stock rises through both strikes; defined max loss.",
+  bear_put_spread: "Profits if the stock falls through both strikes; defined max loss.",
+  long_call: "Profits on upside; pays for IV crush at expiration.",
+  long_put: "Profits on downside; pays for IV crush at expiration.",
+  calendar_spread: "Profits if the stock pins near the strike; IV crush asymmetry is the edge.",
+  diagonal_spread: "Profits if the stock pins near the strike; mixed IV-crush exposure.",
+};
+
+// PM-A 2026-05-05: credit comboTypes get a one-line IV-crush note
+// inside the leg list so traders entering before earnings see the
+// trade-off explicitly: the credit you collect must beat the
+// post-event vol compression.
+const CREDIT_STRATEGIES = new Set([
+  "iron_condor",
+  "iron_butterfly",
+  "short_strangle",
+  "short_straddle",
+  "bear_call_spread",
+  "bull_put_spread",
+]);
+
 export default function OptionsPayoffPanel({
   draft,
   title = "Options payoff",
@@ -71,42 +104,36 @@ export default function OptionsPayoffPanel({
             <span>{summary.reason}</span>
           </div>
           <LegList draft={draft} />
+          <StrategyCaption comboType={draft?.comboType} />
         </div>
       ) : (
         <div className="px-4 py-4">
           <MetricGrid summary={summary} compact={compact} />
           <PayoffChart summary={summary} />
           {!compact ? <LegList draft={draft} /> : null}
+          {!compact ? <StrategyCaption comboType={draft.comboType} /> : null}
         </div>
       )}
     </section>
   );
 }
 
-function MetricGrid({ summary, compact }: { summary: PayoffSummary; compact: boolean }) {
-  const netLabel = summary.netPremium >= 0 ? "Net credit" : "Net debit";
-  const netValue =
-    summary.status === "ready"
-      ? formatCurrency(Math.abs(summary.netPremium))
-      : "Unknown";
-  const breakevenValue =
-    summary.breakevens.length === 0
-      ? summary.status === "ready"
-        ? "None"
-        : "Unknown"
-      : summary.breakevens.map((price) => formatCurrency(price)).join(", ");
+function MetricGrid({ summary, compact: _compact }: { summary: PayoffSummary; compact: boolean }) {
+  // PM-A 2026-05-05: slimmed from 4 cells to 2. The breakeven cell
+  // moved into the chart (commit 3 callouts), and net premium is
+  // already visible in the leg list. Two cells means each can
+  // breathe — larger text, full width — and the rest of the panel
+  // gets vertical room for the redesigned chart.
   const metrics = [
     { label: "Max profit", value: formatPayoffValue(summary.maxProfit), tone: "text-profit" },
     { label: "Max loss", value: formatPayoffValue(summary.maxLoss), tone: "text-loss" },
-    { label: "Breakeven", value: breakevenValue, tone: "text-fg" },
-    { label: netLabel, value: netValue, tone: summary.netPremium >= 0 ? "text-profit" : "text-loss" },
   ];
   return (
-    <div className={cn("grid gap-px overflow-hidden rounded-md border border-border-hair bg-border-hair", compact ? "grid-cols-2" : "grid-cols-2 lg:grid-cols-4")}>
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border-hair bg-border-hair">
       {metrics.map((metric) => (
-        <div key={metric.label} className="min-w-0 bg-bg px-3 py-3">
+        <div key={metric.label} className="min-w-0 bg-bg px-4 py-4">
           <p className="t-label text-fg-hint">{metric.label}</p>
-          <p className={cn("mt-2 truncate font-mono text-body-sm font-semibold tabular-nums", metric.tone)}>
+          <p className={cn("mt-2 truncate font-mono text-body font-semibold tabular-nums", metric.tone)}>
             {metric.value}
           </p>
         </div>
@@ -207,9 +234,23 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
         }}
       >
         <svg viewBox={`0 0 ${chart.width} ${chart.height}`} className="h-full w-full overflow-visible" role="img" aria-label="Options profit and loss at expiration">
+          {/* PM-A 2026-05-05: gradient zone fills replace flat
+              tints so profit/loss bands fade away from the zero
+              line — easier to read at a glance which side of zero
+              the curve lives on. */}
+          <defs>
+            <linearGradient id="payoff-profit-fill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="var(--profit-tint)" stopOpacity="0.3" />
+              <stop offset="100%" stopColor="var(--profit-tint)" stopOpacity="0.7" />
+            </linearGradient>
+            <linearGradient id="payoff-loss-fill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="var(--loss-tint)" stopOpacity="0.7" />
+              <stop offset="100%" stopColor="var(--loss-tint)" stopOpacity="0.3" />
+            </linearGradient>
+          </defs>
           <rect x="0" y="0" width={chart.width} height={chart.height} rx="10" fill="transparent" />
-          <rect x={chart.padding} y={chart.yTop} width={chart.innerWidth} height={Math.max(0, chart.zeroY - chart.yTop)} fill="var(--profit-tint)" opacity="0.55" />
-          <rect x={chart.padding} y={chart.zeroY} width={chart.innerWidth} height={Math.max(0, chart.yBottom - chart.zeroY)} fill="var(--loss-tint)" opacity="0.6" />
+          <rect x={chart.padding} y={chart.yTop} width={chart.innerWidth} height={Math.max(0, chart.zeroY - chart.yTop)} fill="url(#payoff-profit-fill)" />
+          <rect x={chart.padding} y={chart.zeroY} width={chart.innerWidth} height={Math.max(0, chart.yBottom - chart.zeroY)} fill="url(#payoff-loss-fill)" />
           {chart.gridYs.map((y) => (
             <line key={`grid-y-${y}`} x1={chart.padding} x2={chart.width - chart.padding} y1={y} y2={y} stroke="var(--border-hair)" />
           ))}
@@ -219,17 +260,109 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
           <line x1={chart.padding} x2={chart.width - chart.padding} y1={chart.zeroY} y2={chart.zeroY} stroke="var(--fg-muted)" strokeDasharray="4 5" opacity="0.85" />
           {summary.spotPrice != null ? (
             <g>
-              <line x1={chart.x(summary.spotPrice)} x2={chart.x(summary.spotPrice)} y1={chart.yTop} y2={chart.yBottom} stroke="var(--brand)" strokeDasharray="3 5" opacity="0.9" />
+              {/* PM-A 2026-05-05: solid spot indicator (was dashed,
+                  identical to breakevens). Adds a small triangular
+                  tick marker at the chart top edge — like a price
+                  ruler — so the spot stands out visually. */}
+              <line x1={chart.x(summary.spotPrice)} x2={chart.x(summary.spotPrice)} y1={chart.yTop} y2={chart.yBottom} stroke="var(--brand)" opacity="0.9" />
+              <polygon
+                points={`${chart.x(summary.spotPrice) - 4},${chart.yTop - 1} ${chart.x(summary.spotPrice) + 4},${chart.yTop - 1} ${chart.x(summary.spotPrice)},${chart.yTop + 5}`}
+                fill="var(--brand)"
+              />
               <circle cx={chart.x(summary.spotPrice)} cy={chart.zeroY} r="3.5" fill="var(--brand)" />
             </g>
           ) : null}
-          {summary.breakevens.map((breakeven) => (
-            <g key={`be-${breakeven}`}>
-              <line x1={chart.x(breakeven)} x2={chart.x(breakeven)} y1={chart.yTop} y2={chart.yBottom} stroke="var(--fg-muted)" strokeDasharray="2 4" opacity="0.7" />
-              <circle cx={chart.x(breakeven)} cy={chart.zeroY} r="3" fill="var(--bg)" stroke="var(--fg-muted)" />
-            </g>
+          {/* PM-A 2026-05-05: dollar-valued Y-axis tick labels. The
+              old chart had unlabelled gridlines so users had to
+              hover to read pnl magnitudes. yAxisTicks is computed
+              by buildSvgModel and always includes $0 when the
+              range straddles zero. */}
+          {chart.yAxisTicks.map((tick) => (
+            <text
+              key={`y-tick-${tick.label}-${tick.y.toFixed(2)}`}
+              x={chart.padding - 4}
+              y={tick.y + 3}
+              textAnchor="end"
+              fontSize="9"
+              fill="var(--fg-hint)"
+            >
+              {tick.label}
+            </text>
           ))}
+          {summary.breakevens.map((breakeven, idx) => {
+            const leader = chart.breakevenLeader[idx];
+            return (
+              <g key={`be-${breakeven}`}>
+                <line x1={chart.x(breakeven)} x2={chart.x(breakeven)} y1={chart.yTop} y2={chart.yBottom} stroke="var(--fg-muted)" strokeDasharray="2 4" opacity="0.7" />
+                <circle cx={chart.x(breakeven)} cy={chart.zeroY} r="3" fill="var(--bg)" stroke="var(--fg-muted)" />
+                {/* PM-A 2026-05-05: in-chart breakeven callout. The
+                    leader line connects label → vertical so users
+                    don't have to map text to gridline position. */}
+                {leader ? (
+                  <g>
+                    <line
+                      x1={leader.labelX}
+                      x2={leader.x}
+                      y1={leader.labelY + 2}
+                      y2={chart.yTop + 14}
+                      stroke="var(--fg-muted)"
+                      strokeDasharray="1 2"
+                      opacity="0.6"
+                    />
+                    <text
+                      x={leader.labelX}
+                      y={leader.labelY}
+                      textAnchor="middle"
+                      fontSize="9"
+                      fill="var(--fg-muted)"
+                    >
+                      {`BE ${formatCurrency(breakeven)}`}
+                    </text>
+                  </g>
+                ) : null}
+              </g>
+            );
+          })}
           <path d={chart.path} fill="none" stroke="var(--brand)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+          {/* PM-A 2026-05-05: max-profit / max-loss markers on the
+              curve. Filled coloured circles + labelled text give
+              users the headline numbers without parsing the metric
+              grid above. "∞" replaces "+\$Infinity" when the
+              strategy is unbounded on that side. */}
+          {chart.maxProfitCoord ? (
+            <g>
+              <circle cx={chart.maxProfitCoord.x} cy={chart.maxProfitCoord.y} r="5" fill="var(--profit)" />
+              <text
+                x={chart.maxProfitCoord.x}
+                y={chart.maxProfitCoord.y - 8}
+                textAnchor="middle"
+                fontSize="9"
+                fill="var(--profit)"
+                fontWeight="600"
+              >
+                {chart.maxProfitCoord.label === "∞"
+                  ? "+∞"
+                  : `+${formatCurrency(chart.maxProfitCoord.pnl)}`}
+              </text>
+            </g>
+          ) : null}
+          {chart.maxLossCoord ? (
+            <g>
+              <circle cx={chart.maxLossCoord.x} cy={chart.maxLossCoord.y} r="5" fill="var(--loss)" />
+              <text
+                x={chart.maxLossCoord.x}
+                y={chart.maxLossCoord.y + 14}
+                textAnchor="middle"
+                fontSize="9"
+                fill="var(--loss)"
+                fontWeight="600"
+              >
+                {chart.maxLossCoord.label === "∞"
+                  ? "−∞"
+                  : `−${formatCurrency(Math.abs(chart.maxLossCoord.pnl))}`}
+              </text>
+            </g>
+          ) : null}
           {hovered ? (
             <g>
               <line x1={chart.x(hovered.underlyingPrice)} x2={chart.x(hovered.underlyingPrice)} y1={chart.yTop} y2={chart.yBottom} stroke="var(--fg)" opacity="0.18" />
@@ -278,6 +411,7 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
 }
 
 function LegList({ draft }: { draft: OptionStrategyDraft }) {
+  const isCredit = draft.comboType ? CREDIT_STRATEGIES.has(draft.comboType) : false;
   return (
     <div className="mt-4 grid gap-2">
       {draft.legs.map((leg, index) => (
@@ -291,8 +425,20 @@ function LegList({ draft }: { draft: OptionStrategyDraft }) {
           <span className="text-fg-muted">{leg.entryPrice == null ? "Unpriced" : formatCurrency(leg.entryPrice)}</span>
         </div>
       ))}
+      {isCredit ? (
+        <p className="t-label text-[var(--fg-muted)]">
+          Entering before earnings means selling IV crush; the credit must exceed the post-event compression.
+        </p>
+      ) : null}
     </div>
   );
+}
+
+function StrategyCaption({ comboType }: { comboType?: string | null }) {
+  if (!comboType) return null;
+  const text = STRATEGY_CAPTIONS[comboType];
+  if (!text) return null;
+  return <p className="text-[var(--fg-muted)] text-body-sm mt-2">{text}</p>;
 }
 
 function EmptyPayoff({ copy, compact = false }: { copy: string; compact?: boolean }) {
@@ -305,11 +451,60 @@ function EmptyPayoff({ copy, compact = false }: { copy: string; compact?: boolea
   );
 }
 
-function buildSvgModel(points: PayoffPoint[], summary: PayoffSummary) {
+// PM-A 2026-05-05: extended buildSvgModel return shape with
+// maxProfitCoord, maxLossCoord, yAxisTicks, breakevenLeader. These
+// support the redesigned payoff chart's curve annotations,
+// dollar-labelled Y axis, and breakeven callouts. No visual change
+// in this commit — fields are declared but not yet rendered.
+export interface PayoffCurveCoord {
+  x: number;
+  y: number;
+  pnl: number;
+  price: number;
+  label?: string;
+}
+
+export interface YAxisTick {
+  y: number;
+  label: string;
+}
+
+export interface BreakevenLeader {
+  x: number;
+  labelX: number;
+  labelY: number;
+  price: number;
+}
+
+export interface SvgModel {
+  width: number;
+  height: number;
+  padding: number;
+  innerWidth: number;
+  yTop: number;
+  yBottom: number;
+  zeroY: number;
+  xMin: number;
+  xMax: number;
+  x: (price: number) => number;
+  y: (pnl: number) => number;
+  path: string;
+  gridYs: number[];
+  gridXs: number[];
+  maxProfitCoord: PayoffCurveCoord | null;
+  maxLossCoord: PayoffCurveCoord | null;
+  yAxisTicks: YAxisTick[];
+  breakevenLeader: BreakevenLeader[];
+}
+
+export function buildSvgModel(points: PayoffPoint[], summary: PayoffSummary): SvgModel | null {
   if (points.length < 2) return null;
   const width = 720;
   const height = 220;
-  const padding = 28;
+  // PM-A 2026-05-05: widened padding from 28 → 48 so dollar Y-axis
+  // labels (e.g. "−$1,200") have room to render without clipping
+  // the chart body.
+  const padding = 48;
   const innerWidth = width - padding * 2;
   const yTop = 16;
   const yBottom = height - 28;
@@ -341,6 +536,69 @@ function buildSvgModel(points: PayoffPoint[], summary: PayoffSummary) {
   const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${x(point.underlyingPrice).toFixed(2)} ${y(point.pnl).toFixed(2)}`).join(" ");
   const gridYs = [0.25, 0.5, 0.75].map((ratio) => yTop + innerHeight * ratio);
   const gridXs = [0.25, 0.5, 0.75].map((ratio) => padding + innerWidth * ratio);
+
+  // PM-A 2026-05-05: compute max-profit coordinate. If the strategy
+  // is unbounded on the upside (e.g. long call), pin to the chart's
+  // top-right corner with label "∞". Otherwise scan the payoff
+  // points for the highest pnl > 0 and project to (x, y).
+  const right = width - padding;
+  let maxProfitCoord: PayoffCurveCoord | null = null;
+  if (summary.maxProfit.kind === "unlimited") {
+    maxProfitCoord = { x: right, y: yTop, pnl: Infinity, price: xMax, label: "∞" };
+  } else {
+    let best: PayoffPoint | null = null;
+    for (const point of points) {
+      if (point.pnl > 0 && (best === null || point.pnl > best.pnl)) best = point;
+    }
+    if (best) {
+      maxProfitCoord = { x: x(best.underlyingPrice), y: y(best.pnl), pnl: best.pnl, price: best.underlyingPrice };
+    }
+  }
+
+  // PM-A 2026-05-05: max-loss coordinate. Unbounded → bottom edge.
+  let maxLossCoord: PayoffCurveCoord | null = null;
+  if (summary.maxLoss.kind === "unlimited") {
+    // Pin to a point reflecting the directional risk: short calls
+    // blow up to the right; short puts blow up to the left. We don't
+    // know the leg mix here, so anchor to the lowest-pnl curve
+    // point as a conservative fallback.
+    let worst: PayoffPoint | null = null;
+    for (const point of points) {
+      if (worst === null || point.pnl < worst.pnl) worst = point;
+    }
+    if (worst) {
+      maxLossCoord = { x: x(worst.underlyingPrice), y: yBottom, pnl: -Infinity, price: worst.underlyingPrice, label: "∞" };
+    }
+  } else {
+    let worst: PayoffPoint | null = null;
+    for (const point of points) {
+      if (point.pnl < 0 && (worst === null || point.pnl < worst.pnl)) worst = point;
+    }
+    if (worst) {
+      maxLossCoord = { x: x(worst.underlyingPrice), y: y(worst.pnl), pnl: worst.pnl, price: worst.underlyingPrice };
+    }
+  }
+
+  // PM-A 2026-05-05: pick 4–5 nice round-number dollar Y-axis ticks
+  // within [yMin, yMax]. Always include $0. Step is rounded to a
+  // {1,2,2.5,5}*10^k "nice" number for human readability.
+  const yAxisTicks = computeYAxisTicks(yMin, yMax, y);
+
+  // PM-A 2026-05-05: breakeven leader lines. For each breakeven
+  // price, compute its chart x and a label position at the chart's
+  // top edge. If the breakeven label collides with the spot
+  // indicator (within 20px), shift it 20px left.
+  const labelY = yTop + 10;
+  const spotX = summary.spotPrice != null ? x(summary.spotPrice) : null;
+  const breakevenLeader: BreakevenLeader[] = summary.breakevens.map((price) => {
+    const bx = x(price);
+    let labelX = bx;
+    if (spotX != null && Math.abs(bx - spotX) < 20) {
+      labelX = bx - 20;
+    }
+    return { x: bx, labelX, labelY, price };
+  });
+
   return {
     width,
     height,
@@ -356,7 +614,54 @@ function buildSvgModel(points: PayoffPoint[], summary: PayoffSummary) {
     path,
     gridYs,
     gridXs,
+    maxProfitCoord,
+    maxLossCoord,
+    yAxisTicks,
+    breakevenLeader,
   };
+}
+
+function computeYAxisTicks(yMin: number, yMax: number, project: (pnl: number) => number): YAxisTick[] {
+  const range = yMax - yMin;
+  if (!Number.isFinite(range) || range <= 0) return [];
+  // Aim for ~4 ticks; pick a "nice" step.
+  const target = 4;
+  const rough = range / target;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rough)));
+  const normalised = rough / magnitude;
+  let nice: number;
+  if (normalised < 1.5) nice = 1;
+  else if (normalised < 3) nice = 2;
+  else if (normalised < 7) nice = 5;
+  else nice = 10;
+  const step = nice * magnitude;
+  const start = Math.ceil(yMin / step) * step;
+  const ticks: YAxisTick[] = [];
+  // Always include $0 if it's in range.
+  const includeZero = yMin <= 0 && yMax >= 0;
+  for (let value = start; value <= yMax + 1e-6 && ticks.length < 6; value += step) {
+    if (includeZero && Math.abs(value) < step / 2 && !ticks.some((t) => t.label === "$0")) {
+      ticks.push({ y: project(0), label: "$0" });
+      continue;
+    }
+    ticks.push({ y: project(value), label: formatTickLabel(value) });
+  }
+  if (includeZero && !ticks.some((t) => t.label === "$0")) {
+    ticks.push({ y: project(0), label: "$0" });
+  }
+  return ticks;
+}
+
+function formatTickLabel(value: number): string {
+  if (Math.abs(value) < 0.5) return "$0";
+  const sign = value < 0 ? "−" : "+";
+  const abs = Math.abs(value);
+  if (abs >= 1000) {
+    const thousands = abs / 1000;
+    const rounded = thousands >= 10 ? Math.round(thousands) : Math.round(thousands * 10) / 10;
+    return `${sign}$${rounded}k`;
+  }
+  return `${sign}$${Math.round(abs)}`;
 }
 
 function nearestPoint(points: PayoffPoint[], underlyingPrice: number): PayoffPoint | null {

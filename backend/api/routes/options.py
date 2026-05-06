@@ -7,7 +7,10 @@ from datetime import date
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
+
+from api.routes._rate_limit import check_contract_snapshot_rate
+from core.http import client_ip
 
 # Models, demo helpers, Alpaca-OPRA helpers, and TTL caches live in the
 # service layer so non-HTTP callers (e.g. ``services.earnings_screener``)
@@ -15,18 +18,22 @@ from fastapi import APIRouter, HTTPException, Query
 # API of ``api.routes.options`` is preserved by re-exporting the names
 # below.
 from services.options import (  # noqa: F401 — re-exported for tests/back-compat
+    ContractSnapshot,
     Greeks,
     IVData,
     OptionChain,
     OptionContract,
     OptionType,
     _DEMO_BASE_IV,
+    _OCC_SYMBOL_PATTERN,
     _chain_cache,
+    _contract_snapshot_cache,
     _demo_spot,
     _iv_cache,
     _real_spot_cache,
     _ttl_lru_set,
     fetch_chain,
+    fetch_contract_snapshot,
     fetch_iv_analysis,
 )
 
@@ -81,6 +88,51 @@ async def get_options_chain(
     return await fetch_chain(
         symbol, expiry, strike_min, strike_max, option_type, chain_limit=limit,
     )
+
+
+@router.get(
+    "/contract-snapshot",
+    response_model=ContractSnapshot,
+    summary="Per-contract NBBO snapshot (PM-C)",
+    description=(
+        "Returns a top-of-book snapshot for a single OCC option symbol. "
+        "Polled at ~2s by the frontend NBBO display.\n\n"
+        "Provider waterfall: Polygon "
+        "(`/v3/snapshot/options/{underlying}/{contract}`) → Alpaca OPRA "
+        "(`/v1beta1/options/snapshots/{symbol}`) → demo synthesis. "
+        "Polygon is preferred because it surfaces the originating "
+        "exchange ID for both top-of-book quotes; Alpaca aggregates NBBO "
+        "without venue attribution. The endpoint never 503s — both "
+        "upstream failures fall through to a deterministic demo snapshot "
+        "with `is_demo=true`.\n\n"
+        "Cached at the service layer with a 2-second TTL keyed on the "
+        "OCC symbol — collapses 30 frontend calls/min to ~1-2 upstream "
+        "calls/min per contract. Per-IP rate-limited at 60/min."
+    ),
+)
+async def get_contract_snapshot(
+    request: Request,
+    symbol: Annotated[
+        str,
+        Query(
+            min_length=9,
+            max_length=21,
+            description=(
+                "OCC option symbol (e.g. ``AAPL250418C00250000``). 1-6 "
+                "letter underlying, YYMMDD expiry, ``C`` or ``P``, then "
+                "an 8-digit strike (×1000)."
+            ),
+        ),
+    ],
+) -> ContractSnapshot:
+    """Thin HTTP wrapper: rate-limit then delegate to the service layer.
+
+    Validation, caching, and the provider waterfall all live in
+    :func:`services.options.fetch_contract_snapshot`. The route's only
+    job is enforcing the per-IP rate limit and unpacking the request.
+    """
+    await check_contract_snapshot_rate(client_ip(request))
+    return await fetch_contract_snapshot(symbol.upper())
 
 
 @router.get(

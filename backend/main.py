@@ -38,6 +38,7 @@ from api.routes import broker as broker_routes
 from api.routes import earnings
 from api.routes import access_requests as access_requests_routes
 from api.routes import exit_rules as exit_rules_routes
+from api.routes import admin_control as admin_control_routes
 from api.routes import metrics as metrics_routes
 from api.routes import user as user_routes
 from api.middleware.skip_db_init_warning import SkipDbInitWarningMiddleware
@@ -304,7 +305,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(
     title="AlphaDesk API",
-    description="Claude-powered trading platform API",
+    description="AI-powered trading platform API",
     version="0.1.0",
     lifespan=lifespan,
     docs_url="/docs" if not settings.is_production else None,
@@ -443,6 +444,12 @@ app.include_router(access_requests_routes.router, prefix="/api/v1/access-request
 # sensitive (an enabled 21-DTE rule will close every position on
 # Friday-of-opex).
 app.include_router(exit_rules_routes.router, prefix="/api/v1/exit-rules", tags=["Exit Rules"], dependencies=[Depends(require_auth)])
+# Admin Control Center — provider-agnostic key rotation, dashboard
+# layout config, and a "Push to prod" button that triggers the GitHub
+# Actions deploy workflow. Routes self-gate via require_admin /
+# require_auth (the layout GET is auth-only because the dashboard
+# fetches it on every authed mount).
+app.include_router(admin_control_routes.router, prefix="/api/v1", tags=["Admin Control Center"])
 # Round-23 / persona-A P0: CSP violation report ingest. Public endpoint
 # (browsers POST without credentials when violation fires); validated +
 # per-IP rate-limited at the route layer. Used by the Report-Only CSP

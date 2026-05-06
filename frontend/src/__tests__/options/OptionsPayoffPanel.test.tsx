@@ -25,12 +25,17 @@ const draft: OptionStrategyDraft = {
 };
 
 describe("OptionsPayoffPanel", () => {
-  it("renders max profit, max loss, breakeven, and chart", () => {
+  it("renders max profit, max loss, and chart (breakeven now lives on the chart)", () => {
     render(<OptionsPayoffPanel draft={draft} />);
     expect(screen.getByText("Options payoff")).toBeInTheDocument();
     expect(screen.getByText("Unlimited")).toBeInTheDocument();
     expect(screen.getAllByText("$500.00").length).toBeGreaterThan(0);
-    expect(screen.getByText("$105.00")).toBeInTheDocument();
+    // PM-A 2026-05-05: breakeven moved out of the MetricGrid into
+    // an in-chart "BE $X" callout. The exact dollar string still
+    // appears in the SVG markup as a <text>; assert that any
+    // element on the page contains "BE $105.00" or that the SVG
+    // has the breakeven callout content.
+    expect(screen.getByText(/BE \$105\.00/i)).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /options profit and loss/i })).toBeInTheDocument();
   });
 

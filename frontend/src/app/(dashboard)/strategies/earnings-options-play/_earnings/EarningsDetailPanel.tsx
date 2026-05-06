@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { ArrowUpCircle, Bookmark, X } from "lucide-react";
-import type { CalendarRow, EarningsCandidateDecision, EarningsDetail, EarningsErrorCode, TickerContext, TickerFactEnvelope } from "@/types";
+import type { CalendarRow, EarningsCandidateDecision, EarningsDetail, EarningsErrorCode, Quote, TickerContext, TickerFactEnvelope } from "@/types";
 import CalendarWeekHeatmap from "./CalendarWeekHeatmap";
 import type { SelectionSource } from "../page";
 import { cn } from "@/lib/utils";
@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import DetailHeader from "./DetailHeader";
 import DecisionStrip from "./DecisionStrip";
 import MetricsStrip from "./MetricsStrip";
-import ClaudeThesisCard from "./ClaudeThesisCard";
+import AIThesisCard from "./AIThesisCard";
 import StrikeLadder from "./StrikeLadder";
 import HistoricalMoves from "./HistoricalMoves";
 import HistoricalSetupReplay from "./HistoricalSetupReplay";
@@ -267,6 +267,14 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         reportDate={detail.reportDate} reportTime={detail.reportTime}
         quote={detail.quote} generatedAt={detail.generatedAt}
         selectionSource={selectionSource}
+        // PM-B: hand the (possibly null) ticker-context quote envelope to
+        // DetailHeader so the after-hours / pre-market secondary line can
+        // render. The cast is safe because the envelope's ``value`` is
+        // the backend's quote payload (snake_case keys mirroring the
+        // ``Quote`` interface — see types/index.ts EH-1 contract); it
+        // arrives as ``Record<string, unknown>`` because the envelope is
+        // schema-version-agnostic.
+        extendedQuote={(tickerContext?.quote?.value ?? null) as Partial<Quote> | null}
       />
       <div
         data-slot="candidate-swipe-card"
@@ -347,7 +355,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
           {/* Left column: thesis + news */}
           <div className="min-w-0 space-y-3">
-            <ClaudeThesisCard
+            <AIThesisCard
               structured={detail.claudeStructured} full={detail.claudeFullResearch}
               running={runningFull} error={fullResearchError}
               onRunFull={onRunFullResearch}
@@ -357,19 +365,19 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
           </div>
           {/* Right column: ladder + term/skew */}
           <div className="min-w-0 space-y-3">
-            <StrikeLadder ladder={detail.strikeLadder} />
+            <StrikeLadder ladder={detail.strikeLadder} underlying={detail.symbol} />
             <IVTermSkew term={detail.ivTermStructure} skew={detail.skew} />
           </div>
         </div>
       ) : (
         <div className="mt-4 space-y-4">
-          <ClaudeThesisCard
+          <AIThesisCard
             structured={detail.claudeStructured} full={detail.claudeFullResearch}
             running={runningFull} error={fullResearchError}
             onRunFull={onRunFullResearch}
             symbol={detail.symbol}
           />
-          <StrikeLadder ladder={detail.strikeLadder} />
+          <StrikeLadder ladder={detail.strikeLadder} underlying={detail.symbol} />
           <IVTermSkew term={detail.ivTermStructure} skew={detail.skew} />
           <NewsFeed news={detail.news} />
         </div>
@@ -626,9 +634,9 @@ export const ERROR_CODE_COPY: Record<EarningsErrorCode, string> = {
     "Volatility metrics unavailable — HV pipeline output missing for this symbol",
   hv_unavailable: "Historical volatility unavailable — daily HV job hasn't completed",
   regime_unavailable:
-    "Market regime unavailable — Alpaca/SPY/VIXY context failed; Claude treats regime as neutral",
+    "Market regime unavailable — Alpaca/SPY/VIXY context failed; AI treats regime as neutral",
   claude_unavailable:
-    "AI thesis unavailable — Claude budget tripped, upstream timeout, or daily $ cap reached. Retry in ~30s",
+    "AI thesis unavailable — model budget tripped, upstream timeout, or daily $ cap reached. Retry in ~30s",
 };
 
 /**

@@ -59,14 +59,27 @@ _ANALYSIS_BUCKET_WINDOW_S: float = float(settings.RATE_LIMIT_ANALYSIS_PER_IP_WIN
 _ANALYSIS_GLOBAL_MAX: int = int(settings.RATE_LIMIT_ANALYSIS_GLOBAL)
 _ANALYSIS_GLOBAL_WINDOW_S: float = float(settings.RATE_LIMIT_ANALYSIS_GLOBAL_WINDOW_SECONDS)
 
+# PM-C: per-contract NBBO snapshot. The frontend polls this endpoint every
+# ~2 seconds per open row, so the per-IP cap has to leave headroom for a
+# user with ~20 open rows (20 rows × 30 calls/min/row = 600 calls/min in the
+# uncached worst case — but the 2s service-layer cache keeps the realistic
+# per-row upstream rate around 1-2 calls/min). 60/min/IP is the abuse
+# ceiling for the route, not the steady-state load.
+_CONTRACT_SNAPSHOT_BUCKET_MAX: int = int(getattr(settings, "RATE_LIMIT_CONTRACT_SNAPSHOT_PER_IP", 60))
+_CONTRACT_SNAPSHOT_BUCKET_WINDOW_S: float = float(
+    getattr(settings, "RATE_LIMIT_CONTRACT_SNAPSHOT_PER_IP_WINDOW_SECONDS", 60.0)
+)
+
 _history: Dict[str, Deque[float]] = defaultdict(deque)
 _detail_history: Dict[str, Deque[float]] = defaultdict(deque)
 _analysis_history: Dict[str, Deque[float]] = defaultdict(deque)
 _analysis_global_history: Deque[float] = deque()
+_contract_snapshot_history: Dict[str, Deque[float]] = defaultdict(deque)
 _lock: asyncio.Lock = asyncio.Lock()
 _detail_lock: asyncio.Lock = asyncio.Lock()
 _analysis_lock: asyncio.Lock = asyncio.Lock()
 _analysis_global_lock: asyncio.Lock = asyncio.Lock()
+_contract_snapshot_lock: asyncio.Lock = asyncio.Lock()
 
 
 async def check_full_research_rate(client_host: str) -> None:
@@ -150,6 +163,26 @@ async def check_analysis_rate(client_host: str) -> None:
                 headers={"Retry-After": str(retry_after)},
             )
         _analysis_global_history.append(now)
+
+
+async def check_contract_snapshot_rate(client_host: str) -> None:
+    """PM-C: per-IP rate limit on the contract-snapshot endpoint.
+
+    The endpoint is hit by the frontend NBBO display at ~2s per open row.
+    A user with one open row generates 30 calls / minute; the cap at 60/min
+    leaves headroom for two simultaneously-open rows (the realistic upper
+    bound for a focused trading session). Past that, the service-layer
+    2s cache absorbs the load — but the rate limit guards against a stuck
+    or hostile client polling without throttling.
+    """
+    await _check_bucket(
+        client_host,
+        _contract_snapshot_history,
+        _contract_snapshot_lock,
+        _CONTRACT_SNAPSHOT_BUCKET_MAX,
+        _CONTRACT_SNAPSHOT_BUCKET_WINDOW_S,
+        bucket_label="contract-snapshot",
+    )
 
 
 async def _check_bucket(
@@ -299,3 +332,4 @@ def _reset_for_tests() -> None:
     _detail_history.clear()
     _analysis_history.clear()
     _analysis_global_history.clear()
+    _contract_snapshot_history.clear()

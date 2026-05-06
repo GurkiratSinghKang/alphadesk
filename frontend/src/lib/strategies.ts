@@ -117,8 +117,12 @@ export const STRATEGY_META: Record<string, StrategyMetaEntry> = {
     group: "fundamental",
   },
   "claude-alpha": {
-    name: "Claude Alpha",
-    shortName: "Claude Alpha",
+    // Slug "claude-alpha" preserved as a stable identifier for back-compat
+    // (DB rows, Redis keys, API contracts, deep links). Display name is
+    // generic "AI Alpha" so the underlying model can be swapped without
+    // touching the URL surface.
+    name: "AI Alpha",
+    shortName: "AI Alpha",
     icon: Zap,
     regimeNote: "AI-driven, regime-aware",
     group: "fundamental",

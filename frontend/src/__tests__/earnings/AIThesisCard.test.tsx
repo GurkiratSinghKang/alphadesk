@@ -1,7 +1,7 @@
 import "../setup-mocks";
 import { describe, it, expect, vi } from "vitest";
 import { render, fireEvent, act } from "@testing-library/react";
-import ClaudeThesisCard from "@/app/(dashboard)/strategies/earnings-options-play/_earnings/ClaudeThesisCard";
+import AIThesisCard from "@/app/(dashboard)/strategies/earnings-options-play/_earnings/AIThesisCard";
 import { RateLimitError } from "@/lib/api";
 import type { ClaudeStructured, ClaudeFullResearch } from "@/types";
 
@@ -18,10 +18,10 @@ const structured: ClaudeStructured = {
   generatedAt: new Date().toISOString(),
 };
 
-describe("ClaudeThesisCard", () => {
+describe("AIThesisCard", () => {
   it("renders verdict, confidence, thesis, catalysts, risks, suggested play", () => {
     const { container } = render(
-      <ClaudeThesisCard structured={structured} full={null} running={false} onRunFull={() => {}} />,
+      <AIThesisCard structured={structured} full={null} running={false} onRunFull={() => {}} />,
     );
     expect(container.textContent).toMatch(/NEUTRAL-BULL/i);
     expect(container.textContent).toMatch(/62/);
@@ -33,7 +33,7 @@ describe("ClaudeThesisCard", () => {
 
   it("warns when cached structured analysis recommends a legacy undefined-risk play", () => {
     const { container } = render(
-      <ClaudeThesisCard structured={structured} full={null} running={false} onRunFull={() => {}} />,
+      <AIThesisCard structured={structured} full={null} running={false} onRunFull={() => {}} />,
     );
     const warning = container.querySelector('[data-slot="legacy-unsupported-play"]');
     expect(warning?.textContent).toMatch(/legacy undefined-risk play/i);
@@ -43,7 +43,7 @@ describe("ClaudeThesisCard", () => {
   it("calls onRunFull when 'Run full research' clicked", () => {
     const onRunFull = vi.fn();
     const { getByRole } = render(
-      <ClaudeThesisCard structured={structured} full={null} running={false} onRunFull={onRunFull} />,
+      <AIThesisCard structured={structured} full={null} running={false} onRunFull={onRunFull} />,
     );
     fireEvent.click(getByRole("button", { name: /run full research/i }));
     expect(onRunFull).toHaveBeenCalled();
@@ -51,7 +51,7 @@ describe("ClaudeThesisCard", () => {
 
   it("shows spinner/disabled state when running", () => {
     const { getByRole } = render(
-      <ClaudeThesisCard structured={structured} full={null} running={true} onRunFull={() => {}} />,
+      <AIThesisCard structured={structured} full={null} running={true} onRunFull={() => {}} />,
     );
     const btn = getByRole("button", { name: /generating|running|loading/i });
     expect(btn).toHaveProperty("disabled", true);
@@ -72,7 +72,7 @@ describe("ClaudeThesisCard", () => {
       generatedAt: new Date().toISOString(),
     };
     const { container } = render(
-      <ClaudeThesisCard structured={structured} full={full} running={false} onRunFull={() => {}} />,
+      <AIThesisCard structured={structured} full={full} running={false} onRunFull={() => {}} />,
     );
     expect(container.textContent).toContain("Full paragraph content");
     expect(container.textContent).toContain("+$120");
@@ -81,7 +81,7 @@ describe("ClaudeThesisCard", () => {
 
   it("renders null state when no structured analysis", () => {
     const { container } = render(
-      <ClaudeThesisCard structured={null} full={null} running={false} onRunFull={() => {}} />,
+      <AIThesisCard structured={null} full={null} running={false} onRunFull={() => {}} />,
     );
     expect(container.textContent).toMatch(/analysis pending|not yet|unavailable/i);
   });
@@ -89,7 +89,7 @@ describe("ClaudeThesisCard", () => {
   it("allows full research when structured analysis is unavailable", () => {
     const onRunFull = vi.fn();
     const { container, getByRole } = render(
-      <ClaudeThesisCard
+      <AIThesisCard
         structured={null}
         full={null}
         running={false}
@@ -115,7 +115,7 @@ describe("ClaudeThesisCard", () => {
       generatedAt: new Date().toISOString(),
     };
     const { container, queryByRole } = render(
-      <ClaudeThesisCard structured={null} full={full} running={false} onRunFull={() => {}} />,
+      <AIThesisCard structured={null} full={full} running={false} onRunFull={() => {}} />,
     );
     expect(container.textContent).toContain("Fallback full research content");
     expect(container.textContent).toContain("Watch the post-report opening range");
@@ -129,7 +129,7 @@ describe("ClaudeThesisCard", () => {
     try {
       const err = new RateLimitError("/api/v1/earnings/NVDA/full-research", 5);
       const { container, getByRole } = render(
-        <ClaudeThesisCard
+        <AIThesisCard
           structured={structured}
           full={null}
           running={false}
@@ -160,7 +160,7 @@ describe("ClaudeThesisCard", () => {
   it("renders a generic alert for non-RateLimit errors (CLUSTER D/11)", () => {
     const err = new Error("network down");
     const { container } = render(
-      <ClaudeThesisCard
+      <AIThesisCard
         structured={structured}
         full={null}
         running={false}
@@ -181,7 +181,7 @@ describe("ClaudeThesisCard", () => {
         30,
       );
       const { container, rerender } = render(
-        <ClaudeThesisCard
+        <AIThesisCard
           structured={structured}
           full={null}
           running={false}
@@ -208,7 +208,7 @@ describe("ClaudeThesisCard", () => {
         30,
       );
       rerender(
-        <ClaudeThesisCard
+        <AIThesisCard
           structured={structured}
           full={null}
           running={false}
