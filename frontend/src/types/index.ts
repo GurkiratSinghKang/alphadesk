@@ -659,6 +659,15 @@ export interface ClaudeStructured {
   generatedAt: string;
 }
 
+/**
+ * PR-C of the Claude → AI rename. Provider-agnostic alias for
+ * {@link ClaudeStructured}. New consumers SHOULD use {@link AIStructured};
+ * the legacy alias remains because the API contract still emits a
+ * `claudeStructured` JSON key (renaming the wire format requires
+ * lockstep frontend ↔ backend changes — out of scope for this PR).
+ */
+export type AIStructured = ClaudeStructured;
+
 export interface ComparableSetup {
   reportDate: string;
   ivRank: number;
@@ -678,6 +687,9 @@ export interface ClaudeFullResearch {
   model: string;
   generatedAt: string;
 }
+
+/** Provider-agnostic alias for {@link ClaudeFullResearch} — see {@link AIStructured}. */
+export type AIFullResearch = ClaudeFullResearch;
 
 export interface HistQuarter {
   reportDate: string;
