@@ -3179,6 +3179,7 @@ async def _hydrate_row(
                 report_time=row.get("report_time", "DMT"),
                 prior_moves=prior_moves,
                 tail_risk_signals=tr_signals,
+                vol_premium_score=metrics.get("vol_premium_score"),
             )
             if top_setups:
                 # Override the legacy top_setup with the recommender's

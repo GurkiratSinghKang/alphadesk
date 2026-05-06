@@ -50,7 +50,7 @@ import logging
 import math
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Literal, Sequence
 
 from scipy.stats import norm  # type: ignore[import-untyped]
 
@@ -2021,6 +2021,90 @@ def _candidates_for_regime(regime: str, verdict: str | None) -> list[Any]:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# PR-1 / T2 — per-setup confidence (PoP × vol-premium × Claude × alignment)
+# ---------------------------------------------------------------------------
+
+
+_BULL_SETUPS: frozenset[str] = frozenset(
+    {"bull_put_spread", "bull_call_spread", "long_call"},
+)
+_BEAR_SETUPS: frozenset[str] = frozenset(
+    {"bear_call_spread", "bear_put_spread", "long_put"},
+)
+
+
+def _setup_direction(setup_id: str) -> Literal["bull", "bear", "neutral"]:
+    """Map a setup_id to the directional bias the structure expresses.
+
+    Used by :func:`setup_confidence` to detect the case where Claude's
+    verdict and the recommender's setup disagree (e.g. bullish verdict
+    but the regime returned a bear call spread). When the system is not
+    internally consistent we knock 15% off the per-setup confidence so
+    the FE can see the disagreement reflected in the score.
+    """
+    if setup_id in _BULL_SETUPS:
+        return "bull"
+    if setup_id in _BEAR_SETUPS:
+        return "bear"
+    return "neutral"
+
+
+def _direction_aligned(verdict: str | None, setup_id: str) -> bool:
+    """True when Claude's verdict is internally consistent with the setup.
+
+    * Bullish-leaning verdict (``"bullish"`` / ``"neutral-bull"``) →
+      bull or neutral setup aligns.
+    * Bearish-leaning verdict (``"bearish"`` / ``"neutral-bear"``) →
+      bear or neutral setup aligns.
+    * ``"neutral"`` verdict → only fully-neutral setups align.
+    * Missing verdict → default to aligned (no penalty).
+    """
+    if verdict is None:
+        return True
+    direction = _setup_direction(setup_id)
+    if verdict in ("bullish", "neutral-bull"):
+        return direction in ("bull", "neutral")
+    if verdict in ("bearish", "neutral-bear"):
+        return direction in ("bear", "neutral")
+    if verdict == "neutral":
+        return direction == "neutral"
+    return True
+
+
+def setup_confidence(
+    setup: EarningsSetup,
+    vol_premium_score: float | None,
+    claude_structured_confidence: float | None,
+    direction_alignment: bool,
+) -> float | None:
+    """Per-setup credibility — PoP weighted by vol edge × Claude × alignment.
+
+    The value is clamped to ``[0, 1]``. Returns ``None`` when ``pop_estimate``
+    is missing — without an empirical PoP base there is nothing to scale
+    and a synthetic score would mislead the analyst more than ``None``.
+    """
+    if setup.pop_estimate is None:
+        return None
+
+    score = setup.pop_estimate
+
+    if vol_premium_score is not None:
+        if vol_premium_score >= 0.15:
+            score += 0.10
+        elif vol_premium_score < 0.05:
+            score -= 0.10
+
+    if claude_structured_confidence is not None:
+        # Floor at 0.7 so a weak Claude run never zeroes a high-PoP setup.
+        score *= 0.7 + 0.3 * claude_structured_confidence
+
+    if not direction_alignment:
+        score -= 0.15
+
+    return max(0.0, min(1.0, score))
+
+
 def _build_skip_setup(
     *,
     tail_risk_score: float,
@@ -2075,6 +2159,7 @@ async def recommend_setups(
     report_time: str | None = None,
     prior_moves: Sequence[float] | None = None,
     tail_risk_signals: TailRiskSignals | None = None,
+    vol_premium_score: float | None = None,
 ) -> list[EarningsSetup]:
     """Return ranked top-3 setups by expected value, with SHR hardening.
 
@@ -2262,6 +2347,23 @@ async def recommend_setups(
     # actually receive. Each forecast is independent - a failure on one
     # setup must not fail the others or the whole list.
     candidates = [_attach_fill_forecast(s, chain) for s in candidates]
+
+    # PR-1 / T2: stamp each candidate with its per-setup confidence — a
+    # PoP × vol-premium × Claude × alignment blend. Done after demotion +
+    # ranking so the score reflects the EV the caller will actually see.
+    candidates = [
+        s.model_copy(
+            update={
+                "confidence": setup_confidence(
+                    s,
+                    vol_premium_score=vol_premium_score,
+                    claude_structured_confidence=claude_confidence,
+                    direction_alignment=_direction_aligned(claude_verdict, s.setup_id),
+                ),
+            },
+        )
+        for s in candidates
+    ]
 
     # SHR-4: emit a "skip" outcome when EV is poor across the board OR
     # tail risk is extreme OR (low confidence AND elevated tail risk).

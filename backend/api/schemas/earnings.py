@@ -218,6 +218,12 @@ class EarningsSetup(BaseModel):
     # is graceful degradation - the recommender returns the setup without
     # the forecast rather than failing the whole pipeline.
     fill_forecast: ComboFillForecast | None = None
+    # PR-1 / T2 (earnings discipline gates): per-setup credibility score
+    # blending PoP × vol_premium_score × Claude confidence × direction
+    # alignment. Each recommended trade carries its own score so the FE
+    # can rank or gate beyond the single global Claude-confidence value.
+    # ``None`` when ``pop_estimate`` is missing (skip setups, etc).
+    confidence: float | None = Field(default=None, ge=0, le=1)
 
 
 # ─── Calendar row ────────────────────────────────────────────
