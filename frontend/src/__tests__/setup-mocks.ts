@@ -113,6 +113,30 @@ vi.mock('@/lib/api', async (importOriginal) => {
       }
       return out;
     }),
+    // P1-19 BL-1.1: /trade now calls the batched getSnapshots helper for
+    // option leg quotes (one upstream request per page-load instead of N
+    // per-OCC). Mirror getSnapshot's permissive happy-path so the same
+    // submit flow tests pass without per-test fixtures.
+    getSnapshots: vi.fn().mockImplementation(async (symbols: string[]) => {
+      const out: Record<string, unknown> = {};
+      for (const s of symbols) {
+        out[s] = {
+          symbol: s,
+          last: 1.45,
+          bid: 1.4,
+          ask: 1.5,
+          volume: 100,
+          high: 1.5,
+          low: 1.4,
+          open: 1.45,
+          close: 1.45,
+          change: 0,
+          changePct: 0,
+          timestamp: Date.now(),
+        };
+      }
+      return out;
+    }),
     getMarketDepth: vi.fn().mockResolvedValue({ symbol: 'SPY', kind: 'top_of_book', provider: 'test', bids: [{ price: 678.9, size: 100 }], asks: [{ price: 679.1, size: 100 }], timestamp: Date.now(), isL2: false, isDemo: false, notes: [] }),
     getMarketDepthCapabilities: vi.fn().mockResolvedValue({ activeKind: 'top_of_book', trueL2Available: false, providers: [], notes: [] }),
     getBars: vi.fn().mockResolvedValue([]),

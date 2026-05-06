@@ -63,7 +63,7 @@ import type { ChartOrderPlacement, ChartTradeOverlay } from "@/components/charts
 import OptionsPayoffPanel from "@/components/options/OptionsPayoffPanel";
 import OptionsStrategyBuilder from "@/components/options/OptionsStrategyBuilder";
 import { ExtendedHoursBadge } from "@/components/primitives/ExtendedHoursBadge";
-import { getBars, getOrders, getSnapshot, placeOrder } from "@/lib/api";
+import { getBars, getOrders, getSnapshots, placeOrder } from "@/lib/api";
 import { barsRequestForRange } from "@/lib/chartRange";
 import { parseOccSymbol } from "@/lib/occ";
 import { ORDER_BAR_DEFAULTS, isValidOrderQty } from "@/lib/orderDefaults";
@@ -407,6 +407,36 @@ export default function TradePage() {
   useEffect(() => {
     legsUnavailableRef.current = legsUnavailable;
   }, [legsUnavailable]);
+  // P1-19 BL-1.5: simple per-page network call counter. Increments inside
+  // each batched fetch path below; logs to debug at unmount so QA / DevTools
+  // can spot fan-out regressions in `console.jsonl`. Implementation lives
+  // alongside the snapshot effect because that's where most of /trade's
+  // network volume originates today.
+  const networkCallCounter = useRef(0);
+  useEffect(() => {
+    return () => {
+      // Only debug-level — production noise budget should stay tiny. The
+      // payload makes regressions visible during QA replay (a 4-leg
+      // deep-link should produce exactly ONE snapshot call now).
+      // eslint-disable-next-line no-console
+      console.debug(
+        `[trade] page network calls: ${networkCallCounter.current}`,
+      );
+    };
+  }, []);
+
+  // P1-19 BL-1.4: stable join key for the snapshot effect deps. activeLegs
+  // is a freshly-allocated array on every render of TradePage (e.g. when
+  // the URL search-key flips), which previously made `[…, activeLegs]`
+  // fire the effect every render even if the OCC list was identical.
+  // Joining the OCCs into a comma-separated string gives the dep array a
+  // value-stable identity — same legs ⇒ same string ⇒ no refetch.
+  const legsKey = useMemo(
+    () => activeLegs.map((leg) => leg.occ).join(","),
+    [activeLegs],
+  );
+  const activeContractKey = activeContract?.occ ?? null;
+
   // QA r1 A2 follow-up: hydrate the OCC quote into the store. The data
   // pipeline bridge only fans out for the equity watchlist + selected
   // symbol — option contracts deep-linked via ?contract= / ?legs= aren't
@@ -414,6 +444,16 @@ export default function TradePage() {
   // OrderBar telemetry would render "--" indefinitely. Fetch on
   // activeContract / activeLegs change; updateQuotes merges into the
   // store, after which useQuote starts returning the contract's market.
+  //
+  // P1-19 BL-1.1: switched the per-symbol fan-out (getSnapshot) for the
+  // batched `/api/v1/market/snapshots?symbols=…` endpoint via getSnapshots.
+  // A 4-leg iron condor previously cost 4-5 sequential round-trips here
+  // (one per OCC + underlying). The batched endpoint collapses that to
+  // exactly ONE upstream call. getSnapshots falls back to the per-symbol
+  // path internally if the batch endpoint is unavailable, so degradation
+  // behaviour is identical to before. Also: the dep array uses
+  // `legsKey` (joined OCCs) instead of the array reference so a re-render
+  // with the same legs doesn't refire this effect — see BL-1.4 above.
   useEffect(() => {
     const symbols: string[] = [];
     if (activeContract) symbols.push(activeContract.occ);
@@ -424,11 +464,9 @@ export default function TradePage() {
       return;
     }
     let cancelled = false;
-    // R6-5: snapshot helper for the multi-leg branch. getSnapshot's
-    // per-symbol fan-out swallows 404s and returns a partial map; we
-    // detect missing OCCs by absence rather than rejection. The
-    // singular activeContract path (R4-W-3) had the same shape; we now
-    // mirror it for activeLegs[].
+    // R6-5: snapshot helper for the multi-leg branch. getSnapshots
+    // returns a partial map of {OCC: Quote}; we detect missing OCCs by
+    // absence rather than rejection.
     const computeMissingLegs = (
       snapshot: Record<string, unknown>,
     ): LegQuoteUnavailable[] => {
@@ -445,17 +483,19 @@ export default function TradePage() {
       }
       return missing;
     };
-    getSnapshot(symbols)
+    networkCallCounter.current += 1;
+    getSnapshots(symbols)
       .then((snapshot) => {
         if (cancelled) return;
         const quotes = Object.values(snapshot);
         if (quotes.length > 0) {
           useMarketStore.getState().updateQuotes(quotes);
         }
-        // R4-5 W-3: getSnapshot swallows per-symbol failures (see api.ts).
-        // If the staged OCC is missing from the result map, surface that to
-        // the OrderBar so the trader sees the degradation. Equity-only
-        // tickets (no activeContract) don't get this banner.
+        // R4-5 W-3: getSnapshots (and its fan-out fallback) swallows
+        // per-symbol failures. If the staged OCC is missing from the
+        // result map, surface that to the OrderBar so the trader sees
+        // the degradation. Equity-only tickets (no activeContract)
+        // don't get this banner.
         if (activeContract && !(activeContract.occ in snapshot)) {
           setOptionsUnavailable({
             occ: activeContract.occ,
@@ -471,8 +511,9 @@ export default function TradePage() {
         setLegsUnavailable(computeMissingLegs(snapshot));
       })
       .catch(() => {
-        // Total network failure (rare — getSnapshot itself swallows symbol
-        // 404s). Still surface as unavailable so the UI is honest.
+        // Total network failure (rare — getSnapshots already falls back
+        // to a per-symbol fan-out internally on batch failure). Still
+        // surface as unavailable so the UI is honest.
         if (cancelled) return;
         if (activeContract) {
           setOptionsUnavailable({
@@ -495,7 +536,12 @@ export default function TradePage() {
     return () => {
       cancelled = true;
     };
-  }, [activeContract, activeLegs, optionsSnapshotRetry]);
+    // P1-19 BL-1.4: depend on stable scalar keys, not array references.
+    // activeLegs / activeContract change reference per render even when
+    // the underlying OCCs haven't moved; legsKey + activeContractKey
+    // collapse identical-payload renders into a no-op.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeContractKey, legsKey, optionsSnapshotRetry]);
   const optionContractQuote = useMemo(
     () =>
       activeContract && optionContractRawQuote
