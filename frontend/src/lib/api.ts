@@ -3001,6 +3001,14 @@ interface RawEarningsDetail {
    * forcing a cast at the call site.
    */
   error_codes?: unknown;
+  /**
+   * Maverick FIX-C: tail-risk score + reasons. Backend already
+   * emits them on the analysis endpoint; the detail payload is the
+   * forward-compat shape (mapper passes through whatever lands).
+   * Typed liberally on the wire — the mapper does the narrowing.
+   */
+  tail_risk_score?: number | null;
+  tail_risk_reasons?: unknown;
 }
 
 function mapCalendarRow(r: RawCalendarRow): CalendarRow {
@@ -3229,6 +3237,15 @@ export function mapEarningsDetail(raw: RawEarningsDetail): EarningsDetail {
   const codes = Array.isArray(rawCodes)
     ? rawCodes.filter((v): v is string => typeof v === "string")
     : [];
+  // Maverick FIX-C: pass through tail_risk fields. Score is nullable so
+  // we preserve the null/undefined distinction (undefined = backend did
+  // not emit the field; null = explicitly absent — both render as no
+  // badge in the panel). Reasons coerced to a string array; non-string
+  // entries silently dropped.
+  const rawReasons: unknown = raw.tail_risk_reasons;
+  const tailRiskReasons = Array.isArray(rawReasons)
+    ? rawReasons.filter((v): v is string => typeof v === "string")
+    : [];
   return {
     symbol: raw.symbol,
     company: raw.company,
@@ -3261,6 +3278,11 @@ export function mapEarningsDetail(raw: RawEarningsDetail): EarningsDetail {
     // across re-fetches even if backend gather()s the providers in a
     // different order. `slice()` so we don't mutate the wire payload.
     errorCodes: codes.slice().sort() as EarningsErrorCode[],
+    // Maverick FIX-C: tail_risk passthrough. Only set when backend
+    // emitted the field so older cached responses don't gain a
+    // synthetic null in the FE shape.
+    ...(raw.tail_risk_score !== undefined ? { tailRiskScore: raw.tail_risk_score } : {}),
+    ...(rawReasons !== undefined ? { tailRiskReasons } : {}),
   };
 }
 

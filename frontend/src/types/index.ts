@@ -880,6 +880,22 @@ export interface EarningsDetail {
    * fixtures pre-dating the field still type-check.
    */
   errorCodes?: EarningsErrorCode[];
+  /**
+   * Maverick FIX-C (pro-trader P0 #2 + data-skeptic HIGH):
+   * tail-risk score + reasons emitted by
+   * ``services.earnings_recommender._compute_tail_risk_score`` and
+   * ``_tail_risk_reasons``. Already on the analysis endpoint; backend
+   * wires them through the detail payload too. Optional on the wire so
+   * older cached responses still validate.
+   *
+   * Score is in [0, 1]. Frontend rendering thresholds (matching the
+   * recommender's internal demotion logic):
+   *   - 0.6  → amber "TAIL RISK ELEVATED" badge + reasons in tooltip
+   *   - 0.85 → red "RECOMMENDED: SKIP THIS TRADE" banner with reasons
+   *   - top setup_id === "skip" forces the red banner regardless of score.
+   */
+  tailRiskScore?: number | null;
+  tailRiskReasons?: string[];
 }
 
 export interface EarningsCalendarFilters {

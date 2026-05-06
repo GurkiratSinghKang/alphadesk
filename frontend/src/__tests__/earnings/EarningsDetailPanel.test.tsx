@@ -295,4 +295,71 @@ describe("EarningsDetailPanel", () => {
     expect(banner?.textContent).toContain(ERROR_CODE_COPY.iv_term_partial);
     expect(banner?.textContent).toContain(ERROR_CODE_COPY.news_error);
   });
+
+  // ── Maverick FIX-C: tail-risk banner ────────────────────────
+  it("renders nothing for the tail-risk banner when score < 0.6", () => {
+    const detailWithLowRisk: EarningsDetail = {
+      ...detail,
+      tailRiskScore: 0.4,
+      tailRiskReasons: ["intraday +1.2%"],
+    };
+    const { container } = render(
+      <EarningsDetailPanel
+        detail={detailWithLowRisk}
+        loading={false}
+        error={null}
+        runningFull={false}
+        onRunFullResearch={() => {}}
+      />,
+    );
+    expect(container.querySelector('[data-slot="tail-risk-banner"]')).toBeNull();
+  });
+
+  it("renders TAIL RISK ELEVATED amber pill when 0.6 <= score < 0.85", () => {
+    const elevated: EarningsDetail = {
+      ...detail,
+      tailRiskScore: 0.7,
+      tailRiskReasons: ["intraday +4.3%", "kurtosis 4.5"],
+    };
+    const { container } = render(
+      <EarningsDetailPanel
+        detail={elevated}
+        loading={false}
+        error={null}
+        runningFull={false}
+        onRunFullResearch={() => {}}
+      />,
+    );
+    const banner = container.querySelector('[data-slot="tail-risk-banner"]');
+    expect(banner).not.toBeNull();
+    expect(banner?.getAttribute("data-severity")).toBe("elevated");
+    expect(banner?.textContent).toMatch(/TAIL RISK ELEVATED/);
+    // Reasons exposed via the title attribute (tooltip).
+    expect(banner?.getAttribute("title")).toMatch(/intraday \+4\.3%/);
+    expect(banner?.getAttribute("title")).toMatch(/kurtosis 4\.5/);
+  });
+
+  it("renders a red SKIP THIS TRADE banner with reasons when score >= 0.85", () => {
+    const skip: EarningsDetail = {
+      ...detail,
+      tailRiskScore: 0.9,
+      tailRiskReasons: ["intraday +6.0%", "analyst PT raises ×2", "kurtosis 4.5"],
+    };
+    const { container } = render(
+      <EarningsDetailPanel
+        detail={skip}
+        loading={false}
+        error={null}
+        runningFull={false}
+        onRunFullResearch={() => {}}
+      />,
+    );
+    const banner = container.querySelector('[data-slot="tail-risk-banner"]');
+    expect(banner).not.toBeNull();
+    expect(banner?.getAttribute("data-severity")).toBe("skip");
+    expect(banner?.textContent).toMatch(/SKIP THIS TRADE/);
+    // Reasons rendered inline (not just in a tooltip).
+    expect(banner?.textContent).toMatch(/intraday \+6\.0%/);
+    expect(banner?.textContent).toMatch(/analyst PT raises/);
+  });
 });

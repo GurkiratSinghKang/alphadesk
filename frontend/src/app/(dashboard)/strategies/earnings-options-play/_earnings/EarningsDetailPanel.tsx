@@ -323,6 +323,16 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
             surfaces the missing-data case explicitly so a placeholder
             strip would just add noise. */}
         <DecisionStrip structured={detail.claudeStructured} metrics={detail.metrics} />
+        {/* Maverick FIX-C (pro-trader P0 #2 + data-skeptic HIGH):
+            tail-risk surface. Sits directly under the recommendation
+            so a trader cannot miss a "skip" signal that the recommender
+            already flagged. Reads from the (forward-compat) detail
+            fields wired in by mapEarningsDetail; renders nothing when
+            backend didn't emit a score. */}
+        <_TailRiskBanner
+          score={detail.tailRiskScore ?? null}
+          reasons={detail.tailRiskReasons ?? []}
+        />
       </div>
       <MetricsStrip metrics={detail.metrics} />
       {/* Slice-3 / FZ-1 (2026 design brief, Tastytrade signature):
@@ -796,4 +806,78 @@ function formatDateOnly(
     return localDate.toLocaleDateString("en-US", options);
   }
   return new Date(value).toLocaleDateString("en-US", options);
+}
+
+/**
+ * Maverick FIX-C (pro-trader P0 #2 + data-skeptic HIGH):
+ * tail-risk surface. Mirrors the recommender's internal demotion
+ * thresholds so the user sees the same signal the engine acted on:
+ *
+ *   - score >= 0.85 → red banner "RECOMMENDED: SKIP THIS TRADE"
+ *     with the reason list inline. Matches ``extreme_tail`` in the
+ *     recommender (forces a "skip" outcome on the BE).
+ *   - 0.6 ≤ score < 0.85 → amber pill "TAIL RISK ELEVATED" with
+ *     reasons in the title attribute. Matches the threshold that
+ *     demotes short-vol setups in the BE recommender.
+ *   - score < 0.6 (or null/undefined) → render nothing — no need to
+ *     advertise "your trade is safe" with a green chip.
+ *
+ * Inline divs (no Badge primitive) because the banner shape needs a
+ * full-width red callout, which doesn't fit the badge sizing tokens.
+ */
+function _TailRiskBanner({
+  score,
+  reasons,
+}: {
+  score: number | null;
+  reasons: string[];
+}) {
+  if (score == null || !Number.isFinite(score) || score < 0.6) return null;
+  const reasonText = reasons.length > 0 ? reasons.join("; ") : null;
+  if (score >= 0.85) {
+    return (
+      <div
+        data-slot="tail-risk-banner"
+        data-severity="skip"
+        role="alert"
+        className="mt-3 rounded border px-3 py-2"
+        style={{
+          borderColor: "var(--loss)",
+          background: "color-mix(in oklab, var(--loss) 12%, transparent)",
+          color: "var(--loss)",
+        }}
+      >
+        <p className="t-mono text-label font-semibold uppercase tracking-[0.08em]">
+          ⚠ RECOMMENDED: SKIP THIS TRADE
+        </p>
+        <p className="mt-1 t-mono text-label">
+          Tail-risk score {score.toFixed(2)} ≥ 0.85.
+          {reasonText && (
+            <>
+              {" "}
+              <span className="u-muted">Reasons: {reasonText}.</span>
+            </>
+          )}
+        </p>
+      </div>
+    );
+  }
+  // 0.6 ≤ score < 0.85 — amber pill with reasons in the tooltip.
+  return (
+    <div
+      data-slot="tail-risk-banner"
+      data-severity="elevated"
+      className="mt-3 inline-flex items-center gap-2 rounded border px-2 py-0.5 t-mono text-label"
+      style={{
+        borderColor: "var(--state-warning)",
+        color: "var(--state-warning)",
+      }}
+      title={reasonText ?? "Elevated tail-risk score"}
+    >
+      <span className="font-semibold uppercase tracking-[0.08em]">
+        TAIL RISK ELEVATED
+      </span>
+      <span className="u-muted tabular-nums">{score.toFixed(2)}</span>
+    </div>
+  );
 }
