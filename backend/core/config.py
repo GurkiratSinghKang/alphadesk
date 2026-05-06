@@ -289,6 +289,37 @@ class Settings(BaseSettings):
     EARNINGS_IV_RICH_THRESHOLD: float = 70.0
     EARNINGS_IV_CHEAP_THRESHOLD: float = 35.0
 
+    # --- Recommender strike selection (Batch M-O — strike-tuning ST) ---
+    # DTE/confidence/IV-aware delta tables for credit/debit setups.
+    # Backed by TastyTrade Research and Sosnoff/Battista backtests:
+    # earnings (DTE ≤ 10) iron condors maximise win-rate × avg-credit at
+    # 0.16Δ shorts (vs the standard 0.20Δ); long-dated (DTE > 35) widen
+    # to 0.25Δ for more credit. Wings track at half the short delta so
+    # the wing/short ratio holds across regimes.
+    RECOMMENDER_IRON_CONDOR_SHORT_DELTA_EARNINGS: float = 0.16
+    RECOMMENDER_IRON_CONDOR_SHORT_DELTA_STANDARD: float = 0.20
+    RECOMMENDER_IRON_CONDOR_SHORT_DELTA_LONG_DATED: float = 0.25
+    RECOMMENDER_IRON_CONDOR_LONG_DELTA_EARNINGS: float = 0.08
+    RECOMMENDER_IRON_CONDOR_LONG_DELTA_STANDARD: float = 0.10
+    RECOMMENDER_IRON_CONDOR_LONG_DELTA_LONG_DATED: float = 0.12
+    # DTE breakpoints between the three regimes above.
+    RECOMMENDER_DTE_EARNINGS_MAX: int = 10
+    RECOMMENDER_DTE_STANDARD_MAX: int = 35
+    # When Claude confidence is below LOW threshold we widen strikes by
+    # multiplying the standard delta by WIDEN_FACTOR (0.7 → 0.20*0.7 = 0.14).
+    # When confidence is above HIGH threshold we tighten back to the
+    # baseline (no widening). Iron-butterfly is suppressed below LOW.
+    RECOMMENDER_LOW_CONFIDENCE_THRESHOLD: float = 0.55
+    RECOMMENDER_HIGH_CONFIDENCE_THRESHOLD: float = 0.75
+    RECOMMENDER_LOW_CONFIDENCE_DELTA_WIDEN_FACTOR: float = 0.7
+    # IV-rank thresholds for strike adjustments. Above HIGH (rich vol)
+    # we tighten slightly (more credit); below LOW (cheap vol) we widen
+    # so the recommender prefers long-vol structures over thin credit.
+    RECOMMENDER_IV_RANK_HIGH_THRESHOLD: float = 80.0
+    RECOMMENDER_IV_RANK_LOW_THRESHOLD: float = 30.0
+    RECOMMENDER_HIGH_IV_DELTA_TIGHTEN_FACTOR: float = 1.10
+    RECOMMENDER_LOW_IV_DELTA_WIDEN_FACTOR: float = 0.85
+
     # --- Claude Opus per-call cost estimate (Batch U — A-3) ---
     # Used solely for cost-ceiling telemetry; tracks Anthropic pricing.
     CLAUDE_OPUS_COST_PER_CALL_USD: float = 0.30

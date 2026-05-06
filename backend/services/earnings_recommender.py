@@ -197,6 +197,202 @@ def find_strike_nearest(
 
 
 # ---------------------------------------------------------------------------
+# DTE / confidence / IV-aware delta selection (Batch M-O — strike-tuning ST)
+# ---------------------------------------------------------------------------
+#
+# Hardcoded delta defaults (e.g. 0.20Δ shorts on every iron condor) ignore
+# the regime they're trading into. TastyTrade Research / Sosnoff-Battista
+# backtests show win-rate × avg-credit on 7-DTE earnings condors peaks at
+# 0.16Δ shorts; on long-dated 35+ DTE 0.25Δ holds up; tighter butterfly
+# wings (5 strikes) beat wider (10) on Sharpe; low-conviction directional
+# spreads do better at 0.20Δ short than 0.30Δ.
+#
+# The selectors below pick a delta target from three independent inputs:
+#   1. DTE bucket — earnings (≤10), standard (≤35), long-dated (>35)
+#   2. Claude confidence — low (<0.55) widens, high (≥0.75) restores baseline
+#   3. IV rank — rich (>80) tightens slightly, cheap (<30) widens
+#
+# Adjustments compose multiplicatively. All thresholds and factors live in
+# Settings so an analyst can tune without a code deploy.
+
+
+def _select_short_delta_for_iron_condor(
+    dte_days: int | float,
+    *,
+    claude_confidence: float | None = None,
+    iv_rank: float | None = None,
+) -> float:
+    """DTE / confidence / IV-aware short-leg delta for iron condors.
+
+    Bands (defaults, override via Settings):
+      * Earnings (DTE ≤ 10): 0.16 — tighter for higher win rate on 7-DTE
+        earnings plays per TastyTrade backtests
+      * Standard (10 < DTE ≤ 35): 0.20 — balanced default
+      * Long-dated (DTE > 35): 0.25 — wider for more credit when theta
+        decay window is long enough to absorb wider losses
+
+    Adjustments:
+      * Confidence < ``RECOMMENDER_LOW_CONFIDENCE_THRESHOLD`` (default 0.55):
+        multiply by ``RECOMMENDER_LOW_CONFIDENCE_DELTA_WIDEN_FACTOR`` (0.7)
+        → 0.20 * 0.7 = 0.14 short. More cushion at the cost of less credit.
+      * IV rank > ``RECOMMENDER_IV_RANK_HIGH_THRESHOLD`` (default 80):
+        multiply by ``RECOMMENDER_HIGH_IV_DELTA_TIGHTEN_FACTOR`` (1.10) —
+        IV crush bonus offsets some upside loss.
+      * IV rank < ``RECOMMENDER_IV_RANK_LOW_THRESHOLD`` (default 30):
+        multiply by ``RECOMMENDER_LOW_IV_DELTA_WIDEN_FACTOR`` (0.85) —
+        thin credit, prefer wider strikes (or skip credit setup entirely).
+    """
+    from core.config import settings as _settings
+
+    if dte_days <= _settings.RECOMMENDER_DTE_EARNINGS_MAX:
+        delta = _settings.RECOMMENDER_IRON_CONDOR_SHORT_DELTA_EARNINGS
+    elif dte_days <= _settings.RECOMMENDER_DTE_STANDARD_MAX:
+        delta = _settings.RECOMMENDER_IRON_CONDOR_SHORT_DELTA_STANDARD
+    else:
+        delta = _settings.RECOMMENDER_IRON_CONDOR_SHORT_DELTA_LONG_DATED
+
+    if (
+        claude_confidence is not None
+        and float(claude_confidence) < _settings.RECOMMENDER_LOW_CONFIDENCE_THRESHOLD
+    ):
+        delta *= _settings.RECOMMENDER_LOW_CONFIDENCE_DELTA_WIDEN_FACTOR
+
+    if iv_rank is not None:
+        rank = float(iv_rank)
+        if rank > _settings.RECOMMENDER_IV_RANK_HIGH_THRESHOLD:
+            delta *= _settings.RECOMMENDER_HIGH_IV_DELTA_TIGHTEN_FACTOR
+        elif rank < _settings.RECOMMENDER_IV_RANK_LOW_THRESHOLD:
+            delta *= _settings.RECOMMENDER_LOW_IV_DELTA_WIDEN_FACTOR
+
+    return float(delta)
+
+
+def _select_long_delta_for_iron_condor(
+    dte_days: int | float,
+    *,
+    claude_confidence: float | None = None,
+    iv_rank: float | None = None,
+) -> float:
+    """Long-wing delta for iron condors. Tracks the short selector at half
+    the magnitude so the wing/short ratio is preserved across regimes.
+
+    Bands (defaults, override via Settings):
+      * Earnings: 0.08
+      * Standard: 0.10
+      * Long-dated: 0.12
+    """
+    from core.config import settings as _settings
+
+    if dte_days <= _settings.RECOMMENDER_DTE_EARNINGS_MAX:
+        delta = _settings.RECOMMENDER_IRON_CONDOR_LONG_DELTA_EARNINGS
+    elif dte_days <= _settings.RECOMMENDER_DTE_STANDARD_MAX:
+        delta = _settings.RECOMMENDER_IRON_CONDOR_LONG_DELTA_STANDARD
+    else:
+        delta = _settings.RECOMMENDER_IRON_CONDOR_LONG_DELTA_LONG_DATED
+
+    if (
+        claude_confidence is not None
+        and float(claude_confidence) < _settings.RECOMMENDER_LOW_CONFIDENCE_THRESHOLD
+    ):
+        delta *= _settings.RECOMMENDER_LOW_CONFIDENCE_DELTA_WIDEN_FACTOR
+
+    if iv_rank is not None:
+        rank = float(iv_rank)
+        if rank > _settings.RECOMMENDER_IV_RANK_HIGH_THRESHOLD:
+            delta *= _settings.RECOMMENDER_HIGH_IV_DELTA_TIGHTEN_FACTOR
+        elif rank < _settings.RECOMMENDER_IV_RANK_LOW_THRESHOLD:
+            delta *= _settings.RECOMMENDER_LOW_IV_DELTA_WIDEN_FACTOR
+
+    return float(delta)
+
+
+def _select_vertical_short_delta(
+    dte_days: int | float,
+    *,
+    claude_confidence: float | None = None,
+    iv_rank: float | None = None,
+) -> float:
+    """Short-leg delta for credit verticals (bear-call / bull-put).
+
+    Defaults to 0.30Δ short when confidence is high (the historical
+    default in this module). Below the low-confidence threshold the
+    short widens to 0.20Δ — the TastyTrade research finds that low-
+    conviction directional spreads beat 0.30Δ on Sharpe at 0.20Δ.
+    """
+    from core.config import settings as _settings
+
+    # Standard credit-spread default; mirrors the legacy hardcoded 0.30Δ.
+    delta = 0.30
+    if (
+        claude_confidence is not None
+        and float(claude_confidence) < _settings.RECOMMENDER_LOW_CONFIDENCE_THRESHOLD
+    ):
+        # Drop straight to 0.20Δ rather than apply the widen factor —
+        # the research result is empirical, not a multiplicative tweak.
+        delta = 0.20
+
+    if iv_rank is not None:
+        rank = float(iv_rank)
+        if rank > _settings.RECOMMENDER_IV_RANK_HIGH_THRESHOLD:
+            delta *= _settings.RECOMMENDER_HIGH_IV_DELTA_TIGHTEN_FACTOR
+        elif rank < _settings.RECOMMENDER_IV_RANK_LOW_THRESHOLD:
+            delta *= _settings.RECOMMENDER_LOW_IV_DELTA_WIDEN_FACTOR
+
+    return float(delta)
+
+
+def _select_vertical_long_delta(
+    dte_days: int | float,
+    *,
+    claude_confidence: float | None = None,
+    iv_rank: float | None = None,
+) -> float:
+    """Long-leg delta for credit verticals — half the short delta so width
+    scales with the short selection."""
+    return _select_vertical_short_delta(
+        dte_days,
+        claude_confidence=claude_confidence,
+        iv_rank=iv_rank,
+    ) / 2.0
+
+
+def _should_avoid_iron_butterfly(claude_confidence: float | None) -> bool:
+    """Iron butterflies pin-bet on a tight ATM range — they require high
+    conviction. Below the low-confidence threshold we suppress the
+    candidate so the recommender doesn't lead with a structure the
+    analyst hasn't earned the right to trade.
+    """
+    if claude_confidence is None:
+        return False
+    from core.config import settings as _settings
+
+    return float(claude_confidence) < _settings.RECOMMENDER_LOW_CONFIDENCE_THRESHOLD
+
+
+def _butterfly_wing_em_factor(
+    dte_days: int | float,
+    *,
+    iv_rank: float | None = None,
+) -> float:
+    """Multiplier on expected-move dollars for iron butterfly wings.
+
+    Tighter wings (5 strikes vs 10) beat wider on Sharpe per the research.
+    For sub-7-DTE earnings butterflies we drop to 0.6× the implied move;
+    standard plays use 1.0×. High IV-rank tightens further (the crush
+    bonus offsets the narrower band).
+    """
+    from core.config import settings as _settings
+
+    if dte_days <= _settings.RECOMMENDER_DTE_EARNINGS_MAX:
+        factor = 0.6
+    else:
+        factor = 1.0
+    if iv_rank is not None and float(iv_rank) > _settings.RECOMMENDER_IV_RANK_HIGH_THRESHOLD:
+        factor *= 0.85
+    return factor
+
+
+# ---------------------------------------------------------------------------
 # Probability of profit (lognormal terminal distribution)
 # ---------------------------------------------------------------------------
 
@@ -622,10 +818,20 @@ def _summary_implied_vs_hist(ctx: _BuildContext) -> str:
 
 
 def _build_iron_condor(ctx: _BuildContext) -> EarningsSetup | None:
-    short_put = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -0.20)
-    long_put = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -0.10)
-    short_call = find_strike_by_delta(ctx.chain, ctx.expiry, "call", 0.20)
-    long_call = find_strike_by_delta(ctx.chain, ctx.expiry, "call", 0.10)
+    short_d = _select_short_delta_for_iron_condor(
+        ctx.dte_days,
+        claude_confidence=ctx.claude_confidence,
+        iv_rank=ctx.iv_rank,
+    )
+    long_d = _select_long_delta_for_iron_condor(
+        ctx.dte_days,
+        claude_confidence=ctx.claude_confidence,
+        iv_rank=ctx.iv_rank,
+    )
+    short_put = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -short_d)
+    long_put = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -long_d)
+    short_call = find_strike_by_delta(ctx.chain, ctx.expiry, "call", short_d)
+    long_call = find_strike_by_delta(ctx.chain, ctx.expiry, "call", long_d)
     if not (short_put and long_put and short_call and long_call):
         return None
     if long_put.strike >= short_put.strike or long_call.strike <= short_call.strike:
@@ -678,12 +884,21 @@ def _build_iron_condor(ctx: _BuildContext) -> EarningsSetup | None:
 
 
 def _build_iron_butterfly(ctx: _BuildContext) -> EarningsSetup | None:
+    # Iron butterflies are pin-bets on a tight ATM range. Suppress when
+    # Claude confidence is below the low threshold — the structure
+    # requires conviction on the pin we don't have.
+    if _should_avoid_iron_butterfly(ctx.claude_confidence):
+        return None
     atm_call = find_strike_nearest(ctx.chain, ctx.expiry, "call", ctx.spot)
     atm_put = find_strike_nearest(ctx.chain, ctx.expiry, "put", ctx.spot)
     if not (atm_call and atm_put):
         return None
-    # Wing strikes: ~1 expected-move-stdev OTM.
-    em_dollars = ctx.expected_move_pct * ctx.spot if ctx.expected_move_pct else ctx.spot * 0.05
+    # Wing strikes: ~1 expected-move-stdev OTM, scaled by the DTE/IV-aware
+    # tightening factor. Earnings butterflies (DTE ≤ 10) shrink to 0.6×
+    # the implied move per the research.
+    em_pct = ctx.expected_move_pct if ctx.expected_move_pct else 0.05
+    wing_factor = _butterfly_wing_em_factor(ctx.dte_days, iv_rank=ctx.iv_rank)
+    em_dollars = em_pct * ctx.spot * wing_factor
     long_call = find_strike_nearest(
         ctx.chain, ctx.expiry, "call", atm_call.strike + em_dollars,
     )
@@ -735,8 +950,13 @@ def _build_iron_butterfly(ctx: _BuildContext) -> EarningsSetup | None:
 
 
 def _build_short_strangle(ctx: _BuildContext) -> EarningsSetup | None:
-    short_put = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -0.20)
-    short_call = find_strike_by_delta(ctx.chain, ctx.expiry, "call", 0.20)
+    short_d = _select_short_delta_for_iron_condor(
+        ctx.dte_days,
+        claude_confidence=ctx.claude_confidence,
+        iv_rank=ctx.iv_rank,
+    )
+    short_put = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -short_d)
+    short_call = find_strike_by_delta(ctx.chain, ctx.expiry, "call", short_d)
     if not (short_put and short_call):
         return None
     legs = [
@@ -825,8 +1045,18 @@ def _build_short_straddle(ctx: _BuildContext) -> EarningsSetup | None:
 
 
 def _build_bear_call_spread(ctx: _BuildContext) -> EarningsSetup | None:
-    short_call = find_strike_by_delta(ctx.chain, ctx.expiry, "call", 0.30)
-    long_call = find_strike_by_delta(ctx.chain, ctx.expiry, "call", 0.15)
+    short_d = _select_vertical_short_delta(
+        ctx.dte_days,
+        claude_confidence=ctx.claude_confidence,
+        iv_rank=ctx.iv_rank,
+    )
+    long_d = _select_vertical_long_delta(
+        ctx.dte_days,
+        claude_confidence=ctx.claude_confidence,
+        iv_rank=ctx.iv_rank,
+    )
+    short_call = find_strike_by_delta(ctx.chain, ctx.expiry, "call", short_d)
+    long_call = find_strike_by_delta(ctx.chain, ctx.expiry, "call", long_d)
     if not (short_call and long_call):
         return None
     if long_call.strike <= short_call.strike:
@@ -867,8 +1097,18 @@ def _build_bear_call_spread(ctx: _BuildContext) -> EarningsSetup | None:
 
 
 def _build_bull_put_spread(ctx: _BuildContext) -> EarningsSetup | None:
-    short_put = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -0.30)
-    long_put = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -0.15)
+    short_d = _select_vertical_short_delta(
+        ctx.dte_days,
+        claude_confidence=ctx.claude_confidence,
+        iv_rank=ctx.iv_rank,
+    )
+    long_d = _select_vertical_long_delta(
+        ctx.dte_days,
+        claude_confidence=ctx.claude_confidence,
+        iv_rank=ctx.iv_rank,
+    )
+    short_put = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -short_d)
+    long_put = find_strike_by_delta(ctx.chain, ctx.expiry, "put", -long_d)
     if not (short_put and long_put):
         return None
     if long_put.strike >= short_put.strike:

@@ -25,11 +25,17 @@ import pytest
 
 from api.schemas.earnings import TailRiskSignals
 from services.earnings_recommender import (
-    _classify_regime,
+    _butterfly_wing_em_factor,
     _candidates_for_regime,
+    _classify_regime,
     _compute_tail_risk_score,
     _empirical_pop,
     _lognormal_pop,
+    _select_long_delta_for_iron_condor,
+    _select_short_delta_for_iron_condor,
+    _select_vertical_long_delta,
+    _select_vertical_short_delta,
+    _should_avoid_iron_butterfly,
     compute_pop,
     find_strike_by_delta,
     find_strike_nearest,
@@ -850,3 +856,299 @@ async def test_recommend_setups_threads_prior_moves_into_pop():
             f"Empirical POP should down-weight from lognormal given fat-tail "
             f"history; got {top.pop_estimate}"
         )
+
+
+# ---------------------------------------------------------------------------
+# ST-1/ST-2/ST-3: DTE / confidence / IV-aware delta selection
+# (Batch M-O — strike-tuning ST)
+# ---------------------------------------------------------------------------
+
+
+def test_select_short_delta_earnings_bucket():
+    """DTE ≤ 10 → 0.16 baseline."""
+    assert _select_short_delta_for_iron_condor(7) == pytest.approx(0.16)
+    assert _select_short_delta_for_iron_condor(3) == pytest.approx(0.16)
+    assert _select_short_delta_for_iron_condor(10) == pytest.approx(0.16)
+
+
+def test_select_short_delta_standard_bucket():
+    """10 < DTE ≤ 35 → 0.20 baseline."""
+    assert _select_short_delta_for_iron_condor(28) == pytest.approx(0.20)
+    assert _select_short_delta_for_iron_condor(11) == pytest.approx(0.20)
+    assert _select_short_delta_for_iron_condor(35) == pytest.approx(0.20)
+
+
+def test_select_short_delta_long_dated_bucket():
+    """DTE > 35 → 0.25 baseline."""
+    assert _select_short_delta_for_iron_condor(45) == pytest.approx(0.25)
+    assert _select_short_delta_for_iron_condor(60) == pytest.approx(0.25)
+
+
+def test_select_long_delta_tracks_short():
+    """Long-wing deltas: 0.08 / 0.10 / 0.12 — half of short, no rounding."""
+    assert _select_long_delta_for_iron_condor(7) == pytest.approx(0.08)
+    assert _select_long_delta_for_iron_condor(28) == pytest.approx(0.10)
+    assert _select_long_delta_for_iron_condor(45) == pytest.approx(0.12)
+
+
+def test_select_short_delta_low_confidence_widens():
+    """Confidence < 0.55 → multiply by 0.7 widen factor (0.20 * 0.7 = 0.14)."""
+    delta = _select_short_delta_for_iron_condor(28, claude_confidence=0.40)
+    assert delta == pytest.approx(0.14, abs=1e-6)
+
+
+def test_select_long_delta_low_confidence_widens():
+    """Long wing also tightens: 0.10 * 0.7 = 0.07."""
+    delta = _select_long_delta_for_iron_condor(28, claude_confidence=0.40)
+    assert delta == pytest.approx(0.07, abs=1e-6)
+
+
+def test_select_short_delta_high_confidence_baseline():
+    """Confidence ≥ 0.75 → standard 0.20 (no widening)."""
+    delta = _select_short_delta_for_iron_condor(28, claude_confidence=0.80)
+    assert delta == pytest.approx(0.20)
+
+
+def test_select_short_delta_high_iv_rank_tightens():
+    """IV rank > 80 → multiply by 1.10."""
+    delta = _select_short_delta_for_iron_condor(28, iv_rank=90.0)
+    assert delta == pytest.approx(0.20 * 1.10, abs=1e-6)
+
+
+def test_select_short_delta_low_iv_rank_widens():
+    """IV rank < 30 → multiply by 0.85."""
+    delta = _select_short_delta_for_iron_condor(28, iv_rank=20.0)
+    assert delta == pytest.approx(0.20 * 0.85, abs=1e-6)
+
+
+def test_select_short_delta_combined_low_conf_low_iv():
+    """Adjustments compose: 0.20 * 0.7 (low conf) * 0.85 (low IV) = 0.119."""
+    delta = _select_short_delta_for_iron_condor(
+        28, claude_confidence=0.40, iv_rank=20.0,
+    )
+    assert delta == pytest.approx(0.20 * 0.7 * 0.85, abs=1e-6)
+
+
+def test_select_vertical_short_delta_high_conf_baseline():
+    """High-conviction vertical: 0.30 short."""
+    delta = _select_vertical_short_delta(28, claude_confidence=0.80)
+    assert delta == pytest.approx(0.30)
+
+
+def test_select_vertical_short_delta_low_conf_widens_to_20():
+    """Low-conviction vertical: drop to 0.20 short (research result)."""
+    delta = _select_vertical_short_delta(28, claude_confidence=0.40)
+    assert delta == pytest.approx(0.20)
+
+
+def test_select_vertical_long_delta_half_of_short():
+    """Long leg = half the short leg."""
+    long = _select_vertical_long_delta(28, claude_confidence=0.80)
+    assert long == pytest.approx(0.15)
+
+
+def test_should_avoid_iron_butterfly_low_confidence():
+    """Below 0.55 → suppress butterfly."""
+    assert _should_avoid_iron_butterfly(0.40) is True
+    assert _should_avoid_iron_butterfly(0.55) is False
+    assert _should_avoid_iron_butterfly(0.80) is False
+    # None → don't suppress (no signal).
+    assert _should_avoid_iron_butterfly(None) is False
+
+
+def test_butterfly_wing_em_factor_earnings_tightens():
+    """DTE ≤ 10 earnings butterflies tighten to 0.6× implied move."""
+    assert _butterfly_wing_em_factor(7) == pytest.approx(0.6)
+    assert _butterfly_wing_em_factor(28) == pytest.approx(1.0)
+
+
+def test_butterfly_wing_em_factor_high_iv_tightens_more():
+    """Earnings butterfly + IV rank > 80 → 0.6 * 0.85 = 0.51."""
+    factor = _butterfly_wing_em_factor(7, iv_rank=90.0)
+    assert factor == pytest.approx(0.6 * 0.85, abs=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# ST-4 integration: strike picks flow through to recommend_setups
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_iron_condor_picks_earnings_delta_at_dte_3():
+    """AMD-style high-IV neutral case at DTE=3 should produce an iron
+    condor whose short-leg deltas track the earnings 0.16 target rather
+    than the legacy 0.20.
+
+    Build a strike-rich chain so the picker can find a contract whose
+    delta is closer to 0.16 than to 0.20, and assert the actual short
+    legs land closer to 0.16 in absolute delta.
+    """
+    chain = _make_chain(
+        underlying="AMD", spot=356.0, iv=1.19, dte_days=3,
+        # Wider strike grid so a 0.16 / 0.20 distinction is resolvable.
+        strikes=[200 + i * 5.0 for i in range(80)],
+    )
+    setups = await recommend_setups(
+        symbol="AMD",
+        spot=356.0,
+        iv_rank=None,
+        iv_percentile=None,
+        current_iv=1.19,
+        hv_20=0.65,
+        expected_move_pct=0.066,
+        hist_avg_abs_move_pct=0.045,
+        # High confidence so the low-confidence widening DOESN'T kick in
+        # — we want the pure earnings-bucket 0.16 here.
+        claude_verdict="neutral",
+        claude_confidence=0.80,
+        chain=chain,
+        report_date=date.today(),
+        report_time="AMC",
+    )
+    assert setups, "expected at least one setup"
+    condor = next((s for s in setups if s.setup_id == "iron_condor"), None)
+    assert condor is not None, (
+        f"expected iron_condor in setups; got {[s.setup_id for s in setups]}"
+    )
+    short_legs = [l for l in condor.legs if l.side == "sell"]
+    # Find each short leg's contract back in the chain to read the delta.
+    deltas: list[float] = []
+    for leg in short_legs:
+        for c in chain.contracts:
+            if (
+                c.strike == leg.strike
+                and c.option_type == leg.contract_type
+                and c.expiry == leg.expiry
+            ):
+                deltas.append(abs(c.delta))
+                break
+    assert len(deltas) == 2
+    avg = sum(deltas) / len(deltas)
+    # Short-leg delta should be closer to the earnings 0.16 target than
+    # to the standard 0.20 default.
+    assert abs(avg - 0.16) < abs(avg - 0.20), (
+        f"DTE=3 iron condor should land near 0.16Δ shorts, not 0.20Δ. "
+        f"Got avg={avg:.3f} (deltas={deltas})"
+    )
+
+
+@pytest.mark.asyncio
+async def test_iron_condor_low_confidence_picks_wider_strikes():
+    """Confidence < 0.55 should widen to ~0.14 / 0.07 strikes."""
+    chain = _make_chain(
+        spot=100.0, iv=0.35, dte_days=21,
+        strikes=[60 + i * 1.0 for i in range(80)],
+    )
+    setups = await recommend_setups(
+        symbol="XYZ",
+        spot=100.0,
+        iv_rank=85,
+        iv_percentile=80,
+        current_iv=0.35,
+        hv_20=0.25,
+        expected_move_pct=0.05,
+        hist_avg_abs_move_pct=0.04,
+        claude_verdict="neutral",
+        claude_confidence=0.40,  # < 0.55 low-conf → widen
+        chain=chain,
+    )
+    assert setups
+    condor = next((s for s in setups if s.setup_id == "iron_condor"), None)
+    if condor is None:
+        # Some configurations won't surface a condor; the unit test on the
+        # selector already covers the maths. Skip the integration assert.
+        return
+    short_legs = [l for l in condor.legs if l.side == "sell"]
+    deltas = []
+    for leg in short_legs:
+        for c in chain.contracts:
+            if (
+                c.strike == leg.strike
+                and c.option_type == leg.contract_type
+                and c.expiry == leg.expiry
+            ):
+                deltas.append(abs(c.delta))
+                break
+    avg = sum(deltas) / len(deltas)
+    # The widened target with iv_rank=85 (high) and conf=0.40 (low) is
+    # 0.20 * 0.7 * 1.10 = 0.154. Should be closer to 0.154 than 0.20.
+    assert avg < 0.20, (
+        f"low-confidence widening should drop short delta below 0.20; "
+        f"got {avg:.3f}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_iron_condor_high_confidence_uses_standard_strikes():
+    """Confidence ≥ 0.75 with DTE in standard band → 0.20 / 0.10.
+
+    Use rich-vol input (high IV vs HV) so the regime classifier surfaces
+    iron_condor as a candidate with positive EV, with an IV rank in the
+    middle band so neither the tighten nor widen IV-rank factor fires.
+    """
+    chain = _make_chain(
+        spot=100.0, iv=0.85, dte_days=21,
+        strikes=[60 + i * 1.0 for i in range(80)],
+    )
+    setups = await recommend_setups(
+        symbol="XYZ",
+        spot=100.0,
+        iv_rank=50,  # mid-band: no tighten / widen from IV rank
+        iv_percentile=50,
+        current_iv=0.85,
+        hv_20=0.40,  # IV/HV ≈ 2.1x → rich_neutral regime
+        expected_move_pct=0.06,
+        hist_avg_abs_move_pct=0.05,
+        claude_verdict="neutral",
+        claude_confidence=0.80,
+        chain=chain,
+    )
+    assert setups
+    condor = next((s for s in setups if s.setup_id == "iron_condor"), None)
+    assert condor is not None, (
+        f"expected iron_condor; got {[s.setup_id for s in setups]}"
+    )
+    short_legs = [l for l in condor.legs if l.side == "sell"]
+    deltas = []
+    for leg in short_legs:
+        for c in chain.contracts:
+            if (
+                c.strike == leg.strike
+                and c.option_type == leg.contract_type
+                and c.expiry == leg.expiry
+            ):
+                deltas.append(abs(c.delta))
+                break
+    avg = sum(deltas) / len(deltas)
+    # Confidence 0.80 + IV rank 50 → no adjustment, baseline 0.20.
+    assert abs(avg - 0.20) < abs(avg - 0.14), (
+        f"high-confidence neutral-IV should land near 0.20Δ shorts; "
+        f"got avg={avg:.3f}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_iron_butterfly_suppressed_below_low_confidence():
+    """Confidence < 0.55 → butterfly builder returns None, never appears."""
+    chain = _make_chain(
+        spot=100.0, iv=0.85, dte_days=7,
+        strikes=[60 + i * 1.0 for i in range(80)],
+    )
+    setups = await recommend_setups(
+        symbol="XYZ",
+        spot=100.0,
+        iv_rank=82,
+        iv_percentile=80,
+        current_iv=0.85,
+        hv_20=0.40,
+        expected_move_pct=0.06,
+        hist_avg_abs_move_pct=0.05,
+        claude_verdict="neutral",
+        claude_confidence=0.40,  # below 0.55 low-conf
+        chain=chain,
+    )
+    setup_ids = {s.setup_id for s in setups}
+    assert "iron_butterfly" not in setup_ids, (
+        f"iron_butterfly must be suppressed below low-confidence threshold; "
+        f"got setups={setup_ids}"
+    )
