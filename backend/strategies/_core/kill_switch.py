@@ -132,12 +132,44 @@ class KillSwitch:
         layer2_threshold: float | None = None,
     ) -> None:
         self.repo = repo
+        # Constructor-supplied thresholds win when set (test paths,
+        # back-compat). When None, the per-call resolver in
+        # ``_resolve_layer{1,2}_threshold`` reads
+        # ``core.config.get_strategy_layer*_threshold(strategy)`` so
+        # operators can tune a single strategy's thresholds at runtime
+        # via the env config or the admin overlay endpoint.
+        self._ctor_layer1_threshold = layer1_threshold
+        self._ctor_layer2_threshold = layer2_threshold
         self.layer1_threshold = (
             layer1_threshold if layer1_threshold is not None else self.DEFAULT_LAYER1_THRESHOLD
         )
         self.layer2_threshold = (
             layer2_threshold if layer2_threshold is not None else self.DEFAULT_LAYER2_THRESHOLD
         )
+
+    def _resolve_layer1_threshold(self, strategy: str) -> float:
+        """Per-strategy Layer 1 threshold resolver.
+
+        Precedence: constructor-supplied value (tests / bench) →
+        per-strategy config (overlay → env → default). Returns a
+        non-positive float (-0.08 = -8%).
+        """
+        if self._ctor_layer1_threshold is not None:
+            return float(self._ctor_layer1_threshold)
+        try:
+            from core.config import get_strategy_layer1_threshold
+            return float(get_strategy_layer1_threshold(strategy))
+        except Exception:
+            return float(self.DEFAULT_LAYER1_THRESHOLD)
+
+    def _resolve_layer2_threshold(self, strategy: str) -> float:
+        if self._ctor_layer2_threshold is not None:
+            return float(self._ctor_layer2_threshold)
+        try:
+            from core.config import get_strategy_layer2_threshold
+            return float(get_strategy_layer2_threshold(strategy))
+        except Exception:
+            return float(self.DEFAULT_LAYER2_THRESHOLD)
 
     # -- Layer 1: drawdown from peak NAV ----------------------------------
 
@@ -150,11 +182,12 @@ class KillSwitch:
                 metrics={"peak_nav": ctx.peak_nav, "current_nav": ctx.current_nav},
             )
         dd = (ctx.current_nav - ctx.peak_nav) / ctx.peak_nav
-        if dd > self.layer1_threshold:
+        threshold = self._resolve_layer1_threshold(strategy)
+        if dd > threshold:
             return Decision(
                 enabled=True,
                 layer=0,
-                reason=f"layer1: dd {dd:.2%} > threshold {self.layer1_threshold:.2%}",
+                reason=f"layer1: dd {dd:.2%} > threshold {threshold:.2%}",
                 metrics={"peak_nav": ctx.peak_nav, "current_nav": ctx.current_nav, "dd": dd},
             )
         # Triggered: log idempotently, return disabled
@@ -168,14 +201,14 @@ class KillSwitch:
                     triggered_at=datetime.now(timezone.utc),
                     peak_nav=ctx.peak_nav,
                     current_nav=ctx.current_nav,
-                    threshold=self.layer1_threshold,
-                    reason=f"dd {dd:.2%} <= threshold {self.layer1_threshold:.2%}",
+                    threshold=threshold,
+                    reason=f"dd {dd:.2%} <= threshold {threshold:.2%}",
                 )
             )
         return Decision(
             enabled=False,
             layer=1,
-            reason=f"layer1: dd {dd:.2%} <= threshold {self.layer1_threshold:.2%}",
+            reason=f"layer1: dd {dd:.2%} <= threshold {threshold:.2%}",
             metrics={"peak_nav": ctx.peak_nav, "current_nav": ctx.current_nav, "dd": dd},
         )
 
@@ -190,11 +223,12 @@ class KillSwitch:
                 metrics={"alloc_capital": ctx.alloc_capital, "realized_today": ctx.realized_today},
             )
         ratio = ctx.realized_today / ctx.alloc_capital
-        if ratio > self.layer2_threshold:
+        threshold = self._resolve_layer2_threshold(strategy)
+        if ratio > threshold:
             return Decision(
                 enabled=True,
                 layer=0,
-                reason=f"layer2: ratio {ratio:.2%} > threshold {self.layer2_threshold:.2%}",
+                reason=f"layer2: ratio {ratio:.2%} > threshold {threshold:.2%}",
                 metrics={"alloc_capital": ctx.alloc_capital, "realized_today": ctx.realized_today, "ratio": ratio},
             )
         existing = self.repo.latest_unresolved_for_strategy(strategy, layer=2)
@@ -207,14 +241,14 @@ class KillSwitch:
                     triggered_at=datetime.now(timezone.utc),
                     realized_pnl=ctx.realized_today,
                     alloc_capital=ctx.alloc_capital,
-                    threshold=self.layer2_threshold,
-                    reason=f"daily PnL {ratio:.2%} <= threshold {self.layer2_threshold:.2%}",
+                    threshold=threshold,
+                    reason=f"daily PnL {ratio:.2%} <= threshold {threshold:.2%}",
                 )
             )
         return Decision(
             enabled=False,
             layer=2,
-            reason=f"layer2: ratio {ratio:.2%} <= threshold {self.layer2_threshold:.2%}",
+            reason=f"layer2: ratio {ratio:.2%} <= threshold {threshold:.2%}",
             metrics={"alloc_capital": ctx.alloc_capital, "realized_today": ctx.realized_today, "ratio": ratio},
         )
 

@@ -4734,6 +4734,153 @@ async def patch_strategy_alloc_capital(
     }
 
 
+@router.get("/strategy-kill-switch-thresholds")
+async def get_kill_switch_thresholds(
+    username: str = Depends(require_auth),
+) -> dict[str, Any]:
+    """Return per-strategy Layer 1 + Layer 2 threshold configuration.
+
+    Both thresholds are negative fractions (e.g. -0.10 = -10%). When a
+    strategy isn't explicitly configured, the system-wide default
+    applies (-8% drawdown / -2% daily-PnL ratio).
+    """
+    from core.config import (
+        STRATEGY_LAYER1_THRESHOLD_DEFAULT,
+        STRATEGY_LAYER2_THRESHOLD_DEFAULT,
+        get_strategy_layer1_threshold,
+        get_strategy_layer2_threshold,
+        get_strategy_layer1_threshold_overlay,
+        get_strategy_layer2_threshold_overlay,
+    )
+    from core.config import settings as _cfg
+
+    def _env(attr: str) -> dict[str, float]:
+        try:
+            raw = getattr(_cfg, attr, None) or {}
+            return {str(k): float(v) for k, v in raw.items()} if isinstance(raw, dict) else {}
+        except Exception:
+            return {}
+
+    layer1_overlay = get_strategy_layer1_threshold_overlay()
+    layer2_overlay = get_strategy_layer2_threshold_overlay()
+    layer1_env = _env("STRATEGY_LAYER1_THRESHOLD")
+    layer2_env = _env("STRATEGY_LAYER2_THRESHOLD")
+    keys = (
+        set(layer1_overlay) | set(layer2_overlay) |
+        set(layer1_env) | set(layer2_env)
+    )
+    try:
+        from strategies._core.registry import REGISTRY
+        keys |= set(REGISTRY.keys())
+    except Exception:
+        pass
+    effective = {
+        name: {
+            "layer1": get_strategy_layer1_threshold(name),
+            "layer2": get_strategy_layer2_threshold(name),
+        }
+        for name in sorted(keys)
+    }
+    return {
+        "default": {
+            "layer1": STRATEGY_LAYER1_THRESHOLD_DEFAULT,
+            "layer2": STRATEGY_LAYER2_THRESHOLD_DEFAULT,
+        },
+        "env": {
+            "layer1": layer1_env,
+            "layer2": layer2_env,
+        },
+        "overlay": {
+            "layer1": layer1_overlay,
+            "layer2": layer2_overlay,
+        },
+        "effective": effective,
+    }
+
+
+class _LayerThresholdPatch(BaseModel):
+    set: dict[str, float] = Field(default_factory=dict)
+    clear: list[str] = Field(default_factory=list)
+
+
+class StrategyKillSwitchThresholdsPatch(BaseModel):
+    """Body schema for ``PATCH /api/v1/trades/strategy-kill-switch-thresholds``.
+
+    Each layer block has ``set`` (add/update overlays) and ``clear``
+    (drop overlays). Values must be ≤ 0 — the gate compares with strict
+    ``>``, so a positive threshold would never trigger.
+    """
+
+    layer1: _LayerThresholdPatch = Field(default_factory=_LayerThresholdPatch)
+    layer2: _LayerThresholdPatch = Field(default_factory=_LayerThresholdPatch)
+
+
+@router.patch("/strategy-kill-switch-thresholds")
+async def patch_kill_switch_thresholds(
+    body: StrategyKillSwitchThresholdsPatch,
+    req: Request,
+    username: str = Depends(require_auth),
+) -> dict[str, Any]:
+    """Update the in-memory overlay for Layer 1 + Layer 2 thresholds.
+
+    Admin-only. Values must be ≤ 0 (negative fractions). In-memory
+    overlay drops on process restart; pair with the env vars
+    ``STRATEGY_LAYER1_THRESHOLD`` / ``STRATEGY_LAYER2_THRESHOLD`` for
+    durability.
+    """
+    from core.config import settings as _cfg
+    if username != _cfg.ADMIN_USERNAME:
+        raise HTTPException(status_code=403, detail="Admin role required")
+
+    from core.config import (
+        set_strategy_layer1_threshold_overlay,
+        set_strategy_layer2_threshold_overlay,
+        get_strategy_layer1_threshold_overlay,
+        get_strategy_layer2_threshold_overlay,
+    )
+
+    # Validate before mutating so a partial bad payload doesn't half-write.
+    for layer_name, layer_patch in (("layer1", body.layer1), ("layer2", body.layer2)):
+        for name, value in layer_patch.set.items():
+            if not isinstance(name, str) or not name.strip():
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"{layer_name} strategy name must be a non-empty string",
+                )
+            if value > 0:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"{layer_name} threshold for {name!r} must be <= 0 "
+                        f"(got {value}); the gate compares with strict > so "
+                        "a positive value never fires"
+                    ),
+                )
+        for name in layer_patch.clear:
+            if not isinstance(name, str) or not name.strip():
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"{layer_name} cleared strategy name must be a non-empty string",
+                )
+
+    for name, value in body.layer1.set.items():
+        set_strategy_layer1_threshold_overlay(name.strip(), float(value))
+    for name in body.layer1.clear:
+        set_strategy_layer1_threshold_overlay(name.strip(), None)
+    for name, value in body.layer2.set.items():
+        set_strategy_layer2_threshold_overlay(name.strip(), float(value))
+    for name in body.layer2.clear:
+        set_strategy_layer2_threshold_overlay(name.strip(), None)
+
+    return {
+        "ok": True,
+        "overlay": {
+            "layer1": get_strategy_layer1_threshold_overlay(),
+            "layer2": get_strategy_layer2_threshold_overlay(),
+        },
+    }
+
+
 @router.post("/flatten_all")
 async def flatten_all_positions(
     req: Request,
