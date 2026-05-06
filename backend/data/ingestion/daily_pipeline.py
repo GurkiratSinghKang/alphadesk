@@ -1811,6 +1811,285 @@ async def _execute_approved_orders(
 
 
 # =====================================================================
+# Exit-rules engine support helpers (PM-3 / audit/2026-05-05-position-management)
+# =====================================================================
+# Both helpers are intentionally module-level rather than nested inside
+# ``_check_exits`` — the test suite (``backend/tests/test_exit_rules.py``)
+# stubs them at import time to avoid hitting Alpaca, and nested closures
+# can't be patched the same way.
+
+
+async def _build_current_marks_for_trade(
+    client: httpx.AsyncClient,
+    trade: dict[str, Any],
+    *,
+    username: str | None = None,
+) -> dict[str, float]:
+    """Best-effort current-mark dict for the trade's leg symbols.
+
+    For multi-leg combos we re-use the option-chain helper that OPEN-1's
+    combo branch uses (``_fetch_chain_for_combo``) when present — that
+    path is the canonical one and stays in sync with the combo-mark
+    hardening work. We import lazily so this module remains importable
+    on a tree where OPEN-1 hasn't merged yet (the helper is missing in
+    that case and we fall back to the position snapshot).
+
+    For single-leg / equity trades we use the position snapshot's
+    ``current_price``.
+
+    Returns an empty dict on failure; the rule engine treats missing
+    marks as "rule does not fire" rather than crashing.
+    """
+    legs = trade.get("legs") or []
+    out: dict[str, float] = {}
+
+    fetch_chain = globals().get("_fetch_chain_for_combo")
+    if legs and callable(fetch_chain):
+        try:
+            chain = await fetch_chain(trade)
+        except Exception:
+            chain = None
+        if chain:
+            for leg in legs:
+                if not isinstance(leg, dict):
+                    continue
+                sym = leg.get("occ_symbol") or leg.get("symbol")
+                if not sym:
+                    continue
+                quote = chain.get(sym) if isinstance(chain, dict) else None
+                mid = None
+                if isinstance(quote, dict):
+                    bid = quote.get("bid")
+                    ask = quote.get("ask")
+                    last = quote.get("last")
+                    if isinstance(bid, (int, float)) and isinstance(ask, (int, float)) and bid > 0 and ask > 0:
+                        mid = (float(bid) + float(ask)) / 2.0
+                    elif isinstance(last, (int, float)) and last > 0:
+                        mid = float(last)
+                if mid is not None:
+                    out[str(sym)] = mid
+
+    # Single-leg / equity fallback — use position snapshot.
+    sym = trade.get("symbol")
+    if sym and sym not in out:
+        try:
+            positions = await _get_positions(client, username=username)
+        except Exception:
+            positions = []
+        for pos in positions:
+            if pos.get("symbol") == sym:
+                price = pos.get("current_price") or pos.get("market_price")
+                if isinstance(price, (int, float)) and price > 0:
+                    out[str(sym)] = float(price)
+                break
+
+    return out
+
+
+async def _record_exit_alert(
+    trade: dict[str, Any],
+    decision: Any,
+    reason_label: str,
+    *,
+    downgraded_from: str | None = None,
+    extra_rationale: str = "",
+    proposed_legs: list[dict[str, Any]] | None = None,
+) -> None:
+    """Persist an Alert row and emit a structured log line."""
+    sym = trade.get("symbol") or ""
+    rationale = getattr(decision, "rationale", "")
+    msg_parts = [f"exit_rule:{getattr(decision, 'rule_type', '?')} on {sym}"]
+    if rationale:
+        msg_parts.append(rationale)
+    if extra_rationale:
+        msg_parts.append(extra_rationale)
+    if downgraded_from:
+        msg_parts.append(f"(downgraded_from={downgraded_from})")
+    message = " — ".join(msg_parts)
+
+    logger.warning(
+        "exit_rule_fired",
+        extra={
+            "event": "exit_rule_fired",
+            "symbol": sym,
+            "rule_id": getattr(decision, "rule_id", None),
+            "rule_type": getattr(decision, "rule_type", None),
+            "action": getattr(decision, "action", None),
+            "downgraded_from": downgraded_from,
+            "rationale": rationale,
+            "extra_rationale": extra_rationale,
+            "strategy": trade.get("strategy"),
+        },
+    )
+
+    # Best-effort durable persistence of the alert so the dashboard
+    # NotificationCenter can render it. DB failures are NOT fatal —
+    # the structured log above is the source of truth.
+    try:
+        from core.database import _get_session_factory
+        from data.storage.models import Alert as _Alert
+
+        factory = _get_session_factory()
+        async with factory() as session:
+            row = _Alert(
+                alert_type=reason_label,
+                message=message[:2000],
+                symbol=sym[:20] if sym else None,
+            )
+            session.add(row)
+            await session.commit()
+    except Exception:
+        logger.debug("exit_rule alert persistence failed", exc_info=True)
+
+
+async def _dispatch_exit_decision(
+    client: httpx.AsyncClient,
+    ledger: TradeLedger,
+    trade: dict[str, Any],
+    decision: Any,
+    *,
+    closed_orders: list[dict[str, Any]],
+    auto_roll_evaluator: Any,
+    marks: dict[str, float],
+    username: str | None = None,
+) -> None:
+    """Actuate the rule engine's decision.
+
+    Branches on ``decision.action``:
+
+    * ``close`` — submits an exit order. For combos delegates to
+      ``_close_combo_trade`` when that helper is available (OPEN-1's
+      combo-exit path); single-leg always uses ``_place_order``.
+    * ``alert`` — records a row on ``alerts`` so NotificationCenter
+      and the dashboard render it. Audit trail via structured log.
+    * ``roll`` — calls ``services.position_roller.evaluate_auto_roll``.
+      If guardrails fail the decision is downgraded to ``alert``;
+      if they pass we still only fire an alert in this wave (live
+      multi-leg auto-submission is gated behind a follow-up). The
+      proposed legs are stamped onto the alert metadata so an
+      operator can review and submit manually.
+
+    Edge case — broker rejects the close: the existing
+    ``_close_combo_trade`` and ``_place_order`` paths surface the
+    exception via ``closed_orders[].error``. The rule row stays
+    enabled and will re-fire on the next tick. The structured log
+    captures every fire so a sustained reject is visible.
+    """
+    sym = trade.get("symbol")
+    action = getattr(decision, "action", "alert")
+    rationale = getattr(decision, "rationale", "")
+    rule_type = getattr(decision, "rule_type", "")
+    reason_label = f"exit_rule:{rule_type}"
+
+    # ── Close branch ──
+    if action == "close":
+        legs = trade.get("legs") or []
+        try:
+            close_combo = globals().get("_close_combo_trade")
+            if legs and callable(close_combo):
+                # Use the combo close path (OPEN-1 territory). Pass
+                # mark=0 since we're closing because the rule said so,
+                # not because of a price trigger.
+                result = await close_combo(
+                    client, ledger, trade, reason_label,
+                    combo_mark=0.0, username=username,
+                )
+                result["exit_rule_id"] = getattr(decision, "rule_id", None)
+                result["exit_rule_rationale"] = rationale
+                closed_orders.append(result)
+            else:
+                shares = trade.get("shares") or 0
+                is_short = str(trade.get("side") or "long").lower() in {"short", "sell", "s"}
+                exit_side = "buy" if is_short else "sell"
+                order = await _place_order(
+                    client, sym, shares, exit_side,
+                    strategy=trade.get("strategy", "unknown"),
+                    username=username,
+                )
+                closed_orders.append({
+                    "symbol": sym,
+                    "side": exit_side,
+                    "shares": shares,
+                    "reason": reason_label,
+                    "exit_rule_id": getattr(decision, "rule_id", None),
+                    "exit_rule_rationale": rationale,
+                    "order_id": order.get("id") if isinstance(order, dict) else None,
+                    "strategy": trade.get("strategy", "unknown"),
+                })
+        except Exception as exc:
+            logger.error(
+                "exit-rules close failed for %s rule=%s: %s",
+                sym, rule_type, exc, exc_info=True,
+            )
+            closed_orders.append({
+                "symbol": sym,
+                "reason": reason_label,
+                "exit_rule_id": getattr(decision, "rule_id", None),
+                "error": str(exc),
+                "strategy": trade.get("strategy", "unknown"),
+            })
+        return
+
+    # ── Roll branch ──
+    if action == "roll" and auto_roll_evaluator is not None:
+        try:
+            roll_decision = auto_roll_evaluator(trade, marks)
+        except Exception:
+            logger.error(
+                "exit-rules: auto-roll evaluator raised for %s",
+                sym, exc_info=True,
+            )
+            roll_decision = None
+
+        if roll_decision is None or getattr(roll_decision, "action", "alert") == "alert":
+            await _record_exit_alert(
+                trade, decision, reason_label,
+                downgraded_from="roll",
+                extra_rationale=getattr(roll_decision, "rationale", "auto-roll evaluator failed") if roll_decision else "auto-roll evaluator failed",
+            )
+            closed_orders.append({
+                "symbol": sym,
+                "kind": "alert",
+                "reason": reason_label,
+                "exit_rule_id": getattr(decision, "rule_id", None),
+                "exit_rule_rationale": rationale,
+                "downgraded_from": "roll",
+                "strategy": trade.get("strategy", "unknown"),
+            })
+            return
+
+        # Guardrails passed — record an alert with the proposed legs.
+        await _record_exit_alert(
+            trade, decision, reason_label,
+            downgraded_from=None,
+            extra_rationale=getattr(roll_decision, "rationale", ""),
+            proposed_legs=getattr(roll_decision, "proposed_legs", None),
+        )
+        closed_orders.append({
+            "symbol": sym,
+            "kind": "roll_proposed",
+            "reason": reason_label,
+            "exit_rule_id": getattr(decision, "rule_id", None),
+            "exit_rule_rationale": rationale,
+            "proposed_legs": getattr(roll_decision, "proposed_legs", []),
+            "estimated_debit": getattr(roll_decision, "estimated_debit", 0.0),
+            "strategy": trade.get("strategy", "unknown"),
+        })
+        return
+
+    # ── Alert branch (default) ──
+    await _record_exit_alert(trade, decision, reason_label)
+    closed_orders.append({
+        "symbol": sym,
+        "kind": "alert",
+        "reason": reason_label,
+        "exit_rule_id": getattr(decision, "rule_id", None),
+        "exit_rule_rationale": rationale,
+        "strategy": trade.get("strategy", "unknown"),
+    })
+
+
+# =====================================================================
 # Combo (multi-leg) exit support helpers
 # =====================================================================
 # OE-1/OE-2 (audit/2026-05-05-combo-exits, P0). Alpaca rejects bracket
@@ -1953,9 +2232,22 @@ async def _check_exits(
     replacements through the position owner's :class:`BrokerConnection`
     row instead of the env credentials.
 
-    OE-2 (combo-exit hardening, 2026-05-05): when a trade has multi-leg
-    ``legs`` populated AND a ``stop_loss_combo_mark`` set, the combo
-    branch computes the combined spread mark via
+    PM-3 (audit/2026-05-05-position-management): before the legacy
+    stop-loss / take-profit / time-exit / trailing-stop checks below
+    we FIRST consult the configurable exit-rule engine
+    (``services.exit_rules.evaluate_exit_rules``). Hot-block markers
+    ``# === BEGIN exit-rules engine (PM-3) ===`` and
+    ``# === END   exit-rules engine (PM-3) ===`` bracket the new
+    section so OPEN-1 (combo-mark exits) and OPEN-4 (additional rule
+    types) can merge their changes without disturbing the rule-engine
+    block. The rule engine runs FIRST so a configured rule (which can
+    fire on combos too) takes priority over the hard-coded
+    ``stop_loss_combo_mark`` check that follows.
+
+    OE-2 (combo-exit hardening, 2026-05-05): after the rule engine,
+    when a trade has multi-leg ``legs`` populated AND a
+    ``stop_loss_combo_mark`` set, the combo branch computes the
+    combined spread mark via
     :func:`services.combo_calc.compute_combo_mark` and compares against
     the COMBO mark threshold instead of the underlying's mark. Single-leg
     trades and legacy rows without ``legs`` continue down the existing
@@ -1980,6 +2272,85 @@ async def _check_exits(
     closed_orders: list[dict[str, Any]] = []
     open_trades = ledger.get_open_positions()
 
+    if not open_trades:
+        return closed_orders
+
+    # === BEGIN exit-rules engine (PM-3) ===
+    # Wave 5A — runs the configurable ``exit_rules`` table against every
+    # OPEN trade. Returns at most one ``ExitDecision`` per trade — the
+    # highest-priority rule that fires. We dispatch on
+    # ``decision.action``:
+    #
+    #   - close  → ``_close_combo_trade`` (combos) or ``_place_order``
+    #              (single-leg). Records the rule rationale on the
+    #              exit reason so the operator can pivot to the rule.
+    #   - alert  → record an Alert row + emit a structured log; the
+    #              dashboard's NotificationCenter renders it.
+    #   - roll   → ``services.position_roller.evaluate_auto_roll``
+    #              which DOWNGRADES to alert if guardrails fail.
+    #              Live broker submission of the rolled combo is
+    #              gated behind a follow-up — this wave only fires
+    #              the alert when guardrails pass so the operator
+    #              can submit the multi-leg order manually.
+    #
+    # Composition note (merge 2026-05-05): the rule engine runs BEFORE
+    # the OE-1/OE-2 combo branch below. Configurable rules can fire on
+    # combos too, and we want the more-flexible operator-defined rules
+    # to win when both would fire. After this block we refresh
+    # ``open_trades`` to drop trades that the rule engine just closed.
+    try:
+        from services.exit_rules import (
+            evaluate_exit_rules as _evaluate_exit_rules,
+        )
+        from services.position_roller import evaluate_auto_roll as _evaluate_auto_roll
+    except Exception:
+        logger.warning("exit-rules engine import failed — skipping rule evaluation", exc_info=True)
+        _evaluate_exit_rules = None
+        _evaluate_auto_roll = None
+
+    if _evaluate_exit_rules is not None:
+        for trade in list(open_trades):
+            try:
+                marks = await _build_current_marks_for_trade(
+                    client, trade, username=username,
+                )
+            except Exception:
+                logger.warning(
+                    "exit-rules: failed to build marks for %s — skipping",
+                    trade.get("symbol"), exc_info=True,
+                )
+                continue
+
+            try:
+                decision = await _evaluate_exit_rules(trade, marks)
+            except Exception:
+                logger.error(
+                    "exit-rules: evaluator raised for %s",
+                    trade.get("symbol"), exc_info=True,
+                )
+                continue
+
+            if decision is None:
+                continue
+
+            try:
+                await _dispatch_exit_decision(
+                    client, ledger, trade, decision,
+                    closed_orders=closed_orders,
+                    auto_roll_evaluator=_evaluate_auto_roll,
+                    marks=marks,
+                    username=username,
+                )
+            except Exception:
+                logger.error(
+                    "exit-rules: dispatch failed for %s decision=%s",
+                    trade.get("symbol"), decision, exc_info=True,
+                )
+    # === END exit-rules engine (PM-3) ===
+
+    # Re-fetch open_trades since the rules engine may have closed some
+    closed_ids_so_far = {co.get("trade_id") for co in closed_orders if co.get("trade_id") is not None}
+    open_trades = [t for t in open_trades if t.get("id") not in closed_ids_so_far]
     if not open_trades:
         return closed_orders
 

@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { DashboardPageLayout } from "@/components/layouts";
+import ExitRulesPanel from "@/components/settings/ExitRulesPanel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
 import { useDestructiveAction } from "@/components/destructive/useDestructiveAction";
@@ -577,6 +578,14 @@ export default function SettingsPage() {
     <>
     <DashboardPageLayout eyebrow="§ SETTINGS" title="Settings">
       <div className="space-y-4">
+        {/* PM-5 (audit/2026-05-05-position-management): minimal admin
+            CRUD for the configurable exit-rules engine. Backed by
+            /api/v1/exit-rules. Sits above Trading Mode because rule
+            edits are the most consequential action on this page —
+            an enabled 21-DTE rule will close every position one
+            Friday before opex. */}
+        <ExitRulesPanel />
+
         {/* Trading Mode */}
         <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">

@@ -117,17 +117,78 @@ function MetricGrid({ summary, compact }: { summary: PayoffSummary; compact: boo
 
 function PayoffChart({ summary }: { summary: PayoffSummary }) {
   const [hovered, setHovered] = useState<PayoffPoint | null>(null);
+  // EOP-AUDIT 2026-05-06 PR-3 (a11y): keyboard-driven readout. When
+  // the chart container has focus, arrow keys move the selected
+  // point; the visible readout + an aria-live region announce the
+  // change so screen-reader users get the same per-price PnL info
+  // pointer users get from hovering. Pointer activity overrides
+  // keyboard selection (and vice versa) via setHovered.
+  const [keyboardActive, setKeyboardActive] = useState(false);
   const points = summary.payoffPoints;
   const chart = useMemo(() => buildSvgModel(points, summary), [points, summary]);
   if (!chart) {
     return <EmptyPayoff copy="The payoff curve will appear once every selected leg has a usable price." compact />;
   }
 
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (points.length === 0) return;
+    const currentIndex = hovered
+      ? points.findIndex((p) => p.underlyingPrice === hovered.underlyingPrice)
+      : -1;
+    const startIndex = currentIndex >= 0 ? currentIndex : Math.floor(points.length / 2);
+    let nextIndex = startIndex;
+    const step10 = Math.max(1, Math.round(points.length / 10));
+    switch (event.key) {
+      case "ArrowLeft":
+        nextIndex = Math.max(0, startIndex - 1);
+        break;
+      case "ArrowRight":
+        nextIndex = Math.min(points.length - 1, startIndex + 1);
+        break;
+      case "PageUp":
+        nextIndex = Math.max(0, startIndex - step10);
+        break;
+      case "PageDown":
+        nextIndex = Math.min(points.length - 1, startIndex + step10);
+        break;
+      case "Home":
+        nextIndex = 0;
+        break;
+      case "End":
+        nextIndex = points.length - 1;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    setKeyboardActive(true);
+    setHovered(points[nextIndex] ?? null);
+  };
+
   return (
     <div className="mt-4 rounded-md border border-border-hair bg-bg px-3 py-3">
       <div
-        className="relative h-[220px] w-full"
-        onMouseLeave={() => setHovered(null)}
+        className="relative h-[220px] w-full rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        role="application"
+        aria-label="Options payoff chart. Use left and right arrow keys to step through prices, Home and End to jump to the extremes."
+        tabIndex={0}
+        onFocus={() => {
+          setKeyboardActive(true);
+          if (!hovered && points.length > 0) {
+            const spotIdx = summary.spotPrice != null
+              ? points.findIndex((p) => p.underlyingPrice === nearestPoint(points, summary.spotPrice!)?.underlyingPrice)
+              : -1;
+            setHovered(points[spotIdx >= 0 ? spotIdx : Math.floor(points.length / 2)]);
+          }
+        }}
+        onBlur={() => {
+          setKeyboardActive(false);
+          setHovered(null);
+        }}
+        onKeyDown={handleKeyDown}
+        onMouseLeave={() => {
+          if (!keyboardActive) setHovered(null);
+        }}
         onMouseMove={(event) => {
           // EOP-AUDIT 2026-05-06 Bug 2c: the SVG has chart.padding=28
           // horizontal padding on each side, so mapping cursor.x
@@ -141,6 +202,7 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
           const innerX = Math.max(0, Math.min(chart.innerWidth, svgX - chart.padding));
           const ratio = chart.innerWidth > 0 ? innerX / chart.innerWidth : 0;
           const price = chart.xMin + ratio * (chart.xMax - chart.xMin);
+          setKeyboardActive(false);
           setHovered(nearestPoint(points, price));
         }}
       >
@@ -175,16 +237,41 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
             </g>
           ) : null}
         </svg>
-        <div className="pointer-events-none absolute left-2 top-2 rounded border border-border-hair bg-bg-elev-1/95 px-2 py-1 font-mono text-label text-fg-muted shadow-[0_10px_24px_-18px_rgba(16,22,17,0.55)]">
+        <div
+          aria-live="polite"
+          aria-atomic="true"
+          className="pointer-events-none absolute left-2 top-2 rounded border border-border-hair bg-bg-elev-1/95 px-2 py-1 font-mono text-label text-fg-muted shadow-[0_10px_24px_-18px_rgba(16,22,17,0.55)]"
+        >
           {hovered
             ? `${formatCurrency(hovered.underlyingPrice)} -> ${formatCurrency(hovered.pnl)}`
-            : "Hover for P/L"}
+            : "Hover or focus for P/L"}
         </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-eyebrow text-fg-muted">
         <span>At expiration</span>
         {summary.spotPrice != null ? <span>Spot {formatCurrency(summary.spotPrice)}</span> : null}
         {summary.expiries[0] ? <span>Expiry {summary.expiries[0]}</span> : null}
+      </div>
+      {/* EOP-AUDIT 2026-05-06 PR-3 (a11y): screen-reader summary of the
+          chart's key prices, so non-pointer users get max profit, max
+          loss, and breakevens without having to step through every
+          payoff point. The interactive arrow-key nav above gives them
+          per-price PnL on demand; this provides the high-level shape. */}
+      <div className="sr-only">
+        <h3>Payoff summary</h3>
+        <ul>
+          {summary.spotPrice != null ? <li>Spot price: {formatCurrency(summary.spotPrice)}</li> : null}
+          <li>Maximum profit: {formatPayoffValue(summary.maxProfit)}</li>
+          <li>Maximum loss: {formatPayoffValue(summary.maxLoss)}</li>
+          {summary.breakevens.length > 0 ? (
+            <li>
+              Breakeven{summary.breakevens.length > 1 ? "s" : ""}:{" "}
+              {summary.breakevens.map((be) => formatCurrency(be)).join(", ")}
+            </li>
+          ) : (
+            <li>No breakeven inside the modeled price range.</li>
+          )}
+        </ul>
       </div>
     </div>
   );
