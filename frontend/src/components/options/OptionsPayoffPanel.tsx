@@ -129,9 +129,18 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
         className="relative h-[220px] w-full"
         onMouseLeave={() => setHovered(null)}
         onMouseMove={(event) => {
+          // EOP-AUDIT 2026-05-06 Bug 2c: the SVG has chart.padding=28
+          // horizontal padding on each side, so mapping cursor.x
+          // directly through (rect.width) over-states the price by
+          // up to 28/innerWidth at the extremes. Project cursor
+          // px → SVG px → inner-x first; clamp to [0, innerWidth].
           const rect = event.currentTarget.getBoundingClientRect();
-          const ratio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0;
-          const price = chart.xMin + Math.max(0, Math.min(1, ratio)) * (chart.xMax - chart.xMin);
+          if (rect.width <= 0) return;
+          const svgPxPerCssPx = chart.width / rect.width;
+          const svgX = (event.clientX - rect.left) * svgPxPerCssPx;
+          const innerX = Math.max(0, Math.min(chart.innerWidth, svgX - chart.padding));
+          const ratio = chart.innerWidth > 0 ? innerX / chart.innerWidth : 0;
+          const price = chart.xMin + ratio * (chart.xMax - chart.xMin);
           setHovered(nearestPoint(points, price));
         }}
       >
@@ -220,14 +229,28 @@ function buildSvgModel(points: PayoffPoint[], summary: PayoffSummary) {
   const innerHeight = yBottom - yTop;
   const xMin = summary.priceRange.min;
   const xMax = summary.priceRange.max;
+  // EOP-AUDIT 2026-05-06 Bug 2b: when priceRange collapses (single
+  // strike or upstream pricing failure), every payoff point would
+  // map to x = padding via the divide-by-zero-guarded fallback,
+  // collapsing the curve to a vertical line at the chart's left
+  // edge. Bail early so the empty-state copy renders instead.
+  if (xMax - xMin <= 0) return null;
   const pnlValues = [...points.map((point) => point.pnl), 0];
   const rawMin = Math.min(...pnlValues);
   const rawMax = Math.max(...pnlValues);
-  const span = Math.max(Math.abs(rawMin), Math.abs(rawMax), 1);
-  const yMin = -span * 1.12;
-  const yMax = span * 1.12;
-  const x = (price: number) => padding + ((price - xMin) / Math.max(1, xMax - xMin)) * innerWidth;
-  const y = (pnl: number) => yBottom - ((pnl - yMin) / Math.max(1, yMax - yMin)) * innerHeight;
+  // EOP-AUDIT 2026-05-06 Bug 2a: previous symmetric span (yMin =
+  // -span*1.12, yMax = span*1.12) crushed asymmetric strategies —
+  // a long call with $370 max loss and ~$4,330 max profit rendered
+  // its loss-tinted band across half the chart in dead space. Pad
+  // up and down independently so each side of zero gets ~12%
+  // breathing room, with a small floor so a flat curve still has
+  // visible vertical extent.
+  const upPad = Math.max(rawMax * 0.12, 1);
+  const downPad = Math.max(Math.abs(rawMin) * 0.12, 1);
+  const yMin = Math.min(0, rawMin) - downPad;
+  const yMax = Math.max(0, rawMax) + upPad;
+  const x = (price: number) => padding + ((price - xMin) / (xMax - xMin)) * innerWidth;
+  const y = (pnl: number) => yBottom - ((pnl - yMin) / Math.max(1e-6, yMax - yMin)) * innerHeight;
   const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${x(point.underlyingPrice).toFixed(2)} ${y(point.pnl).toFixed(2)}`).join(" ");
   const gridYs = [0.25, 0.5, 0.75].map((ratio) => yTop + innerHeight * ratio);
   const gridXs = [0.25, 0.5, 0.75].map((ratio) => padding + innerWidth * ratio);
