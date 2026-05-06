@@ -111,3 +111,12 @@ output/playwright/
 # =============================================================================
 .claude/
 .gstack/
+
+# =============================================================================
+# Runtime artifacts (not checked in)
+# =============================================================================
+backend/data/pipeline_logs/*.json
+backend/data/pipeline_logs/*.log
+.audit/
+.tmp-*
+.tmp-cookies.txt
