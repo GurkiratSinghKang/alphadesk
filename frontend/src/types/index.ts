@@ -322,6 +322,62 @@ export interface OptionsChain {
   isDemo?: boolean;
 }
 
+/**
+ * Project Maverick (PM-C): per-contract NBBO snapshot returned by
+ * ``GET /api/v1/options/contract-snapshot``. The wire envelope is
+ * snake_case (Python convention) — keep ``RawContractSnapshot`` as the
+ * mapper input and ``ContractSnapshot`` as the camelCase shape consumed
+ * by hooks + components. ``isDemo`` flips true when the backend cannot
+ * reach OPRA / its provider and falls back to a synthetic NBBO; the UI
+ * still renders the panel but stamps a "SYNTHETIC DATA" warning.
+ *
+ * Greek / IV / volume / OI may all be unavailable depending on provider,
+ * so anything optional on the wire stays nullable on the FE — callers
+ * must render an em-dash rather than a fabricated zero.
+ */
+export interface ContractSnapshot {
+  symbol: string;
+  bid: number;
+  ask: number;
+  bidSize: number;
+  askSize: number;
+  bidExchange: string | null;
+  askExchange: string | null;
+  midpoint: number;
+  lastPrice: number | null;
+  lastTimestamp: string | null;
+  volume: number;
+  openInterest: number;
+  impliedVolatility: number | null;
+  fetchedAt: string;
+  isDemo: boolean;
+}
+
+/**
+ * Wire shape for ``GET /api/v1/options/contract-snapshot``. Mirrors the
+ * backend exactly so the API mapper can lift it into ``ContractSnapshot``
+ * without renaming surprises. All fields are typed as ``unknown``-friendly
+ * primitives; the mapper coerces nullable / missing entries to safe
+ * defaults (``0`` for sizes, ``null`` for optional fields).
+ */
+export interface RawContractSnapshot {
+  symbol: string;
+  bid: number;
+  ask: number;
+  bid_size: number;
+  ask_size: number;
+  bid_exchange: string | null;
+  ask_exchange: string | null;
+  midpoint: number;
+  last_price: number | null;
+  last_timestamp: string | null;
+  volume: number;
+  open_interest: number;
+  implied_volatility: number | null;
+  fetched_at: string;
+  is_demo: boolean;
+}
+
 // ─── Analysis ─────────────────────────────────────────────────
 
 export type SignalType = "bullish" | "bearish" | "neutral";
