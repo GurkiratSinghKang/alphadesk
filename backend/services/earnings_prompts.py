@@ -205,6 +205,15 @@ def build_structured_prompt(
         'bull call spread|bear put spread|iron condor|long straddle",\n'
         ' "suggested_play_reason": "one sentence — must explicitly note max loss is capped",\n'
         ' "confidence": float 0-1}\n'
+        # EOP-AUDIT 2026-05-06 / Bug 3: Claude returned ``8`` (percent
+        # units) for an 8% expected move, so the frontend's ``fmtPct``
+        # would render +800% before clamping kicked in. Pin the unit
+        # explicitly: bull/bear case MUST be a signed decimal ratio.
+        "UNITS — direction_magnitude.bull_case_pct and bear_case_pct MUST be "
+        "signed decimal ratios (NOT percent values). A 12% expected upside = "
+        "+0.12; a 7% expected downside = -0.07. Values outside ±1.0 will be "
+        "rejected. Bull case is positive, bear case is negative. Confidence "
+        "is also a decimal ratio between 0.0 and 1.0.\n\n"
         "Hard rule: NEVER suggest a naked short option or short strangle/straddle. "
         "If the directional view is bullish + IV elevated, prefer a bull put spread "
         "or bear call spread for bearish + elevated IV. "
@@ -244,7 +253,15 @@ def build_structured_prompt(
 
 def parse_structured_response(raw: str) -> dict:
     """Parse Claude's structured JSON. Validates verdict + suggested_play vs
-    vocab and raises ValueError on any deviation so the route can retry once."""
+    vocab and raises ValueError on any deviation so the route can retry once.
+
+    EOP-AUDIT 2026-05-06 / Bug 3: defensive unit correction. Even with
+    the explicit ``UNITS`` instruction in the system prompt, Claude
+    occasionally returns ``8`` for an 8% move. When |value| > 1 we
+    divide by 100, set ``unit_corrected=True`` on the magnitude block
+    so the frontend can surface a marker, and proceed instead of
+    failing the whole parse (which would empty the whole thesis card).
+    """
     try:
         obj = json.loads(raw)
     except json.JSONDecodeError as e:
@@ -260,8 +277,27 @@ def parse_structured_response(raw: str) -> dict:
         if required not in obj:
             raise ValueError(f"missing key {required!r}")
     conf = float(obj["confidence"])
+    if conf > 1 and conf <= 100:
+        conf = conf / 100.0
+        obj["confidence"] = conf
     if not 0 <= conf <= 1:
         raise ValueError(f"confidence {conf} not in 0..1")
+
+    mag = obj.get("direction_magnitude")
+    if isinstance(mag, dict):
+        unit_corrected = False
+        for key in ("bull_case_pct", "bear_case_pct"):
+            try:
+                value = float(mag.get(key))  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(value):
+                continue
+            if abs(value) > 1.0 and abs(value) <= 100.0:
+                mag[key] = value / 100.0
+                unit_corrected = True
+        if unit_corrected:
+            mag["unit_corrected"] = True
     return obj
 
 

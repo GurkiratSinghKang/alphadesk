@@ -145,6 +145,19 @@ class Settings(BaseSettings):
     TELEGRAM_CHAT_ID: str = ""
     DISCORD_WEBHOOK_URL: SecretStr = SecretStr("")
 
+    # --- Oncall alert dispatcher (audit P0-5, 2026-05-05) ---
+    # Generic webhook-based dispatcher (``services.alerts.fire_alert``)
+    # routes alerts by severity. Empty strings = destination disabled
+    # (silently skipped). See ``docs/RUNBOOK-alerts.md`` for severity
+    # meanings and SLAs. ``ALERT_DISCORD_WEBHOOK_URL`` falls back to the
+    # legacy ``DISCORD_WEBHOOK_URL`` when unset, so existing deploys
+    # don't have to be re-configured to keep Discord working.
+    ALERT_PAGERDUTY_INTEGRATION_KEY: SecretStr = SecretStr("")  # PagerDuty Events API v2 integration key
+    ALERT_DISCORD_WEBHOOK_URL: SecretStr = SecretStr("")        # Optional override; falls back to DISCORD_WEBHOOK_URL
+    ALERT_SLACK_WEBHOOK_URL: SecretStr = SecretStr("")          # Optional Slack incoming webhook
+    ALERT_GENERIC_WEBHOOK_URL: SecretStr = SecretStr("")        # Optional generic POST endpoint
+    ALERT_DEDUP_WINDOW_SECONDS: int = 900                       # 15 min dedup window
+
     # --- Webhooks ---
     TRADINGVIEW_WEBHOOK_SECRET: SecretStr = SecretStr("")
 

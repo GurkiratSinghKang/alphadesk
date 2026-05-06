@@ -1810,6 +1810,137 @@ async def _execute_approved_orders(
     return orders_placed
 
 
+# =====================================================================
+# Combo (multi-leg) exit support helpers
+# =====================================================================
+# OE-1/OE-2 (audit/2026-05-05-combo-exits, P0). Alpaca rejects bracket
+# parameters on multi-leg option submissions, so the only stop-enforcement
+# layer for combos is client-side. These helpers compute the combined
+# spread mark and unwind a combo position one leg at a time.
+
+
+async def _close_combo_trade(
+    client: httpx.AsyncClient,
+    ledger: TradeLedger,
+    trade: dict[str, Any],
+    reason: str,
+    combo_mark: float,
+    *,
+    username: str | None = None,
+) -> dict[str, Any]:
+    """Close a multi-leg combo trade by submitting offsetting legs.
+
+    Each leg is closed individually with the OPPOSITE side (``buy`` becomes
+    ``sell`` and vice versa); per-leg failures are logged but do not abort
+    the rest of the unwind because a partial close on a defined-risk spread
+    still reduces dollar exposure.
+
+    Returns a dict suitable for the ``closed_orders`` list — same shape as
+    the single-leg path (symbol/reason/legs_closed/legs_failed).
+    """
+    legs = trade.get("legs") or []
+    sym = trade.get("symbol")
+    legs_closed: list[dict[str, Any]] = []
+    legs_failed: list[dict[str, Any]] = []
+    for leg in legs:
+        # Accept both Pydantic-style (occ_symbol) and dict-with-strike
+        # leg shapes — the latter requires upstream code to construct an
+        # OCC string before submission. We assume the leg dict carries
+        # ``occ_symbol`` (strategy_runner format).
+        occ = (
+            leg.get("occ_symbol") if isinstance(leg, dict)
+            else getattr(leg, "occ_symbol", None)
+        )
+        leg_side = (
+            leg.get("side") if isinstance(leg, dict)
+            else getattr(leg, "side", None)
+        )
+        leg_qty = (
+            leg.get("quantity") if isinstance(leg, dict)
+            else getattr(leg, "quantity", 1)
+        ) or 1
+        if not occ or leg_side not in ("buy", "sell"):
+            legs_failed.append({"leg": leg, "error": "missing occ_symbol/side"})
+            continue
+        offset_side = "sell" if leg_side == "buy" else "buy"
+        try:
+            order = await _place_order(
+                client, occ, int(leg_qty), offset_side,
+                strategy=trade.get("strategy", "unknown"),
+                username=username,
+            )
+            legs_closed.append({
+                "occ_symbol": occ,
+                "side": offset_side,
+                "quantity": int(leg_qty),
+                "order_id": order.get("id") if isinstance(order, dict) else None,
+            })
+        except Exception as exc:
+            logger.error(
+                "Combo unwind failed for %s leg %s (%s %d): %s",
+                sym, occ, offset_side, leg_qty, exc, exc_info=True,
+            )
+            legs_failed.append({"occ_symbol": occ, "error": str(exc)})
+
+    # Mark the trade closed regardless of partial leg failures — leaving
+    # status='open' would have the next exit-monitor tick re-attempt the
+    # full unwind, which is wrong if some legs actually closed. Operators
+    # audit ``legs_failed`` to catch stragglers and finish them manually.
+    trade_id = trade.get("id")
+    if trade_id is not None:
+        try:
+            ledger.update(int(trade_id), {
+                "status": "closed",
+                "exit_reason": reason,
+                "exit_time": datetime.now(timezone.utc).isoformat(),
+                # Use the combo mark as a proxy for the exit "price" so
+                # the row is queryable; downstream P&L attribution should
+                # consult the per-leg fills, not this column.
+                "exit_price": float(combo_mark),
+            })
+        except Exception:
+            logger.error(
+                "Combo close: ledger update failed for id=%s",
+                trade_id, exc_info=True,
+            )
+
+    return {
+        "symbol": sym,
+        "kind": "combo",
+        "reason": reason,
+        "combo_mark": combo_mark,
+        "legs_closed": legs_closed,
+        "legs_failed": legs_failed,
+        "strategy": trade.get("strategy", "unknown"),
+    }
+
+
+async def _fetch_chain_for_combo(trade: dict[str, Any]) -> Any | None:
+    """Best-effort chain lookup for the underlying of a combo trade.
+
+    Returns ``None`` when the chain provider is unreachable so the caller
+    falls back to per-leg ``mid``/``limit_price`` for the mark calc.
+    Wrapped in a broad except because a chain-lookup blow-up should NEVER
+    silently leave a combo unmonitored — the caller treats ``None`` as
+    "use leg fallback mids" rather than "abort exit checks".
+    """
+    try:
+        from services.options import fetch_chain
+    except Exception:
+        return None
+    sym = trade.get("symbol")
+    if not sym:
+        return None
+    try:
+        return await fetch_chain(sym)
+    except Exception as exc:
+        logger.warning(
+            "Combo exit-check: chain fetch for %s failed: %s — falling back to leg mids",
+            sym, exc,
+        )
+        return None
+
+
 async def _check_exits(
     client: httpx.AsyncClient,
     ledger: TradeLedger,
@@ -1821,11 +1952,97 @@ async def _check_exits(
     Audit MB-P0-1: ``username`` routes broker queries / cancels /
     replacements through the position owner's :class:`BrokerConnection`
     row instead of the env credentials.
+
+    OE-2 (combo-exit hardening, 2026-05-05): when a trade has multi-leg
+    ``legs`` populated AND a ``stop_loss_combo_mark`` set, the combo
+    branch computes the combined spread mark via
+    :func:`services.combo_calc.compute_combo_mark` and compares against
+    the COMBO mark threshold instead of the underlying's mark. Single-leg
+    trades and legacy rows without ``legs`` continue down the existing
+    path unchanged. The audit (P0-2) called out that the prior path
+    compared the UNDERLYING'S mark against ``stop_loss`` for combos —
+    an iron condor that's bleeding from a +21% gap on the SHORT call
+    side never trips a "stop_loss < entry_price" check.
     """
+    # OE-4 (heartbeat fail-safe): record this run's start time even if no
+    # trades are open, so the staleness monitor (above 5 min in market
+    # hours) doesn't false-trigger on a quiet ledger.
+    try:
+        from core.redis import cache_set as _cache_set
+        await _cache_set(
+            "exit_monitor:last_run",
+            {"ts": datetime.now(timezone.utc).isoformat()},
+            ttl_seconds=24 * 60 * 60,
+        )
+    except Exception:  # pragma: no cover — Redis miss is non-fatal here
+        pass
+
     closed_orders: list[dict[str, Any]] = []
     open_trades = ledger.get_open_positions()
 
     if not open_trades:
+        return closed_orders
+
+    # Split combos vs single-leg up front so we don't blow the position
+    # API budget for combos that don't need a per-symbol broker quote.
+    combo_trades = [
+        t for t in open_trades
+        if (t.get("legs") or []) and t.get("stop_loss_combo_mark") is not None
+    ]
+    single_leg_trades = [t for t in open_trades if t not in combo_trades]
+
+    # ── Combo branch ────────────────────────────────────────
+    from services.combo_calc import compute_combo_mark
+
+    for trade in combo_trades:
+        sym = trade.get("symbol")
+        threshold = trade.get("stop_loss_combo_mark")
+        try:
+            combo_threshold = float(threshold) if threshold is not None else None
+        except (TypeError, ValueError):
+            combo_threshold = None
+        if combo_threshold is None:
+            continue
+
+        chain = await _fetch_chain_for_combo(trade)
+        try:
+            mark = compute_combo_mark(trade.get("legs") or [], chain)
+        except Exception:
+            logger.error("compute_combo_mark failed for %s", sym, exc_info=True)
+            mark = None
+        if mark is None:
+            # Insufficient quote data — defer rather than fire on stale.
+            logger.info(
+                "Combo exit-check %s: mark unavailable (illiquid/halted?); deferring",
+                sym,
+            )
+            continue
+
+        # Stop fires when mark drops BELOW the threshold (combo mark is
+        # cost-to-flatten: more negative = bleeding more).
+        if mark <= combo_threshold:
+            logger.warning(
+                "Combo stop tripped for %s: mark=%.2f <= threshold=%.2f",
+                sym, mark, combo_threshold,
+            )
+            try:
+                result = await _close_combo_trade(
+                    client, ledger, trade, "stop_loss_combo",
+                    mark, username=username,
+                )
+                closed_orders.append(result)
+            except Exception as exc:
+                logger.error("Combo close failed for %s", sym, exc_info=True)
+                closed_orders.append({
+                    "symbol": sym,
+                    "kind": "combo",
+                    "reason": "stop_loss_combo",
+                    "error": str(exc),
+                    "strategy": trade.get("strategy", "unknown"),
+                })
+
+    # ── Single-leg branch (legacy path, unchanged behaviour) ────────
+    if not single_leg_trades:
         return closed_orders
 
     try:
@@ -1836,7 +2053,7 @@ async def _check_exits(
 
     pos_map = {p["symbol"]: p for p in positions}
 
-    for trade in open_trades:
+    for trade in single_leg_trades:
         sym = trade["symbol"]
         pos = pos_map.get(sym)
         if not pos:
@@ -2342,15 +2559,42 @@ async def _run_pipeline_inner(
                 errors.append(msg)
                 log["portfolio_snapshot"] = {"equity": equity, "cash": cash, "day_pnl": day_pnl}
 
-                # Send alert via available channels
+                # Audit P0-5 (2026-05-05): replaced ad-hoc Discord-only
+                # post with the generic ``services.alerts.fire_alert``
+                # dispatcher so PagerDuty pages oncall in addition to
+                # the Discord ping. Fail-open: dispatcher swallows its
+                # own errors so the pipeline still records the breaker
+                # trip even if every destination is misconfigured.
                 try:
-                    discord_url = settings.DISCORD_WEBHOOK_URL.get_secret_value() if hasattr(settings.DISCORD_WEBHOOK_URL, 'get_secret_value') else settings.DISCORD_WEBHOOK_URL
-                    if discord_url:
-                        async with httpx.AsyncClient(timeout=5) as discord_client:
-                            await discord_client.post(discord_url, json={"content": f"🚨 CIRCUIT BREAKER: Pipeline halted — daily P&L exceeded -2% threshold"})
+                    from services.alerts import (
+                        Alert,
+                        AlertSeverity,
+                        fire_alert,
+                    )
+                    from datetime import datetime, timezone
+
+                    await fire_alert(Alert(
+                        severity=AlertSeverity.P0,
+                        title="Circuit breaker tripped — daily PnL exceeded -2%",
+                        description=(
+                            f"Pipeline halted. day_pnl={day_pnl:.2f} "
+                            f"({day_pnl/equity*100:.2f}%) exceeds threshold "
+                            f"{abs(CIRCUIT_BREAKER_PCT)*100:.1f}%. See "
+                            "docs/RUNBOOK-alerts.md#circuit-breaker"
+                        ),
+                        source="daily_pipeline.circuit_breaker",
+                        deduplication_key="daily_pipeline.circuit_breaker",
+                        occurred_at=datetime.now(timezone.utc),
+                        metadata={
+                            "equity": float(equity),
+                            "day_pnl": float(day_pnl),
+                            "day_pnl_pct": float(day_pnl / equity),
+                            "threshold_pct": float(CIRCUIT_BREAKER_PCT),
+                        },
+                    ))
                 except Exception:
                     logger.critical(
-                        "Circuit breaker notify failed — oncall will not be paged via Discord",
+                        "Circuit breaker notify dispatcher raised",
                         exc_info=True,
                     )
 
@@ -2733,6 +2977,39 @@ async def _run_pipeline_inner(
     except Exception as e:
         logger.exception("Pipeline failed")
         errors.append(f"Pipeline exception: {e}")
+
+        # Audit P0-5 (2026-05-05): page oncall when the daily pipeline
+        # raises an unhandled exception. Same dedup key per-run so a
+        # multi-stage failure doesn't fire 5 distinct pages — PagerDuty
+        # collapses them into one incident.
+        try:
+            from services.alerts import (
+                Alert,
+                AlertSeverity,
+                fire_alert,
+            )
+            from datetime import datetime, timezone
+
+            await fire_alert(Alert(
+                severity=AlertSeverity.P0,
+                title=f"Daily pipeline failure: {type(e).__name__}",
+                description=(
+                    f"Pipeline raised {type(e).__name__}: {e}. See "
+                    "docs/RUNBOOK-alerts.md#daily-pipeline"
+                ),
+                source="daily_pipeline.run",
+                deduplication_key="daily_pipeline.run",
+                occurred_at=datetime.now(timezone.utc),
+                metadata={
+                    "exception_type": type(e).__name__,
+                    "errors_count": len(errors),
+                },
+            ))
+        except Exception:
+            logger.error(
+                "Pipeline failure alert dispatcher raised",
+                exc_info=True,
+            )
     finally:
         current_result = _pipeline_status.get("last_result")
         # Don't double-save in the cancel path (it returned above) —
@@ -2767,6 +3044,46 @@ async def run_position_check(
     except Exception as e:
         logger.error("Position check failed", exc_info=True)
         result["errors"].append(str(e))
+
+    return result
+
+
+async def run_exit_monitor(
+    *, username: str | None = None,
+) -> dict[str, Any]:
+    """OE-3 (combo-exit hardening, 2026-05-05): high-frequency exit checker.
+
+    Sibling to :func:`run_position_check`, but optimised to be safe to
+    invoke every 60 seconds during regular market hours. The whole point
+    is that combo stops MUST not be capped at the daily-pipeline cadence:
+    Alpaca rejects bracket parameters on multi-leg orders, so the only
+    enforcement layer is client-side, and a once-per-day check leaves a
+    spread naked through a +21% earnings gap.
+
+    Differences from ``run_position_check``:
+      * Lighter logging (every-minute INFO would flood operators).
+      * Same ``_check_exits`` is called — no logic divergence.
+      * Returns the closed-orders list and a heartbeat timestamp the
+        scheduler stamps to Redis.
+
+    The actual cadence (60 s during RTH, 5 min during extended hours,
+    skipped overnight) is enforced by the scheduler in
+    ``pipeline_runner._exit_monitor_loop``.
+    """
+    ledger = TradeLedger()
+    result: dict[str, Any] = {
+        "closed": [],
+        "errors": [],
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        _base_url()
+        async with httpx.AsyncClient(timeout=30) as client:
+            closed = await _check_exits(client, ledger, username=username)
+            result["closed"] = closed
+    except Exception as exc:
+        logger.error("Exit monitor failed", exc_info=True)
+        result["errors"].append(str(exc))
 
     return result
 

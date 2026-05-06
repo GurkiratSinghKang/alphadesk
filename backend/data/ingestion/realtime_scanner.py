@@ -872,8 +872,47 @@ async def _scanner_loop() -> None:
 
     except asyncio.CancelledError:
         pass
-    except Exception:
+    except Exception as exc:
         logger.exception("Scanner loop error")
+
+        # Audit P0-5 (2026-05-05): the scanner-loop dying silently was
+        # one of the audit's worst-case scenarios — every realtime
+        # setup goes unevaluated, the operator notices when the tape
+        # rolls and no alerts fire. Page oncall (P0) so a co-oncall
+        # can manually restart the scanner. Dedup'd across the day so
+        # a flapping loop doesn't fire 100 pages.
+        try:
+            from services.alerts import (
+                Alert,
+                AlertSeverity,
+                fire_alert,
+            )
+            from datetime import datetime, timezone, date as _date
+
+            await fire_alert(Alert(
+                severity=AlertSeverity.P0,
+                title=f"Realtime scanner loop died: {type(exc).__name__}",
+                description=(
+                    f"Scanner-loop heartbeat failure. Exception: "
+                    f"{type(exc).__name__}: {exc}. Real-time signal "
+                    "evaluation is HALTED until restart. See "
+                    "docs/RUNBOOK-alerts.md#scanner-loop-died"
+                ),
+                source="realtime_scanner.loop",
+                deduplication_key=f"realtime_scanner.loop.{_date.today().isoformat()}",
+                occurred_at=datetime.now(timezone.utc),
+                metadata={
+                    "exception_type": type(exc).__name__,
+                    "pending_setups": sum(
+                        len(s) for s in _pending_setups.values()
+                    ),
+                    "pairs_setups": len(_pairs_setups),
+                },
+            ))
+        except Exception:
+            logger.error(
+                "Scanner-loop alert dispatch raised", exc_info=True
+            )
     finally:
         logger.info("Real-time signal scanner stopped")
 
