@@ -327,6 +327,16 @@ class Settings(BaseSettings):
     STRATEGY_LAYER1_THRESHOLD: dict[str, float] = {}
     STRATEGY_LAYER2_THRESHOLD: dict[str, float] = {}
 
+    # SHF-2 (audit 2026-05-05 P0-4): per-trade max-loss gate as a fraction
+    # of current account equity. The existing $50k absolute notional cap
+    # (TRADES_PER_ORDER_NOTIONAL_CAP) does NOT prevent a $48k iron-condor
+    # max-loss against a $100k account (= 48% of book in one trade).
+    # Default 5% — enough headroom for a 1-contract iron condor on a
+    # $100k book while still rejecting a 5-contract version that would
+    # eat half the account. Admins can override per-deploy via env or
+    # bypass per-order with ``?override_size_limit=true`` on POST /orders.
+    MAX_LOSS_PER_TRADE_PCT_OF_EQUITY: float = 0.05
+
     # --- Derived helpers ---
     @property
     def is_production(self) -> bool:
