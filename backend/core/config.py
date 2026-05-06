@@ -342,6 +342,29 @@ class Settings(BaseSettings):
     RECOMMENDER_PREFER_HIGH_OI_WEIGHT: float = 0.30
     RECOMMENDER_PREFER_HIGH_VOLUME_WEIGHT: float = 0.20
 
+    # --- Recommender liquidity gating (Wave V — V2) ---
+    # The legacy strike picker chose by delta only. Result: a 4-leg iron
+    # condor could land a wing on a contract with volume=2 / OI=15 — an
+    # essentially untradeable leg. The picker now walks +/- N strikes
+    # from the best-delta match looking for a contract whose
+    # ``liquidity_score`` (Wave V Agent 1: a 0..1 composite of volume,
+    # OI, volume/OI ratio, and bid/ask spread) clears MIN. If nothing
+    # in the window qualifies it falls back to the best-delta pick and
+    # the setup is flagged with ``liquidity_warning``.
+    #
+    # After legs are built, the worst leg's score gates the setup as a
+    # whole: below DEMOTE the EV is halved (the setup still ranks but
+    # loses ground to liquid alternatives); below EXCLUDE the setup is
+    # dropped entirely (a leg this thin will not fill cleanly even at
+    # favourable prices). Defaults are conservative — DEMOTE 0.20 and
+    # EXCLUDE 0.10 roughly correspond to "below 20th-percentile
+    # liquidity in a typical earnings chain" and "essentially dead".
+    RECOMMENDER_MIN_LEG_LIQUIDITY_SCORE: float = 0.4
+    RECOMMENDER_DEMOTE_LIQUIDITY_THRESHOLD: float = 0.2
+    RECOMMENDER_EXCLUDE_LIQUIDITY_THRESHOLD: float = 0.1
+    # Walk distance (in strike steps) the picker searches for a liquid
+    # alternative around the best-delta match.
+    RECOMMENDER_LIQUIDITY_WALK_MAX_STRIKES: int = 2
 
     # --- Slippage forecasting (Wave V — V5) ---
     # Pre-trade fill estimator used by ``services.slippage_forecast`` to

@@ -42,6 +42,9 @@ import type {
   SkewBlock,
   LadderRow,
   StrikeLadder,
+  ComboFillForecast,
+  EarningsSetup,
+  EarningsSetupLeg,
 } from "@/types";
 
 // ─── Base Fetch ──────────────────────────────────────────────
@@ -3088,6 +3091,111 @@ function mapStrikeLadder(raw: RawStrikeLadder): StrikeLadder {
     fetchedAt: raw.fetched_at ?? null,
     // Round-4: backend may flag synthetic / demo chain — UI badges it.
     isDemo: raw.is_demo === true,
+  };
+}
+
+/**
+ * Wave V V5 — pre-trade slippage forecast emitted with each setup. Maps
+ * the backend snake-case payload to the frontend ComboFillForecast shape.
+ * Returns null when the backend emitted null/undefined so the FE can
+ * conditionally render the "Expected fill" line.
+ */
+export function mapFillForecast(raw: unknown): ComboFillForecast | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const targetMid = typeof r.target_mid === "number" ? r.target_mid : null;
+  const expectedFill = typeof r.expected_fill === "number" ? r.expected_fill : null;
+  const p10Fill = typeof r.p10_fill === "number" ? r.p10_fill : null;
+  const p90Fill = typeof r.p90_fill === "number" ? r.p90_fill : null;
+  const expectedSlippageDollars =
+    typeof r.expected_slippage_dollars === "number"
+      ? r.expected_slippage_dollars
+      : null;
+  if (
+    targetMid === null
+    || expectedFill === null
+    || p10Fill === null
+    || p90Fill === null
+    || expectedSlippageDollars === null
+  ) {
+    return null;
+  }
+  const confidenceRaw = r.confidence;
+  const confidence: "high" | "medium" | "low" =
+    confidenceRaw === "high" || confidenceRaw === "medium" || confidenceRaw === "low"
+      ? confidenceRaw
+      : "low";
+  const reasoning = Array.isArray(r.reasoning)
+    ? (r.reasoning as unknown[]).filter((s): s is string => typeof s === "string")
+    : [];
+  return {
+    targetMid,
+    expectedFill,
+    p10Fill,
+    p90Fill,
+    expectedSlippageDollars,
+    confidence,
+    reasoning,
+  };
+}
+
+/**
+ * Wave 4a / Batch Q — map a backend EarningsSetup wire payload to the
+ * frontend EarningsSetup shape. Tolerant of missing optional fields
+ * (older cached responses, demo data) so unknown fields fall to safe
+ * defaults rather than failing the whole earnings response.
+ */
+export function mapEarningsSetup(raw: unknown): EarningsSetup | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const setupId = typeof r.setup_id === "string" ? r.setup_id : null;
+  if (!setupId) return null;
+  const legsRaw = Array.isArray(r.legs) ? (r.legs as unknown[]) : [];
+  const legs: EarningsSetupLeg[] = legsRaw
+    .map((legRaw): EarningsSetupLeg | null => {
+      if (!legRaw || typeof legRaw !== "object") return null;
+      const l = legRaw as Record<string, unknown>;
+      const side = l.side === "buy" || l.side === "sell" ? l.side : null;
+      const contractType = l.contract_type === "call" || l.contract_type === "put"
+        ? l.contract_type
+        : null;
+      const strike = typeof l.strike === "number" ? l.strike : null;
+      const mid = typeof l.mid === "number" ? l.mid : null;
+      const expiry = typeof l.expiry === "string" ? l.expiry : null;
+      if (side === null || contractType === null || strike === null || mid === null || expiry === null) {
+        return null;
+      }
+      return {
+        side,
+        contractType,
+        strike,
+        expiry,
+        qty: typeof l.qty === "number" ? l.qty : 1,
+        mid,
+      };
+    })
+    .filter((l): l is EarningsSetupLeg => l !== null);
+  return {
+    setupId,
+    legs,
+    netCreditOrDebit: typeof r.net_credit_or_debit === "number" ? r.net_credit_or_debit : 0,
+    maxProfit: typeof r.max_profit === "number" ? r.max_profit : null,
+    maxLoss: typeof r.max_loss === "number" ? r.max_loss : null,
+    breakevens: Array.isArray(r.breakevens)
+      ? (r.breakevens as unknown[]).filter((b): b is number => typeof b === "number")
+      : [],
+    popEstimate: typeof r.pop_estimate === "number" ? r.pop_estimate : 0,
+    expectedValue: typeof r.expected_value === "number" ? r.expected_value : 0,
+    riskReward: typeof r.risk_reward === "number" ? r.risk_reward : null,
+    rationale: typeof r.rationale === "string" ? r.rationale : "",
+    sizingKellyPct: typeof r.sizing_kelly_pct === "number" ? r.sizing_kelly_pct : 0,
+    isDefinedRisk: r.is_defined_risk === true,
+    requiresMarginEstimate:
+      typeof r.requires_margin_estimate === "number" ? r.requires_margin_estimate : null,
+    worstLegLiquidityScore:
+      typeof r.worst_leg_liquidity_score === "number" ? r.worst_leg_liquidity_score : null,
+    liquidityWarning: r.liquidity_warning === true,
+    fillForecast: mapFillForecast(r.fill_forecast),
   };
 }
 

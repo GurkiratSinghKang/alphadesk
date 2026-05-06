@@ -588,6 +588,64 @@ export type EarningsBucket = "15Δ" | "30Δ" | "ATM";
  */
 export type EarningsReportState = "upcoming" | "today_pre" | "today_done" | "past";
 
+/**
+ * Wave V V5 — pre-trade slippage forecast emitted with each
+ * recommended setup. Mirrors backend `ComboFillForecast` (per-share
+ * figures except `expectedSlippageDollars` which is total $). The FE
+ * renders the line "Expected fill: $X.XX (range $Y-$Z) · ~$N slippage"
+ * beneath each recommendation with color coding by `expectedSlippageDollars`.
+ *
+ * `confidence` is driven by the worst-leg liquidity score; "low"
+ * triggers a "(low confidence — illiquid chain)" suffix in the UI.
+ */
+export interface ComboFillForecast {
+  targetMid: number;
+  expectedFill: number;
+  p10Fill: number;
+  p90Fill: number;
+  expectedSlippageDollars: number;
+  confidence: "high" | "medium" | "low";
+  reasoning: string[];
+}
+
+/**
+ * Wave 4a / Batch Q — structured ranked setup with full leg info,
+ * P/L, breakevens, EV, Kelly sizing, and (Wave V V5) the pre-trade
+ * fill forecast. Shape mirrors backend `api.schemas.earnings.EarningsSetup`.
+ */
+export interface EarningsSetupLeg {
+  side: "buy" | "sell";
+  contractType: EarningsOptionSide;
+  strike: number;
+  expiry: string;
+  qty: number;
+  mid: number;
+}
+
+export interface EarningsSetup {
+  setupId: string;
+  legs: EarningsSetupLeg[];
+  netCreditOrDebit: number;
+  maxProfit: number | null;
+  maxLoss: number | null;
+  breakevens: number[];
+  popEstimate: number;
+  expectedValue: number;
+  riskReward: number | null;
+  rationale: string;
+  sizingKellyPct: number;
+  isDefinedRisk: boolean;
+  requiresMarginEstimate?: number | null;
+  worstLegLiquidityScore?: number | null;
+  liquidityWarning?: boolean;
+  /**
+   * Wave V V5: pre-trade slippage forecast. Null on setups whose chain
+   * lacks bid/ask (rare) or whose contracts don't match by strike. UI
+   * renders the "Expected fill" line only when this is present.
+   */
+  fillForecast?: ComboFillForecast | null;
+}
+
 export interface CalendarRow {
   symbol: string;
   company: string;

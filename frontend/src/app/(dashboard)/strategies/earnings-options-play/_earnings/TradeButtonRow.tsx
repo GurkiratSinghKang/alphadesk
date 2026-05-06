@@ -1,5 +1,11 @@
 import Link from "next/link";
-import type { EarningsReportState, EarningsTopSetup, StrikeLadder, LadderRow } from "@/types";
+import type {
+  ComboFillForecast,
+  EarningsReportState,
+  EarningsTopSetup,
+  StrikeLadder,
+  LadderRow,
+} from "@/types";
 import { fmtNumber } from "@/lib/intl";
 import { cn } from "@/lib/utils";
 import type { OptionStrategyDraft } from "@/lib/optionsPayoff";
@@ -47,6 +53,20 @@ export interface TradeButtonRowProps {
   reportState?: EarningsReportState;
   /** True when backend error_codes says the option chain came from demo/synthetic data. */
   syntheticChain?: boolean;
+  /**
+   * Wave V V5: pre-trade slippage forecast for the recommended setup.
+   * When provided, renders the "Expected fill: $X.XX (range $Y - $Z)"
+   * line beneath the trade buttons so the user sees the HONEST entry
+   * cost — not just the theoretical mid. Null/undefined hides the line.
+   */
+  recommendedSetupFillForecast?: ComboFillForecast | null;
+  /**
+   * Wave V V5: net credit / debit (per share) of the recommended setup.
+   * Used as the anchor for the slippage line — when present the FE
+   * renders it above the forecast line as "Net credit $X.XX". Negative
+   * = debit. ``null`` skips the credit/debit anchor.
+   */
+  recommendedNetCreditOrDebit?: number | null;
 }
 
 const STRATEGY_TAG = "earnings-options-play";
@@ -59,6 +79,8 @@ export default function TradeButtonRow({
   recommendedSetup = null,
   reportState = "upcoming",
   syntheticChain = false,
+  recommendedSetupFillForecast = null,
+  recommendedNetCreditOrDebit = null,
 }: TradeButtonRowProps) {
   // Round-7 / EP-6: validate the expiry shape BEFORE building any OCC
   // contract symbol. ``occSymbol`` slices ``YYYY-MM-DD`` at fixed offsets;
@@ -370,7 +392,79 @@ export default function TradeButtonRow({
         />
       )}
       </div>
+      {recommendedSetupFillForecast ? (
+        <FillForecastLine
+          forecast={recommendedSetupFillForecast}
+          netCreditOrDebit={recommendedNetCreditOrDebit}
+        />
+      ) : null}
     </>
+  );
+}
+
+/**
+ * Wave V V5 — render the pre-trade slippage forecast beneath the
+ * recommended trade buttons.
+ *
+ * Output:
+ *   Net credit $6.62
+ *   Expected fill: $6.40 (range $6.25-$6.55) · ~$22 slippage (low confidence)
+ *
+ * Color coding on the slippage figure:
+ *   < $5    → green  (negligible drag)
+ *   $5-$25  → amber  (typical)
+ *   > $25   → red    (heavy slippage; treat with care)
+ */
+function FillForecastLine({
+  forecast,
+  netCreditOrDebit,
+}: {
+  forecast: ComboFillForecast;
+  netCreditOrDebit: number | null;
+}) {
+  const slippage = forecast.expectedSlippageDollars;
+  const slippageColor =
+    slippage > 25 ? "u-loss" : slippage > 5 ? "u-warn" : "u-profit";
+  // Credit combo (target_mid > 0) → "Net credit $X.XX"; debit (< 0) →
+  // "Net debit $X.XX". The label uses the recommended setup's actual
+  // net (not the forecast's target_mid) so the headline price matches
+  // what the recommender chose to surface elsewhere; range/expected
+  // come from the forecast.
+  const isCredit = (netCreditOrDebit ?? 0) >= 0;
+  const netLabel = netCreditOrDebit === null
+    ? null
+    : `Net ${isCredit ? "credit" : "debit"} $${fmtNumber(Math.abs(netCreditOrDebit), { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`;
+  // For UI display, show the absolute value of the fill so credit and
+  // debit combos read naturally. Range bracket: lower = farther from
+  // mid (worse), upper = closer to mid (better).
+  const expectedAbs = Math.abs(forecast.expectedFill);
+  const lowAbs = Math.min(Math.abs(forecast.p10Fill), Math.abs(forecast.p90Fill));
+  const highAbs = Math.max(Math.abs(forecast.p10Fill), Math.abs(forecast.p90Fill));
+  return (
+    <div
+      data-slot="trade-button-fill-forecast"
+      className="mt-2 rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-2 py-1.5 t-mono text-label"
+    >
+      {netLabel ? (
+        <div data-slot="fill-forecast-net" className="u-default">
+          {netLabel}
+        </div>
+      ) : null}
+      <div data-slot="fill-forecast-expected">
+        Expected fill: ${fmtNumber(expectedAbs, { maximumFractionDigits: 2, minimumFractionDigits: 2 })}
+        {" "}(range ${fmtNumber(lowAbs, { maximumFractionDigits: 2, minimumFractionDigits: 2 })}
+        –${fmtNumber(highAbs, { maximumFractionDigits: 2, minimumFractionDigits: 2 })})
+        {" · "}
+        <span data-slot="fill-forecast-slippage" className={slippageColor}>
+          ~${fmtNumber(slippage, { maximumFractionDigits: 0 })} slippage
+        </span>
+        {forecast.confidence === "low" ? (
+          <span data-slot="fill-forecast-low-confidence" className="u-muted">
+            {" "}(low confidence — illiquid chain)
+          </span>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

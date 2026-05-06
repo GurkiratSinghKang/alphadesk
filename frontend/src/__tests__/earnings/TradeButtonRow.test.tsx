@@ -189,4 +189,191 @@ describe("TradeButtonRow (Round-12 DR-1: defined-risk only)", () => {
     expect(describedBy).toContain("trade-button-bull-put-spread-risk-copy");
     expect(container.textContent).toMatch(/max loss/i);
   });
+
+  // ─── Wave V V5: pre-trade slippage forecast surface ────────
+  describe("Wave V V5 — pre-trade slippage forecast", () => {
+    it("renders 'Expected fill' line when fillForecast is provided", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          recommendedNetCreditOrDebit={6.62}
+          recommendedSetupFillForecast={{
+            targetMid: 6.62,
+            expectedFill: 6.40,
+            p10Fill: 6.55,
+            p90Fill: 6.25,
+            expectedSlippageDollars: 22,
+            confidence: "medium",
+            reasoning: ["patient fill mode (10% of spread per leg)"],
+          }}
+        />,
+      );
+      const node = container.querySelector('[data-slot="trade-button-fill-forecast"]');
+      expect(node).not.toBeNull();
+      expect(node!.textContent).toMatch(/Expected fill/i);
+      expect(node!.textContent).toMatch(/6\.40/);
+      expect(node!.textContent).toMatch(/6\.25/);
+      expect(node!.textContent).toMatch(/6\.55/);
+      expect(node!.textContent).toMatch(/22 slippage/);
+    });
+
+    it("renders the 'Net credit $X.XX' anchor when net is positive", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          recommendedNetCreditOrDebit={6.62}
+          recommendedSetupFillForecast={{
+            targetMid: 6.62,
+            expectedFill: 6.40,
+            p10Fill: 6.55,
+            p90Fill: 6.25,
+            expectedSlippageDollars: 22,
+            confidence: "medium",
+            reasoning: [],
+          }}
+        />,
+      );
+      expect(container.textContent).toMatch(/Net credit \$6\.62/);
+    });
+
+    it("renders the 'Net debit' anchor when net is negative", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          recommendedNetCreditOrDebit={-1.05}
+          recommendedSetupFillForecast={{
+            targetMid: -1.05,
+            expectedFill: -1.06,
+            p10Fill: -1.055,
+            p90Fill: -1.065,
+            expectedSlippageDollars: 1,
+            confidence: "high",
+            reasoning: [],
+          }}
+        />,
+      );
+      expect(container.textContent).toMatch(/Net debit \$1\.05/);
+    });
+
+    it("appends '(low confidence — illiquid chain)' when confidence is low", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          recommendedNetCreditOrDebit={6.62}
+          recommendedSetupFillForecast={{
+            targetMid: 6.62,
+            expectedFill: 6.40,
+            p10Fill: 6.55,
+            p90Fill: 6.25,
+            expectedSlippageDollars: 22,
+            confidence: "low",
+            reasoning: ["1 illiquid leg adds 2.5x penalty"],
+          }}
+        />,
+      );
+      const lowConf = container.querySelector('[data-slot="fill-forecast-low-confidence"]');
+      expect(lowConf).not.toBeNull();
+      expect(lowConf!.textContent).toMatch(/low confidence/i);
+      expect(lowConf!.textContent).toMatch(/illiquid chain/i);
+    });
+
+    it("does NOT append low-confidence suffix when confidence is medium or high", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          recommendedNetCreditOrDebit={6.62}
+          recommendedSetupFillForecast={{
+            targetMid: 6.62,
+            expectedFill: 6.40,
+            p10Fill: 6.55,
+            p90Fill: 6.25,
+            expectedSlippageDollars: 22,
+            confidence: "high",
+            reasoning: [],
+          }}
+        />,
+      );
+      expect(container.querySelector('[data-slot="fill-forecast-low-confidence"]')).toBeNull();
+    });
+
+    it("color-codes slippage as profit when below $5", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          recommendedNetCreditOrDebit={6.62}
+          recommendedSetupFillForecast={{
+            targetMid: 6.62,
+            expectedFill: 6.61,
+            p10Fill: 6.61,
+            p90Fill: 6.60,
+            expectedSlippageDollars: 2,
+            confidence: "high",
+            reasoning: [],
+          }}
+        />,
+      );
+      const slip = container.querySelector('[data-slot="fill-forecast-slippage"]');
+      expect(slip!.className).toContain("u-profit");
+    });
+
+    it("color-codes slippage as warn when between $5 and $25", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          recommendedNetCreditOrDebit={6.62}
+          recommendedSetupFillForecast={{
+            targetMid: 6.62,
+            expectedFill: 6.40,
+            p10Fill: 6.55,
+            p90Fill: 6.25,
+            expectedSlippageDollars: 12,
+            confidence: "medium",
+            reasoning: [],
+          }}
+        />,
+      );
+      const slip = container.querySelector('[data-slot="fill-forecast-slippage"]');
+      expect(slip!.className).toContain("u-warn");
+    });
+
+    it("color-codes slippage as loss when above $25", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          recommendedNetCreditOrDebit={6.62}
+          recommendedSetupFillForecast={{
+            targetMid: 6.62,
+            expectedFill: 6.10,
+            p10Fill: 6.30,
+            p90Fill: 5.90,
+            expectedSlippageDollars: 52,
+            confidence: "low",
+            reasoning: [],
+          }}
+        />,
+      );
+      const slip = container.querySelector('[data-slot="fill-forecast-slippage"]');
+      expect(slip!.className).toContain("u-loss");
+    });
+
+    it("hides the line entirely when fillForecast is null", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          recommendedNetCreditOrDebit={6.62}
+          recommendedSetupFillForecast={null}
+        />,
+      );
+      expect(container.querySelector('[data-slot="trade-button-fill-forecast"]')).toBeNull();
+    });
+  });
 });

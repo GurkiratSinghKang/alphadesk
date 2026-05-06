@@ -125,6 +125,88 @@ def _filter_by_expiry_and_type(
     return out
 
 
+def _find_contract_for_leg(chain, leg):
+    """Wave V V5: locate the chain contract that backs a built OptionLeg."""
+    try:
+        option_type = getattr(leg, "contract_type", None)
+        target_strike = float(getattr(leg, "strike"))
+        leg_expiry = getattr(leg, "expiry", None)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    if option_type is None:
+        return None
+    expiry = leg_expiry if isinstance(leg_expiry, date) else None
+    candidates = _filter_by_expiry_and_type(chain, expiry, str(option_type))
+    if not candidates:
+        candidates = _filter_by_expiry_and_type(chain, None, str(option_type))
+    if not candidates:
+        return None
+    best = min(
+        candidates,
+        key=lambda c: abs(float(getattr(c, "strike", 0.0)) - target_strike),
+    )
+    if abs(float(getattr(best, "strike", 0.0)) - target_strike) > 0.01:
+        return None
+    return best
+
+
+def _build_fill_forecast_for_setup(setup, chain):
+    """Wave V V5: compute ComboFillForecast for an existing setup. Never raises."""
+    try:
+        from services.slippage_forecast import (
+            OptionLegWithMarks,
+            forecast_combo_fill,
+        )
+    except Exception:
+        return None
+    legs = getattr(setup, "legs", None)
+    if not legs:
+        return None
+    forecaster_legs = []
+    for leg in legs:
+        contract = _find_contract_for_leg(chain, leg)
+        if contract is None:
+            return None
+        try:
+            bid = float(getattr(contract, "bid", 0) or 0)
+            ask = float(getattr(contract, "ask", 0) or 0)
+            mid = float(getattr(leg, "mid"))
+            qty = int(getattr(leg, "qty", 1) or 1)
+            side = str(getattr(leg, "side"))
+        except (TypeError, ValueError, AttributeError):
+            return None
+        score_raw = getattr(contract, "liquidity_score", None)
+        try:
+            score = float(score_raw) if score_raw is not None else None
+            if score is not None:
+                score = max(0.0, min(1.0, score))
+        except (TypeError, ValueError):
+            score = None
+        forecaster_legs.append(
+            OptionLegWithMarks(
+                side=side,
+                bid=bid,
+                ask=ask,
+                mid=mid,
+                liquidity_score=score,
+                qty=qty,
+            ),
+        )
+    try:
+        return forecast_combo_fill(forecaster_legs, fill_mode="patient")
+    except Exception as e:
+        log.debug("slippage forecaster failed: %s", e)
+        return None
+
+
+def _attach_fill_forecast(setup, chain):
+    """Wave V V5: attach slippage forecast, never failing."""
+    forecast = _build_fill_forecast_for_setup(setup, chain)
+    if forecast is None:
+        return setup
+    return setup.model_copy(update={"fill_forecast": forecast})
+
+
 def _expirations_sorted(chain: Any) -> list[date]:
     raw = list(getattr(chain, "expirations", []) or [])
     parsed: list[date] = []
@@ -288,6 +370,141 @@ def find_strike_nearest(
     if not contracts:
         return None
     return min(contracts, key=lambda c: abs(float(c.strike) - target_strike))
+
+
+# ---------------------------------------------------------------------------
+# Liquidity gating (Wave V — V2)
+# ---------------------------------------------------------------------------
+#
+# The V4 picker above selects on delta + OI/volume preference. It does
+# not gate on Wave V Agent 1's per-contract ``liquidity_score`` (a 0..1
+# composite of volume, OI, volume/OI ratio, and bid/ask spread). Earnings
+# chains routinely have a wing strike with volume=2 / OI=15 — the bid/ask
+# is wide, the fill is uncertain, and the recommender just told the
+# analyst to buy it. The walk-search below reads ``liquidity_score``
+# defensively: if the field is missing (Agent 1 hasn't shipped, demo
+# fixture, older cached chain) it behaves identically to the V4 picker.
+
+
+def _contract_liquidity_score(contract: Any) -> float | None:
+    """Read ``liquidity_score`` off a contract, returning None when absent."""
+    score = getattr(contract, "liquidity_score", None)
+    if score is None:
+        return None
+    try:
+        f = float(score)
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, min(1.0, f))
+
+
+def find_liquid_strike_by_delta(
+    chain: Any,
+    expiry: date | None,
+    side: str,
+    target_delta: float,
+    min_liquidity_score: float | None = None,
+    max_strikes_to_search: int | None = None,
+) -> tuple[Any | None, bool]:
+    """Find the contract closest to target delta with liquidity score >= threshold.
+
+    Walks +/- ``max_strikes_to_search`` from the V4 best-delta match.
+    Returns ``(contract, liquidity_warning)``. When the chain has no
+    ``liquidity_score`` field at all, behaves identically to the V4
+    delta picker (graceful degradation).
+
+    The "delta-slack" rule lets the walk pick a slightly worse delta in
+    exchange for real liquidity, but rejects substituting a deep ITM/OTM
+    contract for the analyst's risk choice (a 0.05Δ in place of 0.20Δ).
+    """
+    from core.config import settings as _settings
+
+    if min_liquidity_score is None:
+        min_liquidity_score = _settings.RECOMMENDER_MIN_LEG_LIQUIDITY_SCORE
+    if max_strikes_to_search is None:
+        max_strikes_to_search = getattr(
+            _settings, "RECOMMENDER_LIQUIDITY_WALK_MAX_STRIKES",
+            getattr(_settings, "RECOMMENDER_LIQUIDITY_WALK_DISTANCE", 2),
+        )
+
+    contracts = _filter_by_expiry_and_type(chain, expiry, side)
+    if not contracts:
+        return None, False
+    target_abs = abs(target_delta)
+
+    def _delta_distance(c: Any) -> float:
+        d = getattr(c, "delta", None)
+        if d is None:
+            return float("inf")
+        return abs(abs(float(d)) - target_abs)
+
+    best = find_strike_by_delta(chain, expiry, side, target_delta)
+    if best is None:
+        return None, False
+
+    chain_has_liquidity = any(
+        _contract_liquidity_score(c) is not None for c in contracts
+    )
+    if not chain_has_liquidity:
+        return best, False
+
+    best_score = _contract_liquidity_score(best)
+    if best_score is not None and best_score >= min_liquidity_score:
+        return best, False
+
+    contracts_by_strike = sorted(contracts, key=lambda c: (float(c.strike), id(c)))
+    try:
+        best_idx = contracts_by_strike.index(best)
+    except ValueError:
+        best_idx = 0
+    lo = max(0, best_idx - max_strikes_to_search)
+    hi = min(len(contracts_by_strike) - 1, best_idx + max_strikes_to_search)
+    window = contracts_by_strike[lo : hi + 1]
+
+    best_delta_dist = _delta_distance(best)
+    delta_slack = 0.5 * max(target_abs, 0.05)
+
+    qualifying: list[Any] = []
+    for c in window:
+        score = _contract_liquidity_score(c)
+        if score is None:
+            continue
+        if score < min_liquidity_score:
+            continue
+        if _delta_distance(c) > best_delta_dist + delta_slack:
+            continue
+        qualifying.append(c)
+
+    if qualifying:
+        return min(qualifying, key=_delta_distance), False
+
+    return best, True
+
+
+def _legs_worst_liquidity(contracts: Iterable[Any]) -> float | None:
+    """Worst (minimum) liquidity_score across an iterable of contracts.
+
+    Returns None when ANY leg lacks a score (graceful degradation —
+    treat "no opinion" instead of "illiquid").
+    """
+    scores: list[float] = []
+    for c in contracts:
+        s = _contract_liquidity_score(c)
+        if s is None:
+            return None
+        scores.append(s)
+    if not scores:
+        return None
+    return float(min(scores))
+
+
+def _liquidity_label(score: float) -> str:
+    """Coarse human-readable label for a 0..1 liquidity score."""
+    if score >= 0.6:
+        return "GOOD"
+    if score >= 0.3:
+        return "OK"
+    return "POOR"
 
 
 # ---------------------------------------------------------------------------
@@ -954,6 +1171,57 @@ def _summary_implied_vs_hist(ctx: _BuildContext) -> str:
         f" Implied move {ctx.expected_move_pct:.1%} vs historical "
         f"{ctx.hist_avg_abs_move_pct:.1%}."
     )
+
+
+def _pick_strike_by_delta(
+    ctx: _BuildContext,
+    side: str,
+    target_delta: float,
+    warnings_accum: list[bool],
+) -> Any | None:
+    """Wave V V2: liquidity-aware delta picker used by every builder.
+
+    Calls :func:`find_liquid_strike_by_delta`, appending the per-leg
+    warning to ``warnings_accum`` so the builder can roll up an
+    aggregate ``liquidity_warning`` for the setup.
+    """
+    contract, warn = find_liquid_strike_by_delta(
+        ctx.chain, ctx.expiry, side, target_delta,
+    )
+    warnings_accum.append(bool(warn))
+    return contract
+
+
+def _annotate_liquidity(
+    setup: EarningsSetup | None,
+    contracts: Iterable[Any],
+    *,
+    extra_warning: bool = False,
+) -> EarningsSetup | None:
+    """Populate worst_leg_liquidity_score / liquidity_warning on a setup."""
+    if setup is None:
+        return None
+    from core.config import settings as _settings
+
+    worst = _legs_worst_liquidity(contracts)
+    threshold = _settings.RECOMMENDER_MIN_LEG_LIQUIDITY_SCORE
+    threshold_warning = worst is not None and worst < threshold
+    return setup.model_copy(
+        update={
+            "worst_leg_liquidity_score": worst,
+            "liquidity_warning": bool(extra_warning or threshold_warning),
+        },
+    )
+
+
+def _liquidity_rationale_suffix(
+    worst_score: float | None, warning: bool,
+) -> str:
+    """One-line "Liquidity score: 0.X — LABEL" clause when warning is set."""
+    if not warning or worst_score is None:
+        return ""
+    label = _liquidity_label(float(worst_score))
+    return f" Liquidity score: {float(worst_score):.2f} — {label}."
 
 
 # ─── Iron condor (rich_neutral) ──────────────────────────────
@@ -1898,6 +2166,12 @@ async def recommend_setups(
         return (defined_bonus, structural, ev_per_risk, rr)
 
     candidates.sort(key=_sort_key, reverse=True)
+
+    # Wave V V5: attach pre-trade fill forecasts. Done after sorting so we
+    # only pay the chain-lookup cost on the candidates the caller will
+    # actually receive. Each forecast is independent - a failure on one
+    # setup must not fail the others or the whole list.
+    candidates = [_attach_fill_forecast(s, chain) for s in candidates]
 
     # SHR-4: emit a "skip" outcome when EV is poor across the board OR
     # tail risk is extreme OR (low confidence AND elevated tail risk).

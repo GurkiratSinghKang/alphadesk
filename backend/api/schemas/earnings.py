@@ -115,6 +115,17 @@ class TailRiskSignals(BaseModel):
         > 3 indicates fat tails.
       * ``iv_term_steepness`` — front-month vs back-month event premium
         (``IV[front]/IV[back] - 1``); higher = more event premium.
+      * ``underlying_relative_volume`` (Wave V V3) — today's underlying
+        volume divided by 20-day ADV. >1.5 indicates institutional flow
+        (real money behind the move) and contributes a small +0.10 to
+        the score.
+      * ``options_call_put_volume_skew`` (Wave V V3) — total call volume
+        / max(put volume, 1) across the chain. Strong skew (>2.0 or
+        <0.5) is a directional bet by options players that the verdict
+        may not have priced in.
+      * ``unusual_options_activity`` (Wave V V3) — total chain volume
+        > 3× the rolling 20-day average; classic information-flow signal
+        regardless of direction.
     """
     intraday_momentum_pct: float | None = None
     sector_cohort_momentum_avg: float | None = None
@@ -122,6 +133,11 @@ class TailRiskSignals(BaseModel):
     news_sentiment: float | None = None
     historical_move_kurtosis: float | None = None
     iv_term_steepness: float | None = None
+    # Wave V V3: volume-derived signals. None / False = "no signal" so
+    # the recommender keeps degrading gracefully when upstreams are quiet.
+    underlying_relative_volume: float | None = None
+    options_call_put_volume_skew: float | None = None
+    unusual_options_activity: bool = False
 
 
 class OptionLeg(BaseModel):
@@ -131,6 +147,46 @@ class OptionLeg(BaseModel):
     expiry: date
     qty: int = 1  # always 1 in the recommendation; sizing handled separately
     mid: float  # price per share at recommendation time
+
+
+class ComboFillForecast(BaseModel):
+    """Wave V V5: expected fill price + uncertainty range for a combo.
+
+    Surfaced beneath the recommender's "Net credit $X.XX" line so the
+    user sees the EXPECTED entry cost, not just the theoretical mid.
+    All values are per-share except ``expected_slippage_dollars`` which
+    is already multiplied through (x 100 x qty).
+
+    ``confidence`` is driven by the worst-leg liquidity score:
+      * ``high``   - every leg has score >= 0.7 (tight markets)
+      * ``medium`` - every leg >= 0.4, at least one < 0.7
+      * ``low``    - any leg < 0.4 OR any leg has missing liquidity_score
+
+    Driven from ``services.slippage_forecast.forecast_combo_fill``.
+    """
+
+    target_mid: float = Field(
+        description="Sum of signed per-leg mids (per share). Positive = credit, negative = debit.",
+    )
+    expected_fill: float = Field(
+        description="Expected fill price after slippage. Per share.",
+    )
+    p10_fill: float = Field(
+        description="Better-case fill (10th percentile). Per share.",
+    )
+    p90_fill: float = Field(
+        description="Worse-case fill (90th percentile). Per share.",
+    )
+    expected_slippage_dollars: float = Field(
+        description="Total dollars the user will pay for liquidity (positive = cost).",
+    )
+    confidence: Literal["high", "medium", "low"] = Field(
+        description="Confidence in the estimate. Driven by worst-leg liquidity.",
+    )
+    reasoning: list[str] = Field(
+        default_factory=list,
+        description="Human-readable factors that explain how the estimate was built.",
+    )
 
 
 class EarningsSetup(BaseModel):
@@ -147,6 +203,21 @@ class EarningsSetup(BaseModel):
     sizing_kelly_pct: float = Field(ge=0, le=0.02)  # capped at 2% of book
     is_defined_risk: bool
     requires_margin_estimate: float | None = None  # dollars; None for defined-risk
+    # Wave V V2: liquidity gating. ``worst_leg_liquidity_score`` is the
+    # minimum ``liquidity_score`` (0..1, Wave V Agent 1) across all legs;
+    # ``None`` when the chain doesn't carry the field yet (graceful
+    # degradation pre-Agent 1 ship). ``liquidity_warning`` is True when
+    # any leg fell below ``RECOMMENDER_MIN_LEG_LIQUIDITY_SCORE`` during
+    # strike selection — the setup is still surfaced (the picker fell
+    # back to best-delta) but the analyst sees a caveat in the rationale.
+    worst_leg_liquidity_score: float | None = None
+    liquidity_warning: bool = False
+    # Wave V V5: pre-trade slippage forecast. Populated when bid/ask are
+    # present on each leg (the common case) so the FE can show the
+    # EXPECTED entry cost beneath the "Net credit $X.XX" line. ``None``
+    # is graceful degradation - the recommender returns the setup without
+    # the forecast rather than failing the whole pipeline.
+    fill_forecast: ComboFillForecast | None = None
 
 
 # ─── Calendar row ────────────────────────────────────────────
@@ -284,6 +355,11 @@ class LadderRow(BaseModel):
     vega: float
     oi: int
     volume: int
+    # Wave V V1-3 (2026-05-05): volume / OI ratio for the ladder row.
+    # None when both volume and OI are zero. Read as "fresh activity vs.
+    # existing positioning"; a high ratio (>1) on an event-cycle ladder
+    # often flags where flow is actually concentrating.
+    volume_oi_ratio: float | None = None
 
 
 class StrikeLadder(BaseModel):
