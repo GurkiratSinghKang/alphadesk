@@ -24,7 +24,7 @@ State keys:
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 import numpy as np
@@ -279,6 +279,7 @@ class PairsTradingStrategy(Strategy):
         entries, new_pending = _compute_entries(
             closes, positions, pending, active, params, asof,
             exclude_pair_ids=closed_pair_ids,
+            earnings=input.earnings,
         )
         diagnostics["entries_emitted"] = len(entries)
 
@@ -778,6 +779,49 @@ def _compute_exits(
     return exits, refreshed_active
 
 
+def _symbol_has_earnings_in_window(
+    earnings: Optional[pd.DataFrame],
+    symbol: str,
+    asof: date,
+    skip_days: int,
+) -> bool:
+    """True if ``symbol`` has an earnings announcement within ±``skip_days``
+    *calendar* days of ``asof``.
+
+    Audit 2026-05-05 (forward gap): pairs cointegration breaks across
+    earnings prints (overnight gap, vol regime shift, fundamental repricing).
+    Unlike PEAD's ``has_overlapping_earnings`` (forward-only), this is
+    bidirectional — recent earnings can still be re-pricing the spread, so
+    we exclude both pre- and post-print proximity.
+
+    The ``skip_days`` window is calendar days, not sessions. The audit
+    suggested ±5 days; this picks up any print in the previous or coming
+    week without needing the NYSE session calendar.
+    """
+    if earnings is None or skip_days <= 0:
+        return False
+    if not isinstance(earnings, pd.DataFrame) or earnings.empty:
+        return False
+    if "symbol" not in earnings.columns or "date" not in earnings.columns:
+        return False
+    sym = symbol.upper()
+    sub = earnings[earnings["symbol"].astype(str).str.upper() == sym]
+    if sub.empty:
+        return False
+    lo = asof - timedelta(days=skip_days)
+    hi = asof + timedelta(days=skip_days)
+    for d in sub["date"]:
+        try:
+            d_val = d.date() if isinstance(d, datetime) else (
+                d if isinstance(d, date) else pd.Timestamp(d).date()
+            )
+        except (ValueError, TypeError):
+            continue
+        if lo <= d_val <= hi:
+            return True
+    return False
+
+
 def _compute_entries(
     closes: pd.DataFrame,
     positions: dict[str, OpenPosition],
@@ -786,6 +830,7 @@ def _compute_entries(
     params: PairsTradingParams,
     asof: date,
     exclude_pair_ids: set[str] | None = None,
+    earnings: Optional[pd.DataFrame] = None,
 ) -> tuple[list[Signal], dict[str, OpenPosition]]:
     """Compute entry signals and the pending-intent dict to merge into state.
 
@@ -794,6 +839,13 @@ def _compute_entries(
     ledger; intents only graduate into it via ``on_fill``. Same-bar
     capacity also accounts for ``pending`` so a stuck unfilled pair from
     yesterday doesn't let us re-arm beyond ``max_pairs``.
+
+    Audit 2026-05-05: when ``earnings`` is provided and
+    ``params.earnings_skip_days > 0``, pairs whose y-leg or x-leg has an
+    earnings announcement within the configured window are skipped at
+    entry. The cointegration test is statistical; earnings break the
+    cointegration assumption with a fundamental shock that the test can
+    only catch ex-post.
     """
     occupied = len(positions) + len(pending)
     if occupied >= params.max_pairs:
@@ -810,6 +862,14 @@ def _compute_entries(
             continue
         if pair.y in held_syms or pair.x in held_syms:
             continue
+        # Audit 2026-05-05: skip pairs near earnings on either leg.
+        if params.earnings_skip_days > 0 and earnings is not None:
+            if _symbol_has_earnings_in_window(
+                earnings, pair.y, asof, params.earnings_skip_days,
+            ) or _symbol_has_earnings_in_window(
+                earnings, pair.x, asof, params.earnings_skip_days,
+            ):
+                continue
         zinfo = _spread_and_z(pair, closes, params)
         if zinfo is None:
             continue
