@@ -120,6 +120,35 @@ def compute_expected_move_from_straddle(
     return (call_mid + put_mid) / underlying
 
 
+def compute_vol_premium_score(
+    expected_move_pct: float | None,
+    hist_avg_abs_move_pct: float | None,
+) -> float | None:
+    """How much richer the implied move is vs. the realized history.
+
+    Returns ``(em - hist) / max(hist, 0.005)``. The ``0.005`` floor keeps
+    the ratio bounded when history is missing or near-zero — without it,
+    a fresh-listing or a quiet name with hist=0.001 would blow up the
+    score and flip every consumer's decision threshold.
+
+    >= 0.15 ⇒ IV is at least 15% richer than realized → vol-selling edge.
+    0.05–0.15 ⇒ IV is fair — modest edge.
+    <  0.05 ⇒ IV ≈ realized — no edge, directional plays unjustified.
+    None ⇒ either input was null / non-finite.
+    """
+    if expected_move_pct is None or hist_avg_abs_move_pct is None:
+        return None
+    try:
+        em = float(expected_move_pct)
+        hist = float(hist_avg_abs_move_pct)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(em) or not math.isfinite(hist):
+        return None
+    denom = max(hist, 0.005)
+    return (em - hist) / denom
+
+
 def compute_historical_stats(quarters: Sequence[Mapping]) -> dict:
     """Roll up per-quarter earnings history into screener summary stats.
 
@@ -2050,6 +2079,7 @@ async def _compute_metrics_uncached(
         historical_stats = historical.get("stats") if historical else {}
         if not isinstance(historical_stats, dict):
             historical_stats = {}
+        hist_avg = historical_stats.get("avg_abs_move_pct")
         return {
             "iv_rank": iv.iv_rank,
             "iv_percentile": iv.iv_percentile,
@@ -2065,7 +2095,8 @@ async def _compute_metrics_uncached(
             # SHR-5: surface IV term so the recommender can compute
             # `iv_term_steepness` for the tail-risk overlay.
             "term_structure": dict(iv.term_structure or {}),
-            "hist_avg_abs_move_pct": historical_stats.get("avg_abs_move_pct"),
+            "hist_avg_abs_move_pct": hist_avg,
+            "vol_premium_score": compute_vol_premium_score(em_pct, hist_avg),
             "beat_rate": historical_stats.get("surprise_beat_rate"),
             "historical_stats": historical_stats,
             "historical_quarters": historical.get("quarters", []) if historical else [],
@@ -3148,6 +3179,7 @@ async def _hydrate_row(
                 report_time=row.get("report_time", "DMT"),
                 prior_moves=prior_moves,
                 tail_risk_signals=tr_signals,
+                vol_premium_score=metrics.get("vol_premium_score"),
             )
             if top_setups:
                 # Override the legacy top_setup with the recommender's
@@ -3166,6 +3198,7 @@ async def _hydrate_row(
                 ),
             )
             top_setups = []
+    hist_avg_abs_move_pct = metrics.get("hist_avg_abs_move_pct") if metrics else None
     return {
         **row,
         "price": quote["last"] if quote else None,
@@ -3175,7 +3208,10 @@ async def _hydrate_row(
         "expected_move_pct": expected_move_pct,
         "premium_yield_call_atm": premium_yield_call_atm,
         "premium_yield_put_atm": premium_yield_put_atm,
-        "hist_avg_abs_move_pct": metrics.get("hist_avg_abs_move_pct") if metrics else None,
+        "hist_avg_abs_move_pct": hist_avg_abs_move_pct,
+        "vol_premium_score": compute_vol_premium_score(
+            expected_move_pct, hist_avg_abs_move_pct,
+        ),
         "claude_verdict": claude.get("verdict") if claude else None,
         "claude_confidence": claude.get("confidence") if claude else None,
         "top_setup": legacy_top_setup,
@@ -3689,6 +3725,14 @@ async def get_detail(symbol: str) -> EarningsDetail:
         value = metrics.get(key)
         return value if value is not None else None
 
+    # PR-1 T6: surface vol_premium_score so the prompt's CONFIDENCE
+    # CALIBRATION block can anchor against the same number the
+    # recommender consumes. The metrics block already stores it
+    # (services.earnings_screener:_load_metrics computes it once).
+    # recent_5d_move_pct isn't computed in the detail-hydration path
+    # yet — left as ``None`` so the prompt simply omits the pre-rally
+    # guard line and falls back to vol-tier calibration alone.
+    _vol_premium_score = metrics.get("vol_premium_score") if metrics else None
     claude_ctx = {
         "symbol": symbol,
         "company": meta["company"],
@@ -3709,6 +3753,8 @@ async def get_detail(symbol: str) -> EarningsDetail:
         "headlines": _format_news_for_prompt(news),
         "market_regime": market_regime,
         "external_research": external_research,
+        "vol_premium_score": _vol_premium_score,
+        "recent_5d_move_pct": None,
     }
     try:
         claude = await _load_claude_structured(symbol, context=claude_ctx)

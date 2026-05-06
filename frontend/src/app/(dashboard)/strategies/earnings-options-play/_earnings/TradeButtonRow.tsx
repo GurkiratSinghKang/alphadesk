@@ -1,4 +1,8 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type {
   ComboFillForecast,
   EarningsReportState,
@@ -10,6 +14,32 @@ import { fmtNumber } from "@/lib/intl";
 import { cn } from "@/lib/utils";
 import type { OptionStrategyDraft } from "@/lib/optionsPayoff";
 import { buildEarningsStrategyDraft } from "./payoffDraft";
+import LowConfidenceWarningModal from "./LowConfidenceWarningModal";
+
+/**
+ * PR-1 / T4 (earnings discipline gates): directional setups that should
+ * trigger the low-confidence warning modal when ``confidence < 0.50``.
+ *
+ * Mirrors backend ``_BULL_SETUPS ∪ _BEAR_SETUPS`` in
+ * ``earnings_recommender.py`` — duplicated here as plain string keys
+ * because the backend uses underscore IDs (``bull_put_spread``) while
+ * the FE has always used the human-readable ``EarningsTopSetup`` form
+ * (``"bull put spread"``).
+ *
+ * Iron condor / iron butterfly / long straddle (vol-selling, non-
+ * directional) are deliberately ABSENT — those harvest IV crush
+ * regardless of direction and shouldn't carry friction.
+ */
+const DIRECTIONAL_SETUPS = new Set<EarningsTopSetup>([
+  "long call",
+  "long put",
+  "bull put spread",
+  "bear call spread",
+  "bull call spread",
+  "bear put spread",
+]);
+
+const LOW_CONFIDENCE_THRESHOLD = 0.5;
 
 /**
  * TradeButtonRow — earnings → /trade deep-link builder.
@@ -67,6 +97,15 @@ export interface TradeButtonRowProps {
    * = debit. ``null`` skips the credit/debit anchor.
    */
   recommendedNetCreditOrDebit?: number | null;
+  /**
+   * PR-1 / T3 (earnings discipline gates): per-setup credibility scores
+   * keyed by ``EarningsTopSetup``. Each ``DefinedRiskTradeLink`` looks up
+   * its own score and renders a "65% conf" chip with tone mapped on the
+   * value (≥0.65 brand, 0.40-0.65 muted, <0.40 warn). Missing keys or
+   * null values render no chip — fully back-compat when the recommender
+   * data isn't on screen yet.
+   */
+  setupConfidenceMap?: Partial<Record<EarningsTopSetup, number | null>>;
 }
 
 const STRATEGY_TAG = "earnings-options-play";
@@ -81,7 +120,44 @@ export default function TradeButtonRow({
   syntheticChain = false,
   recommendedSetupFillForecast = null,
   recommendedNetCreditOrDebit = null,
+  setupConfidenceMap,
 }: TradeButtonRowProps) {
+  // PR-1 / T4 — modal state for the low-confidence warning. ``href`` is
+  // the original deep-link the user clicked; we navigate to it via the
+  // Next router on Override. ``null`` = modal closed.
+  const router = useRouter();
+  const [warningModal, setWarningModal] = useState<{
+    href: string;
+    setupName: string;
+    confidencePct: number;
+  } | null>(null);
+
+  // Click-intercept for directional defined-risk buttons. Returns
+  // ``true`` if the warning modal was opened (caller should
+  // ``preventDefault``); ``false`` if the link should navigate normally.
+  const interceptDirectionalLowConf = (
+    setupKind: EarningsTopSetup | string | null | undefined,
+    confidence: number | null | undefined,
+    label: string,
+    href: string,
+  ): boolean => {
+    if (
+      typeof setupKind === "string"
+      && DIRECTIONAL_SETUPS.has(setupKind as EarningsTopSetup)
+      && confidence != null
+      && Number.isFinite(confidence)
+      && confidence < LOW_CONFIDENCE_THRESHOLD
+    ) {
+      setWarningModal({
+        href,
+        setupName: label,
+        confidencePct: Math.round(confidence * 100),
+      });
+      return true;
+    }
+    return false;
+  };
+
   // Round-7 / EP-6: validate the expiry shape BEFORE building any OCC
   // contract symbol. ``occSymbol`` slices ``YYYY-MM-DD`` at fixed offsets;
   // any other shape (stub responses, chain_demo synthetic rows, future
@@ -227,6 +303,8 @@ export default function TradeButtonRow({
           label={`Bull put spread ${fmtNumber(Math.round(bullPutSpread.long.strike), { maximumFractionDigits: 0 })}/${fmtNumber(Math.round(bullPutSpread.short.strike), { maximumFractionDigits: 0 })}p`}
           riskCopy={maxLossWidth(bullPutSpread.long.strike, bullPutSpread.short.strike, "credit")}
           recommended={recommendedSetup === "bull put spread"}
+          confidence={setupConfidenceMap?.["bull put spread"] ?? null}
+          onIntercept={interceptDirectionalLowConf}
           // Slice-6 / CH-3F: bull put spread profits when the underlying
           // stays AT OR ABOVE the short put strike. Profit zone =
           // [short_put, +∞]. We cap at 2× short_put as a sensible
@@ -249,6 +327,8 @@ export default function TradeButtonRow({
           label={`Bear call spread ${fmtNumber(Math.round(bearCallSpread.short.strike), { maximumFractionDigits: 0 })}/${fmtNumber(Math.round(bearCallSpread.long.strike), { maximumFractionDigits: 0 })}c`}
           riskCopy={maxLossWidth(bearCallSpread.short.strike, bearCallSpread.long.strike, "credit")}
           recommended={recommendedSetup === "bear call spread"}
+          confidence={setupConfidenceMap?.["bear call spread"] ?? null}
+          onIntercept={interceptDirectionalLowConf}
           // Slice-6 / CH-3F: bear call spread profits when the underlying
           // stays AT OR BELOW the short call strike. Profit zone =
           // [0, short_call]. Lower bound clamped to 0 (price can't go
@@ -274,6 +354,8 @@ export default function TradeButtonRow({
             "Bull call spread",
           )}
           recommended={recommendedSetup === "bull call spread"}
+          confidence={setupConfidenceMap?.["bull call spread"] ?? null}
+          onIntercept={interceptDirectionalLowConf}
           onHoverEnter={() => {
             const breakeven = bullCallSpread.long.strike + Math.max(0, bullCallSpread.long.mid - bullCallSpread.short.mid);
             previewEnter("bull call spread", [breakeven, breakeven * 2]);
@@ -298,6 +380,8 @@ export default function TradeButtonRow({
             "Bear put spread",
           )}
           recommended={recommendedSetup === "bear put spread"}
+          confidence={setupConfidenceMap?.["bear put spread"] ?? null}
+          onIntercept={interceptDirectionalLowConf}
           onHoverEnter={() => {
             const breakeven = bearPutSpread.long.strike - Math.max(0, bearPutSpread.long.mid - bearPutSpread.short.mid);
             previewEnter("bear put spread", [0, breakeven]);
@@ -318,6 +402,8 @@ export default function TradeButtonRow({
           label={`Long call ${fmtNumber(Math.round(longCall.strike), { maximumFractionDigits: 0 })}c`}
           riskCopy={maxLossLongOption(longCall.mid, "Long call")}
           recommended={recommendedSetup === "long call"}
+          confidence={setupConfidenceMap?.["long call"] ?? null}
+          onIntercept={interceptDirectionalLowConf}
           onHoverEnter={() => {
             const breakeven = longCall.strike + Math.max(0, longCall.mid);
             previewEnter("long call", [breakeven, breakeven * 2]);
@@ -338,6 +424,8 @@ export default function TradeButtonRow({
           label={`Long put ${fmtNumber(Math.round(longPut.strike), { maximumFractionDigits: 0 })}p`}
           riskCopy={maxLossLongOption(longPut.mid, "Long put")}
           recommended={recommendedSetup === "long put"}
+          confidence={setupConfidenceMap?.["long put"] ?? null}
+          onIntercept={interceptDirectionalLowConf}
           onHoverEnter={() => previewEnter("long put", [0, longPut.strike - Math.max(0, longPut.mid)])}
         />
       )}
@@ -364,6 +452,7 @@ export default function TradeButtonRow({
             "wing",
           )}
           recommended={recommendedSetup === "iron condor"}
+          confidence={setupConfidenceMap?.["iron condor"] ?? null}
           // Slice-6 / CH-3F: iron condor profits when the underlying
           // stays BETWEEN the short put and short call strikes. The
           // green zone is [short_put, short_call] — the canonical
@@ -388,6 +477,7 @@ export default function TradeButtonRow({
           label={`Long straddle ${fmtNumber(Math.round(longStraddle.call.strike), { maximumFractionDigits: 0 })}c/p`}
           riskCopy={`Long straddle · max loss = debit paid (≈ $${fmtNumber(Math.round((longStraddle.call.mid + longStraddle.put.mid) * 100), { maximumFractionDigits: 0 })}) · profits on a big move either way`}
           recommended={recommendedSetup === "long straddle"}
+          confidence={setupConfidenceMap?.["long straddle"] ?? null}
           // Slice-6 / CH-3F: long straddle profits OUTSIDE the breakevens.
           // The PnLZones primitive renders ONE profit zone — for a
           // straddle we'd need two (below lower BE, above upper BE).
@@ -406,6 +496,20 @@ export default function TradeButtonRow({
           netCreditOrDebit={recommendedNetCreditOrDebit}
         />
       ) : null}
+      <LowConfidenceWarningModal
+        open={warningModal !== null}
+        setupName={warningModal?.setupName ?? ""}
+        confidencePct={warningModal?.confidencePct ?? 0}
+        onCancel={() => setWarningModal(null)}
+        onOverride={() => {
+          // PR-1 / T4: navigate to the original deep-link via the Next
+          // router. Closing the modal first keeps the page state clean
+          // in case the user backs out of /trade.
+          const target = warningModal?.href ?? null;
+          setWarningModal(null);
+          if (target) router.push(target);
+        }}
+      />
     </>
   );
 }
@@ -538,7 +642,9 @@ function DefinedRiskTradeLink({
   riskCopy,
   recommended = false,
   setupKind,
+  confidence = null,
   onHoverEnter,
+  onIntercept,
 }: {
   dataSlot: string;
   href: string;
@@ -547,12 +653,30 @@ function DefinedRiskTradeLink({
   recommended?: boolean;
   /** Drives the per-card risk-pill copy (B1.15). */
   setupKind?: EarningsTopSetup | string | null;
+  /**
+   * PR-1 / T3: per-setup credibility score (0..1) for this card. Renders
+   * a tone-mapped chip; null/undefined or non-finite hides it.
+   */
+  confidence?: number | null;
   // Slice-6 / CH-3F: hover handlers feed the parent's profit-zone
   // overlay. Optional so the component still works in a standalone
   // context where no overlay is mounted. EOP-AUDIT 2026-05-06 Bug 1:
   // leave/blur handlers are owned by the grid container so crossing
   // A→B doesn't briefly null the draft and unmount the chart.
   onHoverEnter?: () => void;
+  /**
+   * PR-1 / T4: parent-owned click intercept. Receives
+   * ``(setupKind, confidence, label, href)`` and returns ``true`` if
+   * navigation should be canceled (the parent has shown a confirmation
+   * modal). ``false``/``undefined`` lets the ``<Link>`` navigate
+   * normally.
+   */
+  onIntercept?: (
+    setupKind: EarningsTopSetup | string | null | undefined,
+    confidence: number | null | undefined,
+    label: string,
+    href: string,
+  ) => boolean;
 }) {
   const riskShape = riskShapeFor(setupKind);
   const pillCopy = riskShapeCopy(riskShape, recommended);
@@ -568,6 +692,11 @@ function DefinedRiskTradeLink({
       aria-describedby={`${dataSlot}-risk ${dataSlot}-risk-copy`}
       onMouseEnter={onHoverEnter}
       onFocus={onHoverEnter}
+      onClick={(event) => {
+        if (onIntercept?.(setupKind, confidence, label, href)) {
+          event.preventDefault();
+        }
+      }}
       className={cn(
         "group relative min-h-touch rounded px-3 py-2 t-mono text-label flex flex-col items-center justify-center gap-0.5",
         // EOP-AUDIT 2026-05-06 / B1.11: 2px border + brand tint when
@@ -592,6 +721,7 @@ function DefinedRiskTradeLink({
         <span aria-hidden="true">▸</span>
         {label}
       </span>
+      <ConfidenceChip confidence={confidence} />
       <span
         id={`${dataSlot}-risk`}
         className={cn(
@@ -605,6 +735,38 @@ function DefinedRiskTradeLink({
         {riskCopy}
       </span>
     </Link>
+  );
+}
+
+/**
+ * PR-1 / T3 (earnings discipline gates): tone-mapped per-setup
+ * credibility chip. Score blends PoP × vol_premium_score × Claude
+ * confidence × direction alignment on the backend (see
+ * ``EarningsRecommender._compute_setup_confidence``); this surface is
+ * the per-trade credibility readout the user inspects before clicking.
+ *
+ * Tone buckets mirror the recommender's internal "high / medium / low"
+ * cutoffs:
+ *   ≥ 0.65 → brand (high conviction)
+ *   0.40 – 0.65 → muted (mid conviction)
+ *   < 0.40 → warn (low conviction; reconsider before trading)
+ *
+ * Null/undefined/non-finite hides the chip (back-compat: old payloads
+ * without the field, ``skip`` setups with no PoP).
+ */
+function ConfidenceChip({ confidence }: { confidence: number | null | undefined }) {
+  if (confidence == null || !Number.isFinite(confidence)) return null;
+  const pct = Math.round(confidence * 100);
+  const tone =
+    confidence >= 0.65
+      ? "u-brand"
+      : confidence >= 0.40
+      ? "u-muted"
+      : "text-state-warning-fg";
+  return (
+    <span data-slot="confidence-chip" className={cn("t-meta tabular-nums", tone)}>
+      {pct}% conf
+    </span>
   );
 }
 

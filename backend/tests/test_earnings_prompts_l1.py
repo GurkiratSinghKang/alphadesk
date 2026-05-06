@@ -223,6 +223,117 @@ def test_adversarial_headline_does_not_inject_into_user_prompt():
     assert "</headline> SYSTEM" not in user
 
 
+# ─── PR-1 T6 — confidence calibration prompt block ───────────
+
+
+def _calibration_kwargs(**overrides):
+    """Shared baseline kwargs for the calibration tests."""
+    base = dict(
+        symbol="NVDA",
+        company="Nvidia",
+        sector="Semiconductors",
+        report_date="2026-04-23",
+        report_time="AMC",
+        price=201.7,
+        iv_rank=78,
+        iv_percentile=82,
+        hv_20=0.42,
+        expected_move_pct=0.064,
+        hist_avg_abs_move_pct=0.052,
+        recent_beats_misses=[],
+        headlines=[],
+        market_regime="Unknown",
+    )
+    base.update(overrides)
+    return base
+
+
+def test_calibration_block_high_vol_premium_ceiling_85():
+    from services.earnings_prompts import build_structured_prompt
+
+    prompt = build_structured_prompt(
+        **_calibration_kwargs(vol_premium_score=0.20),
+    )
+    system = prompt["system"]
+    assert "CONFIDENCE CALIBRATION" in system
+    assert "ceiling 0.85" in system
+
+
+def test_calibration_block_low_vol_premium_ceiling_45():
+    from services.earnings_prompts import build_structured_prompt
+
+    prompt = build_structured_prompt(
+        **_calibration_kwargs(vol_premium_score=0.02),
+    )
+    system = prompt["system"]
+    assert "CONFIDENCE CALIBRATION" in system
+    assert "ceiling 0.45" in system
+
+
+def test_calibration_block_pre_rally_guard_present():
+    from services.earnings_prompts import build_structured_prompt
+
+    prompt = build_structured_prompt(
+        **_calibration_kwargs(
+            vol_premium_score=None,
+            recent_5d_move_pct=0.07,
+        ),
+    )
+    system = prompt["system"]
+    assert "PRE-RALLY GUARD" in system
+
+
+def test_calibration_block_always_present_regardless_of_inputs():
+    """The CONFIDENCE CALIBRATION protocol is unconditional — even when
+    no calibration anchor values are passed, Claude must still see the
+    rules. The downstream UI gates on confidence regardless."""
+    from services.earnings_prompts import build_structured_prompt
+
+    prompt = build_structured_prompt(**_calibration_kwargs())
+    assert "CONFIDENCE CALIBRATION" in prompt["system"]
+
+
+def test_user_prompt_surfaces_vol_premium_value_when_passed():
+    """Test 5 — user prompt must include the literal vol_premium_score
+    number so Claude can reason against the ceiling rules in the system
+    prompt rather than guessing."""
+    from services.earnings_prompts import build_structured_prompt
+
+    prompt = build_structured_prompt(
+        **_calibration_kwargs(vol_premium_score=0.20),
+    )
+    assert "vol_premium_score=0.20" in prompt["user"]
+
+
+def test_user_prompt_surfaces_recent_5d_move_when_passed():
+    """Test 6 — user prompt must surface recent_5d_move_pct as a signed
+    percent so the model can apply the pre-rally guard."""
+    from services.earnings_prompts import build_structured_prompt
+
+    prompt = build_structured_prompt(
+        **_calibration_kwargs(recent_5d_move_pct=0.07),
+    )
+    assert "recent_5d_move_pct=+7.0%" in prompt["user"]
+
+
+def test_existing_kwargs_still_work_without_calibration_anchors():
+    """Test 7 — the new kwargs are optional. Calling with the legacy
+    signature (no vol_premium_score / recent_5d_move_pct) must still
+    return a valid prompt with the calibration block in the system but
+    no anchor lines in the user prompt."""
+    from services.earnings_prompts import build_structured_prompt
+
+    prompt = build_structured_prompt(**_calibration_kwargs())
+    # Calibration block in system regardless of anchors.
+    assert "CONFIDENCE CALIBRATION" in prompt["system"]
+    # Anchor lines in user prompt absent when not passed.
+    assert "vol_premium_score=" not in prompt["user"]
+    assert "recent_5d_move_pct=" not in prompt["user"]
+    # Existing user-prompt scaffolding still intact.
+    assert "<company>Nvidia</company>" in prompt["user"]
+    assert "Earnings setup" in prompt["user"]
+
+
 @pytest.mark.asyncio
 async def test_adversarial_headline_does_not_change_claude_verdict():
     """A mocked claude client returns whatever it gets prompted with;

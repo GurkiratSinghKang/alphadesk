@@ -645,6 +645,14 @@ export interface EarningsSetup {
    * renders the "Expected fill" line only when this is present.
    */
   fillForecast?: ComboFillForecast | null;
+  /**
+   * PR-1 / T2 (earnings discipline gates): per-setup credibility score
+   * (0..1) blending PoP × vol_premium_score × Claude confidence ×
+   * direction alignment. ``null`` when the recommender couldn't compute
+   * (e.g. ``skip`` setups with missing PoP). Surfaced as a per-button
+   * "% conf" chip on TradeButtonRow (T3).
+   */
+  confidence: number | null;
 }
 
 export interface CalendarRow {
@@ -894,6 +902,12 @@ export interface EarningsMetricsBlock {
   expectedMovePct: number | null;
   expectedMoveDollars: number | null;
   histAvgAbsMovePct: number | null;
+  /**
+   * PR-1 / T1: signed % delta between IV-implied and realized average
+   * earnings move. Positive ⇒ vol-selling edge, negative ⇒ vol-buying
+   * edge, near-zero ⇒ thin / no edge. Null when either input is missing.
+   */
+  volPremiumScore: number | null;
   beatRate: number | null;
   daysToEarnings: number | null;
   daysToExpiry: number | null;

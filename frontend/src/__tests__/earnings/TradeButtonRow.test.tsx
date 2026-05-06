@@ -1,6 +1,6 @@
-import "../setup-mocks";
-import { describe, it, expect } from "vitest";
-import { render } from "@testing-library/react";
+import { mockPush } from "../setup-mocks";
+import { describe, it, expect, beforeEach } from "vitest";
+import { fireEvent, render } from "@testing-library/react";
 import TradeButtonRow from "@/app/(dashboard)/strategies/earnings-options-play/_earnings/TradeButtonRow";
 import type { StrikeLadder } from "@/types";
 
@@ -436,6 +436,282 @@ describe("TradeButtonRow (Round-12 DR-1: defined-risk only)", () => {
         />,
       );
       expect(container.querySelector('[data-slot="trade-button-fill-forecast"]')).toBeNull();
+    });
+  });
+
+  // ─── PR-1 / T3: per-button confidence chip ───────────────
+  describe("PR-1 T3 — per-button confidence chip", () => {
+    it("renders a brand-tone chip when confidence is ≥ 0.65 (high conviction)", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          setupConfidenceMap={{ "bull put spread": 0.65 }}
+        />,
+      );
+      const card = container.querySelector(
+        'a[data-slot="trade-button-bull-put-spread"]',
+      ) as HTMLAnchorElement;
+      const chip = card.querySelector('[data-slot="confidence-chip"]');
+      expect(chip).not.toBeNull();
+      expect(chip!.textContent).toBe("65% conf");
+      expect(chip!.className).toContain("u-brand");
+    });
+
+    it("renders a muted-tone chip when confidence is in [0.40, 0.65)", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          setupConfidenceMap={{ "bear call spread": 0.42 }}
+        />,
+      );
+      const card = container.querySelector(
+        'a[data-slot="trade-button-bear-call-spread"]',
+      ) as HTMLAnchorElement;
+      const chip = card.querySelector('[data-slot="confidence-chip"]');
+      expect(chip).not.toBeNull();
+      expect(chip!.textContent).toBe("42% conf");
+      expect(chip!.className).toContain("u-muted");
+      expect(chip!.className).not.toContain("u-brand");
+    });
+
+    it("renders a warn-tone chip when confidence is < 0.40 (low conviction)", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          setupConfidenceMap={{ "iron condor": 0.30 }}
+        />,
+      );
+      const card = container.querySelector(
+        'a[data-slot="trade-button-iron-condor"]',
+      ) as HTMLAnchorElement;
+      const chip = card.querySelector('[data-slot="confidence-chip"]');
+      expect(chip).not.toBeNull();
+      expect(chip!.textContent).toBe("30% conf");
+      expect(chip!.className).toContain("text-state-warning-fg");
+    });
+
+    it("does NOT render a chip when confidence is null", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          setupConfidenceMap={{ "long straddle": null }}
+        />,
+      );
+      const card = container.querySelector(
+        'a[data-slot="trade-button-long-straddle"]',
+      ) as HTMLAnchorElement;
+      expect(card.querySelector('[data-slot="confidence-chip"]')).toBeNull();
+    });
+
+    it("does NOT render a chip when the setup is missing from the map (back-compat)", () => {
+      const { container } = render(
+        <TradeButtonRow symbol="NVDA" ladder={ladder} setupConfidenceMap={{}} />,
+      );
+      // No keys means no chips on any of the cards.
+      expect(
+        container.querySelectorAll('[data-slot="confidence-chip"]').length,
+      ).toBe(0);
+    });
+
+    it("does NOT render any chip when setupConfidenceMap is omitted entirely", () => {
+      const { container } = render(<TradeButtonRow symbol="NVDA" ladder={ladder} />);
+      expect(
+        container.querySelectorAll('[data-slot="confidence-chip"]').length,
+      ).toBe(0);
+    });
+
+    it("renders different confidence values across multiple buttons from one map", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          setupConfidenceMap={{
+            "bull put spread": 0.72,
+            "bear call spread": 0.48,
+            "iron condor": 0.18,
+            // long straddle deliberately omitted
+          }}
+        />,
+      );
+      const bps = container
+        .querySelector('a[data-slot="trade-button-bull-put-spread"]')!
+        .querySelector('[data-slot="confidence-chip"]');
+      const bcs = container
+        .querySelector('a[data-slot="trade-button-bear-call-spread"]')!
+        .querySelector('[data-slot="confidence-chip"]');
+      const ic = container
+        .querySelector('a[data-slot="trade-button-iron-condor"]')!
+        .querySelector('[data-slot="confidence-chip"]');
+      const ls = container
+        .querySelector('a[data-slot="trade-button-long-straddle"]')!
+        .querySelector('[data-slot="confidence-chip"]');
+
+      expect(bps?.textContent).toBe("72% conf");
+      expect(bps?.className).toContain("u-brand");
+      expect(bcs?.textContent).toBe("48% conf");
+      expect(bcs?.className).toContain("u-muted");
+      expect(ic?.textContent).toBe("18% conf");
+      expect(ic?.className).toContain("text-state-warning-fg");
+      expect(ls).toBeNull();
+    });
+
+    it("hides the chip for non-finite confidence values (NaN, Infinity)", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          setupConfidenceMap={{
+            "bull put spread": Number.NaN,
+            "bear call spread": Number.POSITIVE_INFINITY,
+          }}
+        />,
+      );
+      expect(
+        container.querySelectorAll('[data-slot="confidence-chip"]').length,
+      ).toBe(0);
+    });
+  });
+
+  // ─── PR-1 / T4: low-confidence warning modal on directional trades ───
+  describe("PR-1 T4 — low-confidence warning modal", () => {
+    beforeEach(() => {
+      mockPush.mockReset();
+      // base-ui's Dialog portal mounts to document.body; clean up any
+      // leftover modal nodes between tests so queries don't see stale
+      // dialogs.
+      document
+        .querySelectorAll('[data-slot="low-confidence-warning-modal"]')
+        .forEach((n) => n.remove());
+    });
+
+    // base-ui's Dialog leaves the popup in the DOM with ``data-closed``
+    // during the close animation; "open" means ``data-open`` is present.
+    // Test against the OPEN state so we don't fail on a closed-but-still-
+    // mounted modal.
+    const queryModal = () =>
+      document.querySelector(
+        '[data-slot="low-confidence-warning-modal"][data-open]',
+      );
+
+    it("opens warning modal and prevents navigation on directional click below 50% (long call @ 30%)", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          setupConfidenceMap={{ "long call": 0.3 }}
+        />,
+      );
+      const link = container.querySelector(
+        'a[data-slot="trade-button-long-call"]',
+      ) as HTMLAnchorElement;
+      const result = fireEvent.click(link);
+      // fireEvent.click returns false if any handler called
+      // ``preventDefault`` (i.e. our intercept fired and the link is
+      // suppressed); ``true`` means navigation would proceed.
+      expect(result).toBe(false);
+      const modal = queryModal();
+      expect(modal).not.toBeNull();
+      expect(modal!.textContent).toMatch(/Low conviction directional trade/i);
+      expect(modal!.textContent).toMatch(/30%/);
+    });
+
+    it("does NOT open modal for iron condor at 30% confidence (vol-selling exempt)", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          setupConfidenceMap={{ "iron condor": 0.3 }}
+        />,
+      );
+      const link = container.querySelector(
+        'a[data-slot="trade-button-iron-condor"]',
+      ) as HTMLAnchorElement;
+      const result = fireEvent.click(link);
+      expect(result).toBe(true);
+      expect(queryModal()).toBeNull();
+    });
+
+    it("does NOT open modal for directional click at 65% confidence (above threshold)", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          setupConfidenceMap={{ "long call": 0.65 }}
+        />,
+      );
+      const link = container.querySelector(
+        'a[data-slot="trade-button-long-call"]',
+      ) as HTMLAnchorElement;
+      const result = fireEvent.click(link);
+      expect(result).toBe(true);
+      expect(queryModal()).toBeNull();
+    });
+
+    it("does NOT open modal when confidence is unknown/null (don't penalize unknown)", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          setupConfidenceMap={{ "long call": null }}
+        />,
+      );
+      const link = container.querySelector(
+        'a[data-slot="trade-button-long-call"]',
+      ) as HTMLAnchorElement;
+      const result = fireEvent.click(link);
+      expect(result).toBe(true);
+      expect(queryModal()).toBeNull();
+    });
+
+    it("Cancel closes the modal without navigating", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          setupConfidenceMap={{ "long put": 0.2 }}
+        />,
+      );
+      const link = container.querySelector(
+        'a[data-slot="trade-button-long-put"]',
+      ) as HTMLAnchorElement;
+      fireEvent.click(link);
+      expect(queryModal()).not.toBeNull();
+
+      const cancel = document.querySelector(
+        '[data-slot="low-confidence-warning-cancel"]',
+      ) as HTMLButtonElement;
+      expect(cancel).not.toBeNull();
+      fireEvent.click(cancel);
+      expect(queryModal()).toBeNull();
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it("Override pushes the original href via Next router and closes the modal", () => {
+      const { container } = render(
+        <TradeButtonRow
+          symbol="NVDA"
+          ladder={ladder}
+          setupConfidenceMap={{ "bull put spread": 0.2 }}
+        />,
+      );
+      const link = container.querySelector(
+        'a[data-slot="trade-button-bull-put-spread"]',
+      ) as HTMLAnchorElement;
+      const expectedHref = link.getAttribute("href")!;
+      fireEvent.click(link);
+      expect(queryModal()).not.toBeNull();
+
+      const override = document.querySelector(
+        '[data-slot="low-confidence-warning-override"]',
+      ) as HTMLButtonElement;
+      expect(override).not.toBeNull();
+      fireEvent.click(override);
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith(expectedHref);
     });
   });
 });

@@ -36,6 +36,7 @@ function makeSetup(
     rationale: "test rationale",
     sizingKellyPct: 0.01,
     isDefinedRisk: true,
+    confidence: null,
     ...overrides,
   };
 }

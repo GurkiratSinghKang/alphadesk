@@ -1538,3 +1538,345 @@ async def test_amd_style_recommender_prefers_liquid_alternative():
         and ic.worst_leg_liquidity_score >= 0.4
     )
     assert ic.liquidity_warning is False
+
+
+# ---------------------------------------------------------------------------
+# PR-1 / T2 — per-setup confidence (PoP × vol-premium × Claude × alignment)
+# ---------------------------------------------------------------------------
+
+
+from api.schemas.earnings import EarningsSetup as _EarningsSetup
+from services.earnings_recommender import (
+    _direction_aligned,
+    _setup_direction,
+    setup_confidence,
+)
+
+
+def _stub_setup(
+    *,
+    setup_id: str = "bull_put_spread",
+    pop: float = 0.65,
+) -> _EarningsSetup:
+    """Build a minimal EarningsSetup for direct formula tests."""
+    return _EarningsSetup(
+        setup_id=setup_id,  # type: ignore[arg-type]
+        legs=[],
+        net_credit_or_debit=0.50,
+        max_profit=50.0,
+        max_loss=50.0,
+        breakevens=[100.0],
+        pop_estimate=pop,
+        expected_value=10.0,
+        risk_reward=1.0,
+        rationale="stub",
+        sizing_kelly_pct=0.01,
+        is_defined_risk=True,
+    )
+
+
+# --- _setup_direction helper ----------------------------------------------
+
+
+def test_setup_direction_bull_setups():
+    assert _setup_direction("bull_put_spread") == "bull"
+    assert _setup_direction("bull_call_spread") == "bull"
+    assert _setup_direction("long_call") == "bull"
+
+
+def test_setup_direction_bear_setups():
+    assert _setup_direction("bear_call_spread") == "bear"
+    assert _setup_direction("bear_put_spread") == "bear"
+    assert _setup_direction("long_put") == "bear"
+
+
+def test_setup_direction_neutral_setups():
+    assert _setup_direction("iron_condor") == "neutral"
+    assert _setup_direction("long_straddle") == "neutral"
+    assert _setup_direction("iron_butterfly") == "neutral"
+    assert _setup_direction("short_strangle") == "neutral"
+    assert _setup_direction("calendar_spread") == "neutral"
+
+
+def test_setup_direction_skip_treated_as_neutral():
+    """Skip is not bull/bear, so the helper folds it into neutral."""
+    assert _setup_direction("skip") == "neutral"
+
+
+# --- _direction_aligned helper --------------------------------------------
+
+
+def test_direction_aligned_bullish_verdict_with_bull_setup():
+    assert _direction_aligned("bullish", "bull_put_spread") is True
+
+
+def test_direction_aligned_bullish_verdict_with_neutral_setup():
+    """Bullish-leaning verdict still aligns with a neutral structure."""
+    assert _direction_aligned("bullish", "iron_condor") is True
+    assert _direction_aligned("neutral-bull", "iron_condor") is True
+
+
+def test_direction_aligned_bullish_verdict_with_bear_setup_misaligned():
+    assert _direction_aligned("bullish", "bear_call_spread") is False
+
+
+def test_direction_aligned_bearish_verdict_with_bear_setup():
+    assert _direction_aligned("bearish", "bear_call_spread") is True
+    assert _direction_aligned("neutral-bear", "bear_put_spread") is True
+
+
+def test_direction_aligned_bearish_verdict_with_bull_setup_misaligned():
+    assert _direction_aligned("bearish", "bull_put_spread") is False
+
+
+def test_direction_aligned_pure_neutral_verdict_only_neutrals_align():
+    assert _direction_aligned("neutral", "iron_condor") is True
+    assert _direction_aligned("neutral", "long_straddle") is True
+    assert _direction_aligned("neutral", "bull_put_spread") is False
+    assert _direction_aligned("neutral", "bear_call_spread") is False
+
+
+def test_direction_aligned_missing_verdict_defaults_to_aligned():
+    """No verdict → no penalty (alignment defaults to True)."""
+    assert _direction_aligned(None, "bull_put_spread") is True
+
+
+# --- setup_confidence formula ---------------------------------------------
+
+
+def test_setup_confidence_pop_only_baseline():
+    """No vol_premium, no Claude conf, aligned → confidence == pop_estimate."""
+    setup = _stub_setup(pop=0.65)
+    score = setup_confidence(
+        setup,
+        vol_premium_score=None,
+        claude_structured_confidence=None,
+        direction_alignment=True,
+    )
+    assert score == pytest.approx(0.65)
+
+
+def test_setup_confidence_vol_premium_bonus_at_threshold():
+    """vol_premium_score >= 0.15 → +0.10 bonus."""
+    setup = _stub_setup(pop=0.50)
+    score = setup_confidence(
+        setup,
+        vol_premium_score=0.20,
+        claude_structured_confidence=None,
+        direction_alignment=True,
+    )
+    assert score == pytest.approx(0.60)
+
+
+def test_setup_confidence_vol_premium_penalty_when_thin():
+    """vol_premium_score < 0.05 → -0.10 penalty."""
+    setup = _stub_setup(pop=0.50)
+    score = setup_confidence(
+        setup,
+        vol_premium_score=0.02,
+        claude_structured_confidence=None,
+        direction_alignment=True,
+    )
+    assert score == pytest.approx(0.40)
+
+
+def test_setup_confidence_vol_premium_neutral_band_no_change():
+    """0.05 <= vol_premium_score < 0.15 → no adjustment."""
+    setup = _stub_setup(pop=0.50)
+    score = setup_confidence(
+        setup,
+        vol_premium_score=0.10,
+        claude_structured_confidence=None,
+        direction_alignment=True,
+    )
+    assert score == pytest.approx(0.50)
+
+
+def test_setup_confidence_claude_multiplier_high_conf():
+    """Claude conf=1.0 → multiplier (0.7 + 0.3*1.0) = 1.0 → score unchanged."""
+    setup = _stub_setup(pop=0.50)
+    score = setup_confidence(
+        setup,
+        vol_premium_score=None,
+        claude_structured_confidence=1.0,
+        direction_alignment=True,
+    )
+    assert score == pytest.approx(0.50)
+
+
+def test_setup_confidence_claude_multiplier_low_conf_floors_at_seventy():
+    """Claude conf=0.0 → multiplier 0.7 (NOT zero) → score keeps 70%."""
+    setup = _stub_setup(pop=0.50)
+    score = setup_confidence(
+        setup,
+        vol_premium_score=None,
+        claude_structured_confidence=0.0,
+        direction_alignment=True,
+    )
+    assert score == pytest.approx(0.35)
+
+
+def test_setup_confidence_misaligned_direction_penalty():
+    """Direction-misaligned setup → -0.15 from the score."""
+    setup = _stub_setup(pop=0.65)
+    score = setup_confidence(
+        setup,
+        vol_premium_score=None,
+        claude_structured_confidence=None,
+        direction_alignment=False,
+    )
+    assert score == pytest.approx(0.50)
+
+
+def test_setup_confidence_clamped_to_one_high_inputs():
+    """High pop + bonus + max claude → clamped at 1.0."""
+    setup = _stub_setup(pop=0.95)
+    score = setup_confidence(
+        setup,
+        vol_premium_score=0.30,  # +0.10
+        claude_structured_confidence=1.0,  # ×1.0
+        direction_alignment=True,
+    )
+    # 0.95 + 0.10 = 1.05, ×1.0 = 1.05 → clamp to 1.0
+    assert score == pytest.approx(1.0)
+
+
+def test_setup_confidence_clamped_to_zero_low_inputs():
+    """Low pop + thin premium + low claude + misaligned → floored at 0."""
+    setup = _stub_setup(pop=0.10)
+    score = setup_confidence(
+        setup,
+        vol_premium_score=0.0,  # -0.10
+        claude_structured_confidence=0.0,  # ×0.7
+        direction_alignment=False,  # -0.15
+    )
+    # 0.10 - 0.10 = 0.00, ×0.7 = 0.00, -0.15 = -0.15 → clamp to 0
+    assert score == pytest.approx(0.0)
+
+
+def test_setup_confidence_full_formula_combined():
+    """All four components active in a realistic case.
+
+    pop=0.65, vol_premium=0.20 (bonus +0.10) → 0.75
+    claude_conf=0.80 → ×(0.7 + 0.3*0.8) = ×0.94 → 0.705
+    aligned → no penalty → 0.705
+    """
+    setup = _stub_setup(pop=0.65)
+    score = setup_confidence(
+        setup,
+        vol_premium_score=0.20,
+        claude_structured_confidence=0.80,
+        direction_alignment=True,
+    )
+    assert score == pytest.approx(0.705, abs=1e-3)
+
+
+# --- Integration: recommend_setups stamps confidence on every setup -------
+
+
+@pytest.mark.asyncio
+async def test_recommend_setups_attaches_confidence_to_each_setup():
+    """Every returned non-skip setup carries a `confidence` in [0,1] or None."""
+    chain = _make_chain(spot=100.0, iv=0.50, dte_days=7)
+    setups = await recommend_setups(
+        symbol="XYZ",
+        spot=100.0,
+        iv_rank=80,
+        iv_percentile=78,
+        current_iv=0.50,
+        hv_20=0.30,
+        expected_move_pct=0.05,
+        hist_avg_abs_move_pct=0.04,
+        claude_verdict="neutral-bear",
+        claude_confidence=0.70,
+        chain=chain,
+        report_date=date.today(),
+        report_time="AMC",
+        vol_premium_score=0.18,
+    )
+    assert setups, "expected at least one setup from this regime"
+    for s in setups:
+        if s.setup_id == "skip":
+            continue
+        # Either populated and clamped, or None (defensive).
+        if s.confidence is not None:
+            assert 0.0 <= s.confidence <= 1.0
+
+
+@pytest.mark.asyncio
+async def test_recommend_setups_high_pop_aligned_beats_low_pop_misaligned():
+    """High-pop + good vol-premium + aligned has higher confidence than
+    low-pop + thin premium + misaligned.
+
+    Run the same chain twice with different inputs and compare the
+    confidence of comparable structures.
+    """
+    chain_high = _make_chain(spot=100.0, iv=0.50, dte_days=7)
+    high_inputs = dict(
+        symbol="XYZ",
+        spot=100.0,
+        iv_rank=85,
+        iv_percentile=85,
+        current_iv=0.50,
+        hv_20=0.25,
+        expected_move_pct=0.06,
+        hist_avg_abs_move_pct=0.04,
+        claude_verdict="bullish",
+        claude_confidence=0.85,
+        chain=chain_high,
+        report_date=date.today(),
+        report_time="AMC",
+        vol_premium_score=0.30,  # rich premium → +0.10
+    )
+    high_setups = await recommend_setups(**high_inputs)
+
+    low_inputs = dict(
+        symbol="XYZ",
+        spot=100.0,
+        iv_rank=85,
+        iv_percentile=85,
+        current_iv=0.50,
+        hv_20=0.25,
+        expected_move_pct=0.06,
+        hist_avg_abs_move_pct=0.04,
+        claude_verdict="bearish",  # opposite verdict → likely misalignment
+        claude_confidence=0.30,
+        chain=chain_high,
+        report_date=date.today(),
+        report_time="AMC",
+        vol_premium_score=0.01,  # thin premium → -0.10
+    )
+    low_setups = await recommend_setups(**low_inputs)
+
+    high_with_conf = [s for s in high_setups if s.confidence is not None and s.setup_id != "skip"]
+    low_with_conf = [s for s in low_setups if s.confidence is not None and s.setup_id != "skip"]
+    assert high_with_conf and low_with_conf
+    best_high = max(s.confidence for s in high_with_conf)
+    worst_low = min(s.confidence for s in low_with_conf)
+    assert best_high > worst_low
+
+
+@pytest.mark.asyncio
+async def test_recommend_setups_confidence_default_none_kwarg_safe():
+    """Recommender still works when vol_premium_score is omitted."""
+    chain = _make_chain(spot=100.0, iv=0.40, dte_days=7)
+    setups = await recommend_setups(
+        symbol="XYZ",
+        spot=100.0,
+        iv_rank=60,
+        iv_percentile=60,
+        current_iv=0.40,
+        hv_20=0.30,
+        expected_move_pct=0.04,
+        hist_avg_abs_move_pct=0.03,
+        claude_verdict="neutral",
+        claude_confidence=0.55,
+        chain=chain,
+        report_date=date.today(),
+        report_time="AMC",
+    )
+    # Whatever shape comes back, no exception — and any confidence is
+    # within the legal range or None.
+    for s in setups:
+        if s.confidence is not None:
+            assert 0.0 <= s.confidence <= 1.0

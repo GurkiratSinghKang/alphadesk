@@ -26,6 +26,7 @@ const detail: EarningsDetail = {
     expectedMovePct: 0.064,
     expectedMoveDollars: 12.8,
     histAvgAbsMovePct: 0.052,
+    volPremiumScore: null,
     beatRate: 0.87,
     daysToEarnings: 1,
     daysToExpiry: 3,

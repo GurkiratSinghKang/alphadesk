@@ -10,7 +10,7 @@ describe("MetricsStrip", () => {
         ivRank: 78, ivPercentile: 82, currentIv: 0.79,
         hv20: 0.42, hv50: null, hv100: null, hvIvRatio: 0.71,
         expectedMovePct: 0.064, expectedMoveDollars: 12.8,
-        histAvgAbsMovePct: 0.052, beatRate: 0.87,
+        histAvgAbsMovePct: 0.052, volPremiumScore: null, beatRate: 0.87,
         daysToEarnings: 1, daysToExpiry: 3,
       }} />,
     );

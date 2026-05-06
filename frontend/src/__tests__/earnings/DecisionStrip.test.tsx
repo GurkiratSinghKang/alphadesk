@@ -28,6 +28,7 @@ const metrics: EarningsMetricsBlock = {
   expectedMovePct: 0.064,
   expectedMoveDollars: 12.8,
   histAvgAbsMovePct: 0.052,
+  volPremiumScore: null,
   beatRate: 0.58,
   daysToEarnings: 1,
   daysToExpiry: 3,
@@ -91,5 +92,95 @@ describe("DecisionStrip", () => {
     );
     const highCap = high.querySelector('[data-slot="confidence-threshold-caption"]');
     expect(highCap?.textContent).toMatch(/clears/i);
+  });
+
+  // ── PR-1 / T5 — verdict-pill 3-bucket tone-mapping ─────────
+  it("verdict pill carries brand tone when confidence ≥ 0.65", () => {
+    const { container } = render(
+      <DecisionStrip
+        structured={{ ...structured, confidence: 0.75 }}
+        metrics={metrics}
+      />,
+    );
+    const pill = container.querySelector('[data-slot="verdict-pill"]') as HTMLElement;
+    expect(pill).not.toBeNull();
+    expect(pill.className).toMatch(/u-brand/);
+    expect(pill.className).toMatch(/border-\[color:var\(--brand\)\]/);
+  });
+
+  it("verdict pill carries muted tone when confidence is in 0.40–0.65", () => {
+    const { container } = render(
+      <DecisionStrip
+        structured={{ ...structured, confidence: 0.50 }}
+        metrics={metrics}
+      />,
+    );
+    const pill = container.querySelector('[data-slot="verdict-pill"]') as HTMLElement;
+    expect(pill).not.toBeNull();
+    expect(pill.className).toMatch(/u-muted/);
+    expect(pill.className).toMatch(/border-\[color:var\(--border\)\]/);
+  });
+
+  it("verdict pill carries warn tone when confidence < 0.40", () => {
+    const { container } = render(
+      <DecisionStrip
+        structured={{ ...structured, confidence: 0.30 }}
+        metrics={metrics}
+      />,
+    );
+    const pill = container.querySelector('[data-slot="verdict-pill"]') as HTMLElement;
+    expect(pill).not.toBeNull();
+    expect(pill.className).toMatch(/text-state-warning-fg/);
+    expect(pill.className).toMatch(/border-state-warning-border/);
+  });
+
+  // ── PR-1 / T5 — vol_premium_score chip ─────────────────────
+  it("renders vol-premium chip with brand tone and +25% when score = 0.25", () => {
+    const { container } = render(
+      <DecisionStrip
+        structured={structured}
+        metrics={{ ...metrics, volPremiumScore: 0.25 }}
+      />,
+    );
+    const chip = container.querySelector('[data-slot="vol-premium-chip"]') as HTMLElement;
+    expect(chip).not.toBeNull();
+    expect(chip.textContent).toBe("Vol premium · +25%");
+    expect(chip.className).toMatch(/u-brand/);
+  });
+
+  it("renders vol-premium chip with muted tone and +10% when score = 0.10", () => {
+    const { container } = render(
+      <DecisionStrip
+        structured={structured}
+        metrics={{ ...metrics, volPremiumScore: 0.10 }}
+      />,
+    );
+    const chip = container.querySelector('[data-slot="vol-premium-chip"]') as HTMLElement;
+    expect(chip).not.toBeNull();
+    expect(chip.textContent).toBe("Vol premium · +10%");
+    expect(chip.className).toMatch(/u-muted/);
+  });
+
+  it("renders vol-premium chip with warn tone and ' · thin' caveat when score = 0.02", () => {
+    const { container } = render(
+      <DecisionStrip
+        structured={structured}
+        metrics={{ ...metrics, volPremiumScore: 0.02 }}
+      />,
+    );
+    const chip = container.querySelector('[data-slot="vol-premium-chip"]') as HTMLElement;
+    expect(chip).not.toBeNull();
+    expect(chip.textContent).toBe("Vol premium · +2% · thin");
+    expect(chip.className).toMatch(/text-state-warning-fg/);
+  });
+
+  it("does not render the vol-premium chip when score is null", () => {
+    const { container } = render(
+      <DecisionStrip
+        structured={structured}
+        metrics={{ ...metrics, volPremiumScore: null }}
+      />,
+    );
+    expect(container.querySelector('[data-slot="vol-premium-chip"]')).toBeNull();
   });
 });

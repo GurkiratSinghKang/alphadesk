@@ -2981,6 +2981,7 @@ interface RawEarningsMetricsBlock {
   expected_move_pct: number | null;
   expected_move_dollars: number | null;
   hist_avg_abs_move_pct: number | null;
+  vol_premium_score?: number | null;
   beat_rate: number | null;
   days_to_earnings: number | null;
   days_to_expiry: number | null;
@@ -3213,6 +3214,10 @@ export function mapEarningsSetup(raw: unknown): EarningsSetup | null {
       typeof r.worst_leg_liquidity_score === "number" ? r.worst_leg_liquidity_score : null,
     liquidityWarning: r.liquidity_warning === true,
     fillForecast: mapFillForecast(r.fill_forecast),
+    // PR-1 / T3: pass through per-setup confidence (0..1). Backend emits
+    // null for setups missing PoP (skip / extreme-tail demotions); we
+    // preserve null so the UI can omit the chip rather than render 0%.
+    confidence: typeof r.confidence === "number" ? r.confidence : null,
   };
 }
 
@@ -3270,6 +3275,7 @@ function mapMetrics(raw: RawEarningsMetricsBlock): EarningsMetricsBlock {
     expectedMovePct: raw.expected_move_pct,
     expectedMoveDollars: raw.expected_move_dollars,
     histAvgAbsMovePct: raw.hist_avg_abs_move_pct,
+    volPremiumScore: raw.vol_premium_score ?? null,
     beatRate: raw.beat_rate,
     daysToEarnings: raw.days_to_earnings,
     daysToExpiry: raw.days_to_expiry,

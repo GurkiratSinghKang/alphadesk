@@ -6,12 +6,14 @@ import DashboardPageLayout from "@/components/layouts/DashboardPageLayout";
 import {
   getEarningsCalendar,
   getEarningsDetail,
+  getRecommendedSetups,
   postEarningsFullResearch,
 } from "@/lib/api";
 import type {
   EarningsCandidateDecision,
   EarningsDetail,
   EarningsCalendarFilters,
+  EarningsSetup,
 } from "@/types";
 import { safeGetItem, safeSetItem } from "@/lib/storage";
 import { useMarketStore } from "@/stores/market";
@@ -170,6 +172,28 @@ export default function EarningsOptionsPlayPage() {
     gcTime: 60_000,
   });
   const detail = selectedSymbol ? detailQuery.data ?? null : null;
+  // PR-1 / T3 (earnings discipline gates): parallel query for the
+  // ranked recommended setups so the per-button confidence chip on
+  // TradeButtonRow has data to surface. ``getEarningsDetail`` doesn't
+  // return ``top_setups`` (heavier analysis-endpoint payload) so this
+  // is a separate /analysis call. 404 → null (curated-universe gate);
+  // any error other than abort is silenced — the page must not black
+  // out when the recommender is unavailable, the chips just don't
+  // render.
+  const setupsQuery = useQuery<EarningsSetup[] | null>({
+    queryKey: ["earnings-setups", selectedSymbol],
+    queryFn: ({ signal }) =>
+      getRecommendedSetups(selectedSymbol!, { signal, setups: 5 }).catch(
+        (err: unknown) => {
+          if (isAbortError(err)) throw err;
+          return null;
+        },
+      ),
+    enabled: !!selectedSymbol,
+    gcTime: 60_000,
+    retry: false,
+  });
+  const recommendedSetups = selectedSymbol ? setupsQuery.data ?? null : null;
   const loadingDetail = !!selectedSymbol && detailQuery.isLoading;
   const refetchingDetail =
     !!selectedSymbol && detailQuery.isFetching && !detailQuery.isLoading;
@@ -508,6 +532,7 @@ export default function EarningsOptionsPlayPage() {
             selectionSource={selectionSource}
             calendarRows={visibleRows}
             onSelectSymbol={onSelectFromSidebar}
+            recommendedSetups={recommendedSetups}
           />
         </div>
       </div>
