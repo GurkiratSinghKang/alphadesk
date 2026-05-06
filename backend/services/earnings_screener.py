@@ -1287,6 +1287,9 @@ def _build_tail_risk_signals(
     quote: Mapping[str, Any] | None,
     metrics: Mapping[str, Any] | None,
     prior_moves: Sequence[float] | None,
+    sector_cohort_momentum_avg: float | None = None,
+    analyst_pt_changes_24h: int = 0,
+    news_sentiment: float | None = None,
 ) -> Any:
     """SHR-5: assemble :class:`TailRiskSignals` from already-loaded data.
 
@@ -1297,10 +1300,11 @@ def _build_tail_risk_signals(
       * ``historical_move_kurtosis`` — sample kurtosis of prior_moves
         when n≥4; ``None`` otherwise.
       * ``iv_term_steepness`` — front/back IV ratio from metrics.
-
-    Sector cohort, analyst PT, and news sentiment require additional
-    upstream calls and aren't plumbed here yet — the recommender's
-    score function gracefully treats them as zero-contribution.
+      * ``sector_cohort_momentum_avg`` (TR-2), ``analyst_pt_changes_24h``
+        (TR-3), and ``news_sentiment`` (TR-4) — passed in by the async
+        wrapper :func:`_build_tail_risk_signals_async` after it fetches
+        them upstream. Default to "no signal" when not provided so the
+        sync surface stays usable from existing call sites and tests.
     """
     from api.schemas.earnings import TailRiskSignals
 
@@ -1323,8 +1327,304 @@ def _build_tail_risk_signals(
 
     return TailRiskSignals(
         intraday_momentum_pct=intraday,
+        sector_cohort_momentum_avg=sector_cohort_momentum_avg,
+        analyst_pt_changes_24h=analyst_pt_changes_24h,
+        news_sentiment=news_sentiment,
         historical_move_kurtosis=kurt,
         iv_term_steepness=_iv_term_steepness(metrics),
+    )
+
+
+# ─── TR-2 .. TR-4: async signal fetchers ─────────────────────
+#
+# These three feed the sync :func:`_build_tail_risk_signals` so the
+# recommender sees a richer ``TailRiskSignals`` payload. Each fetcher is
+# best-effort: any upstream failure logs at WARNING and returns the
+# "no signal" value (None for floats, 0 for ints) so the screener never
+# crashes a calendar entry over a flaky data source.
+
+# Cache TTL for analyst PT lookups (1h per symbol — FMP changes <hourly).
+_PT_CHANGES_CACHE_TTL_SECONDS = 3600
+
+# Cache TTL for news sentiment (15min — sentiment can shift fast around
+# breaking headlines, but Newsdata cache key is symbol-shared).
+_NEWS_SENTIMENT_CACHE_TTL_SECONDS = 900
+
+
+async def _compute_sector_cohort_momentum(symbol: str) -> float | None:
+    """TR-2: average intraday change_pct of related-sector tickers.
+
+    Returns the cohort average as a fraction (0.0145 = 1.45%) so the
+    recommender's threshold (>0.02) compares apples to apples with
+    intraday_momentum_pct (also a fraction). Returns ``None`` when the
+    symbol has no cohort entry or every cohort fetch failed.
+    """
+    from data.symbol_lists import SECTOR_COHORT
+
+    cohort = SECTOR_COHORT.get(symbol.upper())
+    if not cohort:
+        return None
+
+    # Fetch each peer's quote in parallel via the existing _load_quote
+    # path (pulls from ticker_context cache so this is mostly hits).
+    results = await asyncio.gather(
+        *[_load_quote(peer) for peer in cohort],
+        return_exceptions=True,
+    )
+    pcts: list[float] = []
+    for r in results:
+        if isinstance(r, Exception) or not isinstance(r, Mapping):
+            continue
+        cp = r.get("change_pct")
+        if cp is None:
+            continue
+        try:
+            pcts.append(float(cp))
+        except (TypeError, ValueError):
+            continue
+    if not pcts:
+        return None
+    # change_pct is in 0-100 scale; divide to align with the recommender's
+    # fraction-scale threshold (>0.02 = 2%).
+    return float(sum(pcts) / len(pcts) / 100.0)
+
+
+async def _fetch_analyst_pt_changes_24h(symbol: str) -> int:
+    """TR-3: net count of analyst PT raises minus cuts in last 24h.
+
+    Hits FMP ``/v4/upgrades-downgrades?symbol=…``. Cached per symbol
+    (1h TTL) so a busy calendar render doesn't burn FMP rate budget on
+    duplicate lookups across rerenders.
+
+    Returns 0 on any upstream/parsing failure — that maps to the
+    recommender's "no signal" threshold (>0).
+    """
+    import httpx
+
+    from core.config import settings
+    from core.redis import cache_get, cache_set
+
+    sym = symbol.upper()
+    cache_k = f"earnings:tr:pt_changes:{sym}"
+    cached = await cache_get(cache_k)
+    if isinstance(cached, int):
+        return cached
+
+    api_key = settings.FMP_API_KEY.get_secret_value() if settings.FMP_API_KEY else ""
+    if not api_key:
+        return 0
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"{settings.FMP_BASE_URL}/api/v4/upgrades-downgrades",
+                params={"symbol": sym, "apikey": api_key},
+            )
+            if resp.status_code != 200:
+                log.debug(
+                    "FMP upgrades-downgrades non-200 for %s: %s",
+                    sym, resp.status_code,
+                    extra=_log_ctx(
+                        endpoint="earnings._fetch_analyst_pt_changes_24h",
+                        symbol=sym, status=resp.status_code,
+                    ),
+                )
+                await cache_set(cache_k, 0, ttl_seconds=_PT_CHANGES_CACHE_TTL_SECONDS)
+                return 0
+            data = resp.json()
+    except Exception as e:  # noqa: BLE001
+        log.warning(
+            "PT changes fetch failed for %s: %s", sym, _scrub_fmp_error(str(e)),
+            extra=_log_ctx(
+                endpoint="earnings._fetch_analyst_pt_changes_24h",
+                symbol=sym, error=_scrub_fmp_error(str(e)),
+            ),
+        )
+        return 0
+
+    if not isinstance(data, list):
+        await cache_set(cache_k, 0, ttl_seconds=_PT_CHANGES_CACHE_TTL_SECONDS)
+        return 0
+
+    bullish_terms = ("buy", "outperform", "overweight", "upgrade", "positive", "strong buy")
+    bearish_terms = ("sell", "underperform", "underweight", "downgrade", "negative")
+    net = 0
+    for entry in data:
+        if not isinstance(entry, Mapping):
+            continue
+        ts = _parse_pt_publish_ts(entry.get("publishedDate"))
+        if ts is None or ts < cutoff:
+            continue
+        # Prefer ``action`` field when present (some FMP responses use
+        # it); fall back to newGrade/previousGrade comparison heuristic.
+        action_raw = (entry.get("action") or entry.get("newGrade") or "").lower()
+        if any(t in action_raw for t in bullish_terms):
+            net += 1
+        elif any(t in action_raw for t in bearish_terms):
+            net -= 1
+    await cache_set(cache_k, net, ttl_seconds=_PT_CHANGES_CACHE_TTL_SECONDS)
+    return net
+
+
+def _parse_pt_publish_ts(value: Any) -> datetime | None:
+    """Best-effort parse of FMP's ``publishedDate`` field.
+
+    FMP returns ISO-8601 with a ``Z`` suffix (``2026-05-04T15:32:00.000Z``)
+    or ``YYYY-MM-DD HH:MM:SS`` depending on endpoint. Treat naive datetimes
+    as UTC so the 24h-cutoff comparison works.
+    """
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        s = value.strip().replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        try:
+            dt = datetime.strptime(value.strip(), "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+async def _compute_news_sentiment_24h(symbol: str) -> float | None:
+    """TR-4: -1 (bearish) to +1 (bullish) news sentiment over last 24h.
+
+    Uses the existing :func:`services.news.fetch_symbol_news` which
+    returns articles with a string ``sentiment`` field
+    (``"positive"``/``"negative"``/``"neutral"``). Maps each to ±1/0,
+    averages over the window. Falls back to keyword polarity if no
+    article carries a sentiment field.
+
+    Returns ``None`` when there's no news in the 24h window — the
+    recommender treats None as no-signal so a quiet day doesn't
+    accidentally read bearish.
+    """
+    from core.redis import cache_get, cache_set
+
+    sym = symbol.upper()
+    cache_k = f"earnings:tr:news_sent:{sym}"
+    cached = await cache_get(cache_k)
+    if cached is not None:
+        # cache_set serialises as float or None; re-cast defensively.
+        if isinstance(cached, (int, float)):
+            return float(cached)
+        if cached == "none":
+            return None
+
+    try:
+        from services.news import fetch_symbol_news
+
+        resp = await fetch_symbol_news(sym, limit=30)
+    except Exception as e:  # noqa: BLE001
+        log.warning(
+            "News sentiment fetch failed for %s: %s", sym, str(e),
+            extra=_log_ctx(
+                endpoint="earnings._compute_news_sentiment_24h",
+                symbol=sym, error=str(e),
+            ),
+        )
+        return None
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    recent: list[Any] = []
+    for art in (getattr(resp, "articles", []) or []):
+        ts = _parse_pt_publish_ts(getattr(art, "published_at", None))
+        if ts is None:
+            # Newsdata uses "YYYY-MM-DD HH:MM:SS" — try the other parser.
+            ts = _try_parse_news_ts(getattr(art, "published_at", None))
+        if ts is None or ts < cutoff:
+            continue
+        recent.append(art)
+
+    if not recent:
+        await cache_set(cache_k, "none", ttl_seconds=_NEWS_SENTIMENT_CACHE_TTL_SECONDS)
+        return None
+
+    # Path 1: API-provided sentiment — average of the per-article scores.
+    string_scores: list[float] = []
+    for a in recent:
+        s = getattr(a, "sentiment", None)
+        if isinstance(s, str):
+            sl = s.lower()
+            if sl == "positive":
+                string_scores.append(1.0)
+            elif sl == "negative":
+                string_scores.append(-1.0)
+            elif sl == "neutral":
+                string_scores.append(0.0)
+    if string_scores:
+        avg = float(sum(string_scores) / len(string_scores))
+        # Clamp defensively.
+        avg = max(-1.0, min(1.0, avg))
+        await cache_set(cache_k, avg, ttl_seconds=_NEWS_SENTIMENT_CACHE_TTL_SECONDS)
+        return avg
+
+    # Path 2: keyword polarity fallback.
+    bullish_words = {"beat", "raise", "outperform", "upgrade", "bullish",
+                     "surge", "soar", "growth", "rally", "record"}
+    bearish_words = {"miss", "cut", "underperform", "downgrade", "bearish",
+                     "plunge", "decline", "loss", "warning", "fraud"}
+    raw = 0
+    for a in recent:
+        text = ((getattr(a, "title", "") or "") + " "
+                + (getattr(a, "description", "") or "")).lower()
+        raw += sum(1 for w in bullish_words if w in text)
+        raw -= sum(1 for w in bearish_words if w in text)
+    score = max(-1.0, min(1.0, raw / max(len(recent), 1)))
+    await cache_set(cache_k, score, ttl_seconds=_NEWS_SENTIMENT_CACHE_TTL_SECONDS)
+    return float(score)
+
+
+def _try_parse_news_ts(value: Any) -> datetime | None:
+    """Newsdata returns ``"YYYY-MM-DD HH:MM:SS"`` as the published_at.
+
+    The ISO parser accepts that as a naive datetime (no T separator); we
+    just need to assume UTC if no tz info attached.
+    """
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        dt = datetime.strptime(value.strip(), "%Y-%m-%d %H:%M:%S")
+        return dt.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+async def _build_tail_risk_signals_async(
+    symbol: str,
+    *,
+    quote: Mapping[str, Any] | None,
+    metrics: Mapping[str, Any] | None,
+    prior_moves: Sequence[float] | None,
+) -> Any:
+    """TR-1: async wrapper that fans out to TR-2/TR-3/TR-4 fetchers, then
+    delegates to the sync :func:`_build_tail_risk_signals` for assembly.
+
+    Each fetcher is exception-safe — a single failed source becomes a
+    "no signal" value rather than killing the whole calendar entry.
+    """
+    cohort_t = asyncio.create_task(_compute_sector_cohort_momentum(symbol))
+    pt_t = asyncio.create_task(_fetch_analyst_pt_changes_24h(symbol))
+    sent_t = asyncio.create_task(_compute_news_sentiment_24h(symbol))
+
+    cohort_r, pt_r, sent_r = await asyncio.gather(
+        cohort_t, pt_t, sent_t, return_exceptions=True,
+    )
+
+    cohort_avg = cohort_r if isinstance(cohort_r, (int, float)) else None
+    pt_changes = int(pt_r) if isinstance(pt_r, (int, float)) else 0
+    sentiment = sent_r if isinstance(sent_r, (int, float)) else None
+
+    return _build_tail_risk_signals(
+        quote=quote,
+        metrics=metrics,
+        prior_moves=prior_moves,
+        sector_cohort_momentum_avg=cohort_avg,
+        analyst_pt_changes_24h=pt_changes,
+        news_sentiment=sentiment,
     )
 
 
@@ -2562,10 +2862,13 @@ async def _hydrate_row(
             from services.options import fetch_chain
 
             chain = await fetch_chain(symbol)
-            # SHR-5: pull prior_moves + tail-risk signals from already-
-            # loaded metrics so the recommender has the full picture.
+            # SHR-5 / TR-1..TR-4: pull prior_moves + tail-risk signals
+            # from already-loaded metrics + async-fetch the upstream
+            # signals (sector cohort, analyst PT, news sentiment) so the
+            # recommender sees the full picture instead of all-None.
             prior_moves = _prior_moves_from_metrics(metrics)
-            tr_signals = _build_tail_risk_signals(
+            tr_signals = await _build_tail_risk_signals_async(
+                symbol,
                 quote=quote, metrics=metrics, prior_moves=prior_moves,
             )
             tail_risk_score = _compute_tail_risk_score(tr_signals)
