@@ -258,6 +258,12 @@ class CalendarRow(BaseModel):
     premium_yield_put_atm: float | None = None
     expected_move_pct: float | None = None
     hist_avg_abs_move_pct: float | None = None
+    # PR-1 / T1 (earnings discipline gates): IV richness vs. realized
+    # history. ``(expected_move_pct - hist_avg_abs_move_pct) /
+    # max(hist_avg_abs_move_pct, 0.005)``. >=0.15 ⇒ vol-selling edge;
+    # <0.05 ⇒ no edge → directional plays unjustified. ``None`` when
+    # either input is missing.
+    vol_premium_score: float | None = None
     claude_verdict: Verdict | None = None
     claude_confidence: float | None = Field(default=None, ge=0, le=1)
     top_setup: TopSetup | None = None
@@ -341,6 +347,9 @@ class MetricsBlock(BaseModel):
     expected_move_pct: float | None = None
     expected_move_dollars: float | None = None
     hist_avg_abs_move_pct: float | None = None
+    # PR-1 / T1: see ``CalendarRow.vol_premium_score``. Surfaced on the
+    # detail metrics block so the symbol page can render the same gate.
+    vol_premium_score: float | None = None
     beat_rate: float | None = None
     days_to_earnings: int | None = None
     days_to_expiry: int | None = None

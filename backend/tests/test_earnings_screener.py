@@ -6,6 +6,7 @@ from services.earnings_screener import (
     compute_earnings_edge_score,
     compute_expected_move_from_straddle,
     compute_historical_stats,
+    compute_vol_premium_score,
 )
 
 
@@ -49,6 +50,47 @@ def test_historical_stats_empty():
     assert stats["wins"] == 0
     assert stats["losses"] == 0
     assert stats["surprise_beat_rate"] == 0.0
+
+
+# ─── compute_vol_premium_score (PR-1 / T1) ──────────────────────
+# IV richness vs. realized earnings move. >=0.15 ⇒ vol-selling edge,
+# <0.05 ⇒ no edge → directional plays unjustified.
+
+def test_vol_premium_score_iv_above_history():
+    # 12% expected vs 8% historical → 50% richer. Round to dodge fp noise.
+    assert round(compute_vol_premium_score(0.12, 0.08), 6) == 0.5
+
+
+def test_vol_premium_score_iv_below_history():
+    # IV cheaper than realized → negative score.
+    score = compute_vol_premium_score(0.06, 0.10)
+    assert score is not None and score < 0
+
+
+def test_vol_premium_score_iv_matches_history():
+    assert compute_vol_premium_score(0.10, 0.10) == 0.0
+
+
+def test_vol_premium_score_uses_floor_when_history_zero():
+    # hist=0 hits the 0.005 floor → score = (em - 0) / 0.005 = em * 200.
+    assert round(compute_vol_premium_score(0.10, 0.0), 6) == 20.0
+
+
+def test_vol_premium_score_returns_none_when_history_missing():
+    assert compute_vol_premium_score(0.10, None) is None
+
+
+def test_vol_premium_score_returns_none_when_expected_move_missing():
+    assert compute_vol_premium_score(None, 0.10) is None
+
+
+def test_vol_premium_score_returns_none_when_both_missing():
+    assert compute_vol_premium_score(None, None) is None
+
+
+def test_vol_premium_score_returns_none_for_non_finite_inputs():
+    assert compute_vol_premium_score(float("nan"), 0.08) is None
+    assert compute_vol_premium_score(0.10, float("inf")) is None
 
 
 def test_earnings_edge_score_rewards_rich_premium_and_overpriced_move():
