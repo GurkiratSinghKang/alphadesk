@@ -1,5 +1,12 @@
 "use client";
 
+// Opt out of static prerender. The (dashboard) layout uses client-only
+// hooks (useWs etc.) that throw outside the Providers tree; Next.js's
+// build-time prerender pass tries to render this route's layout and
+// crashes with "useWs must be used within Providers". force-dynamic
+// makes the route render only at request time, sidestepping prerender.
+export const dynamic = "force-dynamic";
+
 import { useEffect, useState } from "react";
 import {
   getAdminBackendKeys,
