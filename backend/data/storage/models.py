@@ -760,6 +760,85 @@ def _define_models() -> dict[str, Any]:
             CheckConstraint("id = 1", name="ck_halt_state_singleton"),
         )
 
+    class ExitRule(Base):
+        """Configurable exit-rule for OPEN trades (P2 — position-management automation).
+
+        Wave 5A (audit/2026-05-05-position-management). The system previously
+        held positions to expiration with no auto-take-profit, time-based
+        exit, or auto-roll discipline. A user took max-loss on an AMD iron
+        condor partly because no 50%-of-max-credit profit-taker fired when
+        the trade was favourable mid-week.
+
+        This table holds the rule set the exit evaluator
+        (``services.exit_rules.evaluate_exit_rules``) walks on every
+        ``daily_pipeline._check_exits`` tick. Rules are scoped by
+        ``strategy`` (NULL = all strategies) and ``structure_type`` (NULL or
+        ``"*"`` = all structures), and fire in ``priority`` order — lowest
+        runs first, first match wins.
+
+        Schema fields:
+
+        * ``rule_type`` — one of:
+
+          - ``profit_pct``   — fire when current pnl >= threshold * max_profit
+          - ``time_dte``     — fire when DTE <= threshold
+          - ``loss_pct``     — fire when current pnl <= -threshold * max_profit
+          - ``delta_breach`` — fire when |net combo delta| >= threshold
+
+        * ``threshold`` — interpretation depends on ``rule_type`` (a fraction
+          for profit/loss_pct, a day count for time_dte, a delta for
+          delta_breach).
+
+        * ``action`` — one of ``close`` | ``roll`` | ``alert``. Auto-roll
+          is downgraded to ``alert`` by ``services.position_roller`` when
+          guardrails fail (DTE > 7, no defensible debit, structure not
+          iron_condor / vertical_spread, …).
+
+        * ``priority`` — lower number runs first. Default 100. The seed
+          set uses 5 for the "alert at -200% loss" rule (so it fires
+          before any close action) and 10 for the take-profit rules.
+
+        * ``enabled`` — soft-disable a rule without dropping it. The
+          admin UI uses this for the per-row toggle.
+        """
+
+        __tablename__ = "exit_rules"
+
+        id = Column(Integer, primary_key=True, autoincrement=True)
+        strategy = Column(String(60), nullable=True, index=True)
+        structure_type = Column(String(40), nullable=True, index=True)
+        rule_type = Column(String(32), nullable=False, index=True)
+        threshold = Column(Float, nullable=False)
+        action = Column(String(16), nullable=False, server_default="close", default="close")
+        enabled = Column(Boolean, nullable=False, server_default="true", default=True, index=True)
+        priority = Column(Integer, nullable=False, server_default="100", default=100, index=True)
+        # Free-form notes / rationale shown in the admin UI. Optional.
+        description = Column(Text, nullable=True)
+        created_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+        )
+        updated_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            onupdate=func.now(),
+        )
+
+        __table_args__ = (
+            Index("ix_exit_rules_scope", "strategy", "structure_type", "enabled"),
+            Index("ix_exit_rules_priority", "priority", "enabled"),
+            CheckConstraint(
+                "rule_type IN ('profit_pct','time_dte','loss_pct','delta_breach')",
+                name="ck_exit_rules_rule_type",
+            ),
+            CheckConstraint(
+                "action IN ('close','roll','alert')",
+                name="ck_exit_rules_action",
+            ),
+        )
+
     _models_cache.update({
         "OHLCVBar": OHLCVBar,
         "OptionsSnapshot": OptionsSnapshot,
@@ -780,6 +859,7 @@ def _define_models() -> dict[str, Any]:
         "ComplianceTicket": ComplianceTicket,
         "AccessRequest": AccessRequest,
         "HaltState": HaltState,
+        "ExitRule": ExitRule,
     })
     return _models_cache
 
