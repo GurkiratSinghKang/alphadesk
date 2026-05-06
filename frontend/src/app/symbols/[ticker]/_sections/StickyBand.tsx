@@ -7,10 +7,16 @@ import type { Quote } from "@/types";
 
 import { HeroCTAs } from "./HeroCTAs";
 
+// StickyBand only requires ``last`` for rendering — all other Quote fields are
+// accessed with optional chaining + null fallbacks below. Accepting a narrower
+// shape lets callers (e.g. SymbolPageClient) pass a runtime-validated subset of
+// the wire-format Quote without needing the full envelope.
+export type StickyBandQuote = Partial<Quote> & { last: number };
+
 export interface StickyBandProps {
   symbol: string;
-  quote: Quote | null | undefined;
-  extendedQuote?: Quote | null;
+  quote: StickyBandQuote | null | undefined;
+  extendedQuote?: StickyBandQuote | null;
   children?: ReactNode;
 }
 
@@ -19,7 +25,7 @@ export function StickyBand({ symbol, quote, extendedQuote, children }: StickyBan
   const eh = extendedQuote ?? quote ?? null;
 
   const timestampIso =
-    quote && Number.isFinite(quote.timestamp)
+    quote && typeof quote.timestamp === "number" && Number.isFinite(quote.timestamp)
       ? new Date(quote.timestamp).toISOString()
       : null;
 

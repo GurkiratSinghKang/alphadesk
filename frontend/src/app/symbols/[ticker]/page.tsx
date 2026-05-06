@@ -15,9 +15,8 @@ export const dynamic = "force-dynamic";
 
 import { notFound } from "next/navigation";
 
+import { SymbolPageClient } from "./_components/SymbolPageClient";
 import { normalizeSymbol } from "./_lib/normalizeSymbol";
-import { DecisionStrip } from "./_sections/DecisionStrip";
-import { StickyBand } from "./_sections/StickyBand";
 
 export default async function SymbolPage({
   params,
@@ -33,17 +32,10 @@ export default async function SymbolPage({
 
   return (
     <main data-testid="symbol-page" data-sym={sym}>
-      <StickyBand symbol={sym} quote={null}>
-        <DecisionStrip
-          symbol={sym}
-          claudeStructured={null}
-          analysis={null}
-          marketRegime={null}
-        />
-      </StickyBand>
+      <SymbolPageClient symbol={sym} />
       <div className="px-4 py-3 sm:px-6 sm:py-4">
         <h1 className="font-display text-h1">{sym}</h1>
-        <p className="t-mono u-muted">Page shell — sections coming in tasks 3-12.</p>
+        <p className="t-mono u-muted">Page shell — sections coming in tasks 5-12.</p>
       </div>
     </main>
   );
