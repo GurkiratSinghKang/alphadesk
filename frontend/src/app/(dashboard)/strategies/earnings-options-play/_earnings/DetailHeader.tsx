@@ -21,7 +21,14 @@ export interface DetailHeaderProps {
    *  fields and may omit any subset depending on broker availability. */
   extendedQuote?: Partial<Quote> | null;
   /** ISO datetime of the most-recent detail snapshot. Surfaces as the
-   *  "Updated 5 m ago" label in the header. */
+   *  "Quote updated 5 m ago" label in the header.
+   *
+   *  B1.7 (2026-05-06 audit): explicitly QUOTE-scoped now. The previous
+   *  "Updated just now" copy implied the whole page was that fresh,
+   *  which contradicted the EARNINGS / OPTIONS / RESEARCH chips that
+   *  could be 2 days stale. The TickerFreshnessStrip is the canonical
+   *  source for non-quote domains; this header line speaks only to
+   *  the regular-session price tick. */
   generatedAt?: string;
   /** Round-4 (B-NEW-4): whether to autofocus the heading on symbol
    *  change. Pointer selections suppress autofocus to avoid stealing
@@ -88,9 +95,13 @@ export default function DetailHeader({
           <p
             data-slot="detail-updated"
             className="t-meta mt-0.5 u-muted"
-            title={generatedAt}
+            title={`Quote tick at ${formatGeneratedAt(generatedAt)} · see freshness chips above for OPTIONS / EARNINGS / RESEARCH`}
           >
-            Updated {fmtRelativeTime(generatedAt)}
+            {/* B1.7 (2026-05-06 audit): scope this label to QUOTE only.
+                Previously "Updated just now" implied the whole page was
+                fresh, which contradicted the freshness-chip strip when
+                EARNINGS / RESEARCH were 2 days old. */}
+            Quote updated {fmtRelativeTime(generatedAt)}
           </p>
         )}
       </div>
@@ -120,6 +131,32 @@ export default function DetailHeader({
 function formatReportDate(iso: string): string {
   // Locale-aware via Intl — formats in the viewer's timezone and locale.
   return fmtDate(iso, { weekday: "short", month: "short", day: "numeric" });
+}
+
+/**
+ * Format an ISO instant for the "Quote tick at …" tooltip — matches the
+ * TickerFreshnessStrip's chip timestamp format ("Today 1:50 PM" /
+ * "May 4, 8:00 PM") so the tooltip and the chips speak the same dialect
+ * (B2.16).
+ */
+function formatGeneratedAt(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const now = new Date();
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+  const time = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+  if (sameDay) return `Today ${time}`;
+  const datePart = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(date);
+  return `${datePart}, ${time}`;
 }
 
 function describeReportTiming(reportTime: EarningsReportTime): { label: string; help: string } {
