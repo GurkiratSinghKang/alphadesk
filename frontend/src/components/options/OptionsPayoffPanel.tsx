@@ -118,30 +118,22 @@ export default function OptionsPayoffPanel({
   );
 }
 
-function MetricGrid({ summary, compact }: { summary: PayoffSummary; compact: boolean }) {
-  const netLabel = summary.netPremium >= 0 ? "Net credit" : "Net debit";
-  const netValue =
-    summary.status === "ready"
-      ? formatCurrency(Math.abs(summary.netPremium))
-      : "Unknown";
-  const breakevenValue =
-    summary.breakevens.length === 0
-      ? summary.status === "ready"
-        ? "None"
-        : "Unknown"
-      : summary.breakevens.map((price) => formatCurrency(price)).join(", ");
+function MetricGrid({ summary, compact: _compact }: { summary: PayoffSummary; compact: boolean }) {
+  // PM-A 2026-05-05: slimmed from 4 cells to 2. The breakeven cell
+  // moved into the chart (commit 3 callouts), and net premium is
+  // already visible in the leg list. Two cells means each can
+  // breathe — larger text, full width — and the rest of the panel
+  // gets vertical room for the redesigned chart.
   const metrics = [
     { label: "Max profit", value: formatPayoffValue(summary.maxProfit), tone: "text-profit" },
     { label: "Max loss", value: formatPayoffValue(summary.maxLoss), tone: "text-loss" },
-    { label: "Breakeven", value: breakevenValue, tone: "text-fg" },
-    { label: netLabel, value: netValue, tone: summary.netPremium >= 0 ? "text-profit" : "text-loss" },
   ];
   return (
-    <div className={cn("grid gap-px overflow-hidden rounded-md border border-border-hair bg-border-hair", compact ? "grid-cols-2" : "grid-cols-2 lg:grid-cols-4")}>
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border-hair bg-border-hair">
       {metrics.map((metric) => (
-        <div key={metric.label} className="min-w-0 bg-bg px-3 py-3">
+        <div key={metric.label} className="min-w-0 bg-bg px-4 py-4">
           <p className="t-label text-fg-hint">{metric.label}</p>
-          <p className={cn("mt-2 truncate font-mono text-body-sm font-semibold tabular-nums", metric.tone)}>
+          <p className={cn("mt-2 truncate font-mono text-body font-semibold tabular-nums", metric.tone)}>
             {metric.value}
           </p>
         </div>
