@@ -305,11 +305,60 @@ function EmptyPayoff({ copy, compact = false }: { copy: string; compact?: boolea
   );
 }
 
-function buildSvgModel(points: PayoffPoint[], summary: PayoffSummary) {
+// PM-A 2026-05-05: extended buildSvgModel return shape with
+// maxProfitCoord, maxLossCoord, yAxisTicks, breakevenLeader. These
+// support the redesigned payoff chart's curve annotations,
+// dollar-labelled Y axis, and breakeven callouts. No visual change
+// in this commit — fields are declared but not yet rendered.
+export interface PayoffCurveCoord {
+  x: number;
+  y: number;
+  pnl: number;
+  price: number;
+  label?: string;
+}
+
+export interface YAxisTick {
+  y: number;
+  label: string;
+}
+
+export interface BreakevenLeader {
+  x: number;
+  labelX: number;
+  labelY: number;
+  price: number;
+}
+
+export interface SvgModel {
+  width: number;
+  height: number;
+  padding: number;
+  innerWidth: number;
+  yTop: number;
+  yBottom: number;
+  zeroY: number;
+  xMin: number;
+  xMax: number;
+  x: (price: number) => number;
+  y: (pnl: number) => number;
+  path: string;
+  gridYs: number[];
+  gridXs: number[];
+  maxProfitCoord: PayoffCurveCoord | null;
+  maxLossCoord: PayoffCurveCoord | null;
+  yAxisTicks: YAxisTick[];
+  breakevenLeader: BreakevenLeader[];
+}
+
+export function buildSvgModel(points: PayoffPoint[], summary: PayoffSummary): SvgModel | null {
   if (points.length < 2) return null;
   const width = 720;
   const height = 220;
-  const padding = 28;
+  // PM-A 2026-05-05: widened padding from 28 → 48 so dollar Y-axis
+  // labels (e.g. "−$1,200") have room to render without clipping
+  // the chart body.
+  const padding = 48;
   const innerWidth = width - padding * 2;
   const yTop = 16;
   const yBottom = height - 28;
@@ -341,6 +390,69 @@ function buildSvgModel(points: PayoffPoint[], summary: PayoffSummary) {
   const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${x(point.underlyingPrice).toFixed(2)} ${y(point.pnl).toFixed(2)}`).join(" ");
   const gridYs = [0.25, 0.5, 0.75].map((ratio) => yTop + innerHeight * ratio);
   const gridXs = [0.25, 0.5, 0.75].map((ratio) => padding + innerWidth * ratio);
+
+  // PM-A 2026-05-05: compute max-profit coordinate. If the strategy
+  // is unbounded on the upside (e.g. long call), pin to the chart's
+  // top-right corner with label "∞". Otherwise scan the payoff
+  // points for the highest pnl > 0 and project to (x, y).
+  const right = width - padding;
+  let maxProfitCoord: PayoffCurveCoord | null = null;
+  if (summary.maxProfit.kind === "unlimited") {
+    maxProfitCoord = { x: right, y: yTop, pnl: Infinity, price: xMax, label: "∞" };
+  } else {
+    let best: PayoffPoint | null = null;
+    for (const point of points) {
+      if (point.pnl > 0 && (best === null || point.pnl > best.pnl)) best = point;
+    }
+    if (best) {
+      maxProfitCoord = { x: x(best.underlyingPrice), y: y(best.pnl), pnl: best.pnl, price: best.underlyingPrice };
+    }
+  }
+
+  // PM-A 2026-05-05: max-loss coordinate. Unbounded → bottom edge.
+  let maxLossCoord: PayoffCurveCoord | null = null;
+  if (summary.maxLoss.kind === "unlimited") {
+    // Pin to a point reflecting the directional risk: short calls
+    // blow up to the right; short puts blow up to the left. We don't
+    // know the leg mix here, so anchor to the lowest-pnl curve
+    // point as a conservative fallback.
+    let worst: PayoffPoint | null = null;
+    for (const point of points) {
+      if (worst === null || point.pnl < worst.pnl) worst = point;
+    }
+    if (worst) {
+      maxLossCoord = { x: x(worst.underlyingPrice), y: yBottom, pnl: -Infinity, price: worst.underlyingPrice, label: "∞" };
+    }
+  } else {
+    let worst: PayoffPoint | null = null;
+    for (const point of points) {
+      if (point.pnl < 0 && (worst === null || point.pnl < worst.pnl)) worst = point;
+    }
+    if (worst) {
+      maxLossCoord = { x: x(worst.underlyingPrice), y: y(worst.pnl), pnl: worst.pnl, price: worst.underlyingPrice };
+    }
+  }
+
+  // PM-A 2026-05-05: pick 4–5 nice round-number dollar Y-axis ticks
+  // within [yMin, yMax]. Always include $0. Step is rounded to a
+  // {1,2,2.5,5}*10^k "nice" number for human readability.
+  const yAxisTicks = computeYAxisTicks(yMin, yMax, y);
+
+  // PM-A 2026-05-05: breakeven leader lines. For each breakeven
+  // price, compute its chart x and a label position at the chart's
+  // top edge. If the breakeven label collides with the spot
+  // indicator (within 20px), shift it 20px left.
+  const labelY = yTop + 10;
+  const spotX = summary.spotPrice != null ? x(summary.spotPrice) : null;
+  const breakevenLeader: BreakevenLeader[] = summary.breakevens.map((price) => {
+    const bx = x(price);
+    let labelX = bx;
+    if (spotX != null && Math.abs(bx - spotX) < 20) {
+      labelX = bx - 20;
+    }
+    return { x: bx, labelX, labelY, price };
+  });
+
   return {
     width,
     height,
@@ -356,7 +468,54 @@ function buildSvgModel(points: PayoffPoint[], summary: PayoffSummary) {
     path,
     gridYs,
     gridXs,
+    maxProfitCoord,
+    maxLossCoord,
+    yAxisTicks,
+    breakevenLeader,
   };
+}
+
+function computeYAxisTicks(yMin: number, yMax: number, project: (pnl: number) => number): YAxisTick[] {
+  const range = yMax - yMin;
+  if (!Number.isFinite(range) || range <= 0) return [];
+  // Aim for ~4 ticks; pick a "nice" step.
+  const target = 4;
+  const rough = range / target;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rough)));
+  const normalised = rough / magnitude;
+  let nice: number;
+  if (normalised < 1.5) nice = 1;
+  else if (normalised < 3) nice = 2;
+  else if (normalised < 7) nice = 5;
+  else nice = 10;
+  const step = nice * magnitude;
+  const start = Math.ceil(yMin / step) * step;
+  const ticks: YAxisTick[] = [];
+  // Always include $0 if it's in range.
+  const includeZero = yMin <= 0 && yMax >= 0;
+  for (let value = start; value <= yMax + 1e-6 && ticks.length < 6; value += step) {
+    if (includeZero && Math.abs(value) < step / 2 && !ticks.some((t) => t.label === "$0")) {
+      ticks.push({ y: project(0), label: "$0" });
+      continue;
+    }
+    ticks.push({ y: project(value), label: formatTickLabel(value) });
+  }
+  if (includeZero && !ticks.some((t) => t.label === "$0")) {
+    ticks.push({ y: project(0), label: "$0" });
+  }
+  return ticks;
+}
+
+function formatTickLabel(value: number): string {
+  if (Math.abs(value) < 0.5) return "$0";
+  const sign = value < 0 ? "−" : "+";
+  const abs = Math.abs(value);
+  if (abs >= 1000) {
+    const thousands = abs / 1000;
+    const rounded = thousands >= 10 ? Math.round(thousands) : Math.round(thousands * 10) / 10;
+    return `${sign}$${rounded}k`;
+  }
+  return `${sign}$${Math.round(abs)}`;
 }
 
 function nearestPoint(points: PayoffPoint[], underlyingPrice: number): PayoffPoint | null {
