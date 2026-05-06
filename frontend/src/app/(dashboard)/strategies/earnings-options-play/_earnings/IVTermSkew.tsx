@@ -19,7 +19,11 @@ export default function IVTermSkew({ term, skew }: IVTermSkewProps) {
     <section data-slot="iv-term-skew" className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
       {/* Term structure */}
       <div>
-        <h3 className="t-section-cap italic">IV term structure</h3>
+        {/* EOP-AUDIT 2026-05-06 / B1.4: title used to butt up against
+            the bar visualization with no margin, making the section
+            look like a single overlapping element. ``mb-2`` adds the
+            breathing room. */}
+        <h3 className="t-section-cap italic mb-2">IV term structure</h3>
         {term && term.length > 0 ? (
           <TermStrip points={term} />
         ) : (
@@ -92,26 +96,60 @@ function TermStrip({ points }: { points: IVTermPoint[] }) {
       aria-label="Implied volatility term structure"
       className="mt-1"
     >
-      {/* Round-8 / AX-06: ``aria-hidden`` the visual chart and provide
-          a sr-only data table so screen-reader users get the same
-          information without parsing pixel heights. */}
-      <div className="flex h-10 items-end gap-1" aria-hidden="true">
-        {finite.map((p) => {
-          const h = ((p.atmIv - min) / range) * 30 + 8;
-          return (
-            <div
-              key={p.expiry}
-              title={`${p.expiry}: ${fmtPct(p.atmIv, 1)} ATM IV (${p.dte} days to expiry)`}
-              className="flex flex-col items-center gap-0.5"
-            >
+      {/* EOP-AUDIT 2026-05-06 / B1.4: surface the absolute IV scale.
+          Pre-fix, bars were scaled relative to (max - min) only, so a
+          1pt and a 60pt swing rendered identically. Stamp the high
+          IV value at the top edge and low at the bottom so the user
+          can read magnitude. */}
+      <div className="flex items-stretch gap-2">
+        <div
+          aria-hidden="true"
+          className="flex h-10 flex-col justify-between font-mono text-eyebrow u-muted tabular-nums"
+        >
+          <span data-slot="iv-term-axis-max">{fmtPct(max, 0)}</span>
+          <span data-slot="iv-term-axis-min">{fmtPct(min, 0)}</span>
+        </div>
+        {/* Round-8 / AX-06: ``aria-hidden`` the visual chart and provide
+            a sr-only data table so screen-reader users get the same
+            information without parsing pixel heights. */}
+        <div className="flex h-10 flex-1 items-end gap-1" aria-hidden="true">
+          {finite.map((p, idx) => {
+            const h = ((p.atmIv - min) / range) * 30 + 8;
+            // EOP-AUDIT 2026-05-06 / B1.4: rich tooltip surfacing
+            // expiry, DTE, ATM IV, and intra-strip IV vs the previous
+            // bar (proxy for "vs prior expiry / earlier session" when
+            // intra-day deltas aren't on the wire). When ``priorIv``
+            // is on the type, prefer it; otherwise fall back to the
+            // adjacent bar so the user still gets a directional cue.
+            const priorIv =
+              (p as IVTermPoint & { priorIv?: number | null }).priorIv ??
+              (idx > 0 ? finite[idx - 1].atmIv : null);
+            const ivDelta =
+              priorIv != null && Number.isFinite(priorIv)
+                ? p.atmIv - priorIv
+                : null;
+            const deltaCopy =
+              ivDelta == null
+                ? "no prior session"
+                : `${ivDelta >= 0 ? "+" : ""}${(ivDelta * 100).toFixed(1)}pts vs prior`;
+            const tooltip = `Expiry ${p.expiry} · ${p.dte} DTE · ATM IV ${fmtPct(p.atmIv, 1)} · ${deltaCopy}`;
+            return (
               <div
-                className="w-5 bg-[color:var(--brand)] rounded-sm"
-                style={{ height: `${h}px`, opacity: 0.7 }}
-              />
-              <span className="t-mono text-label u-muted">{p.dte}d</span>
-            </div>
-          );
-        })}
+                key={p.expiry}
+                data-slot="iv-term-bar"
+                title={tooltip}
+                aria-label={tooltip}
+                className="flex flex-col items-center gap-0.5"
+              >
+                <div
+                  className="w-5 bg-[color:var(--brand)] rounded-sm"
+                  style={{ height: `${h}px`, opacity: 0.7 }}
+                />
+                <span className="t-mono text-label u-muted">{p.dte}d</span>
+              </div>
+            );
+          })}
+        </div>
       </div>
       {/* P2-30 (mobile fix wave-3): bump caption from text-label (12px)
           to text-body-sm (13px) so the IV range + front/back values stay
