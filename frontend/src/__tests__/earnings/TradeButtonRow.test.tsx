@@ -52,6 +52,68 @@ describe("TradeButtonRow (Round-12 DR-1: defined-risk only)", () => {
     expect(nonRecommended.textContent).not.toMatch(/Suggested/i);
   });
 
+  // ── EOP-AUDIT 2026-05-06 / B1.11 — RECOMMENDED badge prominence ─
+  it("shows a 🎯 RECOMMENDED badge on the recommended card with brand tint and 2px border (B1.11)", () => {
+    const { container } = render(
+      <TradeButtonRow
+        symbol="NVDA"
+        ladder={ladder}
+        recommendedSetup="long straddle"
+      />,
+    );
+    const recommended = container.querySelector(
+      'a[data-slot="trade-button-long-straddle"]',
+    ) as HTMLAnchorElement;
+    expect(recommended.getAttribute("data-recommended")).toBe("true");
+    expect(recommended.className).toMatch(/border-2/);
+    expect(recommended.className).toMatch(/brand-tint/);
+    const badge = recommended.querySelector(
+      '[data-slot="trade-button-recommended-badge"]',
+    );
+    expect(badge).not.toBeNull();
+    expect(badge?.textContent).toMatch(/RECOMMENDED/i);
+    expect(badge?.textContent).toContain("🎯");
+  });
+
+  it("non-recommended cards keep the 1px default border and no RECOMMENDED badge (B1.11)", () => {
+    const { container } = render(
+      <TradeButtonRow
+        symbol="NVDA"
+        ladder={ladder}
+        recommendedSetup="long straddle"
+      />,
+    );
+    const nonRec = container.querySelector(
+      'a[data-slot="trade-button-iron-condor"]',
+    ) as HTMLAnchorElement;
+    expect(nonRec.getAttribute("data-recommended")).toBeNull();
+    expect(nonRec.className).not.toMatch(/border-2/);
+    expect(
+      nonRec.querySelector('[data-slot="trade-button-recommended-badge"]'),
+    ).toBeNull();
+  });
+
+  // ── EOP-AUDIT 2026-05-06 / B1.15 — DEFINED RISK semantic copy ─
+  it("vertical / iron condor cards keep the ✓ DEFINED RISK pill (B1.15)", () => {
+    const { container } = render(<TradeButtonRow symbol="NVDA" ladder={ladder} />);
+    const ic = container.querySelector('a[data-slot="trade-button-iron-condor"]');
+    expect(ic?.getAttribute("data-risk-shape")).toBe("defined_risk");
+    expect(ic?.textContent).toMatch(/Defined risk/i);
+    expect(ic?.textContent).not.toMatch(/Defined loss/i);
+  });
+
+  it("long straddle / strangle / long call / long put cards read ✓ DEFINED LOSS · ∞ UPSIDE (B1.15)", () => {
+    const { container } = render(<TradeButtonRow symbol="NVDA" ladder={ladder} />);
+    const ls = container.querySelector('a[data-slot="trade-button-long-straddle"]');
+    expect(ls?.getAttribute("data-risk-shape")).toBe("defined_loss_unbounded_upside");
+    expect(ls?.textContent).toMatch(/Defined loss/i);
+    expect(ls?.textContent).toMatch(/upside|∞/i);
+
+    const lc = container.querySelector('a[data-slot="trade-button-long-call"]');
+    expect(lc?.getAttribute("data-risk-shape")).toBe("defined_loss_unbounded_upside");
+    expect(lc?.textContent).toMatch(/Defined loss/i);
+  });
+
   it("bull put spread sells ATM put, buys 30Δ put", () => {
     const { container } = render(<TradeButtonRow symbol="NVDA" ladder={ladder} />);
     const btn = container.querySelector('a[data-slot="trade-button-bull-put-spread"]') as HTMLAnchorElement;

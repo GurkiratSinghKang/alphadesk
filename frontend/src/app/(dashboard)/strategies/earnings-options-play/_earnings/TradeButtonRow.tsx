@@ -215,6 +215,7 @@ export default function TradeButtonRow({
       {bullPutSpread && (
         <DefinedRiskTradeLink
           dataSlot="trade-button-bull-put-spread"
+          setupKind="bull put spread"
           href={buildVerticalSpreadURL({
             symbol,
             short: bullPutSpread.short,
@@ -236,6 +237,7 @@ export default function TradeButtonRow({
       {bearCallSpread && (
         <DefinedRiskTradeLink
           dataSlot="trade-button-bear-call-spread"
+          setupKind="bear call spread"
           href={buildVerticalSpreadURL({
             symbol,
             short: bearCallSpread.short,
@@ -257,6 +259,7 @@ export default function TradeButtonRow({
       {bullCallSpread && (
         <DefinedRiskTradeLink
           dataSlot="trade-button-bull-call-spread"
+          setupKind="bull call spread"
           href={buildDebitVerticalSpreadURL({
             symbol,
             long: bullCallSpread.long,
@@ -280,6 +283,7 @@ export default function TradeButtonRow({
       {bearPutSpread && (
         <DefinedRiskTradeLink
           dataSlot="trade-button-bear-put-spread"
+          setupKind="bear put spread"
           href={buildDebitVerticalSpreadURL({
             symbol,
             long: bearPutSpread.long,
@@ -303,6 +307,7 @@ export default function TradeButtonRow({
       {longCall && (
         <DefinedRiskTradeLink
           dataSlot="trade-button-long-call"
+          setupKind="long call"
           href={buildSingleLegURL({
             symbol,
             row: longCall,
@@ -322,6 +327,7 @@ export default function TradeButtonRow({
       {longPut && (
         <DefinedRiskTradeLink
           dataSlot="trade-button-long-put"
+          setupKind="long put"
           href={buildSingleLegURL({
             symbol,
             row: longPut,
@@ -338,6 +344,7 @@ export default function TradeButtonRow({
       {ironCondor && (
         <DefinedRiskTradeLink
           dataSlot="trade-button-iron-condor"
+          setupKind="iron condor"
           href={buildIronCondorURL({
             symbol,
             shortPut: ironCondor.shortPut,
@@ -370,6 +377,7 @@ export default function TradeButtonRow({
       {longStraddle && (
         <DefinedRiskTradeLink
           dataSlot="trade-button-long-straddle"
+          setupKind="long straddle"
           href={buildStraddleURL({
             symbol,
             call: longStraddle.call,
@@ -472,13 +480,64 @@ function FillForecastLine({
  * Round-12 / DR-1: every button on this row links to a DEFINED-RISK
  * combo. The pill label is "Defined risk" instead of the prior
  * "Undefined risk" warning.
+ *
+ * EOP-AUDIT 2026-05-06 / B1.11: when ``recommended`` is set the card
+ * gets a 2px border (was 1px), a brand-tint background, AND a
+ * "🎯 RECOMMENDED" badge pinned to the top-right corner so it stands
+ * out from the row of otherwise-identical defined-risk cards.
+ *
+ * EOP-AUDIT 2026-05-06 / B1.15: the "✓ DEFINED RISK" pill used to
+ * read identically on every card, even though long straddles /
+ * strangles / single-leg long calls/puts have ASYMMETRIC payoff
+ * (defined LOSS, unbounded UPSIDE). Naked shorts (currently not
+ * surfaced from this row but kept for forward-compat) read
+ * "UNDEFINED RISK". Caller passes a ``setupKind`` discriminator and
+ * we render the right pill.
  */
+type RiskShape =
+  | "defined_risk" // bull/bear vertical credit + iron condor + butterflies → ✓ DEFINED RISK
+  | "defined_loss_unbounded_upside" // long straddle / long strangle / long call / long put → ✓ DEFINED LOSS · ∞ UPSIDE
+  | "naked_short"; // short_strangle / short_straddle / naked calls/puts → ⚠ UNDEFINED RISK · NAKED SHORT
+
+function riskShapeFor(setup: EarningsTopSetup | string | null | undefined): RiskShape {
+  switch (setup) {
+    case "long straddle":
+    case "long strangle":
+    case "long call":
+    case "long put":
+      return "defined_loss_unbounded_upside";
+    case "short strangle":
+    case "short straddle":
+    case "short call":
+    case "short put":
+      return "naked_short";
+    default:
+      // bull put spread / bear call spread / bull call spread /
+      // bear put spread / iron condor / iron butterfly / vertical
+      // spreads → standard defined risk.
+      return "defined_risk";
+  }
+}
+
+function riskShapeCopy(shape: RiskShape, recommended: boolean): string {
+  if (shape === "naked_short") {
+    return "⚠ UNDEFINED RISK · NAKED SHORT";
+  }
+  if (shape === "defined_loss_unbounded_upside") {
+    return recommended
+      ? "✓ Suggested · defined loss · ∞ upside"
+      : "✓ Defined loss · ∞ upside";
+  }
+  return recommended ? "✓ Suggested · defined risk" : "✓ Defined risk";
+}
+
 function DefinedRiskTradeLink({
   dataSlot,
   href,
   label,
   riskCopy,
   recommended = false,
+  setupKind,
   onHoverEnter,
 }: {
   dataSlot: string;
@@ -486,6 +545,8 @@ function DefinedRiskTradeLink({
   label: string;
   riskCopy: string;
   recommended?: boolean;
+  /** Drives the per-card risk-pill copy (B1.15). */
+  setupKind?: EarningsTopSetup | string | null;
   // Slice-6 / CH-3F: hover handlers feed the parent's profit-zone
   // overlay. Optional so the component still works in a standalone
   // context where no overlay is mounted. EOP-AUDIT 2026-05-06 Bug 1:
@@ -493,30 +554,52 @@ function DefinedRiskTradeLink({
   // A→B doesn't briefly null the draft and unmount the chart.
   onHoverEnter?: () => void;
 }) {
+  const riskShape = riskShapeFor(setupKind);
+  const pillCopy = riskShapeCopy(riskShape, recommended);
+  const pillTone =
+    riskShape === "naked_short" ? "u-loss" : "u-profit";
   return (
     <Link
       data-slot={dataSlot}
+      data-recommended={recommended || undefined}
+      data-risk-shape={riskShape}
       href={href}
       title={riskCopy}
       aria-describedby={`${dataSlot}-risk ${dataSlot}-risk-copy`}
       onMouseEnter={onHoverEnter}
       onFocus={onHoverEnter}
       className={cn(
-        "group min-h-touch rounded border bg-[color:var(--bg-elev-1)] px-3 py-2 t-mono text-label flex flex-col items-center justify-center gap-0.5 hover:border-[color:var(--brand)]",
+        "group relative min-h-touch rounded px-3 py-2 t-mono text-label flex flex-col items-center justify-center gap-0.5",
+        // EOP-AUDIT 2026-05-06 / B1.11: 2px border + brand tint when
+        // recommended; 1px default border otherwise. Hover always
+        // upgrades the border to brand for affordance.
         recommended
-          ? "border-[color:var(--brand)] shadow-[0_0_0_1px_var(--brand)]"
-          : "border-[color:var(--border)]",
+          ? "border-2 border-[color:var(--brand)] bg-[color:var(--brand-tint)] shadow-[0_0_0_1px_var(--brand)]"
+          : "border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] hover:border-[color:var(--brand)]",
       )}
     >
+      {recommended ? (
+        <span
+          data-slot="trade-button-recommended-badge"
+          aria-hidden="true"
+          className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-pill bg-[color:var(--brand)] px-1.5 py-0.5 text-eyebrow font-semibold uppercase tracking-[0.08em] text-[color:var(--brand-fg,white)]"
+        >
+          <span>🎯</span>
+          <span>RECOMMENDED</span>
+        </span>
+      ) : null}
       <span className="u-brand inline-flex items-center gap-1.5">
         <span aria-hidden="true">▸</span>
         {label}
       </span>
       <span
         id={`${dataSlot}-risk`}
-        className="text-label uppercase tracking-wider u-profit"
+        className={cn(
+          "text-label uppercase tracking-wider",
+          pillTone,
+        )}
       >
-        {recommended ? "✓ Suggested · defined risk" : "✓ Defined risk"}
+        {pillCopy}
       </span>
       <span id={`${dataSlot}-risk-copy`} className="sr-only">
         {riskCopy}
