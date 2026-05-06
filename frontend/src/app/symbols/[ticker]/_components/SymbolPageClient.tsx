@@ -7,6 +7,7 @@ import { ChartBand } from "../_sections/ChartBand";
 import { DecisionStrip, type DecisionStripMarketRegime } from "../_sections/DecisionStrip";
 import { NotFound } from "../_sections/NotFound";
 import { OptionsThesisBand } from "../_sections/OptionsThesisBand";
+import { RecommendedSetups } from "../_sections/RecommendedSetups";
 import { StickyBand, type StickyBandQuote } from "../_sections/StickyBand";
 import { UnsupportedAsset } from "../_sections/UnsupportedAsset";
 
@@ -111,6 +112,13 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
         metrics={metrics}
         analysisSummary={data.analysis?.summary ?? null}
         isETF={data.isETF}
+      />
+
+      <RecommendedSetups
+        symbol={symbol}
+        setups={data.recommendedSetups}
+        isETF={data.isETF}
+        underlying={quote?.last ?? null}
       />
     </main>
   );

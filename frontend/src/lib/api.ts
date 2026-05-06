@@ -3500,6 +3500,31 @@ export async function getEarningsDetail(
 }
 
 /**
+ * T8 (symbol page): fetch the ranked recommended setups list from the
+ * single-round-trip earnings analysis endpoint. The full ``EarningsAnalysis``
+ * payload is heavy (quote, IV, news, history, claude); the symbol page only
+ * consumes ``top_setups`` so we narrow to that field rather than mapping the
+ * whole shape. 404 from the curated-universe gate must be caught at the call
+ * site (mirrors getEarningsDetail).
+ *
+ * Backend: GET /api/v1/earnings/{symbol}/analysis?setups=3
+ */
+export async function getRecommendedSetups(
+  symbol: string,
+  opts?: { signal?: AbortSignal; setups?: number },
+): Promise<EarningsSetup[]> {
+  const setups = opts?.setups ?? 3;
+  const raw = await apiFetch<{ top_setups?: unknown }>(
+    `/api/v1/earnings/${encodeURIComponent(symbol)}/analysis?setups=${setups}&news_limit=0`,
+    opts?.signal ? { signal: opts.signal } : undefined,
+  );
+  if (!Array.isArray(raw.top_setups)) return [];
+  return (raw.top_setups as unknown[])
+    .map(mapEarningsSetup)
+    .filter((s): s is EarningsSetup => s !== null);
+}
+
+/**
  * Trigger the on-demand Claude Opus full research note.
  * Backend: POST /api/v1/earnings/{symbol}/full-research
  * Rate-limited per user (~30/5min via backend middleware).

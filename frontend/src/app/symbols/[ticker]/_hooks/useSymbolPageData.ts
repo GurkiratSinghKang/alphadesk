@@ -3,9 +3,17 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { ApiError, getAnalysis, getBars, getEarningsDetail, getIVData, searchSymbols } from "@/lib/api";
+import {
+  ApiError,
+  getAnalysis,
+  getBars,
+  getEarningsDetail,
+  getIVData,
+  getRecommendedSetups,
+  searchSymbols,
+} from "@/lib/api";
 import { useTickerContext } from "@/hooks/useQueries";
-import type { Analysis, EarningsDetail, OHLCVBar, TimeFrame } from "@/types";
+import type { Analysis, EarningsDetail, EarningsSetup, OHLCVBar, TimeFrame } from "@/types";
 
 export type SymbolMeta = Awaited<ReturnType<typeof searchSymbols>>[number];
 
@@ -20,6 +28,7 @@ export interface UseSymbolPageDataResult {
   ivData: IVDataResult | null;
   bars: OHLCVBar[] | null;
   earningsDetail: EarningsDetail | null;
+  recommendedSetups: EarningsSetup[] | null;
   symbolMeta: SymbolMeta | null;
   isLoading: boolean;
   isError: boolean;
@@ -105,6 +114,26 @@ export function useSymbolPageData(sym: string): UseSymbolPageDataResult {
     retry: false,
   });
 
+  // T8 / Section 7: ranked top-3 recommended setups for the
+  // RecommendedSetups card. Same curated-universe / asset-class gates as
+  // /detail. 404 → null (no setups for this symbol); any other error
+  // falls through and is excluded from the aggregate isError flag for
+  // the same reason as earningsQuery: a missing recommender shouldn't
+  // black out the whole symbol page.
+  const setupsQuery = useQuery<EarningsSetup[] | null>({
+    queryKey: ["earnings-setups", sym],
+    queryFn: () =>
+      getRecommendedSetups(sym).catch((err: unknown) => {
+        if (err instanceof ApiError && err.status === 404) {
+          return null;
+        }
+        throw err;
+      }),
+    staleTime: 5 * 60 * 1000,
+    enabled: earningsEnabled,
+    retry: false,
+  });
+
   const isLoading =
     ctx.isLoading || analysisQuery.isLoading || ivQuery.isLoading || barsQuery.isLoading || searchQuery.isLoading;
   const isError =
@@ -116,6 +145,7 @@ export function useSymbolPageData(sym: string): UseSymbolPageDataResult {
     ivData: ivQuery.data ?? null,
     bars: barsQuery.data ?? null,
     earningsDetail: earningsQuery.data ?? null,
+    recommendedSetups: setupsQuery.data ?? null,
     symbolMeta,
     isLoading,
     isError,

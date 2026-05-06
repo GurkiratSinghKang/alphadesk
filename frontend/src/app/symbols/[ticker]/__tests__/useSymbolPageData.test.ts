@@ -27,6 +27,7 @@ vi.mock("@/lib/api", async () => {
     }),
     getBars: vi.fn().mockResolvedValue([]),
     getEarningsDetail: vi.fn().mockResolvedValue(null),
+    getRecommendedSetups: vi.fn().mockResolvedValue([]),
     getTickerContext: vi.fn().mockResolvedValue({ symbols: {}, generatedAt: "2026-05-05T00:00:00Z" }),
   };
 });

@@ -37,6 +37,7 @@ function makeBaseResult(overrides: Partial<UseSymbolPageDataResult>): UseSymbolP
     ivData: null,
     bars: null,
     earningsDetail: null,
+    recommendedSetups: null,
     symbolMeta: null,
     isLoading: false,
     isError: false,
