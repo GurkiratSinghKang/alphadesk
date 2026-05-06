@@ -6,6 +6,15 @@ import { fmtPct } from "@/lib/intl";
 const LEGACY_UNSUPPORTED_PLAYS = new Set(["short call", "short strangle"]);
 
 /**
+ * EOP-AUDIT 2026-05-06 / B1.20: the recommender's minimum-confidence
+ * threshold. Mirrors ``CLAUDE_MIN_CONFIDENCE_TO_RECOMMEND`` in the
+ * backend recommender; surfaced here so the user can see whether
+ * Claude's confidence cleared the bar. If the BE constant changes,
+ * update this in lockstep.
+ */
+const CONFIDENCE_THRESHOLD_PCT = 60;
+
+/**
  * DecisionStrip — Round-8 single-view bundle B.
  *
  * The page hero for the earnings detail surface. Promotes Claude's
@@ -68,8 +77,13 @@ export default function DecisionStrip({ structured, metrics }: DecisionStripProp
       <div className="flex flex-col">
         <span className="t-label u-muted">Confidence</span>
         <div className="mt-1 flex items-center gap-2">
+          {/* EOP-AUDIT 2026-05-06 / B1.20: confidence threshold tick.
+              The recommender's "minimum to recommend" is 60% — without
+              a reference mark the user can't tell whether the bar is
+              "good enough". A vertical tick at 60% on the track plus
+              the explanatory caption below makes the cutoff explicit. */}
           <div
-            className="h-2 flex-1 overflow-hidden rounded-full bg-bg-elev-1"
+            className="relative h-2 flex-1 overflow-visible rounded-full bg-bg-elev-1"
             role="progressbar"
             aria-valuenow={confPct}
             aria-valuemin={0}
@@ -78,14 +92,29 @@ export default function DecisionStrip({ structured, metrics }: DecisionStripProp
           >
             <div
               className={
-                "h-full rounded-full transition-all " +
+                "h-full overflow-hidden rounded-full transition-all " +
                 (highConfidence ? "bg-[color:var(--brand)]" : "bg-fg-muted")
               }
               style={{ width: `${confPct}%` }}
             />
+            <span
+              data-slot="confidence-threshold-tick"
+              aria-hidden="true"
+              title="Minimum to recommend: 60%"
+              className="pointer-events-none absolute top-1/2 h-3 w-px -translate-y-1/2 bg-[color:var(--fg)]"
+              style={{ left: `${CONFIDENCE_THRESHOLD_PCT}%` }}
+            />
           </div>
           <span className="t-num-md tabular-nums">{confPct}%</span>
         </div>
+        <span
+          data-slot="confidence-threshold-caption"
+          className="t-meta u-muted mt-0.5"
+        >
+          {confPct >= CONFIDENCE_THRESHOLD_PCT
+            ? `Threshold: ${CONFIDENCE_THRESHOLD_PCT}% — clears the system's minimum to recommend.`
+            : `Threshold: ${CONFIDENCE_THRESHOLD_PCT}% — at ${confPct}% the system suggests caution.`}
+        </span>
         <span className="t-meta u-muted mt-0.5">
           model: {structured.model}
         </span>
