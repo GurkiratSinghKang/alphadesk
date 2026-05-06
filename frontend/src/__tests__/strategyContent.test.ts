@@ -218,9 +218,9 @@ describe('Strategy Content', () => {
     expect(c.howItWorks![0]).toContain('emits no signals');
   });
 
-  it('claude-alpha mentions LLM or Claude', () => {
+  it('claude-alpha mentions LLM or AI', () => {
     const thesis = STRATEGY_CONTENT['claude-alpha'].thesis;
-    expect(thesis).toContain('Claude');
+    expect(thesis).toMatch(/\bAI\b|\bLLM\b|large language model/i);
   });
 
   it('claude-alpha content is explicit that the strategy is planned', () => {

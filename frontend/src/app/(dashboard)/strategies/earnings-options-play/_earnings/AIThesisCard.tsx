@@ -31,7 +31,7 @@ function clampForecast(raw: number): { display: number; clamped: boolean } {
   return { display: raw, clamped: false };
 }
 
-export interface ClaudeThesisCardProps {
+export interface AIThesisCardProps {
   structured: ClaudeStructured | null;
   full: ClaudeFullResearch | null;
   running: boolean;
@@ -51,16 +51,16 @@ export interface ClaudeThesisCardProps {
 
 const LEGACY_UNSUPPORTED_PLAYS = new Set(["short call", "short strangle"]);
 
-export default function ClaudeThesisCard({ structured, full, running, error = null, onRunFull, symbol }: ClaudeThesisCardProps) {
+export default function AIThesisCard({ structured, full, running, error = null, onRunFull, symbol }: AIThesisCardProps) {
   if (!structured) {
     return (
       <section
-        data-slot="claude-thesis"
+        data-slot="ai-thesis"
         aria-busy={running}
         className="rounded border-l-2 border-[color:var(--brand)] bg-[color:var(--brand-tint)] p-3"
       >
         <div className="flex items-center justify-between">
-          <p className="t-label u-brand">◇ CLAUDE · STRUCTURED</p>
+          <p className="t-label u-brand">◇ AI · STRUCTURED</p>
           <span className="t-meta">unavailable</span>
         </div>
         {running ? (
@@ -97,12 +97,12 @@ export default function ClaudeThesisCard({ structured, full, running, error = nu
 
   return (
     <section
-      data-slot="claude-thesis"
+      data-slot="ai-thesis"
       aria-busy={false}
       className="rounded border-l-2 border-[color:var(--brand)] bg-[color:var(--brand-tint)] p-3"
     >
       <div className="flex items-center justify-between">
-        <p className="t-label u-brand">◇ CLAUDE · STRUCTURED</p>
+        <p className="t-label u-brand">◇ AI · STRUCTURED</p>
         <span className="t-meta">{structured.model}</span>
       </div>
       <div className="mt-2 flex items-center justify-between">
@@ -118,7 +118,7 @@ export default function ClaudeThesisCard({ structured, full, running, error = nu
         bearCasePct={structured.directionMagnitude.bearCasePct}
       />
       <div
-        data-slot="claude-thesis-text"
+        data-slot="ai-thesis-text"
         className="mt-2 whitespace-pre-wrap font-sans text-body-sm leading-relaxed"
       >
         {structured.thesis}
@@ -301,7 +301,7 @@ function FullResearchTrigger({ running, error, onRunFull, symbol }: FullResearch
       {error && (
         <p
           role="alert"
-          data-slot="claude-thesis-error"
+          data-slot="ai-thesis-error"
           className="mt-2 t-mono text-label u-loss"
         >
           {isRateLimit

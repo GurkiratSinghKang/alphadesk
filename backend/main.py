@@ -304,7 +304,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(
     title="AlphaDesk API",
-    description="Claude-powered trading platform API",
+    description="AI-powered trading platform API",
     version="0.1.0",
     lifespan=lifespan,
     docs_url="/docs" if not settings.is_production else None,

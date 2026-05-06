@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import DetailHeader from "./DetailHeader";
 import DecisionStrip from "./DecisionStrip";
 import MetricsStrip from "./MetricsStrip";
-import ClaudeThesisCard from "./ClaudeThesisCard";
+import AIThesisCard from "./AIThesisCard";
 import StrikeLadder from "./StrikeLadder";
 import HistoricalMoves from "./HistoricalMoves";
 import HistoricalSetupReplay from "./HistoricalSetupReplay";
@@ -355,7 +355,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
           {/* Left column: thesis + news */}
           <div className="min-w-0 space-y-3">
-            <ClaudeThesisCard
+            <AIThesisCard
               structured={detail.claudeStructured} full={detail.claudeFullResearch}
               running={runningFull} error={fullResearchError}
               onRunFull={onRunFullResearch}
@@ -371,7 +371,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
         </div>
       ) : (
         <div className="mt-4 space-y-4">
-          <ClaudeThesisCard
+          <AIThesisCard
             structured={detail.claudeStructured} full={detail.claudeFullResearch}
             running={runningFull} error={fullResearchError}
             onRunFull={onRunFullResearch}
@@ -634,9 +634,9 @@ export const ERROR_CODE_COPY: Record<EarningsErrorCode, string> = {
     "Volatility metrics unavailable — HV pipeline output missing for this symbol",
   hv_unavailable: "Historical volatility unavailable — daily HV job hasn't completed",
   regime_unavailable:
-    "Market regime unavailable — Alpaca/SPY/VIXY context failed; Claude treats regime as neutral",
+    "Market regime unavailable — Alpaca/SPY/VIXY context failed; AI treats regime as neutral",
   claude_unavailable:
-    "AI thesis unavailable — Claude budget tripped, upstream timeout, or daily $ cap reached. Retry in ~30s",
+    "AI thesis unavailable — model budget tripped, upstream timeout, or daily $ cap reached. Retry in ~30s",
 };
 
 /**

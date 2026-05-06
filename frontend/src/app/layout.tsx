@@ -55,7 +55,7 @@ const geistMono = Geist_Mono({
 // every surface (title, og:image alt, login eyebrow) reads the same.
 const TAGLINE_SHORT = "AI-powered trading terminal";
 const TAGLINE_LONG =
-  "Claude-powered trading platform with 12 systematic strategies, real-time analysis, and automated portfolio management.";
+  "AI-powered trading platform with 12 systematic strategies, real-time analysis, and automated portfolio management.";
 const PAGE_TITLE = `AlphaDesk · ${TAGLINE_SHORT}`;
 // TODO(design): commission the real 1200×630 og card. For now we reference
 // `/og-image.png` so the tag is correct even if the file is the favicon

@@ -39,7 +39,7 @@ const SORT_OPTIONS: SortOption[] = [
   { key: "date", label: "Earnings date" },
   { key: "iv_rank", label: "IV rank" },
   { key: "yield", label: "Premium yield" },
-  { key: "claude_confidence", label: "Claude confidence" },
+  { key: "claude_confidence", label: "AI confidence" },
 ];
 
 // B-9: data model has no explicit sort direction yet — label each sort

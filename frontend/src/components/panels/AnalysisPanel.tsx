@@ -1007,7 +1007,7 @@ export function AnalysisPanel() {
               <Layers className="h-3 w-3 shrink-0" /> MTF
             </TabsTrigger>
           </TabsList>
-          <HelpCircle text="AI-powered analysis of the selected symbol. Technical, fundamental, and sentiment scores updated by Claude agents." />
+          <HelpCircle text="AI-powered analysis of the selected symbol. Technical, fundamental, and sentiment scores updated by AI agents." />
         </div>
 
         <TabsContent value="technical" className="flex-1 mt-0 overflow-hidden">

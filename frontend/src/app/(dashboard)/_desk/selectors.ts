@@ -491,10 +491,10 @@ export function toStatusPills(opts: {
   pills.push({
     label:
       opts.claudeHealthy && opts.claudeLatencyMs != null
-        ? `Claude · healthy · p50 ${opts.claudeLatencyMs}ms`
+        ? `AI · healthy · p50 ${opts.claudeLatencyMs}ms`
         : opts.claudeHealthy
-          ? "Claude · healthy"
-          : "Claude · idle",
+          ? "AI · healthy"
+          : "AI · idle",
     tone: opts.claudeHealthy ? "profit" : "muted",
   });
   // Always emit the 4th pill so the StatusBar has a stable shape even

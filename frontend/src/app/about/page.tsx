@@ -8,7 +8,7 @@ import { ABOUT_CLAUSES } from "./_about/content";
 export const metadata: Metadata = {
   title: "About AlphaDesk",
   description:
-    "AlphaDesk is a Claude-powered trading terminal built by AlphaDesk Labs — a small, invite-only team operating out of a Delaware LLC.",
+    "AlphaDesk is an AI-powered trading terminal built by AlphaDesk Labs — a small, invite-only team operating out of a Delaware LLC.",
 };
 
 /**

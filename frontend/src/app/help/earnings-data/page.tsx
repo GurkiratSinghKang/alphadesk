@@ -31,7 +31,7 @@ const SECTIONS = [
   },
   {
     tag: "03 · AI research",
-    title: "When Claude analysis appears",
+    title: "When AI analysis appears",
     body: [
       "The structured thesis is generated and cached per symbol and report date after the calendar row is hydrated. It can be unavailable when the AI provider times out, a budget limit trips, or upstream data is too thin.",
       "Full research is a user-triggered note that uses the available quote, options, historical earnings, and news context. It may still run even when the structured thesis is missing.",
