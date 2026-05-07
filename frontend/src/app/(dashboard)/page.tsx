@@ -80,6 +80,7 @@ import type { Position, Order, PortfolioGreeks, PortfolioSummary } from "@/types
 import { StrategyPanel } from "./_desk/StrategyPanel";
 
 import {
+  selectIsDemoSeedAccount,
   toContextCells,
   toPositionRows,
   toQuote,
@@ -173,13 +174,13 @@ export default function DeskPage() {
   const { data: pipelineStatus } = usePipelineStatus();
   // Batch E P0-05: detect demo-seed accounts so we can hoist a
   // "Connect your broker" CTA to the top of the Action stack.
-  // The backend hasn't shipped is_demo_seed yet — TODO: wire it via
-  // services/users.py once the migration lands. Until then, treat the
-  // env-configured admin username as demo-seed (matches the audit's
-  // first-login persona that lit up this finding).
+  // Iter 19 — wired up. ``services.users.user_to_dict`` now derives
+  // ``is_demo_seed`` from (role != admin AND zero broker_connections
+  // rows). The selector returns ``false`` when the flag is missing
+  // (degraded /me, loading state) so the CTA never misfires on a real
+  // operator.
   const { data: currentUser } = useCurrentUser();
-  const isDemoSeedAccount =
-    currentUser?.is_demo_seed === true || currentUser?.username === "admin";
+  const isDemoSeedAccount = selectIsDemoSeedAccount(currentUser);
 
   // Batch E P1-16: persistent dismissal of the off-session readiness
   // banner. Pre-fix the off-session copy ("markets are closed") rendered

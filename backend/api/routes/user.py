@@ -83,13 +83,20 @@ async def get_current_user_profile(username: str = Depends(require_auth)) -> dic
             role="admin" if username == settings.ADMIN_USERNAME else "user",
         )
     if row is None:
+        # Iter 19: still emit ``is_demo_seed`` on the env-admin-only
+        # degraded path so the frontend never has to fall back to a
+        # username-equality heuristic. ``role == admin`` here so the
+        # CTA stays hidden — the configured admin is the operator, not
+        # a demo user.
+        role = "admin" if username == settings.ADMIN_USERNAME else "user"
         return {
             "username": username,
-            "role": "admin" if username == settings.ADMIN_USERNAME else "user",
+            "role": role,
             "status": "active",
             "profile": {},
+            "is_demo_seed": role != "admin",
         }
-    return user_to_dict(row)
+    return await user_to_dict(row)
 
 
 @router.post("/admin/users", status_code=201)
@@ -122,7 +129,7 @@ async def create_user(
     )
     if row is None:
         raise HTTPException(status_code=503, detail="User database unavailable")
-    return user_to_dict(row)
+    return await user_to_dict(row)
 
 
 # ---------------------------------------------------------------------------
