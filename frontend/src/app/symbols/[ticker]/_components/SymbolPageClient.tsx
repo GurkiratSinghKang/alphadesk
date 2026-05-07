@@ -3,7 +3,7 @@
 import type { EarningsNewsArticle, Quote } from "@/types";
 
 import { useSymbolPageData } from "../_hooks/useSymbolPageData";
-import { AboutAnalystPeersStub } from "../_sections/AboutAnalystPeersStub";
+import { AboutSection } from "../_sections/AboutSection";
 import { AgentsDebateCard } from "../_sections/AgentsDebateCard";
 import { ChartBand } from "../_sections/ChartBand";
 import { DecisionStrip, type DecisionStripMarketRegime } from "../_sections/DecisionStrip";
@@ -20,11 +20,14 @@ export interface SymbolPageClientProps {
   symbol: string;
 }
 
-// Hide the remaining "Coming soon" placeholder section (About / Analyst
-// peers) until a real backend lands. Strategy reverse lookup, Agents
-// debate, and Key stats now ship live and no longer gate on this flag.
-// Re-enable the placeholder by setting NEXT_PUBLIC_SHOW_SYMBOL_PAGE_STUBS=true.
+// All four originally-stubbed sections now ship live: Strategy reverse
+// lookup, Agents debate, Key stats, and About (company description +
+// sector/industry). Analyst ratings + peers are deferred until a richer
+// data provider lands. The env-flag helper below is dormant — kept in
+// place so future stubs can opt in without re-introducing the gate.
+// Re-enable by setting NEXT_PUBLIC_SHOW_SYMBOL_PAGE_STUBS=true.
 // Read inside the function so tests that mutate process.env observe the change.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function showPlaceholderStubs(): boolean {
   return process.env.NEXT_PUBLIC_SHOW_SYMBOL_PAGE_STUBS === "true";
 }
@@ -222,7 +225,7 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
 
       <NewsBand news={newsArticles} />
 
-      {showPlaceholderStubs() && <AboutAnalystPeersStub />}
+      <AboutSection symbol={symbol} />
     </main>
   );
 }
