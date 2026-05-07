@@ -306,3 +306,70 @@ async def test_strategy_override_takes_precedence_when_cache_misses(
     assert momentum.has_entry_signal is True
     assert momentum.score == pytest.approx(0.91)
     assert momentum.side == "long"
+
+
+# ---------------------------------------------------------------------------
+# Cache-key cross-walk regression (vwap path)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_cache_hit_for_vwap_strategy_uses_meta_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The route must look up the per-signal cache under the strategy's own
+    ``META.name`` (the same string the daily ``UnifiedStrategyRunner`` writes
+    under) -- *not* under the dict-inverted ``_ID_TO_NAME`` alias.
+
+    Regression for the iter-16 code review: ``_STRATEGY_NAME_TO_ID`` has two
+    aliases for the vwap strategy (``vwap`` and ``vwap_strategy``) both
+    mapping to route-id ``vwap-strategy``. Inverting that dict
+    (``{v: k for k, v in ...}``) lossy-collapses the duplicates and
+    last-write-wins picks ``vwap_strategy`` -- so the reader was looking up
+    ``signal_cache:vwap_strategy:NVDA:v1`` while the writer wrote
+    ``signal_cache:vwap:NVDA:v1`` -> eternal cache miss for vwap.
+
+    The fix uses ``instance.META.name`` (== ``"vwap"``) instead of the
+    inverted alias, guaranteeing the keys match.
+    """
+    _patch_ledger(monkeypatch, rows=[])
+    _patch_strat_cache_noop(monkeypatch)
+
+    seen_keys: list[tuple[str, str]] = []
+
+    async def _spy_get(strategy_id: str, symbol: str):
+        seen_keys.append((strategy_id, symbol.upper()))
+        if (strategy_id, symbol.upper()) == ("vwap", "NVDA"):
+            return {
+                "score": 0.85,
+                "side": "long",
+                "evaluated_at": "2026-05-06T12:00:00+00:00",
+                "conviction": 85,
+            }
+        return None
+
+    from services import signal_cache as signal_cache_mod
+
+    monkeypatch.setattr(signal_cache_mod, "get_signal", _spy_get)
+
+    resp = await strat_mod.get_strategies_by_symbol("NVDA")
+    by_id = {m.strategy_id: m for m in resp.matches}
+
+    vwap_match = by_id.get("vwap-strategy")
+    assert vwap_match is not None, "vwap-strategy missing from response"
+    assert vwap_match.has_entry_signal is True, (
+        "vwap cache hit was not picked up -- route is querying the wrong key. "
+        f"Keys queried by route: {seen_keys!r}"
+    )
+    assert vwap_match.score == pytest.approx(0.85)
+    assert vwap_match.side == "long"
+
+    # Confirm the route called the cache under "vwap" (META.name), never under
+    # "vwap_strategy" (the broken dict-inverted alias).
+    vwap_keys = [(sid, sym) for sid, sym in seen_keys if "vwap" in sid]
+    assert ("vwap", "NVDA") in vwap_keys, (
+        f"route never looked up signal_cache:vwap:NVDA -- saw {vwap_keys!r}"
+    )
+    assert ("vwap_strategy", "NVDA") not in vwap_keys, (
+        f"route is still using the broken inverted alias -- saw {vwap_keys!r}"
+    )

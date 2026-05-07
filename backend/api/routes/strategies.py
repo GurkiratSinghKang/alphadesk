@@ -1484,15 +1484,34 @@ async def get_strategies_by_symbol(
         # because the per-strategy signal surface is async (Redis); pushing
         # it into the strategy class would force every strategy to learn
         # about Redis. Instead, after the no-op defaults we look up the
-        # cache here and override on hit. The cache is keyed by the snake_case
-        # registry name (``momentum_quality``) since that's what the daily
-        # ``UnifiedStrategyRunner`` writes under; we cross-walk the route's
-        # hyphenated id to that name via ``_ID_TO_NAME`` (already used a few
-        # lines up to look up the open ledger row). A miss -- including a
-        # Redis outage -- preserves the iter-11 falsy/None contract.
+        # cache here and override on hit. The cache key uses the strategy's
+        # own ``META.name`` (== ``self.name`` in the daily
+        # ``UnifiedStrategyRunner`` -- the runner factory does
+        # ``"name": meta.name`` so the writer and the class agree on the
+        # same string byte-for-byte). We deliberately *don't* use the
+        # dict-inverted ``_ID_TO_NAME`` here because ``_STRATEGY_NAME_TO_ID``
+        # has duplicate values (``vwap-strategy`` has both ``vwap`` and
+        # ``vwap_strategy`` aliases mapping to it), and ``{v: k for k, v in ...}``
+        # lossy-collapses those: last-write-wins picks ``vwap_strategy`` so the
+        # reader would look up ``signal_cache:vwap_strategy:SYMBOL:v1`` while the
+        # writer wrote ``signal_cache:vwap:SYMBOL:v1`` -- eternal cache miss.
+        # Falling back to ``ledger_name`` is fine for catalogue-only entries
+        # (claude-alpha, manual-discretionary) where no class is registered;
+        # there's no runner writing to the cache for those either.
+        # A miss -- including a Redis outage -- preserves the iter-11
+        # falsy/None contract.
+        cache_strategy_name: str | None = None
+        if instance is not None:
+            try:
+                cache_strategy_name = instance.META.name
+            except AttributeError:
+                cache_strategy_name = None
+        if cache_strategy_name is None:
+            cache_strategy_name = ledger_name
+
         try:
             from services.signal_cache import get_signal as _get_cached_signal
-            cached = await _get_cached_signal(ledger_name, sym_upper)
+            cached = await _get_cached_signal(cache_strategy_name, sym_upper)
         except Exception:
             cached = None
 
