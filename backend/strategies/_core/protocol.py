@@ -86,6 +86,64 @@ class Strategy(abc.ABC):
         """
         return {}
 
+    # ------------------------------------------------------------------ #
+    # Reverse-lookup hooks (T11 — symbols-page strategy band)            #
+    # ------------------------------------------------------------------ #
+    # The symbols-page reverse-lookup endpoint asks "for this symbol,
+    # what does each strategy think?". The four hooks below give each
+    # strategy a chance to answer without dragging the whole runner along.
+    #
+    # Defaults are deliberately conservative so an unmigrated strategy
+    # falls through to "in universe / no signal / no score / no side" —
+    # back-compat with iter 10's hardcoded defaults. Strategies that have
+    # a stable static universe (sector ETFs, pairs lists, factor seeds)
+    # SHOULD override ``is_in_universe`` so the symbols page doesn't
+    # render a sea of "watching" chips.
+    #
+    # ``has_entry_signal`` / ``signal_score`` / ``signal_side`` remain
+    # deferred globally — there is no per-strategy signal cache today
+    # (the daily pipeline writes ledger trades, not a "live signals"
+    # surface). When that surface lands, override these in each
+    # strategy or in a shared mixin.
+    def is_in_universe(self, symbol: str) -> bool:
+        """Return True if ``symbol`` is currently a candidate for this strategy.
+
+        Default is permissive (``True``). Override when the strategy has a
+        bounded static universe — sector ETFs, factor seeds, options-liquid
+        names — so the reverse-lookup card doesn't render every strategy
+        as "watching" for every ticker.
+
+        Pure / cheap. Called per-symbol on the symbols-page hot path; do
+        NOT touch I/O. Reading a module-level constant or short list is
+        fine; calling a provider is not.
+        """
+        return True
+
+    def has_entry_signal(self, symbol: str) -> bool:
+        """Return True if there is an actionable entry signal for ``symbol`` right now.
+
+        Default is conservative (``False``). The per-strategy signal cache
+        that would back this hook (last pipeline run → recommended
+        symbols) does not exist yet; once it does, strategies override
+        this to read from it.
+        """
+        return False
+
+    def signal_score(self, symbol: str) -> float | None:
+        """Return the entry-signal score for ``symbol`` if one is cached, else ``None``.
+
+        Default is ``None``. Pairs with ``has_entry_signal`` — when that
+        returns ``True``, this should return the corresponding score.
+        """
+        return None
+
+    def signal_side(self, symbol: str) -> Literal["long", "short"] | None:
+        """Return the side of the cached entry signal for ``symbol``, or ``None``.
+
+        Default is ``None``. Pairs with ``has_entry_signal``.
+        """
+        return None
+
 
 class StrategyMeta(BaseModel):
     """Registry metadata attached by @register_strategy. Frozen."""

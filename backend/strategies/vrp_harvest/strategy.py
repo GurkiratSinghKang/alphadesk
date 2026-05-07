@@ -68,6 +68,11 @@ class VRPHarvestStrategy(Strategy):
     def universe(self, asof: date, state: dict[str, Any]) -> list[str]:
         return [UNDERLYING]
 
+    # T11 reverse-lookup: VRP harvest is single-underlying — only the
+    # configured ``UNDERLYING`` (default SPY) is in-universe.
+    def is_in_universe(self, symbol: str) -> bool:
+        return symbol.upper() == UNDERLYING.upper()
+
     def run(
         self,
         input: StrategyInput,

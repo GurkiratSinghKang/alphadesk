@@ -73,6 +73,12 @@ class RegimeAdaptiveStrategy(Strategy):
     def universe(self, asof: date, state: dict[str, Any]) -> list[str]:
         return list(UNIVERSE) + list(SIGNAL_ONLY)
 
+    # T11 reverse-lookup: tradable universe is the fixed 8-name asset bucket
+    # (SPY/QQQ/EFA/IEF/TLT/GLD/BIL/VXX). VIXY is signal-only and not a
+    # candidate, so it's excluded from the user-facing universe filter.
+    def is_in_universe(self, symbol: str) -> bool:
+        return symbol.upper() in set(UNIVERSE)
+
     def run(
         self,
         input: StrategyInput,

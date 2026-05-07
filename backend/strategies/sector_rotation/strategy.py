@@ -85,6 +85,13 @@ class SectorRotationStrategy(Strategy):
         syms.add("SPY")
         return sorted(syms)
 
+    # T11 reverse-lookup: the user-facing universe is the 11 GICS sector
+    # SPDR ETFs only — the bond-fallback / SPY-probe symbols ride along
+    # for runtime needs but they're not "we trade these" candidates that
+    # belong on a symbol-page card.
+    def is_in_universe(self, symbol: str) -> bool:
+        return symbol.upper() in set(SECTOR_ETFS)
+
     # ------------------------------------------------------------------ #
     # Pure-function alpha                                                #
     # ------------------------------------------------------------------ #

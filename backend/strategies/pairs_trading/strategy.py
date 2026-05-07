@@ -222,6 +222,12 @@ class PairsTradingStrategy(Strategy):
         syms.update(held)
         return sorted(syms)
 
+    # T11 reverse-lookup: a symbol is in-universe iff it appears as a leg
+    # in the static within-sector pairs catalogue (the 49-ticker mega-cap
+    # universe spread across 6 sectors).
+    def is_in_universe(self, symbol: str) -> bool:
+        return symbol.upper() in set(UNIVERSE)
+
     # ------------------------------------------------------------------ #
     # Pure-function alpha                                                #
     # ------------------------------------------------------------------ #

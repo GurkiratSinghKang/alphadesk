@@ -64,6 +64,11 @@ class EarningsVolStrategy(Strategy):
     def universe(self, asof: date, state: dict[str, Any]) -> list[str]:
         return list(UNIVERSE)
 
+    # T11 reverse-lookup: 29-name liquid-options universe. Static — no
+    # asof or state dependency.
+    def is_in_universe(self, symbol: str) -> bool:
+        return symbol.upper() in set(UNIVERSE)
+
     def run(
         self,
         input: StrategyInput,

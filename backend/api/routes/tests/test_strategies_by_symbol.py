@@ -1,14 +1,16 @@
 """Tests for ``GET /api/v1/strategies/by-symbol/{symbol}``.
 
-Iteration-10 fix-loop: replaces the stub on the symbols ticker page with a
+Iteration-10 fix-loop: replaced the stub on the symbols ticker page with a
 read-only fan-out endpoint that asks "which strategies have this symbol in
 their universe / hold it / have an entry signal?".
 
-The MVP scope ships ``current_position`` from the trade ledger only;
-``in_universe`` is hardcoded True, and ``has_entry_signal`` / ``score`` /
-``side`` are hardcoded falsy until the per-strategy signal-cache integration
-lands. These tests pin that contract so the frontend doesn't get caught by a
-silent shape regression.
+Iteration-11 fix-loop: ``in_universe`` is now wired to per-strategy
+``Strategy.is_in_universe`` hooks. ``has_entry_signal`` / ``score`` / ``side``
+remain deferred globally — the per-strategy signal cache they would back
+hasn't been built yet.
+
+These tests pin the contract so the frontend doesn't get caught by a silent
+shape regression.
 """
 
 from __future__ import annotations
@@ -88,7 +90,14 @@ async def test_returns_one_match_per_known_strategy(monkeypatch: pytest.MonkeyPa
 async def test_no_open_positions_returns_null_position_for_all(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """User with no open positions in this symbol → all matches have current_position=None."""
+    """User with no open positions in this symbol → all matches have current_position=None.
+
+    ``in_universe`` is per-strategy as of iter 11 (mixed True/False across the
+    catalogue depending on which strategies' static universes contain NVDA).
+    ``has_entry_signal`` / ``score`` / ``side`` remain globally deferred
+    — every entry returns the conservative defaults until the per-strategy
+    signal cache lands.
+    """
     _patch_ledger(monkeypatch, rows=[])
     _patch_redis_noop(monkeypatch)
 
@@ -96,8 +105,9 @@ async def test_no_open_positions_returns_null_position_for_all(
 
     for m in resp.matches:
         assert m.current_position is None, f"Expected null position for {m.strategy_id}"
-        # MVP defaults
-        assert m.in_universe is True
+        # Per-strategy hooks return bool, not the iter-10 hardcoded True.
+        assert isinstance(m.in_universe, bool)
+        # Globally deferred — see module docstring.
         assert m.has_entry_signal is False
         assert m.score is None
         assert m.side is None
@@ -213,3 +223,124 @@ async def test_symbol_is_uppercased(monkeypatch: pytest.MonkeyPatch) -> None:
 
     resp = await strat_mod.get_strategies_by_symbol("nvda")
     assert resp.symbol == "NVDA"
+
+
+# ---------------------------------------------------------------------------
+# Iter 11 — per-strategy ``is_in_universe`` wiring
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_in_universe_true_for_strategy_whose_universe_contains_symbol(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sector-rotation universe is the 11 GICS sector ETFs → XLK is in.
+
+    Pins one of the iter-11 overrides: ``SectorRotationStrategy.is_in_universe``
+    returns True for sector ETFs and False for everything else.
+    """
+    _patch_ledger(monkeypatch, rows=[])
+    _patch_redis_noop(monkeypatch)
+
+    resp = await strat_mod.get_strategies_by_symbol("XLK")
+    by_id = {m.strategy_id: m for m in resp.matches}
+    assert by_id["sector-rotation"].in_universe is True
+
+
+@pytest.mark.asyncio
+async def test_in_universe_false_for_strategy_whose_universe_excludes_symbol(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-sector-ETF (NVDA) is NOT in sector-rotation's universe.
+
+    Bookend test for the override: NVDA is a Russell-1000 large-cap, not a
+    sector ETF, so sector-rotation reports ``in_universe=False``.
+    """
+    _patch_ledger(monkeypatch, rows=[])
+    _patch_redis_noop(monkeypatch)
+
+    resp = await strat_mod.get_strategies_by_symbol("NVDA")
+    by_id = {m.strategy_id: m for m in resp.matches}
+    assert by_id["sector-rotation"].in_universe is False
+    # vrp-harvesting is single-underlying SPY only — NVDA out.
+    assert by_id["vrp-harvesting"].in_universe is False
+    # Mega-cap NVDA IS in the pairs / momentum / earnings-vol universes.
+    assert by_id["pairs-trading"].in_universe is True
+    assert by_id["earnings-vol-premium"].in_universe is True
+
+
+@pytest.mark.asyncio
+async def test_in_universe_true_for_unmigrated_catalogue_entries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catalogue entries without a registered strategy class default to in-universe.
+
+    Iter-11 back-compat: a catalogue entry like ``claude-alpha`` doesn't
+    register a Strategy subclass, so the endpoint can't call
+    ``is_in_universe`` on it. We default to True (the iter-10 contract) so
+    those cards render rather than disappearing.
+    """
+    _patch_ledger(monkeypatch, rows=[])
+    _patch_redis_noop(monkeypatch)
+
+    resp = await strat_mod.get_strategies_by_symbol("XLK")
+    by_id = {m.strategy_id: m for m in resp.matches}
+    # ``claude-alpha`` exists in _STRATEGIES but is not a registered Strategy
+    # subclass. It must still appear with in_universe=True (back-compat).
+    assert "claude-alpha" in by_id
+    assert by_id["claude-alpha"].in_universe is True
+
+
+@pytest.mark.asyncio
+async def test_default_signal_hooks_return_falsy_until_cache_lands(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``has_entry_signal`` / ``score`` / ``side`` are globally deferred (iter 11).
+
+    Until a per-strategy signal cache exists, the default hook returns
+    ``False`` / ``None`` / ``None`` for every strategy and every symbol —
+    pin that so the frontend chip-state contract doesn't drift silently.
+    """
+    _patch_ledger(monkeypatch, rows=[])
+    _patch_redis_noop(monkeypatch)
+
+    resp = await strat_mod.get_strategies_by_symbol("NVDA")
+    for m in resp.matches:
+        assert m.has_entry_signal is False
+        assert m.score is None
+        assert m.side is None
+
+
+@pytest.mark.asyncio
+async def test_signal_hooks_pick_up_per_strategy_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When a strategy DOES override the signal hooks, those values flow through.
+
+    Patches ``has_entry_signal`` / ``signal_score`` / ``signal_side`` on a
+    representative strategy class to assert the endpoint reads from the
+    overrides — proving that wiring a real signal cache is one method
+    override per strategy, no route edit.
+    """
+    _patch_ledger(monkeypatch, rows=[])
+    _patch_redis_noop(monkeypatch)
+
+    from strategies.registry import get_strategy
+
+    cls = get_strategy("momentum_quality")
+    monkeypatch.setattr(cls, "has_entry_signal", lambda self, sym: sym == "NVDA")
+    monkeypatch.setattr(cls, "signal_score", lambda self, sym: 0.87 if sym == "NVDA" else None)
+    monkeypatch.setattr(cls, "signal_side", lambda self, sym: "long" if sym == "NVDA" else None)
+
+    resp = await strat_mod.get_strategies_by_symbol("NVDA")
+    by_id = {m.strategy_id: m for m in resp.matches}
+    momentum = by_id["momentum-quality"]
+    assert momentum.has_entry_signal is True
+    assert momentum.score == pytest.approx(0.87)
+    assert momentum.side == "long"
+
+    # No leakage to other strategies.
+    for sid, m in by_id.items():
+        if sid == "momentum-quality":
+            continue
+        assert m.has_entry_signal is False, f"{sid} unexpectedly inherited the patch"

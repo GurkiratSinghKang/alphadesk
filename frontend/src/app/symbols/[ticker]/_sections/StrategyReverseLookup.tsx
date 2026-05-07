@@ -10,40 +10,41 @@ const SKELETON_CARDS = Array.from({ length: 6 }, (_, i) => i);
 
 // T11: render the "live signals on this symbol across our strategies"
 // section on /symbols/[ticker]. Replaces the StrategyReverseLookupStub.
-// Strategies that aren't in this symbol's universe are filtered out
-// entirely — the card grid shows only strategies that have something to
-// say (holding it, signal active, or in universe with no signal).
+//
+// Iter 11 distinguishes 4 chip states; only the first 3 ever render — a
+// strategy whose universe excludes the symbol is filtered out entirely
+// rather than rendered as a "Not in universe" card (cap on the grid is
+// already 12; spending a slot on "we don't trade this here" wouldn't earn
+// its keep). Order is holding → signal → watching, alphabetical within.
 export interface StrategyReverseLookupProps {
   symbol: string;
 }
 
-type StrategyStatus = "holding" | "signal" | "watching";
+type StrategyStatus = "holding" | "signal" | "watching" | "out";
 
 interface StrategyCardModel {
   match: StrategyMatch;
-  status: StrategyStatus;
+  status: Exclude<StrategyStatus, "out">;
 }
 
-function classifyMatch(match: StrategyMatch): StrategyStatus | null {
+function classifyMatch(match: StrategyMatch): StrategyStatus {
   if (match.currentPosition) return "holding";
   if (match.hasEntrySignal) return "signal";
   if (match.inUniverse) return "watching";
-  return null;
+  return "out";
 }
 
-function statusChipClass(status: StrategyStatus): string {
-  switch (status) {
-    case "holding":
-      // Green = open position
-      return "bg-up-500/10 text-up-500 border-up-500/30";
-    case "signal":
-      // Brand = entry signal
-      return "bg-brand-tint text-brand-dim border border-border-hair";
-    case "watching":
-      // Muted = in universe, no signal
-      return "bg-bg u-muted border border-border-hair";
-  }
-}
+// Chip tone constants — keep in one place so the 4 statuses share the
+// same vocabulary (positive / brand / muted) rather than each one
+// reinventing colour utilities inline.
+const STATUS_CHIP_CLASS: Record<Exclude<StrategyStatus, "out">, string> = {
+  // Green = open position
+  holding: "bg-up-500/10 text-up-500 border-up-500/30",
+  // Brand = active entry signal
+  signal: "bg-brand-tint text-brand-dim border border-border-hair",
+  // Muted = in universe, no signal yet
+  watching: "bg-bg u-muted border border-border-hair",
+};
 
 function formatStatusLabel(card: StrategyCardModel): string {
   const { match, status } = card;
@@ -53,8 +54,16 @@ function formatStatusLabel(card: StrategyCardModel): string {
     const sign = qty < 0 ? "-" : "";
     return `${sideLabel} ${sign}${Math.abs(qty)} ${Math.abs(qty) === 1 ? "share" : "shares"}`;
   }
-  if (status === "signal") return "Entry signal active";
-  return "In universe, no signal";
+  if (status === "signal") {
+    // Iter 11: prefer "Active signal · {side} · score {score}" when both
+    // are present; degrade gracefully when the signal cache hasn't filled
+    // those fields in yet (it currently never does — see backend deferral).
+    const parts: string[] = ["Active signal"];
+    if (match.side) parts.push(match.side);
+    if (typeof match.score === "number") parts.push(`score ${match.score.toFixed(2)}`);
+    return parts.join(" · ");
+  }
+  return "In universe";
 }
 
 function StrategyCard({ card }: { card: StrategyCardModel }) {
@@ -78,9 +87,7 @@ function StrategyCard({ card }: { card: StrategyCardModel }) {
       <div className="flex items-start justify-between gap-2">
         <h3 className="t-mono text-label leading-tight">{match.name}</h3>
         <span
-          className={`t-mono text-micro rounded-xs px-1.5 py-0.5 whitespace-nowrap ${statusChipClass(
-            status,
-          )}`}
+          className={`t-mono text-micro rounded-xs px-1.5 py-0.5 whitespace-nowrap ${STATUS_CHIP_CLASS[status]}`}
           data-slot="strategy-status-chip"
         >
           {formatStatusLabel(card)}
@@ -146,12 +153,18 @@ export function StrategyReverseLookup({ symbol }: StrategyReverseLookupProps) {
   const cards: StrategyCardModel[] = query.data.matches
     .map((m) => {
       const status = classifyMatch(m);
-      return status ? { match: m, status } : null;
+      // ``out`` = not in universe → drop the card entirely.
+      if (status === "out") return null;
+      return { match: m, status } satisfies StrategyCardModel;
     })
     .filter((c): c is StrategyCardModel => c !== null)
     // Holding > entry signal > watching, then alphabetical within bucket.
     .sort((a, b) => {
-      const order: Record<StrategyStatus, number> = { holding: 0, signal: 1, watching: 2 };
+      const order: Record<Exclude<StrategyStatus, "out">, number> = {
+        holding: 0,
+        signal: 1,
+        watching: 2,
+      };
       const delta = order[a.status] - order[b.status];
       if (delta !== 0) return delta;
       return a.match.name.localeCompare(b.match.name);
