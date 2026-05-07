@@ -33,17 +33,17 @@ const VIEWPORTS = {
 // skipped. New cases will need a `--update-baseline` run on first execution.
 const CASES = [
   // Authenticated app
-  { name: "dashboard-desktop", path: "/", viewport: "desktop-1440" },
-  { name: "trade-desktop", path: "/trade", viewport: "desktop-1440" },
-  { name: "strategies-desktop", path: "/strategies", viewport: "desktop-1440" },
-  { name: "strategies-detail-desktop", path: "/strategies/momentum-quality", viewport: "desktop-1440" },
-  { name: "strategies-earnings-desktop", path: "/strategies/earnings-options-play", viewport: "desktop-1440" },
-  { name: "strategies-tar-desktop", path: "/strategies/trading-agents-research", viewport: "desktop-1440" },
-  { name: "analytics-desktop", path: "/analytics", viewport: "desktop-1440" },
-  { name: "alerts-desktop", path: "/alerts", viewport: "desktop-1440" },
-  { name: "pipeline-desktop", path: "/pipeline", viewport: "desktop-1440" },
-  { name: "reports-desktop", path: "/reports", viewport: "desktop-1440" },
-  { name: "settings-desktop", path: "/settings", viewport: "desktop-1440" },
+  { name: "dashboard-desktop", path: "/", viewport: "desktop-1440", requiresAuth: true },
+  { name: "trade-desktop", path: "/trade", viewport: "desktop-1440", requiresAuth: true },
+  { name: "strategies-desktop", path: "/strategies", viewport: "desktop-1440", requiresAuth: true },
+  { name: "strategies-detail-desktop", path: "/strategies/momentum-quality", viewport: "desktop-1440", requiresAuth: true },
+  { name: "strategies-earnings-desktop", path: "/strategies/earnings-options-play", viewport: "desktop-1440", requiresAuth: true },
+  { name: "strategies-tar-desktop", path: "/strategies/trading-agents-research", viewport: "desktop-1440", requiresAuth: true },
+  { name: "analytics-desktop", path: "/analytics", viewport: "desktop-1440", requiresAuth: true },
+  { name: "alerts-desktop", path: "/alerts", viewport: "desktop-1440", requiresAuth: true },
+  { name: "pipeline-desktop", path: "/pipeline", viewport: "desktop-1440", requiresAuth: true },
+  { name: "reports-desktop", path: "/reports", viewport: "desktop-1440", requiresAuth: true },
+  { name: "settings-desktop", path: "/settings", viewport: "desktop-1440", requiresAuth: true },
   // Public / auth-adjacent
   { name: "login-desktop", path: "/login", viewport: "desktop-1440" },
   { name: "login-reset-desktop", path: "/login/reset", viewport: "desktop-1440" },
@@ -60,13 +60,13 @@ const CASES = [
   // (UI-SPEC §5) which is currently the only end-to-end ETF render check.
   // Harness has no tablet-820 viewport; spec called for one but only
   // desktop-1440 + mobile-390 exist, so we cover both available sizes.
-  { name: "symbols-nvda-desktop", path: "/symbols/NVDA", viewport: "desktop-1440" },
-  { name: "symbols-nvda-mobile", path: "/symbols/NVDA", viewport: "mobile-390" },
-  { name: "symbols-spy-desktop", path: "/symbols/SPY", viewport: "desktop-1440" },
-  { name: "symbols-spy-mobile", path: "/symbols/SPY", viewport: "mobile-390" },
+  { name: "symbols-nvda-desktop", path: "/symbols/NVDA", viewport: "desktop-1440", requiresAuth: true },
+  { name: "symbols-nvda-mobile", path: "/symbols/NVDA", viewport: "mobile-390", requiresAuth: true },
+  { name: "symbols-spy-desktop", path: "/symbols/SPY", viewport: "desktop-1440", requiresAuth: true },
+  { name: "symbols-spy-mobile", path: "/symbols/SPY", viewport: "mobile-390", requiresAuth: true },
   // Mobile spot-checks for the highest-traffic surfaces
-  { name: "dashboard-mobile", path: "/", viewport: "mobile-390" },
-  { name: "trade-mobile", path: "/trade", viewport: "mobile-390" },
+  { name: "dashboard-mobile", path: "/", viewport: "mobile-390", requiresAuth: true },
+  { name: "trade-mobile", path: "/trade", viewport: "mobile-390", requiresAuth: true },
 ];
 
 const FIRST_VIEWPORT_EXPECTATIONS = {
@@ -238,8 +238,7 @@ async function maybeLogin(context, base) {
   const user = process.env.ALPHADESK_TEST_USER;
   const pass = process.env.ALPHADESK_TEST_PASS;
   if (!user || !pass) {
-    await seedVisualAuthCookie(context, base);
-    return;
+    return { authenticated: false, reason: "missing ALPHADESK_TEST_USER / ALPHADESK_TEST_PASS" };
   }
 
   const page = await context.newPage();
@@ -251,32 +250,22 @@ async function maybeLogin(context, base) {
       page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 15_000 }).catch(() => {}),
       page.locator("button[type=submit]").click(),
     ]);
+
+    const session = await context.request.get(`${base}/api/v1/auth/session`, { timeout: 10_000 }).catch(() => null);
+    if (session?.ok()) return { authenticated: true, reason: "session verified" };
+
+    const errorText = await page
+      .locator("[role='alert']")
+      .first()
+      .textContent({ timeout: 1_000 })
+      .catch(() => "");
+    return {
+      authenticated: false,
+      reason: errorText?.trim() || `login did not create a session${session ? ` (${session.status()})` : ""}`,
+    };
   } finally {
     await page.close().catch(() => {});
   }
-}
-
-function createVisualAccessToken() {
-  const encode = (payload) => Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const header = encode({ alg: "none", typ: "JWT" });
-  const body = encode({
-    exp: Math.floor(Date.now() / 1000) + 60 * 60,
-    role: "admin",
-    sub: "visual-regression",
-  });
-  return `${header}.${body}.`;
-}
-
-async function seedVisualAuthCookie(context, base) {
-  await context.addCookies([
-    {
-      name: "access_token",
-      value: createVisualAccessToken(),
-      url: base,
-      sameSite: "Lax",
-      httpOnly: true,
-    },
-  ]);
 }
 
 function normalizeText(value) {
@@ -631,11 +620,121 @@ async function auditContrastAndReadability(page, args) {
     colorCanvas.height = 1;
     const colorContext = colorCanvas.getContext("2d");
 
+    function clamp(value, min = 0, max = 1) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function parsePercentOrNumber(value, percentBase = 1) {
+      const text = String(value ?? "").trim();
+      if (!text) return 0;
+      if (text.endsWith("%")) return (Number.parseFloat(text) / 100) * percentBase;
+      return Number.parseFloat(text) || 0;
+    }
+
+    function parseAlpha(value) {
+      if (value == null || value === "") return 1;
+      return clamp(parsePercentOrNumber(value));
+    }
+
+    function parseHue(value) {
+      const text = String(value ?? "0").trim().toLowerCase();
+      const number = Number.parseFloat(text) || 0;
+      if (text.endsWith("rad")) return number * (180 / Math.PI);
+      if (text.endsWith("turn")) return number * 360;
+      if (text.endsWith("grad")) return number * 0.9;
+      return number;
+    }
+
+    function linearToSrgb(value) {
+      const channel = value <= 0.0031308
+        ? 12.92 * value
+        : 1.055 * (value ** (1 / 2.4)) - 0.055;
+      return Math.round(clamp(channel) * 255);
+    }
+
+    function oklabToRgb(l, a, b, alpha = 1) {
+      const lPrime = l + 0.3963377774 * a + 0.2158037573 * b;
+      const mPrime = l - 0.1055613458 * a - 0.0638541728 * b;
+      const sPrime = l - 0.0894841775 * a - 1.2914855480 * b;
+      const lCube = lPrime ** 3;
+      const mCube = mPrime ** 3;
+      const sCube = sPrime ** 3;
+      return {
+        r: linearToSrgb(4.0767416621 * lCube - 3.3077115913 * mCube + 0.2309699292 * sCube),
+        g: linearToSrgb(-1.2684380046 * lCube + 2.6097574011 * mCube - 0.3413193965 * sCube),
+        b: linearToSrgb(-0.0041960863 * lCube - 0.7034186147 * mCube + 1.7076147010 * sCube),
+        a: alpha,
+      };
+    }
+
+    function parseFunctionalColor(value) {
+      const text = String(value ?? "").trim().toLowerCase();
+
+      const rgbMatch = text.match(/^rgba?\((.*)\)$/i);
+      if (rgbMatch) {
+        const [channels, alphaPart] = rgbMatch[1].split("/").map((part) => part.trim());
+        const parts = channels.includes(",")
+          ? channels.split(",").map((part) => part.trim())
+          : channels.split(/\s+/).filter(Boolean);
+        return {
+          r: Math.round(clamp(parsePercentOrNumber(parts[0], 255), 0, 255)),
+          g: Math.round(clamp(parsePercentOrNumber(parts[1], 255), 0, 255)),
+          b: Math.round(clamp(parsePercentOrNumber(parts[2], 255), 0, 255)),
+          a: parseAlpha(alphaPart ?? parts[3]),
+        };
+      }
+
+      const srgbMatch = text.match(/^color\(\s*srgb\s+(.+)\)$/i);
+      if (srgbMatch) {
+        const [channels, alphaPart] = srgbMatch[1].split("/").map((part) => part.trim());
+        const parts = channels.split(/\s+/).filter(Boolean);
+        return {
+          r: Math.round(clamp(parsePercentOrNumber(parts[0]), 0, 1) * 255),
+          g: Math.round(clamp(parsePercentOrNumber(parts[1]), 0, 1) * 255),
+          b: Math.round(clamp(parsePercentOrNumber(parts[2]), 0, 1) * 255),
+          a: parseAlpha(alphaPart),
+        };
+      }
+
+      const oklabMatch = text.match(/^oklab\((.*)\)$/i);
+      if (oklabMatch) {
+        const [channels, alphaPart] = oklabMatch[1].split("/").map((part) => part.trim());
+        const parts = channels.split(/\s+/).filter(Boolean);
+        return oklabToRgb(
+          parsePercentOrNumber(parts[0]),
+          parsePercentOrNumber(parts[1]),
+          parsePercentOrNumber(parts[2]),
+          parseAlpha(alphaPart),
+        );
+      }
+
+      const oklchMatch = text.match(/^oklch\((.*)\)$/i);
+      if (oklchMatch) {
+        const [channels, alphaPart] = oklchMatch[1].split("/").map((part) => part.trim());
+        const parts = channels.split(/\s+/).filter(Boolean);
+        const lightness = parsePercentOrNumber(parts[0]);
+        const chroma = parsePercentOrNumber(parts[1]);
+        const hueRadians = (parseHue(parts[2]) * Math.PI) / 180;
+        return oklabToRgb(
+          lightness,
+          chroma * Math.cos(hueRadians),
+          chroma * Math.sin(hueRadians),
+          parseAlpha(alphaPart),
+        );
+      }
+
+      return null;
+    }
+
     function parseColor(value) {
       if (!value || !colorContext) return { r: 0, g: 0, b: 0, a: 0 };
+      const direct = parseFunctionalColor(value);
+      if (direct) return direct;
       colorContext.fillStyle = "#000000";
       colorContext.fillStyle = value;
       const parsed = colorContext.fillStyle;
+      const functional = parseFunctionalColor(parsed);
+      if (functional) return functional;
       if (parsed.startsWith("#")) {
         const hex = parsed.slice(1);
         const full = hex.length === 3
@@ -648,15 +747,7 @@ async function auditContrastAndReadability(page, args) {
           a: 1,
         };
       }
-      const match = parsed.match(/rgba?\(([^)]+)\)/i);
-      if (!match) return { r: 0, g: 0, b: 0, a: 0 };
-      const parts = match[1].split(",").map((part) => part.trim());
-      return {
-        r: Number(parts[0]) || 0,
-        g: Number(parts[1]) || 0,
-        b: Number(parts[2]) || 0,
-        a: parts[3] == null ? 1 : Number(parts[3]),
-      };
+      return { r: 0, g: 0, b: 0, a: 0 };
     }
 
     function composite(top, bottom) {
@@ -869,11 +960,22 @@ async function main() {
     window.localStorage?.setItem("alphadesk.onboarding_dismissed", "true");
   });
 
-  await maybeLogin(context, args.base);
+  const authState = await maybeLogin(context, args.base);
 
   const results = [];
   try {
     for (const item of cases) {
+      if (item.requiresAuth && !authState.authenticated) {
+        results.push({
+          ...item,
+          status: "skipped-auth",
+          auth: authState,
+          quality: { status: "skipped", checks: [] },
+        });
+        console.warn(`[visual] skip ${item.name} auth=${authState.reason}`);
+        continue;
+      }
+
       const viewport = VIEWPORTS[item.viewport];
       const page = await context.newPage();
       await page.setViewportSize({ width: viewport.width, height: viewport.height });

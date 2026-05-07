@@ -631,6 +631,9 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Install visual comparison dependencies
+        run: python3 -m pip install --user Pillow
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 

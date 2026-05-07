@@ -625,8 +625,10 @@ button:active { transform: scale(0.98); }
   --auth-fg: #12281f;          /* primary text */
   --auth-fg-strong: #12281f;   /* same as fg here */
   --auth-fg-dim: #40574c;      /* body dim */
-  --auth-fg-muted: #5d7268;    /* secondary text */
-  --auth-fg-soft: #8b9a91;     /* hint text */
+  --auth-fg-muted: #53675e;    /* secondary text */
+  --auth-fg-soft: #66766d;     /* hint text */
+  --fs-eyebrow: 12px;          /* auth pages are public, keep micro-copy AA-readable */
+  --text-eyebrow: 12px;        /* auth pages are public, keep micro-copy AA-readable */
   --auth-bg: #f8f7ef;          /* canvas (porcelain) */
   --auth-bg-card: #ffffff;     /* card surface */
   --auth-bg-soft: #f7fbf4;     /* palest sage tint */
@@ -646,9 +648,11 @@ button:active { transform: scale(0.98); }
 
   position: relative;
   isolation: isolate;
+  background-color: var(--auth-bg);
   background:
     linear-gradient(118deg, color-mix(in oklab, var(--auth-primary) 16%, transparent) 0%, transparent 34%, color-mix(in oklab, var(--auth-fg) 8%, transparent) 72%, transparent 100%),
-    linear-gradient(180deg, #fbfaf4 0%, #edf6ec 48%, #f7f5ed 100%);
+    linear-gradient(180deg, #fbfaf4 0%, #edf6ec 48%, #f7f5ed 100%),
+    var(--auth-bg);
   color: var(--auth-fg);
 }
 

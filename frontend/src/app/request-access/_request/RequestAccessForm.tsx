@@ -193,8 +193,8 @@ export default function RequestAccessForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-      <div className="border-b border-[var(--auth-border)] pb-5">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <div className="border-b border-[var(--auth-border)] pb-4">
         <p className="font-mono text-eyebrow font-semibold uppercase tracking-[0.18em] text-[var(--auth-primary)]">
           Access intake
         </p>
@@ -218,7 +218,7 @@ export default function RequestAccessForm() {
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
           <label htmlFor="request-name" className={labelClass}>Name</label>
           <input
@@ -246,7 +246,7 @@ export default function RequestAccessForm() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
           <label htmlFor="request-firm" className={labelClass}>Firm or context</label>
           <input
@@ -269,7 +269,7 @@ export default function RequestAccessForm() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
           <label htmlFor="request-jurisdiction" className={labelClass}>Trading jurisdiction</label>
           <input
@@ -364,7 +364,7 @@ export default function RequestAccessForm() {
           id="request-note"
           value={form.note}
           onChange={(e) => update("note", e.target.value)}
-          className="min-h-32 w-full resize-y rounded-[8px] border border-[var(--auth-border)] bg-white/80 px-4 py-3 font-sans text-body leading-normal text-[var(--auth-fg)] outline-none transition-colors placeholder:text-[var(--auth-fg-soft)] focus-visible:border-[var(--auth-primary)] focus-visible:shadow-[0_0_0_4px_rgba(15,122,93,0.15)]"
+          className="min-h-24 w-full resize-y rounded-[8px] border border-[var(--auth-border)] bg-white/80 px-4 py-3 font-sans text-body leading-normal text-[var(--auth-fg)] outline-none transition-colors placeholder:text-[var(--auth-fg-soft)] focus-visible:border-[var(--auth-primary)] focus-visible:shadow-[0_0_0_4px_rgba(15,122,93,0.15)]"
           placeholder="Describe the strategy work, execution needs, and what would make AlphaDesk useful."
           required
         />
@@ -398,7 +398,7 @@ export default function RequestAccessForm() {
         size="lg"
         variant="primary"
         disabled={!canSubmit || state === "loading"}
-        className="h-12 rounded-[8px]"
+        className="h-12 rounded-[8px] disabled:bg-[var(--auth-border-soft)] disabled:text-[var(--auth-fg)] disabled:opacity-100"
       >
         {state === "loading" ? (
           <CircleNotch className="mr-2 h-4 w-4 animate-spin" aria-hidden weight="regular" />

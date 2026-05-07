@@ -440,7 +440,7 @@ export default function LoginForm() {
         type="submit"
         size="lg"
         variant="primary"
-        className="mt-1 h-12 w-full rounded-[8px] font-sans text-body font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_1px_2px_rgba(0,0,0,0.08)]"
+        className="mt-1 h-12 w-full rounded-[8px] font-sans text-body font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_1px_2px_rgba(0,0,0,0.08)] disabled:bg-[var(--auth-border-soft)] disabled:text-[var(--auth-fg)] disabled:opacity-100"
         disabled={disabled}
       >
         {loading ? (
