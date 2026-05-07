@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Check, Plus, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -76,12 +77,27 @@ export interface WatchlistProps {
 }
 
 export function Watchlist({ symbols, className }: WatchlistProps) {
+  const router = useRouter();
   const storeWatchlist = useMarketStore((s) => s.watchlist);
   const addToWatchlist = useMarketStore((s) => s.addToWatchlist);
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
   const [isAdding, setIsAdding] = React.useState(false);
   const [draftSymbol, setDraftSymbol] = React.useState("");
+
+  // 2026-05-07: clicking a watchlist row used to set the global
+  // `selectedSymbol` and let the dashboard's local chart pane respond.
+  // The product direction is now: tickers anywhere in the app route to
+  // the dedicated /symbols/[ticker] research page. We still write the
+  // global selection so the destination page can pre-light the right
+  // row when the user navigates back.
+  const handleSelect = React.useCallback(
+    (sym: string) => {
+      setSelectedSymbol(sym);
+      router.push(`/symbols/${encodeURIComponent(sym)}`);
+    },
+    [router, setSelectedSymbol],
+  );
 
   // Clamp to the hard cap so callers and persisted state can't push past 12.
   const list = React.useMemo(() => {
@@ -102,9 +118,9 @@ export function Watchlist({ symbols, className }: WatchlistProps) {
     e.preventDefault();
     if (addDisabled) return;
     addToWatchlist(draft);
-    setSelectedSymbol(draft);
     setDraftSymbol("");
     setIsAdding(false);
+    handleSelect(draft);
   }
 
   // Sparkline closes per symbol. We fetch each row's bars once on first
@@ -219,7 +235,7 @@ export function Watchlist({ symbols, className }: WatchlistProps) {
             key={symbol}
             symbol={symbol}
             selected={symbol === selectedSymbol}
-            onSelect={setSelectedSymbol}
+            onSelect={handleSelect}
             sparkCloses={sparkData[symbol]}
           />
         ))}

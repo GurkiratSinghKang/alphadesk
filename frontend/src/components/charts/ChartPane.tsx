@@ -53,6 +53,12 @@ export interface ChartPaneProps {
   isLoading?: boolean;
   error?: boolean;
   onRetry?: () => void;
+  /** Forwarded to TradingChart — fires when the user pans near the
+   *  leftmost loaded bar so the parent can fetch & merge older bars. */
+  onLoadMoreHistory?: () => void;
+  /** True while a load-more fetch is in flight. Suppresses repeated
+   *  triggers from the chart's pan callback. */
+  loadingMoreHistory?: boolean;
   className?: string;
 }
 
@@ -369,6 +375,8 @@ export default function ChartPane({
   isLoading,
   error,
   onRetry,
+  onLoadMoreHistory,
+  loadingMoreHistory,
   className,
 }: ChartPaneProps) {
   // Slice-16 / TPL-1 (2026 design brief, TradingView "Save Layout"): the
@@ -1327,8 +1335,11 @@ export default function ChartPane({
           })}
         </div>
 
-        {/* Canvas */}
-        <div className="flex-1 relative min-h-[260px] min-w-0">
+        {/* Canvas — min-height bumped 260 → 440 (2026-05-07) so the
+            inner chart pane respects the new outer 480/620px container.
+            Without this bump the flex-1 child could collapse under
+            indicator/volume overlays on tall layouts. */}
+        <div className="flex-1 relative min-h-[440px] min-w-0">
           {error ? (
             <div
               role="alert"
@@ -1453,6 +1464,8 @@ export default function ChartPane({
                 onAlertHover={(price, y) =>
                   setAlertHover(price != null && y != null ? { price, y } : null)
                 }
+                onLoadMoreHistory={onLoadMoreHistory}
+                loadingMoreHistory={loadingMoreHistory}
               />
               <TradeOverlayLayer
                 overlays={tradeOverlays}

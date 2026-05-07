@@ -26,6 +26,7 @@ vi.mock("lightweight-charts", () => ({
     timeScale: () => ({
       fitContent: () => {},
       subscribeVisibleTimeRangeChange: () => {},
+      subscribeVisibleLogicalRangeChange: () => {},
     }),
     priceScale: () => ({ applyOptions: () => {} }),
     applyOptions: () => {},

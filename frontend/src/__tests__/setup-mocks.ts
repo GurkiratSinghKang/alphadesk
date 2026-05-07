@@ -45,6 +45,7 @@ vi.mock('lightweight-charts', () => ({
       fitContent: vi.fn(),
       scrollToRealTime: vi.fn(),
       subscribeVisibleTimeRangeChange: vi.fn(),
+      subscribeVisibleLogicalRangeChange: vi.fn(),
       timeToCoordinate: vi.fn(() => 0),
     }),
     priceScale: () => ({ applyOptions: vi.fn() }),

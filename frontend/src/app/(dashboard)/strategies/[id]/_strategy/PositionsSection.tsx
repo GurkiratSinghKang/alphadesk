@@ -129,7 +129,7 @@ export default function PositionsSection({
                       landed. The date caption was also below the 11px floor
                       (10.5px); lifted to 12px via `t-meta`. */}
                   <Link
-                    href={`/trade?symbol=${p.symbol}`}
+                    href={`/symbols/${encodeURIComponent(p.symbol)}`}
                     className={cn(
                       "rounded-sm font-sans text-body font-semibold text-fg transition-colors hover:text-primary",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"

@@ -63,6 +63,11 @@ export interface PriceChartPanelProps {
   density?: "standard" | "execution";
   tradeOverlays?: ChartTradeOverlay[];
   chartOrderPlacement?: ChartOrderPlacement | null;
+  /** Forwarded to the underlying TradingChart — fires when the chart pans
+   *  near the leftmost loaded bar so the parent can fetch older history. */
+  onLoadMoreHistory?: () => void;
+  /** True while a load-more fetch is in flight. */
+  loadingMoreHistory?: boolean;
   className?: string;
 }
 
@@ -118,7 +123,7 @@ function DashSpan({ size = 13 }: { size?: number }) {
 
 export default function PriceChartPanel({
   symbol, quote, meta, series,
-  activeRange, onRangeChange, isLoading, error, onRetry, density = "standard", tradeOverlays, chartOrderPlacement, className,
+  activeRange, onRangeChange, isLoading, error, onRetry, density = "standard", tradeOverlays, chartOrderPlacement, onLoadMoreHistory, loadingMoreHistory, className,
 }: PriceChartPanelProps) {
   const last = numberOrNull(quote.last);
   const change = numberOrNull(quote.change);
@@ -272,18 +277,24 @@ export default function PriceChartPanel({
         </div>
       </div>
 
+      {/* Chart canvas height: standard density doubled from the prior
+          220px (which only fit ~10 candles vertically and looked like
+          a sparkline) to 540px so bars get vertical breathing room and
+          the indicator/volume overlays don't overlap the price axis.
+          Execution density bumped from 420px → 620px so the trade
+          workspace chart owns the page like a desktop terminal. */}
       <div
         className={cn(
           "relative flex flex-1 flex-col",
           executionDensity
-            ? "min-h-[420px] bg-bg px-3 py-3 text-fg md:px-4 md:py-4"
-            : "min-h-[220px] px-4 py-4 md:px-7",
+            ? "min-h-[620px] bg-bg px-3 py-3 text-fg md:px-4 md:py-4"
+            : "min-h-[480px] px-4 py-4 md:min-h-[540px] md:px-7",
         )}
       >
         {error ? (
           <div
             role={executionDensity ? "status" : "alert"}
-            className="flex flex-col items-center justify-center gap-2.5 h-full min-h-[200px]"
+            className="flex flex-col items-center justify-center gap-2.5 h-full min-h-[440px]"
           >
             <span
               className={cn("font-sans text-body-sm font-medium", executionDensity ? "text-fg" : "italic text-fg-muted")}
@@ -315,12 +326,15 @@ export default function PriceChartPanel({
           <div
             role="status"
             aria-label="Loading chart data"
-            className={cn("h-[200px] w-full animate-pulse rounded-md", executionDensity ? "bg-bg-elev-2" : "bg-bg-elev-1")}
+            className={cn(
+              "w-full animate-pulse rounded-md",
+              executionDensity ? "h-[600px] bg-bg-elev-2" : "h-[440px] md:h-[500px] bg-bg-elev-1",
+            )}
           >
             <span className="sr-only">Loading chart data…</span>
           </div>
         ) : series.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-1 text-center h-full min-h-[200px]">
+          <div className="flex flex-col items-center justify-center gap-1 text-center h-full min-h-[440px]">
             <span
               className={cn("font-display text-body", executionDensity ? "text-fg-muted" : "italic text-fg-muted")}
               style={{ letterSpacing: 0 }}
@@ -343,6 +357,8 @@ export default function PriceChartPanel({
             marketDepth={marketDepth}
             tradeOverlays={tradeOverlays}
             chartOrderPlacement={chartOrderPlacement}
+            onLoadMoreHistory={onLoadMoreHistory}
+            loadingMoreHistory={loadingMoreHistory}
           />
         )}
       </div>
