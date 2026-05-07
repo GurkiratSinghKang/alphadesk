@@ -9,10 +9,15 @@ Covers:
 * B2.3  — earnings category gating: only tags EARNINGS when the title
           mentions the symbol or company.
 * B2.4  — near-duplicate dedupe via Jaccard similarity + 24h window.
+* V1.1  — demo articles must not leak to production. When NEWSDATA_API_KEY
+          is configured but the provider errors / rate-limits, callers must
+          see an empty result, not fake "Wall Street consensus" headlines
+          with empty hrefs.
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -28,6 +33,7 @@ from services.news import (
     _resolve_source,
     _tighten_earnings_category,
     compute_relevance,
+    fetch_symbol_news,
 )
 
 
@@ -324,3 +330,75 @@ class TestDedupSimilarArticles:
         assert len(out) == 2
         for a in out:
             assert a.duplicate_count == 0
+
+
+# ── V1.1 — demo articles must not leak to production ─────────────────────────
+
+class TestDemoFallbackOnlyWhenKeyMissing:
+    """When NEWSDATA_API_KEY is configured, an empty/errored fetch must
+    surface as an empty result — not as fake demo headlines with empty
+    hrefs. Demo articles are a development affordance for environments
+    without an API key, not a fallback for transient provider failures.
+
+    Live evidence from /symbols/TSLA: users were seeing five plausible-
+    looking headlines (e.g. "TSLA dividend increase signals management
+    confidence" — Tesla doesn't pay a dividend) with ``href=""`` and
+    relevance score 0.00, indistinguishable from real news.
+    """
+
+    @staticmethod
+    def _key_secret(value: str):
+        class _Key:
+            def __init__(self, v: str) -> None:
+                self._v = v
+
+            def get_secret_value(self) -> str:
+                return self._v
+
+        return _Key(value)
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_when_provider_empty_and_key_configured(self):
+        """The production failure mode: provider returned [] (rate-limit /
+        timeout / HTTP error / etc.) but the key is configured. Result
+        must be an empty article list, never demo headlines."""
+        from core.config import settings
+
+        original_key = settings.NEWSDATA_API_KEY
+        try:
+            settings.NEWSDATA_API_KEY = self._key_secret("configured-real-key")  # type: ignore[assignment]
+
+            with patch("services.news._fetch_newsdata", AsyncMock(return_value=[])), \
+                 patch("core.redis.cache_get", AsyncMock(return_value=None)), \
+                 patch("core.redis.cache_set", AsyncMock()):
+                resp = await fetch_symbol_news("TSLA", limit=5)
+        finally:
+            settings.NEWSDATA_API_KEY = original_key
+
+        assert resp.is_demo is False, (
+            "Configured API key + empty provider response must NOT serve "
+            "demo articles — that's how fake headlines reached production"
+        )
+        assert resp.articles == []
+        assert resp.count == 0
+
+    @pytest.mark.asyncio
+    async def test_serves_demo_when_key_truly_missing(self):
+        """Local-dev contract preserved: when NEWSDATA_API_KEY is empty
+        (no key configured), demo articles still render so the page is
+        not blank in development."""
+        from core.config import settings
+
+        original_key = settings.NEWSDATA_API_KEY
+        try:
+            settings.NEWSDATA_API_KEY = self._key_secret("")  # type: ignore[assignment]
+
+            with patch("services.news._fetch_newsdata", AsyncMock(return_value=[])), \
+                 patch("core.redis.cache_get", AsyncMock(return_value=None)), \
+                 patch("core.redis.cache_set", AsyncMock()):
+                resp = await fetch_symbol_news("AAPL", limit=5)
+        finally:
+            settings.NEWSDATA_API_KEY = original_key
+
+        assert resp.is_demo is True
+        assert len(resp.articles) > 0

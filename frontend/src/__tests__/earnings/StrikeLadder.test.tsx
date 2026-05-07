@@ -1,5 +1,7 @@
 import "../setup-mocks";
 import { describe, it, expect, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { render, fireEvent } from "@testing-library/react";
 
 // PM-C row-expand mounts ContractNBBO inside expanded rows; that pulls
@@ -24,6 +26,32 @@ const ladder: LadderShape = {
 };
 
 describe("StrikeLadder", () => {
+  // V1.3 — the .t-ladder-row CSS rule used to apply
+  // ``display: grid; grid-template-columns: <7 cols>;`` to every <tr>.
+  // That overrode the table layout, so when "Show Greeks" or "Show
+  // liquidity" added cells (10 or 13 total), the extra cells overflowed
+  // into implicit grid rows below the original — producing the
+  // production layout where VOL was right-aligned on row 1 and
+  // ``OI / LIQ / SIDE`` wrapped onto row 2 underneath each strike.
+  //
+  // Asserting layout via JSDOM is unreliable (grid metrics aren't
+  // computed), so we pin the contract at the CSS source: the rule must
+  // not force a fixed-column grid onto rows whose cell count is
+  // dynamic. Any future "let me grid this for alignment" change has to
+  // update this test alongside the CSS, which is the prompt to
+  // double-check liquidity / Greeks / future column flips first.
+  it("V1.3 — t-ladder-row CSS does not pin a fixed grid column count", () => {
+    const css = readFileSync(
+      path.resolve(__dirname, "../../styles/design-tokens.css"),
+      "utf8",
+    );
+    const ruleMatch = css.match(/\.t-ladder-row\s*\{[\s\S]*?\}/);
+    expect(ruleMatch).not.toBeNull();
+    const rule = ruleMatch![0];
+    expect(rule).not.toMatch(/display\s*:\s*grid/);
+    expect(rule).not.toMatch(/grid-template-columns/);
+  });
+
   it("renders header row with strike/delta/mid/IV/yield/POP columns", () => {
     const { container } = render(<StrikeLadder ladder={ladder} />);
     expect(container.textContent).toMatch(/STRIKE/);

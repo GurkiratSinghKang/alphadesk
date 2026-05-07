@@ -87,6 +87,49 @@ describe("TickerFreshnessStrip", () => {
     expect(chip?.getAttribute("data-tone")).toBe("fresh");
   });
 
+  it("V1.2 — falls back to lastReportDate prop when envelope lacks last_report_date", () => {
+    // The earnings envelope from /api/v1/ticker_context only carries
+    // the *next* FMP calendar row — it doesn't include last_report_date.
+    // Live evidence: AMD on /strategies/earnings-options-play showed
+    // "EARNINGS last ?" despite the historical-earnings widget below
+    // displaying eight quarters of dates ending 2026-02-03. The panel
+    // can pass that recent quarter date down via the new prop so the
+    // chip stops showing a question mark.
+    const c = ctx({
+      earnings: envelope(
+        { next_report_date: "2026-05-05" },
+        { asOf: "2026-05-06T18:00:00Z", quality: "fresh" },
+      ),
+    });
+    const { container } = render(
+      <TickerFreshnessStrip context={c} lastReportDate="2026-02-03" />,
+    );
+    const chip = container.querySelector('[data-slot="freshness-chip-earnings"]');
+    expect(chip).not.toBeNull();
+    // Renders both: "last Feb 3 · next May 5", no question marks.
+    expect(chip?.textContent).toMatch(/Feb\s+3/);
+    expect(chip?.textContent).toMatch(/May\s+5/);
+    expect(chip?.textContent).not.toMatch(/\?/);
+  });
+
+  it("V1.2 — envelope last_report_date still wins when both are provided", () => {
+    // Belt-and-suspenders: if the envelope ever does carry the date,
+    // the prop is just a fallback — envelope is the canonical source.
+    const c = ctx({
+      earnings: envelope(
+        { last_report_date: "2026-04-30", next_report_date: "2026-08-02" },
+        { asOf: "2026-05-06T18:00:00Z", quality: "fresh" },
+      ),
+    });
+    const { container } = render(
+      <TickerFreshnessStrip context={c} lastReportDate="2026-02-03" />,
+    );
+    const chip = container.querySelector('[data-slot="freshness-chip-earnings"]');
+    // Envelope's Apr 30 wins over prop's Feb 3.
+    expect(chip?.textContent).toMatch(/Apr\s+30/);
+    expect(chip?.textContent).not.toMatch(/Feb\s+3/);
+  });
+
   it("buckets a stale (>30 day) earnings asOf as amber", () => {
     const c = ctx({
       earnings: envelope({}, { asOf: "2026-03-01T12:00:00Z", quality: "fresh" }),

@@ -257,6 +257,17 @@ export interface TickerFreshnessStripProps {
    * target for the "Why?" link on the RESEARCH chip.
    */
   helpHref?: string;
+  /**
+   * V1.2 — fallback "last earnings" date for the EARNINGS chip when the
+   * ticker-context envelope only carries the *next* FMP calendar row.
+   *
+   * Live evidence: AMD on /strategies/earnings-options-play showed
+   * "EARNINGS last ?" while the historical-earnings widget below knew
+   * 2026-02-03 was the most recent quarter. The detail panel can pass
+   * ``detail.historicalEarnings.quarters[0].report_date`` here so the
+   * chip stops showing a question mark.
+   */
+  lastReportDate?: string | null;
   /** Test seam: override Date.now() for snapshot stability. */
   nowMs?: number;
 }
@@ -264,6 +275,7 @@ export interface TickerFreshnessStripProps {
 export default function TickerFreshnessStrip({
   context,
   helpHref = "/help/earnings-data",
+  lastReportDate = null,
   nowMs = Date.now(),
 }: TickerFreshnessStripProps) {
   if (!context) return null;
@@ -295,6 +307,7 @@ export default function TickerFreshnessStrip({
           fact={fact ?? null}
           nowMs={nowMs}
           helpHref={helpHref}
+          lastReportDateFallback={lastReportDate}
         />
       ))}
     </div>
@@ -306,9 +319,10 @@ interface FreshnessChipProps {
   fact: TickerFactEnvelope<Record<string, unknown>> | null;
   nowMs: number;
   helpHref: string;
+  lastReportDateFallback: string | null;
 }
 
-function FreshnessChip({ domain, fact, nowMs, helpHref }: FreshnessChipProps) {
+function FreshnessChip({ domain, fact, nowMs, helpHref, lastReportDateFallback }: FreshnessChipProps) {
   const tone = pickTone(domain, fact, nowMs);
   const label = DOMAIN_LABEL[domain];
   const qualityLabel = TONE_QUALITY_LABEL[tone];
@@ -323,6 +337,7 @@ function FreshnessChip({ domain, fact, nowMs, helpHref }: FreshnessChipProps) {
         tone={tone}
         label={label}
         help={help}
+        lastReportDateFallback={lastReportDateFallback}
       />
     );
   }
@@ -364,14 +379,19 @@ function EarningsChip({
   tone,
   label,
   help,
+  lastReportDateFallback,
 }: {
   fact: TickerFactEnvelope<Record<string, unknown>> | null;
   tone: ChipTone;
   label: string;
   help: string;
+  lastReportDateFallback: string | null;
 }) {
   const value = fact?.value ?? null;
-  const lastDate = extractLastEarningsDate(value);
+  // V1.2 — envelope is canonical when populated, but fall back to the
+  // panel-supplied historicalEarnings date so the chip doesn't render
+  // "last ?" while the widget below is showing eight quarters of dates.
+  const lastDate = extractLastEarningsDate(value) ?? lastReportDateFallback;
   const nextDate = extractNextEarningsDate(value);
   const lastLabel = formatEarningsDate(lastDate);
   const nextLabel = formatEarningsDate(nextDate);

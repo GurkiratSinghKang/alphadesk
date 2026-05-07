@@ -568,19 +568,16 @@ html, body {
 }
 
 /* Strike ladder — aligned mono columns for options tables.
-   Column widths are fixed so call/put rows align even at different values. */
+   V1.3 — the previous rule applied ``display: grid`` with a fixed
+   seven-column template to every <tr>. That overrode the <table>
+   layout, and when "Show Greeks" / "Show liquidity" added cells (10
+   or 13 total), the surplus cells wrapped into implicit grid rows —
+   producing the production bug where ``OI / LIQ / SIDE`` rendered on
+   a second line beneath each strike. The <table> already gives us
+   column alignment via ``table-auto`` + ``border-spacing``; this rule
+   is now just shared typography + row spacing so the table layout
+   can do its job. */
 .t-ladder-row {
-  display: grid;
-  grid-template-columns:
-    minmax(52px, auto)   /* strike */
-    minmax(40px, auto)   /* delta */
-    minmax(50px, auto)   /* mid */
-    minmax(44px, auto)   /* iv */
-    minmax(46px, auto)   /* yield */
-    minmax(40px, auto)   /* pop */
-    1fr;                 /* side label */
-  column-gap: 0.75rem;
-  align-items: center;
   padding: 0.25rem 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;

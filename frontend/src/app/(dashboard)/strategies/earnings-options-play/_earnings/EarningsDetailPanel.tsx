@@ -313,7 +313,14 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
           )}
         </div>
       )}
-      <TickerFreshnessStrip context={tickerContext} />
+      <TickerFreshnessStrip
+        context={tickerContext}
+        // V1.2 — the ticker-context earnings envelope only carries the
+        // *next* FMP calendar row. The historical-earnings widget knows
+        // the most recent quarter; pass it down so the EARNINGS chip
+        // shows "last <date>" instead of "last ?".
+        lastReportDate={detail.historicalEarnings?.quarters?.[0]?.reportDate ?? null}
+      />
       <DetailHeader
         symbol={detail.symbol} company={detail.company} sector={detail.sector}
         reportDate={detail.reportDate} reportTime={detail.reportTime}

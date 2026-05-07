@@ -1100,21 +1100,40 @@ async def fetch_symbol_news(
     if cached:
         return NewsResponse(**cached)
 
-    # Always try real API first; fall back to demo only on failure
+    # Always try real API first; fall back to demo only on failure.
+    # V1.1 — demo articles must never leak when an API key is configured.
+    # Production was rendering "Wall Street consensus: TSLA is top pick"
+    # style headlines with url="" whenever Newsdata rate-limited the
+    # request; users couldn't tell those from real news. Demo is now a
+    # local-dev affordance only.
+    from core.config import settings as _settings
+
     is_demo = False
     query = _company_query(symbol)
     raw = await _fetch_newsdata(query, limit)
     articles = _parse_articles(raw, symbols=[symbol])
+    has_api_key = bool(_settings.NEWSDATA_API_KEY.get_secret_value())
     if raw and not articles:
         # The provider answered, but none of the rows survived the
         # relevance filter. Treat that as a clean empty result so callers
         # don't show a provider-unavailable warning or feed demo headlines
         # into the earnings thesis.
         log.info("No relevant real news for symbol=%s after filtering", symbol)
-    elif not articles:
-        log.info("No real news for symbol=%s, serving demo headlines", symbol)
+    elif not articles and not has_api_key:
+        # True dev mode: no key configured, so the empty `raw` is from
+        # the early-return in `_fetch_newsdata`. Serve demo headlines so
+        # the page is not blank during local development.
+        log.info("No NEWSDATA_API_KEY configured for symbol=%s, serving demo headlines", symbol)
         articles = _generate_demo_articles(symbol=symbol, limit=limit)
         is_demo = True
+    elif not articles:
+        # Production / staging: key IS configured, but the provider
+        # errored, timed out, rate-limited, or returned []. Surface as a
+        # clean empty result rather than fake headlines.
+        log.info(
+            "No real news for symbol=%s with key configured (provider transient empty); returning []",
+            symbol,
+        )
     else:
         log.debug("Serving %d real news articles for symbol=%s", len(articles), symbol)
 

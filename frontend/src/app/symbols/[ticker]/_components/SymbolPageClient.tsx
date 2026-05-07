@@ -1,8 +1,9 @@
 "use client";
 
-import type { EarningsNewsArticle, Quote } from "@/types";
+import type { Quote } from "@/types";
 
 import { useSymbolPageData } from "../_hooks/useSymbolPageData";
+import { envelopeToNewsArticles } from "../_lib/envelopeToNewsArticles";
 import { AboutAnalystPeersStub } from "../_sections/AboutAnalystPeersStub";
 import { AgentsDebateStub } from "../_sections/AgentsDebateStub";
 import { ChartBand } from "../_sections/ChartBand";
@@ -61,46 +62,6 @@ function envelopeToQuote(value: Record<string, unknown> | null | undefined): Sti
 // camelCase but is gated to the curated equity universe — sourcing from
 // the spine envelope means ETFs and other broadly-tracked symbols still
 // surface a news rail.
-function envelopeToNewsArticles(
-  value: Record<string, unknown> | null | undefined,
-): EarningsNewsArticle[] | null {
-  if (!value || typeof value !== "object") return null;
-  const raw = value.articles;
-  if (!Array.isArray(raw)) return null;
-  const out: EarningsNewsArticle[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== "object") continue;
-    const a = item as Record<string, unknown>;
-    const title = a.title;
-    const url = a.url;
-    const source = a.source;
-    const publishedAt = a.published_at;
-    if (
-      typeof title !== "string" ||
-      typeof url !== "string" ||
-      typeof source !== "string" ||
-      typeof publishedAt !== "string"
-    ) {
-      continue;
-    }
-    const relevance = a.relevance_score;
-    const tier = a.tier;
-    const category = a.category;
-    const sentiment = a.sentiment;
-    out.push({
-      title,
-      url,
-      source,
-      publishedAt,
-      relevanceScore: typeof relevance === "number" ? relevance : 0,
-      tier: typeof tier === "number" ? tier : 2,
-      category: typeof category === "string" ? category : null,
-      sentiment: typeof sentiment === "string" ? sentiment : null,
-    });
-  }
-  return out;
-}
-
 function envelopeToMarketRegime(
   value: Record<string, unknown> | null | undefined,
 ): DecisionStripMarketRegime | null {
