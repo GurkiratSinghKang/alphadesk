@@ -300,6 +300,18 @@ async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
         // Drop the in-memory + sessionStorage refresh token so the
         // scheduler stops trying to refresh against a dead cookie.
         clearRefreshToken();
+        // Cross-user data-leak fix: clear per-user persisted zustand
+        // stores so the post-redirect /login render doesn't paint user
+        // A's watchlist / unread alerts / preferences. Dynamic import
+        // sidesteps the static cycle (api.ts ⇄ stores/market.ts).
+        try {
+          const { clearPersistedStores } = await import("@/lib/auth/clearPersistedStores");
+          clearPersistedStores();
+        } catch {
+          // chunk load / dynamic import failure: best-effort, redirect
+          // still happens. Keeping logout-on-401 functional matters more
+          // than achieving a perfect wipe in the rare load-failure case.
+        }
         // Ask the backend to revoke the access token and clear its HttpOnly
         // cookies. `await` before navigating so the POST actually completes —
         // a fire-and-forget fetch is cancelled by `window.location.href =`
@@ -1376,6 +1388,21 @@ function handleCrossTabLogout(): void {
   // Drop our own copy of the refresh token. The backend has already
   // revoked it server-side via the originating tab's logout call.
   clearRefreshToken();
+  // Cross-user data-leak fix: clear per-user persisted zustand stores
+  // (and their in-memory snapshots) so the post-redirect /login render
+  // in this tab doesn't paint the previous user's watchlist /
+  // notifications / preferences. Dynamic import sidesteps the static
+  // import cycle (api.ts ⇄ stores/market.ts). Fire-and-forget — the
+  // hard redirect below tears the page down regardless, but invoking
+  // synchronously when the chunk is already cached keeps the wipe
+  // applied to the in-memory snapshot before navigation.
+  void import("@/lib/auth/clearPersistedStores")
+    .then((m) => m.clearPersistedStores())
+    .catch(() => {
+      // chunk load failure: redirect still happens; the post-load
+      // localStorage state is already invalidated by the originating
+      // tab's wipe (other tabs share the same storage).
+    });
   // Hard redirect — easiest way to ensure no in-flight queries leak past
   // the auth boundary.
   window.location.href = "/login";
