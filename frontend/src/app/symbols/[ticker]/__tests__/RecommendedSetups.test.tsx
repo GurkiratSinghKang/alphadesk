@@ -169,6 +169,11 @@ describe("RecommendedSetups", () => {
   });
 
   it("maps each known setup_id to the matching backend combo_type", () => {
+    // Audit fix: extended the SETUP_ID_TO_COMBO_TYPE map after the
+    // backend's _ALLOWED set was widened. long_call / long_put /
+    // cash_secured_put / covered_call now round-trip with their own
+    // combo_type so the equity gate and broker adapter classify them
+    // correctly instead of falling back to per-leg notional pricing.
     const cases: Array<[string, string]> = [
       ["bull_put_spread", "vertical_spread"],
       ["bear_call_spread", "vertical_spread"],
@@ -180,6 +185,10 @@ describe("RecommendedSetups", () => {
       ["short_strangle", "strangle"],
       ["iron_condor", "iron_condor"],
       ["iron_butterfly", "iron_butterfly"],
+      ["long_call", "long_call"],
+      ["long_put", "long_put"],
+      ["cash_secured_put", "cash_secured_put"],
+      ["covered_call", "covered_call"],
     ];
 
     for (const [setupId, expectedComboType] of cases) {
@@ -201,10 +210,11 @@ describe("RecommendedSetups", () => {
     }
   });
 
-  it("omits combo_type for unmapped setup_ids (e.g. long_call) so the trade page falls back to per-leg pricing", () => {
-    // long_call/long_put aren't in the trade page's ALLOWED_COMBO_TYPES set;
-    // setting an unrecognised combo_type would be silently dropped anyway,
-    // but we explicitly omit the param so the URL reads honestly.
+  it("emits combo_type=long_call for the long_call setup_id (audit fix)", () => {
+    // Audit fix: long_call is now in both the backend _ALLOWED set and
+    // the frontend ALLOWED_COMBO_TYPES set. The deep-link must carry
+    // combo_type=long_call so the trade page classifies the order
+    // correctly instead of falling through as undefined-risk.
     const setup = makeSetup("long_call", [
       makeLeg({ side: "buy", contractType: "call", strike: 200, mid: 1.25 }),
     ]);
@@ -218,8 +228,27 @@ describe("RecommendedSetups", () => {
     );
     const href = getByTestId("setup-trade-cta").getAttribute("data-href") ?? "";
     const params = new URLSearchParams(href.split("?")[1] ?? "");
-    expect(params.has("combo_type")).toBe(false);
+    expect(params.get("combo_type")).toBe("long_call");
     expect(params.get("legs")).toBe("NVDA260516C00200000:buy:1:1.25");
+  });
+
+  it("omits combo_type for setup_ids the recommender doesn't classify (e.g. 'skip')", () => {
+    // 'skip' has no combo classification — explicit absence of the
+    // combo_type param keeps the URL honest.
+    const setup = makeSetup("not_a_real_setup", [
+      makeLeg({ side: "buy", contractType: "call", strike: 200, mid: 1.25 }),
+    ]);
+    const { getByTestId } = render(
+      <RecommendedSetups
+        symbol="NVDA"
+        setups={[setup]}
+        isETF={false}
+        underlying={200}
+      />,
+    );
+    const href = getByTestId("setup-trade-cta").getAttribute("data-href") ?? "";
+    const params = new URLSearchParams(href.split("?")[1] ?? "");
+    expect(params.has("combo_type")).toBe(false);
   });
 
   it("renders a card for setupId='skip' WITHOUT the payoff panel and without the trade CTA", () => {

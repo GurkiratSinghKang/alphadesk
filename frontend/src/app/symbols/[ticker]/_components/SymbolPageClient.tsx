@@ -120,11 +120,23 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
     return <UnsupportedAsset symbol={symbol} />;
   }
 
-  if (!data.isLoading && data.symbolMeta === null) {
+  // Audit fix: don't NotFound just because `symbolMeta` is null. The
+  // search index doesn't always carry every valid ticker (BRK.B,
+  // recently-listed names, dot-suffix symbols) — render whatever data
+  // the spine and per-symbol queries return. NotFound now requires the
+  // page to be done loading AND every primary data source to be empty.
+  const ctxData = data.ctx.data?.symbols?.[symbol] ?? null;
+  const hasAnyData =
+    data.symbolMeta != null ||
+    ctxData?.quote?.value != null ||
+    (data.bars && data.bars.length > 0) ||
+    data.analysis != null ||
+    data.ivData != null;
+
+  if (!data.isLoading && !hasAnyData) {
     return <NotFound symbol={symbol} />;
   }
 
-  const ctxData = data.ctx.data?.symbols?.[symbol] ?? null;
   const quote = envelopeToQuote(ctxData?.quote?.value);
   const marketRegime = envelopeToMarketRegime(ctxData?.marketRegime?.value);
   const newsArticles =
@@ -136,8 +148,18 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
   const skew = data.earningsDetail?.skew ?? null;
   const metrics = data.earningsDetail?.metrics ?? null;
 
+  const limitedMetadata = !data.isLoading && data.symbolMeta === null;
+
   return (
     <main data-testid="symbol-page" data-sym={symbol}>
+      {limitedMetadata ? (
+        <div
+          data-testid="limited-metadata-note"
+          className="mx-4 sm:mx-6 mb-2 mt-2 rounded-md border border-border-hair bg-bg-elev-1 px-3 py-2 t-mono text-label u-muted"
+        >
+          Limited metadata available for {symbol}.
+        </div>
+      ) : null}
       <StickyBand symbol={symbol} quote={quote}>
         <DecisionStrip
           symbol={symbol}

@@ -564,3 +564,266 @@ def test_equity_cache_avoids_per_order_alpaca_calls(
         f"Expected 1 _get_account_equity call after caching; got "
         f"{probes['equity_calls']}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Audit fix — long straddle / strangle equity-gate is defined-risk
+# ---------------------------------------------------------------------------
+#
+# Pre-fix: ``_compute_order_max_loss`` blanket-treated ``combo == "strangle"``
+# as undefined risk and ``"straddle"`` fell through to the generic per-leg
+# path. Long straddles / strangles (all BUY) have a deterministic max loss
+# = total debit paid; the equity gate over-rejected them.
+
+
+def _long_straddle_payload() -> dict:
+    """2-leg long straddle on SPY 500 strike — both BUY."""
+    return {
+        "legs": [
+            {"symbol": "SPY260424C00500000", "side": "buy", "qty": 1,
+             "order_type": "limit", "limit_price": 5.00, "asset_class": "option"},
+            {"symbol": "SPY260424P00500000", "side": "buy", "qty": 1,
+             "order_type": "limit", "limit_price": 4.50, "asset_class": "option"},
+        ],
+        "time_in_force": "day",
+        "combo_type": "straddle",
+        "extended_hours": True,
+    }
+
+
+def _short_straddle_payload() -> dict:
+    """2-leg short straddle on SPY 500 strike — both SELL."""
+    return {
+        "legs": [
+            {"symbol": "SPY260424C00500000", "side": "sell", "qty": 1,
+             "order_type": "limit", "limit_price": 5.00, "asset_class": "option"},
+            {"symbol": "SPY260424P00500000", "side": "sell", "qty": 1,
+             "order_type": "limit", "limit_price": 4.50, "asset_class": "option"},
+        ],
+        "time_in_force": "day",
+        "combo_type": "straddle",
+        "extended_hours": True,
+    }
+
+
+def _long_strangle_payload() -> dict:
+    """2-leg long strangle on SPY (505 call + 495 put) — both BUY."""
+    return {
+        "legs": [
+            {"symbol": "SPY260424C00505000", "side": "buy", "qty": 1,
+             "order_type": "limit", "limit_price": 3.00, "asset_class": "option"},
+            {"symbol": "SPY260424P00495000", "side": "buy", "qty": 1,
+             "order_type": "limit", "limit_price": 2.50, "asset_class": "option"},
+        ],
+        "time_in_force": "day",
+        "combo_type": "strangle",
+        "extended_hours": True,
+    }
+
+
+def _short_strangle_payload() -> dict:
+    """2-leg short strangle on SPY (505 call + 495 put) — both SELL."""
+    return {
+        "legs": [
+            {"symbol": "SPY260424C00505000", "side": "sell", "qty": 1,
+             "order_type": "limit", "limit_price": 3.00, "asset_class": "option"},
+            {"symbol": "SPY260424P00495000", "side": "sell", "qty": 1,
+             "order_type": "limit", "limit_price": 2.50, "asset_class": "option"},
+        ],
+        "time_in_force": "day",
+        "combo_type": "strangle",
+        "extended_hours": True,
+    }
+
+
+def _make_order_request(payload: dict) -> Any:
+    """Build a CreateOrderRequest from a JSON-shaped payload."""
+    from api.routes.trades import CreateOrderRequest
+    return CreateOrderRequest.model_validate(payload)
+
+
+def test_long_straddle_max_loss_equals_debit() -> None:
+    """Long straddle (all BUY) → max_loss = sum(debit), undefined=False.
+
+    SPY 500 strike, $5.00 + $4.50 debit, 1 contract each:
+    max_loss = (5.00 + 4.50) × 1 × 100 = $950
+    """
+    import asyncio
+    from api.routes import trades as trades_mod
+
+    request = _make_order_request(_long_straddle_payload())
+    max_loss, undefined = asyncio.new_event_loop().run_until_complete(
+        trades_mod._compute_order_max_loss(request)
+    )
+    assert undefined is False
+    assert max_loss == pytest.approx((5.00 + 4.50) * 1 * 100.0)
+
+
+def test_short_straddle_remains_undefined_risk() -> None:
+    """Short straddle (all SELL) keeps the undefined-risk gate.
+
+    Short call has unbounded loss; short put has near-strike loss
+    capped only by collateral. Without a defined hedge we treat as
+    undefined and force the admin override.
+    """
+    import asyncio
+    from api.routes import trades as trades_mod
+
+    request = _make_order_request(_short_straddle_payload())
+    max_loss, undefined = asyncio.new_event_loop().run_until_complete(
+        trades_mod._compute_order_max_loss(request)
+    )
+    assert undefined is True
+    assert max_loss == 0.0
+
+
+def test_long_strangle_max_loss_equals_debit() -> None:
+    """Long strangle (all BUY) → max_loss = sum(debit), undefined=False.
+
+    505 call $3.00 + 495 put $2.50, 1 contract each:
+    max_loss = (3.00 + 2.50) × 1 × 100 = $550
+    """
+    import asyncio
+    from api.routes import trades as trades_mod
+
+    request = _make_order_request(_long_strangle_payload())
+    max_loss, undefined = asyncio.new_event_loop().run_until_complete(
+        trades_mod._compute_order_max_loss(request)
+    )
+    assert undefined is False
+    assert max_loss == pytest.approx((3.00 + 2.50) * 1 * 100.0)
+
+
+def test_short_strangle_remains_undefined_risk() -> None:
+    """Short strangle (all SELL) keeps the undefined-risk gate."""
+    import asyncio
+    from api.routes import trades as trades_mod
+
+    request = _make_order_request(_short_strangle_payload())
+    max_loss, undefined = asyncio.new_event_loop().run_until_complete(
+        trades_mod._compute_order_max_loss(request)
+    )
+    assert undefined is True
+    assert max_loss == 0.0
+
+
+def test_mixed_strangle_remains_undefined_risk() -> None:
+    """Mixed-side strangle (1 BUY + 1 SELL) is treated as undefined.
+
+    Can't happen via a normal-shape strangle but the gate must default
+    to undefined for any non-pure-buy / non-pure-sell shape.
+    """
+    import asyncio
+    from api.routes import trades as trades_mod
+
+    payload = _long_strangle_payload()
+    payload["legs"][1]["side"] = "sell"  # flip put to SELL → mixed
+    request = _make_order_request(payload)
+    max_loss, undefined = asyncio.new_event_loop().run_until_complete(
+        trades_mod._compute_order_max_loss(request)
+    )
+    assert undefined is True
+    assert max_loss == 0.0
+
+
+def test_long_straddle_combo_notional_equals_debit() -> None:
+    """``_compute_order_notional`` returns sum(debit) for long straddle."""
+    import asyncio
+    from api.routes import trades as trades_mod
+
+    request = _make_order_request(_long_straddle_payload())
+    notional = asyncio.new_event_loop().run_until_complete(
+        trades_mod._compute_order_notional(request)
+    )
+    assert notional == pytest.approx((5.00 + 4.50) * 1 * 100.0)
+
+
+def test_long_strangle_combo_notional_equals_debit() -> None:
+    """``_compute_order_notional`` returns sum(debit) for long strangle.
+
+    Long shape uses the debit envelope, NOT the naked-side max envelope
+    (which would over-count by ~2× for a long-vol structure).
+    """
+    import asyncio
+    from api.routes import trades as trades_mod
+
+    request = _make_order_request(_long_strangle_payload())
+    notional = asyncio.new_event_loop().run_until_complete(
+        trades_mod._compute_order_notional(request)
+    )
+    assert notional == pytest.approx((3.00 + 2.50) * 1 * 100.0)
+
+
+def test_short_strangle_combo_notional_uses_naked_envelope() -> None:
+    """``_compute_order_notional`` for short strangle = max(naked C, naked P).
+
+    SHORT 505C @ $3.00, SHORT 495P @ $2.50:
+    naked_call = 3.00 × 1 × 100 = $300
+    naked_put  = 2.50 × 1 × 100 = $250
+    envelope = max($300, $250) = $300
+    """
+    import asyncio
+    from api.routes import trades as trades_mod
+
+    request = _make_order_request(_short_strangle_payload())
+    notional = asyncio.new_event_loop().run_until_complete(
+        trades_mod._compute_order_notional(request)
+    )
+    assert notional == pytest.approx(300.0)
+
+
+def test_long_straddle_within_cap_succeeds_via_api(
+    risk_gate_app: tuple[FastAPI, dict[str, Any]],
+) -> None:
+    """End-to-end: long straddle with debit < 5% of equity → 201.
+
+    Pre-fix this same payload would have been rejected as undefined-risk
+    even though the max loss is bounded by the debit paid.
+    """
+    app, probes = risk_gate_app
+    probes["equity_value"] = 100_000.0
+
+    client = TestClient(app)
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json=_long_straddle_payload(),
+    )
+    assert resp.status_code == 201, resp.text
+    assert len(probes["broker_posts"]) == 1
+
+
+def test_long_strangle_within_cap_succeeds_via_api(
+    risk_gate_app: tuple[FastAPI, dict[str, Any]],
+) -> None:
+    """End-to-end: long strangle with debit < 5% of equity → 201."""
+    app, probes = risk_gate_app
+    probes["equity_value"] = 100_000.0
+
+    client = TestClient(app)
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json=_long_strangle_payload(),
+    )
+    assert resp.status_code == 201, resp.text
+    assert len(probes["broker_posts"]) == 1
+
+
+def test_short_strangle_rejected_as_undefined_risk_via_api(
+    risk_gate_app: tuple[FastAPI, dict[str, Any]],
+) -> None:
+    """Short strangle without override → 422 (undefined-risk reject).
+
+    Sanity-checks that we did NOT accidentally relax the short path
+    while widening the long path.
+    """
+    app, probes = risk_gate_app
+
+    client = TestClient(app)
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json=_short_strangle_payload(),
+    )
+    assert resp.status_code == 422, resp.text
+    detail = resp.json().get("detail", "")
+    assert "undefined" in detail.lower() or "naked" in detail.lower()
+    assert probes["broker_posts"] == []

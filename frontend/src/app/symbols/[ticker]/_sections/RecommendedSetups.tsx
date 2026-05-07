@@ -18,6 +18,8 @@ import { payoffDraftFromSetup } from "../_lib/payoffDraftFromSetup";
 // backend's combo classifier accepts it, but a typo silently degrades
 // the deep-link to "no combo" (the trade page falls back to per-leg
 // notional pricing). Update both lists together.
+//
+// Keep in sync with backend trades.py:_ALLOWED.
 const SETUP_ID_TO_COMBO_TYPE: Record<string, string> = {
   bull_put_spread: "vertical_spread",
   bear_call_spread: "vertical_spread",
@@ -29,6 +31,14 @@ const SETUP_ID_TO_COMBO_TYPE: Record<string, string> = {
   short_strangle: "strangle",
   iron_condor: "iron_condor",
   iron_butterfly: "iron_butterfly",
+  // Single-leg directional plays now accepted by the backend allowlist.
+  long_call: "long_call",
+  long_put: "long_put",
+  // Income setups — backend supports these as combo_type values; the
+  // recommender doesn't currently emit them but a manual deep-link
+  // should still reach /trade with the correct classification.
+  cash_secured_put: "cash_secured_put",
+  covered_call: "covered_call",
 };
 
 function setupIdToComboType(setupId: string): string | null {

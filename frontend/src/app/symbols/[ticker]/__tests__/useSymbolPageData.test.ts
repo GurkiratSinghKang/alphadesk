@@ -100,6 +100,27 @@ describe("useSymbolPageData", () => {
     expect(result.current.isCryptoForex).toBe(false);
   });
 
+  // Audit fix: when symbolMeta is null because the search index doesn't
+  // carry the ticker (BRK.B, recently-listed names, dot-suffix tickers),
+  // the curated-equity earnings/setups queries must STILL fire so the
+  // page can populate from the backend's own per-symbol routes.
+  it("fires getEarningsDetail even when symbolMeta is null (search index missing the ticker)", async () => {
+    mockSearchSymbols.mockResolvedValue([]); // search index doesn't have BRK.B
+
+    const { result } = renderHook(() => useSymbolPageData("BRK.B"), { wrapper: makeWrapper() });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    // ETF/crypto-forex flags both default to false → earningsEnabled
+    // is true → the query MUST have fired.
+    expect(mockGetEarningsDetail).toHaveBeenCalledWith("BRK.B");
+    expect(result.current.symbolMeta).toBeNull();
+    expect(result.current.isETF).toBe(false);
+    expect(result.current.isCryptoForex).toBe(false);
+  });
+
   // T7 P1 #2: getEarningsDetail 404 is the canonical "non-curated equity"
   // signal; we still want earningsDetail=null and the hook to stay
   // healthy (no isError flip).

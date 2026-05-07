@@ -74,7 +74,11 @@ describe("SymbolPageClient gates", () => {
     expect(screen.queryByTestId("sticky-band")).toBeNull();
   });
 
-  it("renders NotFound (no StickyBand) when symbolMeta is null and not loading", () => {
+  it("renders NotFound when nothing resolved (symbolMeta=null, no quote, no bars, no analysis) and not loading", () => {
+    // Audit fix: NotFound now requires every primary data source to be
+    // empty AND the page to be done loading. A bare symbolMeta=null is
+    // not sufficient — the search index doesn't always carry every valid
+    // ticker (BRK.B, recently-listed names, dot-suffix symbols).
     mockUseSymbolPageData.mockReturnValue(
       makeBaseResult({ symbolMeta: null, isLoading: false }),
     );
@@ -91,7 +95,66 @@ describe("SymbolPageClient gates", () => {
     expect(screen.queryByTestId("sticky-band")).toBeNull();
   });
 
-  it("does not gate to NotFound while still loading (symbolMeta=null but isLoading=true)", () => {
+  it("renders the page (NOT NotFound) when symbolMeta is null but a quote resolved (BRK.B / dot-suffix path)", () => {
+    // Audit fix: search index doesn't carry every valid ticker. As long
+    // as the spine quote/bars/analysis came back, render the page so
+    // operators don't get a misleading "Symbol not found" on a live name.
+    const ctxWithQuote = {
+      data: {
+        generatedAt: "2026-05-06T12:00:00Z",
+        symbols: {
+          "BRK.B": { quote: { value: { last: 412.34 } }, warnings: [] },
+        },
+      },
+      isLoading: false,
+      isError: false,
+    } as unknown as UseSymbolPageDataResult["ctx"];
+
+    mockUseSymbolPageData.mockReturnValue(
+      makeBaseResult({ symbolMeta: null, isLoading: false, ctx: ctxWithQuote }),
+    );
+
+    const Wrapper = makeWrapper();
+    render(
+      createElement(Wrapper, null, <SymbolPageClient symbol="BRK.B" />),
+    );
+
+    expect(screen.queryByTestId("symbol-not-found")).toBeNull();
+    expect(screen.getByTestId("symbol-page")).toBeInTheDocument();
+    // Inline note flags reduced metadata.
+    expect(screen.getByTestId("limited-metadata-note")).toBeInTheDocument();
+  });
+
+  it("renders the page (NOT NotFound) when symbolMeta is null but bars came back", () => {
+    mockUseSymbolPageData.mockReturnValue(
+      makeBaseResult({
+        symbolMeta: null,
+        isLoading: false,
+        bars: [
+          {
+            time: 1714400000,
+            open: 100,
+            high: 101,
+            low: 99,
+            close: 100.5,
+            volume: 1000,
+          },
+        ],
+      }),
+    );
+
+    const Wrapper = makeWrapper();
+    render(
+      createElement(Wrapper, null, <SymbolPageClient symbol="BRK.B" />),
+    );
+
+    expect(screen.queryByTestId("symbol-not-found")).toBeNull();
+    expect(screen.getByTestId("symbol-page")).toBeInTheDocument();
+  });
+
+  it("does not gate to NotFound while still loading (symbolMeta=null but isLoading=true) — skeleton state", () => {
+    // symbolMeta=null && quote=null && bars=null but isLoading=true: still
+    // not NotFound, skeleton state until the queries settle.
     mockUseSymbolPageData.mockReturnValue(
       makeBaseResult({ symbolMeta: null, isLoading: true }),
     );
