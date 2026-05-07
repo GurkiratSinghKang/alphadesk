@@ -624,7 +624,16 @@ export interface EarningsSetupLeg {
 }
 
 export interface EarningsSetup {
+  /** Raw, snake_case setup ID from the backend wire (e.g. "bull_put_spread"). */
   setupId: string;
+  /**
+   * Space-delimited label form of `setupId`, derived via `SETUP_ID_TO_LABEL`
+   * in `lib/api.ts`. ``null`` when the snake_case ID has no entry in the
+   * normalizer table (legacy or future setup types). Use this — not
+   * `setupId` — when keying maps against the `EarningsTopSetup` literal
+   * union (e.g. the per-setup confidence map consumed by TradeButtonRow).
+   */
+  setupLabel: EarningsTopSetup | null;
   legs: EarningsSetupLeg[];
   netCreditOrDebit: number;
   maxProfit: number | null;
