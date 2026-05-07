@@ -5,6 +5,24 @@ export type ParsedOccSymbol = {
   strike: number;
 };
 
+/**
+ * Quick-test predicate: does ``s`` look like a full OCC option contract?
+ *
+ * OCC contract format: ROOT (1–6 letters/digits) + YYMMDD (6 digits) +
+ * C|P (call/put marker) + strike (8 digits, price * 1000 zero-padded).
+ *
+ * Used by /trade to decide whether the staged ticket includes any option
+ * legs — only then does the auto-refresh of ``quote_at_fill_ts`` need to
+ * run, since the backend's stale-quote gate fail-closes for option legs
+ * but not equity-only orders.
+ *
+ * Cheap regex-only check; for parsing the parts use ``parseOccSymbol``.
+ */
+export function isOccSymbol(s: string): boolean {
+  if (typeof s !== "string" || s.length === 0) return false;
+  return /^[A-Z0-9]{1,6}\d{6}[CP]\d{8}$/.test(s);
+}
+
 export function formatOccSymbol({
   symbol,
   expiry,

@@ -66,7 +66,7 @@ import OptionsStrategyBuilder from "@/components/options/OptionsStrategyBuilder"
 import { ExtendedHoursBadge } from "@/components/primitives/ExtendedHoursBadge";
 import { getBars, getOrders, getSnapshots, placeOrder } from "@/lib/api";
 import { barsRequestForRange } from "@/lib/chartRange";
-import { parseOccSymbol } from "@/lib/occ";
+import { isOccSymbol, parseOccSymbol } from "@/lib/occ";
 import { ORDER_BAR_DEFAULTS, isValidOrderQty } from "@/lib/orderDefaults";
 import { isMarketOpen } from "@/lib/marketHours";
 import { isWorkingOrderStatus } from "@/lib/orders";
@@ -106,6 +106,24 @@ function parseQuoteSnapshotTs(raw: string | null): number | null {
   }
   const ms = Date.parse(value);
   return Number.isFinite(ms) ? ms / 1000 : null;
+}
+
+/**
+ * Audit Persona F1.8 (2026-05-06): detect the backend's stale-quote /
+ * price-drift 422 detail strings so the submit-path catch block can
+ * route them into the inline banner instead of the disposable toast.
+ *
+ * Backend constants live in ``backend/services/orders.py``:
+ *   ``QUOTE_STALENESS_MAX_SECONDS`` → "Quote staleness: snapshot is N.Ns old"
+ *   ``QUOTE_PRICE_DRIFT_MAX_FRACTION`` → "Price drift exceeds N bps"
+ *
+ * Match is case-insensitive on both phrases. Returning true means the
+ * trader needs to refresh the chain and re-stage, which is a multi-step
+ * recovery the toast lifetime (4-6s) can't host.
+ */
+function isStaleQuoteOrDriftMessage(message: string): boolean {
+  const lc = message.toLowerCase();
+  return lc.includes("quote staleness") || lc.includes("price drift");
 }
 
 // ─── Pre-fill state types ──────────────────────────────────────────────────────
@@ -303,6 +321,30 @@ export default function TradePage() {
       setSelectedSymbol(nextUnderlying);
     }
   }, [searchKey, setSelectedSymbol]);
+
+  // Audit Persona F1.8 (2026-05-06): auto-refresh ``quote_at_fill_ts`` while
+  // a multi-leg option ticket is being drafted. The URL pre-fill captures
+  // ``quote_ts`` ONCE at deep-link time; if the user then drafts the
+  // ticket for >30s the backend's stale-quote gate
+  // (``QUOTE_STALENESS_MAX_SECONDS = 30``) trips on submit and the trader
+  // sees a generic "Order submission failed" toast.
+  //
+  // Auto-refresh ONLY changes the freshness timestamp — it does NOT
+  // re-fetch the chain or re-price legs (out of scope). The 25s cadence
+  // keeps it just below the backend's 30s gate so the most pessimistic
+  // round-trip still lands inside the window.
+  //
+  // Equity-only tickets are exempt: the backend doesn't fail-closed on
+  // equity quote staleness, and pumping ``quote_at_fill_ts`` for them
+  // would mask genuinely-stale equity quotes from the drift gate.
+  useEffect(() => {
+    const hasOptionLegs = activeLegs.some((leg) => isOccSymbol(leg.occ));
+    if (!hasOptionLegs) return;
+    const interval = setInterval(() => {
+      setQuoteAtFillTs(Date.now() / 1000);
+    }, 25_000);
+    return () => clearInterval(interval);
+  }, [activeLegs]);
 
   useEffect(() => {
     function onAddAlert(e: Event) {
@@ -656,10 +698,17 @@ export default function TradePage() {
   const [resetTick, setResetTick] = useState(0);
   // BUG-002 — inline-error mirror of the toast. See desk `page.tsx`.
   const [orderError, setOrderError] = useState<string | null>(null);
+  // Audit Persona F1.8 (2026-05-06): when the backend rejects with a
+  // stale-quote / price-drift 422 we surface the message in a dedicated
+  // banner above the OrderBar. Toasts disappear in 4-6s; a stale-quote
+  // rejection means the trader needs to refresh the chain and re-stage,
+  // which is too much to ask in a fading toast on a fast-moving ticket.
+  const [staleQuoteError, setStaleQuoteError] = useState<string | null>(null);
 
 	  async function handleSubmit(order: StagedOrder): Promise<boolean> {
 	    if (submitting) return false;
     setOrderError(null);
+    setStaleQuoteError(null);
     const sym = (order.symbol || "").trim().toUpperCase();
     const qty = Number(order.quantity);
     const fail = (msg: string) => {
@@ -834,8 +883,18 @@ export default function TradePage() {
 	      return true;
 	    } catch (err) {
 	      const message = err instanceof Error ? err.message : "Order submission failed";
-	      toast({ type: "error", message });
-	      setOrderError(message);
+	      // Audit Persona F1.8 (2026-05-06): the backend's stale-quote and
+	      // price-drift gates raise HTTPException(422) with detail strings
+	      // that start "Quote staleness:" or contain "price drift". Route
+	      // those into the dedicated inline banner so the trader can read
+	      // them after the toast fades — they imply "refresh chain and
+	      // re-stage", a multi-step recovery the toast lifetime can't host.
+	      if (isStaleQuoteOrDriftMessage(message)) {
+	        setStaleQuoteError(message);
+	      } else {
+	        toast({ type: "error", message });
+	        setOrderError(message);
+	      }
 	      return false;
 	    } finally {
 	      setSubmitting(false);
@@ -1344,12 +1403,21 @@ export default function TradePage() {
                     <p className="truncate text-label text-fg-muted">{intentLabel}</p>
                   </div>
                 </div>
-                <TradeStatusPill label="Paper" tone="muted" />
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <QuoteFreshness tsSeconds={quoteAtFillTs} />
+                  <TradeStatusPill label="Paper" tone="muted" />
+                </div>
               </header>
               <ExecutionQuotePanel
                 quote={executionQuote}
                 onStageLimit={stageLimitPreset}
               />
+              {staleQuoteError && (
+                <StaleQuoteBanner
+                  message={staleQuoteError}
+                  onDismiss={() => setStaleQuoteError(null)}
+                />
+              )}
               <OrderBar
                 key={`trade-orderbar-${resetTick}`}
                 symbol={tradeContextSymbol}
@@ -2156,6 +2224,92 @@ function TradeStatusPill({
       />
       {label}
     </span>
+  );
+}
+
+/**
+ * Audit Persona F1.8 (2026-05-06): freshness indicator chip rendered in
+ * the ticket header when an option ticket is staged with a deep-linked
+ * ``quote_ts``. The auto-refresh effect (above) keeps ``quote_at_fill_ts``
+ * inside the backend's 30s gate, but a trader still benefits from seeing
+ * the actual age of the snapshot they're working from — short ages are
+ * silent, mid ages render as a muted hint, and ages approaching the
+ * 25s refresh boundary surface as a state-warning chip.
+ *
+ * Updates once per second internally so the visible age tracks the
+ * passage of real time even between auto-refresh ticks.
+ */
+function QuoteFreshness({ tsSeconds }: { tsSeconds: number | null }) {
+  const [now, setNow] = useState(() => Date.now() / 1000);
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now() / 1000), 1_000);
+    return () => clearInterval(id);
+  }, []);
+  if (tsSeconds == null) return null;
+  const age = Math.max(0, Math.round(now - tsSeconds));
+  // <5s: too noisy at deep-link arrival to render anything.
+  if (age < 5) return null;
+  // ≥25s aligns with the auto-refresh cadence — the timer should already
+  // have fired; if we're here it likely hasn't yet (or the user is on an
+  // equity-only ticket that is exempt). Either way, surface the warning.
+  const tone =
+    age >= 25
+      ? "border-state-warning/30 bg-state-warning/10 text-state-warning-fg"
+      : age >= 15
+        ? "border-border-hair bg-bg-elev-2 text-fg-muted"
+        : "border-border-hair bg-bg-elev-2 text-fg-hint";
+  return (
+    <span
+      data-slot="quote-freshness"
+      data-age={age}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 font-mono text-label tabular-nums",
+        tone,
+      )}
+    >
+      <Clock className="size-3" aria-hidden />
+      Quotes {age}s old
+    </span>
+  );
+}
+
+/**
+ * Audit Persona F1.8 (2026-05-06): inline banner surfaced above the
+ * OrderBar's submit button when the backend rejects with a stale-quote
+ * or price-drift 422. Keeps the message visible after the toast fades —
+ * traders need to read it, refresh the chain, and re-stage; that flow
+ * doesn't fit a 4-6s toast lifetime on a fast-moving ticket.
+ */
+function StaleQuoteBanner({
+  message,
+  onDismiss,
+}: {
+  message: string;
+  onDismiss: () => void;
+}) {
+  return (
+    <div
+      data-slot="stale-quote-banner"
+      role="alert"
+      className="mx-4 mt-3 flex items-start gap-3 rounded-sm border border-state-warning/40 bg-state-warning/10 px-3 py-2 text-state-warning-fg"
+    >
+      <WarningCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
+      <div className="min-w-0 flex-1">
+        <p className="t-label font-semibold">Quote freshness rejected</p>
+        <p className="mt-1 text-body-sm leading-snug">{message}</p>
+        <p className="mt-1 text-label text-fg-muted">
+          Refresh the chain (or re-stage from the symbol page) so the
+          ticket carries a current snapshot, then resubmit.
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="t-label text-fg-muted underline-offset-2 hover:text-fg hover:underline"
+      >
+        Dismiss
+      </button>
+    </div>
   );
 }
 
