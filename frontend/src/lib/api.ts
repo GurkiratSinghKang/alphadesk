@@ -1,4 +1,5 @@
 import { env } from "@/env";
+import { isOccSymbol } from "@/lib/occ";
 import type {
   Quote,
   OHLCVBar,
@@ -1078,6 +1079,9 @@ export async function getSnapshot(symbols: string[]): Promise<Record<string, Quo
  */
 export async function getSnapshots(symbols: string[]): Promise<Record<string, Quote>> {
   if (!symbols.length) return {};
+  if (symbols.some(isOccSymbol)) {
+    return getSnapshot(symbols);
+  }
   const qs = new URLSearchParams({ symbols: symbols.join(",") }).toString();
   try {
     type BackendSnapshot = { quote?: Quote; is_demo?: boolean; source?: string } & Partial<Quote>;

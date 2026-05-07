@@ -142,6 +142,26 @@ describe("/trade fan-out regression (P1-19)", () => {
     expect(symbolsArg).toEqual(["NVDA260425C00205000"]);
   });
 
+  it("blocks submit when a single-leg option quote is unavailable", async () => {
+    vi.mocked(api.getSnapshots).mockResolvedValueOnce({});
+    setSearch(
+      "?symbol=NVDA&contract=NVDA260425C00205000&side=sell&qty=1&limit=1.42",
+    );
+    const { container } = render(<TradePage />, { wrapper: makeWrapper() });
+
+    await waitFor(() => {
+      expect(container.querySelector("[data-slot='order-bar-options-unavailable']")).not.toBeNull();
+    });
+
+    const submit = container.querySelector(
+      "[data-testid='order-bar-submit']",
+    ) as HTMLButtonElement | null;
+    expect(submit).not.toBeNull();
+    expect(submit!.disabled).toBe(true);
+    expect(submit!.textContent).toMatch(/refresh option quote/i);
+    expect(container.textContent).toMatch(/Option quote unavailable for NVDA260425C00205000/);
+  });
+
   it("does not call getSnapshots when no contract or legs are staged", async () => {
     setSearch("?symbol=AAPL&side=buy&qty=1&type=limit&limit=180");
     render(<TradePage />, { wrapper: makeWrapper() });

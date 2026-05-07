@@ -342,7 +342,7 @@ def test_curated_universe_core_names_present():
     # Mega caps — removing any of these would mean the screener stops
     # surfacing earnings for the most-traded US single-names.
     must_have = {"AAPL", "MSFT", "NVDA", "TSLA", "META", "GOOGL", "AMZN",
-                 "AVGO", "JPM", "NFLX", "AMD", "COIN", "PLTR"}
+                 "AVGO", "ARM", "APP", "JPM", "NFLX", "AMD", "COIN", "PLTR"}
     assert must_have.issubset(CURATED_OPTIONABLE_UNIVERSE)
 
 

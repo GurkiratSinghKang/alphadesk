@@ -22,6 +22,7 @@ import {
   getMarketDepthCapabilities,
   getBars,
   getSnapshot,
+  getSnapshots,
   screenStocks,
   getScreenerPresets,
   analyzeSymbol,
@@ -926,6 +927,50 @@ describe('getSnapshot', () => {
     const result = await getSnapshot([]);
     expect(result).toEqual({});
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+// ─── getSnapshots ────────────────────────────────────────────────────────────
+
+describe('getSnapshots', () => {
+  it('uses the batched market snapshot endpoint for equity symbols', async () => {
+    mockFetch.mockReturnValueOnce(ok({
+      AAPL: {
+        quote: {
+          symbol: 'AAPL',
+          last: 175,
+          bid: 174.9,
+          ask: 175.1,
+          volume: 80000000,
+          change: 2,
+          changePct: 1.15,
+        },
+      },
+    }));
+
+    const result = await getSnapshots(['AAPL']);
+    const calledUrl: string = mockFetch.mock.calls[0][0];
+    expect(calledUrl).toContain('/api/v1/market/snapshots?symbols=AAPL');
+    expect(result.AAPL.last).toBe(175);
+  });
+
+  it('routes OCC option symbols through quote fan-out to avoid equity snapshot 400s', async () => {
+    const occ = 'NVDA260515C00205000';
+    mockFetch.mockReturnValueOnce(ok({
+      symbol: occ,
+      last: 8.95,
+      bid: 8.9,
+      ask: 9,
+      volume: 23500,
+      change: 0.1,
+      changePct: 1.1,
+    }));
+
+    const result = await getSnapshots([occ]);
+    const calledUrl: string = mockFetch.mock.calls[0][0];
+    expect(calledUrl).toContain(`/api/v1/market/quotes/${occ}`);
+    expect(calledUrl).not.toContain('/api/v1/market/snapshots');
+    expect(result[occ].last).toBe(8.95);
   });
 });
 

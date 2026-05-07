@@ -133,10 +133,10 @@ export function TopBar() {
         {/* Round-11 / W-1: workspace selector removed (was a placebo). */}
       </div>
 
-      <button data-tour="search-bar" onClick={() => setCommandPaletteOpen(true)} aria-label="Open command palette to search symbols and commands" className="hidden h-9 min-w-[180px] max-w-[520px] flex-1 items-center gap-2 rounded-sm border border-border-hair bg-bg-elev-1/80 px-3 text-sm text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:border-primary/40 hover:text-foreground xl:flex">
-        <Search className="h-3.5 w-3.5" aria-hidden="true" />
-        <span className="flex-1 text-left">Search symbols, commands...</span>
-        <kbd className="rounded-sm border border-border-hair bg-bg px-2 py-0.5 text-label font-mono text-muted-foreground">{isMac ? "\u2318K" : "Ctrl+K"}</kbd>
+      <button data-tour="search-bar" onClick={() => setCommandPaletteOpen(true)} aria-label="Open command palette to search symbols and commands" className="hidden h-9 min-w-0 basis-[180px] max-w-[520px] flex-1 items-center gap-2 rounded-sm border border-border-hair bg-bg-elev-1/80 px-3 text-sm text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:border-primary/40 hover:text-foreground xl:flex">
+        <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">Search symbols, commands...</span>
+        <kbd className="shrink-0 rounded-sm border border-border-hair bg-bg px-2 py-0.5 text-label font-mono text-muted-foreground">{isMac ? "\u2318K" : "Ctrl+K"}</kbd>
       </button>
 
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">

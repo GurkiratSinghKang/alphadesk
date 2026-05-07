@@ -98,16 +98,16 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
   return (
     <div
       data-slot="filters-bar"
-      className="flex flex-wrap items-center gap-4 rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] p-3"
+      className="grid grid-cols-1 gap-3 rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] p-3 sm:flex sm:flex-wrap sm:items-center sm:gap-4"
     >
       {/* WINDOW — radiogroup (CLUSTER C/7) */}
       <div
         role="radiogroup"
         aria-label="Earnings calendar window"
-        className="flex items-center gap-1"
+        className="flex flex-wrap items-center gap-1"
         onKeyDown={handleRadioGroupKeyDown}
       >
-        <span className="t-label mr-2 text-[color:var(--fg-muted)]" aria-hidden="true">
+        <span className="t-label mr-2 shrink-0 text-[color:var(--fg-muted)]" aria-hidden="true">
           WINDOW
         </span>
         {WINDOW_OPTIONS.map((opt) => {
@@ -148,8 +148,8 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
           unambiguously names the control AND aria-valuetext so screen
           readers announce the percent unit instead of just a bare
           integer. */}
-      <label className="flex items-center gap-2">
-        <span className="t-label text-[color:var(--fg-muted)]">IV RANK &ge;</span>
+      <label className="grid min-w-0 grid-cols-[max-content_minmax(120px,1fr)_3ch] items-center gap-2 sm:flex sm:min-w-[260px]">
+        <span className="t-label whitespace-nowrap text-[color:var(--fg-muted)]">IV RANK &ge;</span>
         <input
           type="range"
           name="minIvRank"
@@ -189,10 +189,10 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
       <div
         role="radiogroup"
         aria-label="Time of day"
-        className="flex items-center gap-1"
+        className="flex flex-wrap items-center gap-1"
         onKeyDown={handleRadioGroupKeyDown}
       >
-        <span className="t-label mr-2 text-[color:var(--fg-muted)]" aria-hidden="true">
+        <span className="t-label mr-2 shrink-0 text-[color:var(--fg-muted)]" aria-hidden="true">
           TIME
         </span>
         {TIME_OPTIONS.map((opt) => {
@@ -230,7 +230,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
           label (not just the 16px native checkbox) is tappable on
           phones. Padding compensates for the negative-margin trick
           to avoid stretching surrounding flex children. */}
-      <label className="flex min-h-touch cursor-pointer items-center gap-2 px-1">
+      <label className="flex min-h-touch w-full cursor-pointer items-center gap-2 px-1 sm:w-auto">
         <input
           type="checkbox"
           className="h-5 w-5"
@@ -244,7 +244,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
           inline SVG with explicit currentColor + 1px outline, so the
           marker reads at the smallest supported viewport even on themes
           where --fg-muted has weak contrast (CLUSTER E/17). */}
-      <label className="ml-auto flex items-center gap-2">
+      <label className="flex w-full min-w-0 items-center gap-2 sm:ml-auto sm:w-auto">
         <span className="t-label text-[color:var(--fg-muted)]">SORT</span>
         <select
           value={filters.sort ?? "date"}
@@ -257,7 +257,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
           onBlur={() => onSettleRef?.()}
           // Round-8 / MO-06: bump padding so the SORT select hits
           // 44px on phones; the ``py-0.5`` left it ~22px tall.
-          className="min-h-touch rounded border border-[color:var(--fg-border)] bg-transparent px-2 py-1.5 font-mono text-label text-[color:var(--fg-base)]"
+          className="min-h-touch min-w-0 flex-1 rounded border border-[color:var(--fg-border)] bg-transparent px-2 py-1.5 font-mono text-label text-[color:var(--fg-base)] sm:flex-none"
         >
           {SORT_OPTIONS.map((o) => (
             <option key={o.key} value={o.key}>{o.label}</option>

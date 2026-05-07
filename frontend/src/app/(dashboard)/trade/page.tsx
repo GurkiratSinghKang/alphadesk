@@ -462,18 +462,22 @@ export default function TradePage() {
   // submit via deriveLegReadiness (lib/legQuoteReadiness.ts).
   const [legsUnavailable, setLegsUnavailable] = useState<LegQuoteUnavailable[]>([]);
   // Audit MF-P0-3 (2026-05-05): refs that mirror activeLegs +
-  // legsUnavailable so the async ``handleSubmit`` reads the freshest
+  // quote-availability state so the async ``handleSubmit`` reads the freshest
   // committed state instead of a closure snapshot from a prior render.
   // Critical when the chart overlay's ``submit`` arrow is captured at
   // memo time but fires after a state change has cleared/added legs.
   const activeLegsRef = useRef(activeLegs);
   const legsUnavailableRef = useRef(legsUnavailable);
+  const optionsUnavailableRef = useRef(optionsUnavailable);
   useEffect(() => {
     activeLegsRef.current = activeLegs;
   }, [activeLegs]);
   useEffect(() => {
     legsUnavailableRef.current = legsUnavailable;
   }, [legsUnavailable]);
+  useEffect(() => {
+    optionsUnavailableRef.current = optionsUnavailable;
+  }, [optionsUnavailable]);
   // P1-19 BL-1.5: simple per-page network call counter. Increments inside
   // each batched fetch path below; logs to debug at unmount so QA / DevTools
   // can spot fan-out regressions in `console.jsonl`. Implementation lives
@@ -808,6 +812,7 @@ export default function TradePage() {
       chartLimited: seriesError != null,
       chartLoading: seriesLoading,
       brokerDegraded,
+      optionsUnavailable: optionsUnavailableRef.current,
       // Use executionQuote.timestamp (already normalized to seconds via
       // normalizeEpochSeconds) — see useMemo for quoteAgeSeconds above.
       quoteAgeSeconds:
@@ -1137,12 +1142,17 @@ export default function TradePage() {
         chartLimited: seriesError != null,
         chartLoading: seriesLoading,
         brokerDegraded,
+        optionsUnavailable,
         quoteAgeSeconds,
         marketOpen,
         legReadiness,
       }),
-    [tradePreview, executionQuote, seriesError, seriesLoading, brokerDegraded, quoteAgeSeconds, marketOpen, legReadiness],
+    [tradePreview, executionQuote, seriesError, seriesLoading, brokerDegraded, optionsUnavailable, quoteAgeSeconds, marketOpen, legReadiness],
   );
+  const orderBarSubmitLabel =
+    executionReadiness.canSubmit && executionReadiness.submitLabel === "Place order"
+      ? submitLabelDerived
+      : executionReadiness.submitLabel ?? submitLabelDerived;
   const chartOrderDraft = useMemo(
     () =>
       completeStagedOrder(
@@ -1473,7 +1483,7 @@ export default function TradePage() {
                 submitting={submitting}
                 errorMessage={orderError}
                 defaults={orderBarDefaults}
-                submitLabel={submitLabelDerived}
+                submitLabel={orderBarSubmitLabel}
                 submitDisabled={!executionReadiness.canSubmit}
                 submitDisabledReason={executionReadiness.blocker}
                 submitDestination={executionReadiness.destination}
@@ -1842,6 +1852,7 @@ function buildExecutionReadiness({
   chartLimited,
   chartLoading,
   brokerDegraded,
+  optionsUnavailable,
   quoteAgeSeconds,
   marketOpen,
   legReadiness,
@@ -1851,6 +1862,7 @@ function buildExecutionReadiness({
   chartLimited: boolean;
   chartLoading: boolean;
   brokerDegraded: boolean;
+  optionsUnavailable: { occ: string; underlying: string } | null;
   quoteAgeSeconds: number | null;
   marketOpen: boolean;
   /**
@@ -1878,6 +1890,21 @@ function buildExecutionReadiness({
       destination: "Submit locked while broker data is degraded",
       reviewCopy: "Live send locked · broker snapshot required",
       icon: Plug,
+    };
+  }
+
+  if (optionsUnavailable) {
+    return {
+      label: "Blocked",
+      tone: "loss",
+      headline: "Cannot submit: option quote unavailable",
+      detail: `${optionsUnavailable.occ} did not return an executable option quote. Refresh the contract quote before sending this ticket.`,
+      canSubmit: false,
+      blocker: `Option quote unavailable for ${optionsUnavailable.occ}.`,
+      submitLabel: "Cannot submit — refresh option quote",
+      destination: "Submit locked while the option contract quote is missing",
+      reviewCopy: "Cannot submit · option quote missing",
+      icon: LockSimple,
     };
   }
 

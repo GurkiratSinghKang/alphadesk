@@ -1310,7 +1310,7 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           className="w-full h-full"
           role="application"
           tabIndex={0}
-          aria-label="Interactive price chart. Use the chart toolbar controls for chart type, indicators, replay, alerts, and orders. Pointer users can zoom with the wheel and drag to pan."
+          aria-label="Interactive trading chart. Use the toolbar controls for chart type, indicators, replay, alerts, and orders. Pointer users can zoom with the wheel and drag to pan."
         />
       </>
     );

@@ -644,8 +644,9 @@ export const ERROR_CODE_COPY: Record<EarningsErrorCode, string> = {
     "News feed in cooldown — newsdata.io rate limit hit (resumes in ~15 min)",
   news_error: "News feed unavailable — newsdata.io returned an error; retry shortly",
   chain_demo:
-    "⚠ Options chain is SYNTHETIC (BSM-modelled) — Polygon options feed unavailable. Strikes/Greeks are estimates, not OPRA quotes",
-  iv_unavailable: "IV rank unavailable — daily HV/IV-rank job hasn't backfilled this symbol yet",
+    "Options chain is SYNTHETIC (BSM-modelled) — Polygon options feed unavailable. Strikes/Greeks are estimates, not OPRA quotes",
+  iv_unavailable:
+    "IV rank history is warming up — live current IV and HV are available; rank appears after 30 stored daily IV samples",
   iv_term_partial:
     "IV term structure incomplete — ≥3 of 6 expiry fetches failed; longer-dated expiries may be missing",
   metrics_unavailable:
@@ -672,7 +673,7 @@ function PartialDataBanner({ codes }: { codes: EarningsErrorCode[] }) {
       className="mb-3 rounded border border-[color:var(--warn,#d97706)] bg-[color:var(--warn-tint,rgba(217,119,6,0.12))] px-3 py-2"
     >
       <p className="font-mono text-label text-[color:var(--warn,#d97706)]" aria-hidden="true">
-        ⚠ PARTIAL DATA
+        DATA NOTES
       </p>
       <ul className="mt-1 space-y-0.5 font-mono text-label u-muted">
         {codes.map((c) => (

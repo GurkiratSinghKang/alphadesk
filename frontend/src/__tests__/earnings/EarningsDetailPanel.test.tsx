@@ -191,10 +191,9 @@ describe("EarningsDetailPanel", () => {
     );
     const banner = container.querySelector('[data-slot="partial-data-banner"]');
     expect(banner).not.toBeNull();
-    // Round-12 / PD-1: copy made more concrete. Still mentions
-    // "synthetic" + "IV rank" — exact wording flexible.
+    // Copy should distinguish synthetic chain risk from IV-history warm-up.
     expect(banner?.textContent).toMatch(/synthetic/i);
-    expect(banner?.textContent).toMatch(/IV rank unavailable/i);
+    expect(banner?.textContent).toMatch(/IV rank history is warming up/i);
   });
 
   it("renders chain_demo banner copy referencing the synthetic options chain (CLUSTER D/12)", () => {

@@ -49,7 +49,7 @@ from typing import Literal
 CURATED_OPTIONABLE_UNIVERSE: frozenset[str] = frozenset({
     # Mega caps (SP100 + top 30 outside) — $100B+
     "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "META", "NVDA", "TSLA",
-    "BRK.B", "AVGO", "LLY", "WMT", "JPM", "V", "XOM", "MA", "ORCL",
+    "BRK.B", "AVGO", "ARM", "APP", "LLY", "WMT", "JPM", "V", "XOM", "MA", "ORCL",
     "COST", "HD", "PG", "JNJ", "NFLX", "BAC", "CRM", "ABBV", "CVX",
     "KO", "MRK", "AMD", "ADBE", "PEP", "TMO", "ACN", "LIN", "CSCO",
     "MCD", "ABT", "TXN", "GE", "DHR", "WFC", "NOW", "INTU", "IBM",
@@ -81,6 +81,7 @@ CURATED_OPTIONABLE_UNIVERSE: frozenset[str] = frozenset({
 # and as an ordering hint when many names share a print day.
 HEADLINE_EARNINGS_SYMBOLS: tuple[str, ...] = (
     "MSFT", "AMZN", "GOOGL", "GOOG", "AAPL", "META", "NVDA", "TSLA",
+    "ARM", "APP",
 )
 
 
@@ -104,7 +105,7 @@ BMO_AMC_FALLBACK_MAP: dict[str, Literal["BMO", "AMC"]] = {
     # Tech / semis (overwhelmingly AMC)
     "AAPL": "AMC", "MSFT": "AMC", "GOOG": "AMC", "GOOGL": "AMC",
     "AMZN": "AMC", "META": "AMC", "NVDA": "AMC", "TSLA": "AMC",
-    "AMD": "AMC", "NFLX": "AMC", "AVGO": "AMC", "ADBE": "AMC",
+    "AMD": "AMC", "ARM": "AMC", "APP": "AMC", "NFLX": "AMC", "AVGO": "AMC", "ADBE": "AMC",
     "ORCL": "AMC", "CRM": "AMC", "NOW": "AMC", "INTU": "AMC",
     "PANW": "AMC", "FTNT": "AMC", "CRWD": "AMC", "DDOG": "AMC",
     "CDNS": "AMC", "SNPS": "AMC", "PLTR": "AMC", "SNOW": "AMC",

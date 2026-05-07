@@ -79,7 +79,7 @@ export const spec = {
 
     {
       kind: "navigate",
-      to: "/trade?symbol=NVDA&contract=NVDA260425C00205000&side=sell&qty=1&limit=1.42&strategy=earnings-options-play",
+      to: "/trade?symbol=NVDA&contract=NVDA260515C00205000&side=sell&qty=1&limit=1.42&strategy=earnings-options-play",
     },
     { kind: "wait", for: "networkidle", timeout: 15000 },
     { kind: "wait", for: "selector", selector: "[data-slot='active-contract']", timeout: 10000 },
@@ -105,9 +105,9 @@ export const spec = {
         if (contract.dataset.orderSide !== "sell") {
           throw new Error(`expected sell side, got ${contract.dataset.orderSide}`);
         }
-        if (!text.includes("NVDA260425C00205000")) throw new Error("missing OCC contract text");
+        if (!text.includes("NVDA260515C00205000")) throw new Error("missing OCC contract text");
         if (!text.includes("@ $1.42")) throw new Error("missing limit price text");
-        if (symbol.value !== "NVDA260425C00205000") {
+        if (symbol.value !== "NVDA260515C00205000") {
           throw new Error(`expected OCC symbol in ticket, got ${symbol.value}`);
         }
         if (qty.value !== "1") throw new Error(`expected qty 1, got ${qty.value}`);
@@ -144,7 +144,7 @@ export const spec = {
 
     {
       kind: "navigate",
-      to: "/trade?symbol=NVDA&legs=NVDA260424P00200000:sell:1:1.45,NVDA260424C00220000:sell:1:1.32&strategy=earnings-options-play&combo_type=strangle",
+      to: "/trade?symbol=NVDA&legs=NVDA260515P00200000:sell:1:1.45,NVDA260515C00220000:sell:1:1.32&strategy=earnings-options-play&combo_type=strangle",
     },
     { kind: "wait", for: "networkidle", timeout: 15000 },
     { kind: "wait", for: "selector", selector: "[data-slot='active-legs']", timeout: 10000 },
@@ -170,8 +170,8 @@ export const spec = {
 
         const rootText = legsRoot.textContent ?? "";
         for (const expected of [
-          "NVDA260424P00200000",
-          "NVDA260424C00220000",
+          "NVDA260515P00200000",
+          "NVDA260515C00220000",
           "@ $1.45",
           "@ $1.32",
         ]) {
@@ -180,7 +180,7 @@ export const spec = {
         if (!legs.every((leg) => leg instanceof HTMLElement && leg.dataset.orderSide === "sell")) {
           throw new Error("expected every combo leg to be sell side");
         }
-        if (symbol.value !== "NVDA260424P00200000") {
+        if (symbol.value !== "NVDA260515P00200000") {
           throw new Error(`expected first leg in ticket, got ${symbol.value}`);
         }
         if (!symbol.disabled) throw new Error("combo ticket symbol should be locked");

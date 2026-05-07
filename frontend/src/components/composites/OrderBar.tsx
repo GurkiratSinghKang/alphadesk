@@ -451,9 +451,20 @@ export default function OrderBar({
     if (!submitting) submittingRef.current = false;
   }, [submitting]);
 
+  const optionQuoteBlocked = optionsUnavailable != null;
+  const effectiveSubmitDisabled = submitDisabled || optionQuoteBlocked;
+  const effectiveSubmitLabel = optionQuoteBlocked
+    ? "Cannot submit — refresh option quote"
+    : submitLabel;
+  const effectiveSubmitDisabledReason =
+    submitDisabledReason ??
+    (optionQuoteBlocked
+      ? `Option quote unavailable for ${optionsUnavailable.occ}.`
+      : null);
+
   const stage = () => {
     if (submitting || submittingRef.current) return;
-    if (submitDisabled) return;
+    if (effectiveSubmitDisabled) return;
     if (qtyInvalid || priceInvalid || stopInvalid || bracketInvalid || symInvalid) return;
     submittingRef.current = true;
     const result = onSubmit(currentDraft);
@@ -738,6 +749,8 @@ export default function OrderBar({
 
       <Field label="Price">
         <Input
+          aria-label="Price"
+          data-testid="order-bar-price"
           value={priceRequired ? price : ""}
           onChange={(e) => setPrice(e.target.value)}
           inputMode="decimal"
@@ -752,6 +765,8 @@ export default function OrderBar({
 
       <Field label="Stop">
         <Input
+          aria-label="Stop"
+          data-testid="order-bar-stop"
           value={stopRequired ? stop : ""}
           onChange={(e) => setStop(e.target.value)}
           inputMode="decimal"
@@ -928,25 +943,25 @@ export default function OrderBar({
           variant="primary"
           className={cn(
             "w-full md:w-auto min-h-11",
-            submitDisabled && "!border-amber/50 !bg-bg-elev-2 !text-amber disabled:opacity-100",
+            effectiveSubmitDisabled && "!border-amber/50 !bg-bg-elev-2 !text-amber disabled:opacity-100",
           )}
           onClick={stage}
           // BUG-002 + Round-28 — disable during in-flight POST, empty
           // strategy, and when client-side qty / price / stop / symbol
           // validation fails. Backend 422 is the belt; this is suspenders.
-          data-state={submitDisabled ? "stale" : undefined}
-          disabled={submitting || submitDisabled || noStrategies || qtyInvalid || priceInvalid || stopInvalid || bracketInvalid || symInvalid}
+          data-state={effectiveSubmitDisabled ? "stale" : undefined}
+          disabled={submitting || effectiveSubmitDisabled || noStrategies || qtyInvalid || priceInvalid || stopInvalid || bracketInvalid || symInvalid}
           aria-busy={submitting || undefined}
           data-testid="order-bar-submit"
         >
-          {submitting ? "Submitting…" : submitLabel}
+          {submitting ? "Submitting…" : effectiveSubmitLabel}
         </Button>
-        {submitDisabledReason ? (
+        {effectiveSubmitDisabledReason ? (
           <span
             data-slot="order-submit-blocker"
             className="max-w-[320px] text-center font-sans text-body-sm leading-snug text-amber md:text-right"
           >
-            {submitDisabledReason}
+            {effectiveSubmitDisabledReason}
           </span>
         ) : null}
         <span
