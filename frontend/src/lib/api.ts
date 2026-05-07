@@ -522,6 +522,66 @@ export function getStrategyAnalytics(strategyId: string) {
   return apiFetch<StrategyAnalytics>(`/api/v1/strategies/${strategyId}/analytics`);
 }
 
+// ── Strategy reverse-lookup by symbol (T11 — symbols-page band) ─────────
+//
+// Backend: GET /api/v1/strategies/by-symbol/{symbol}. One row per catalogue
+// entry; ``current_position`` is populated from the trade ledger when the user
+// has an open / partial-fill trade for ``(symbol, strategy)``. MVP scope —
+// ``in_universe`` is hardcoded true and ``has_entry_signal`` / ``score`` /
+// ``side`` are hardcoded null/false until the per-strategy signal-cache
+// integration lands.
+
+interface RawStrategyMatchPosition {
+  qty: number;
+  entry_price: number;
+  unrealized_pnl: number;
+}
+
+interface RawStrategyMatch {
+  strategy_id: string;
+  name: string;
+  in_universe: boolean;
+  has_entry_signal: boolean;
+  current_position: RawStrategyMatchPosition | null;
+  score: number | null;
+  side: "long" | "short" | null;
+  last_evaluated: string;
+}
+
+interface RawStrategyMatchesResponse {
+  symbol: string;
+  matches: RawStrategyMatch[];
+  generated_at: string;
+}
+
+export async function getStrategiesBySymbol(
+  symbol: string,
+): Promise<import("@/types").StrategyMatchesResponse> {
+  const raw = await apiFetch<RawStrategyMatchesResponse>(
+    `/api/v1/strategies/by-symbol/${encodeURIComponent(symbol)}`,
+  );
+  return {
+    symbol: raw.symbol,
+    matches: raw.matches.map((m) => ({
+      strategyId: m.strategy_id,
+      name: m.name,
+      inUniverse: m.in_universe,
+      hasEntrySignal: m.has_entry_signal,
+      currentPosition: m.current_position
+        ? {
+            qty: m.current_position.qty,
+            entryPrice: m.current_position.entry_price,
+            unrealizedPnl: m.current_position.unrealized_pnl,
+          }
+        : null,
+      score: m.score,
+      side: m.side,
+      lastEvaluated: m.last_evaluated,
+    })),
+    generatedAt: raw.generated_at,
+  };
+}
+
 // ── Kill-switch (Plan B.5) ────────────────────────────────────────────────
 
 export interface DisabledEvent {

@@ -13,7 +13,7 @@ import { NotFound } from "../_sections/NotFound";
 import { OptionsThesisBand } from "../_sections/OptionsThesisBand";
 import { RecommendedSetups } from "../_sections/RecommendedSetups";
 import { StickyBand, type StickyBandQuote } from "../_sections/StickyBand";
-import { StrategyReverseLookupStub } from "../_sections/StrategyReverseLookupStub";
+import { StrategyReverseLookup } from "../_sections/StrategyReverseLookup";
 import { UnsupportedAsset } from "../_sections/UnsupportedAsset";
 
 export interface SymbolPageClientProps {
@@ -204,7 +204,7 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
         underlying={quote?.last ?? null}
       />
 
-      {showPlaceholderStubs() && <StrategyReverseLookupStub />}
+      <StrategyReverseLookup symbol={symbol} />
 
       <div
         data-slot="agents-earnings-row"
