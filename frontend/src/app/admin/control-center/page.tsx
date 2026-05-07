@@ -8,6 +8,7 @@
 export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from "react";
+import { AppMindMap } from "./_components/AppMindMap";
 import {
   getAdminBackendKeys,
   patchAdminBackendKeys,
@@ -46,9 +47,9 @@ import { cn } from "@/lib/utils";
  */
 export default function AdminControlCenterPage() {
   return (
-    <div className="mx-auto max-w-[1100px] space-y-8 px-6 py-8">
+    <div className="mx-auto max-w-[1600px] space-y-8 px-4 py-8 md:px-6">
       <header className="space-y-1.5">
-        <p className="t-label u-brand">⚙ ADMIN · CONTROL CENTER</p>
+        <p className="t-label u-brand">ADMIN / CONTROL CENTER</p>
         <h1 className="font-display text-h1 text-fg">Runtime configuration</h1>
         <p className="t-mono text-body-sm u-muted">
           Rotate backend keys, toggle dashboard sections, and trigger a
@@ -58,6 +59,7 @@ export default function AdminControlCenterPage() {
         </p>
       </header>
 
+      <AppMindMap />
       <BackendKeysPanel />
       <LayoutConfigPanel />
       <DeployPanel />
@@ -175,7 +177,7 @@ function BackendKeysPanel() {
                   disabled={saving || !(edits[k.key] ?? "").trim()}
                   className="min-h-touch rounded border border-[color:var(--brand)] px-3 t-mono text-label u-brand hover:bg-[color:var(--brand-tint)] disabled:opacity-50"
                 >
-                  Save
+                  Save key
                 </button>
                 {k.set ? (
                   <button
@@ -184,7 +186,7 @@ function BackendKeysPanel() {
                     disabled={saving}
                     className="min-h-touch rounded border border-[color:var(--loss)]/50 px-3 t-mono text-label u-loss hover:bg-[color:var(--loss)]/10 disabled:opacity-50"
                   >
-                    Clear
+                    Clear key
                   </button>
                 ) : null}
               </div>
