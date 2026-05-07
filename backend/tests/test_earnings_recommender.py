@@ -1693,7 +1693,7 @@ def test_setup_confidence_vol_premium_neutral_band_no_change():
 
 
 def test_setup_confidence_claude_multiplier_high_conf():
-    """Claude conf=1.0 → multiplier (0.7 + 0.3*1.0) = 1.0 → score unchanged."""
+    """Claude conf=1.0 → multiplier (0.5 + 0.5*1.0) = 1.0 → score unchanged."""
     setup = _stub_setup(pop=0.50)
     score = setup_confidence(
         setup,
@@ -1704,8 +1704,8 @@ def test_setup_confidence_claude_multiplier_high_conf():
     assert score == pytest.approx(0.50)
 
 
-def test_setup_confidence_claude_multiplier_low_conf_floors_at_seventy():
-    """Claude conf=0.0 → multiplier 0.7 (NOT zero) → score keeps 70%."""
+def test_setup_confidence_claude_multiplier_low_conf_floors_at_fifty():
+    """Claude conf=0.0 → multiplier 0.5 (NOT zero) → score keeps 50%."""
     setup = _stub_setup(pop=0.50)
     score = setup_confidence(
         setup,
@@ -1713,7 +1713,7 @@ def test_setup_confidence_claude_multiplier_low_conf_floors_at_seventy():
         claude_structured_confidence=0.0,
         direction_alignment=True,
     )
-    assert score == pytest.approx(0.35)
+    assert score == pytest.approx(0.25)
 
 
 def test_setup_confidence_misaligned_direction_penalty():
@@ -1747,10 +1747,10 @@ def test_setup_confidence_clamped_to_zero_low_inputs():
     score = setup_confidence(
         setup,
         vol_premium_score=0.0,  # -0.10
-        claude_structured_confidence=0.0,  # ×0.7
+        claude_structured_confidence=0.0,  # ×0.5
         direction_alignment=False,  # -0.15
     )
-    # 0.10 - 0.10 = 0.00, ×0.7 = 0.00, -0.15 = -0.15 → clamp to 0
+    # 0.10 - 0.10 = 0.00, ×0.5 = 0.00, -0.15 = -0.15 → clamp to 0
     assert score == pytest.approx(0.0)
 
 
@@ -1758,8 +1758,8 @@ def test_setup_confidence_full_formula_combined():
     """All four components active in a realistic case.
 
     pop=0.65, vol_premium=0.20 (bonus +0.10) → 0.75
-    claude_conf=0.80 → ×(0.7 + 0.3*0.8) = ×0.94 → 0.705
-    aligned → no penalty → 0.705
+    claude_conf=0.80 → ×(0.5 + 0.5*0.8) = ×0.90 → 0.675
+    aligned → no penalty → 0.675
     """
     setup = _stub_setup(pop=0.65)
     score = setup_confidence(
@@ -1768,7 +1768,47 @@ def test_setup_confidence_full_formula_combined():
         claude_structured_confidence=0.80,
         direction_alignment=True,
     )
-    assert score == pytest.approx(0.705, abs=1e-3)
+    assert score == pytest.approx(0.675, abs=1e-3)
+
+
+# --- AMD/ARM-class regression + high-conviction guard ---------------------
+
+
+def test_setup_confidence_amd_arm_class_lands_below_modal_trigger():
+    """Borderline directional case: PoP=0.65, vol=0.10 (no adjust),
+    claude=0.40, aligned=True → 0.65 × (0.5 + 0.5*0.4) = 0.65 × 0.7 = 0.455.
+
+    The 0.7 floor used to leave this case at 0.65 × 0.82 = 0.533, which
+    sat above the 0.50 modal trigger and let the AMD/ARM-class regression
+    through. The 0.5 floor collapses it to 0.455 — well below 0.50 — so
+    the modal renders the skip path instead.
+    """
+    setup = _stub_setup(pop=0.65)
+    score = setup_confidence(
+        setup,
+        vol_premium_score=0.10,  # neutral band — no ±0.10
+        claude_structured_confidence=0.40,
+        direction_alignment=True,
+    )
+    assert score == pytest.approx(0.455, abs=1e-3)
+    assert score < 0.50, "must land under the 0.50 modal trigger"
+
+
+def test_setup_confidence_high_conviction_still_scores_high():
+    """High-conviction setup must still score high after the floor change.
+
+    PoP=0.80, vol=0.20 (+0.10 bonus → 0.90), claude=0.85, aligned=True
+    → 0.90 × (0.5 + 0.5*0.85) = 0.90 × 0.925 = 0.8325. Confirms the
+    floor change doesn't penalize legitimate high-conviction plays.
+    """
+    setup = _stub_setup(pop=0.80)
+    score = setup_confidence(
+        setup,
+        vol_premium_score=0.20,
+        claude_structured_confidence=0.85,
+        direction_alignment=True,
+    )
+    assert score == pytest.approx(0.8325, abs=1e-3)
 
 
 # --- Integration: recommend_setups stamps confidence on every setup -------

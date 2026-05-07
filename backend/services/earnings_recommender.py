@@ -2096,8 +2096,12 @@ def setup_confidence(
             score -= 0.10
 
     if claude_structured_confidence is not None:
-        # Floor at 0.7 so a weak Claude run never zeroes a high-PoP setup.
-        score *= 0.7 + 0.3 * claude_structured_confidence
+        # Floor at 0.5 so a weak Claude run damps but never zeroes a
+        # high-PoP setup. Earlier 0.7 floor left borderline directional
+        # cases (PoP=0.65, claude=0.40) at multiplier 0.82 → score 0.533,
+        # which kept the AMD/ARM-class regression above the 0.50 modal
+        # trigger; the 0.5 floor collapses the same case to 0.385.
+        score *= 0.5 + 0.5 * claude_structured_confidence
 
     if not direction_alignment:
         score -= 0.15
