@@ -1,6 +1,12 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+
 import OptionsPayoffPanel from "@/components/options/OptionsPayoffPanel";
+import ConfidenceChip from "@/components/options/ConfidenceChip";
+import LowConfidenceWarningModal from "@/components/options/LowConfidenceWarningModal";
+import { isLowConfDirectional } from "@/lib/confidenceThresholds";
 import { fmtCurrency, fmtPct } from "@/lib/intl";
 import { formatOccSymbol } from "@/lib/occ";
 import type { EarningsSetup } from "@/types";
@@ -48,6 +54,16 @@ export function RecommendedSetups({
   isETF,
   underlying,
 }: RecommendedSetupsProps) {
+  // P0 audit (2026-05-06): mirror EOP TradeButtonRow's discipline gate.
+  // Directional setups under 50% confidence open a warning modal before
+  // navigating to /trade; iron condor / long straddle bypass this surface.
+  const router = useRouter();
+  const [warningModal, setWarningModal] = useState<{
+    href: string;
+    setupName: string;
+    confidencePct: number;
+  } | null>(null);
+
   if (isETF) return null;
   if (!setups || setups.length === 0) return null;
 
@@ -69,9 +85,21 @@ export function RecommendedSetups({
             symbol={symbol}
             underlying={underlying}
             rank={idx + 1}
+            onLowConfClick={(payload) => setWarningModal(payload)}
           />
         ))}
       </div>
+      <LowConfidenceWarningModal
+        open={warningModal !== null}
+        setupName={warningModal?.setupName ?? ""}
+        confidencePct={warningModal?.confidencePct ?? 0}
+        onCancel={() => setWarningModal(null)}
+        onOverride={() => {
+          const target = warningModal?.href ?? null;
+          setWarningModal(null);
+          if (target) router.push(target);
+        }}
+      />
     </section>
   );
 }
@@ -81,15 +109,36 @@ function SetupCard({
   symbol,
   underlying,
   rank,
+  onLowConfClick,
 }: {
   setup: EarningsSetup;
   symbol: string;
   underlying: number | null;
   rank: number;
+  onLowConfClick: (payload: {
+    href: string;
+    setupName: string;
+    confidencePct: number;
+  }) => void;
 }) {
+  const router = useRouter();
   const draft = payoffDraftFromSetup(setup, symbol, underlying);
   const tradeHref = buildTradeHref(symbol, setup);
   const isSkip = setup.setupId === "skip";
+  const setupLabelText = humanLabel(setup.setupId);
+
+  const handleTradeClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    if (isLowConfDirectional(setup.setupLabel, setup.confidence)) {
+      onLowConfClick({
+        href: tradeHref,
+        setupName: setupLabelText,
+        confidencePct: Math.round((setup.confidence as number) * 100),
+      });
+      return;
+    }
+    router.push(tradeHref);
+  };
 
   return (
     <article
@@ -103,12 +152,15 @@ function SetupCard({
         <div className="flex items-baseline gap-2">
           <span className="t-label u-brand">#{rank}</span>
           <h3 className="t-mono text-body font-semibold">
-            {humanLabel(setup.setupId)}
+            {setupLabelText}
           </h3>
         </div>
-        <span className="t-mono text-label u-muted tabular-nums">
-          PoP {fmtPct(setup.popEstimate, 0)} · Kelly {fmtPct(setup.sizingKellyPct, 1)}
-        </span>
+        <div className="flex items-baseline gap-2">
+          <span className="t-mono text-label u-muted tabular-nums">
+            PoP {fmtPct(setup.popEstimate, 0)} · Kelly {fmtPct(setup.sizingKellyPct, 1)}
+          </span>
+          <ConfidenceChip confidence={setup.confidence} />
+        </div>
       </header>
 
       {setup.rationale ? (
@@ -134,20 +186,22 @@ function SetupCard({
 
       {!isSkip && draft != null ? (
         <div className="mt-3" data-slot="setup-payoff">
-          <OptionsPayoffPanel draft={draft} title={humanLabel(setup.setupId)} compact />
+          <OptionsPayoffPanel draft={draft} title={setupLabelText} compact />
         </div>
       ) : null}
 
       {!isSkip ? (
         <div className="mt-3 flex items-center justify-end">
-          <a
-            href={tradeHref}
+          <button
+            type="button"
             data-testid="setup-trade-cta"
             data-slot="setup-trade-cta"
+            data-href={tradeHref}
+            onClick={handleTradeClick}
             className="inline-flex min-h-9 items-center rounded-sm border border-border bg-bg px-3 text-label font-semibold u-muted transition hover:border-primary hover:text-fg"
           >
             Trade this setup
-          </a>
+          </button>
         </div>
       ) : null}
     </article>

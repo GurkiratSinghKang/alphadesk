@@ -30,6 +30,9 @@ import { Button } from "@/components/ui/button";
  *     ``DestructiveConfirmModal`` pattern; A-F4 audit precedent).
  *   ▸ "Override and trade anyway" — close + ``router.push(href)`` to
  *     proceed to ``/trade?...`` with the original deep-link.
+ *
+ * Shared between EOP TradeButtonRow and the symbols-page
+ * RecommendedSetups so the friction appears identically on both.
  */
 
 export interface LowConfidenceWarningModalProps {

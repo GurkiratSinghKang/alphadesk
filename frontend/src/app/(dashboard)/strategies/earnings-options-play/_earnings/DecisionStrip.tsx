@@ -2,6 +2,7 @@
 
 import type { ClaudeStructured, EarningsMetricsBlock } from "@/types";
 import { fmtPct } from "@/lib/intl";
+import { verdictPillToneClass } from "@/lib/verdictPillTone";
 
 const LEGACY_UNSUPPORTED_PLAYS = new Set(["short call", "short strangle"]);
 
@@ -13,12 +14,6 @@ const LEGACY_UNSUPPORTED_PLAYS = new Set(["short call", "short strangle"]);
  * update this in lockstep.
  */
 const CONFIDENCE_THRESHOLD_PCT = 60;
-
-// PR-1 / T5: 3-bucket tone-mapping for the verdict pill. Mirrors the
-// per-setup credibility chip cutoffs in ``TradeButtonRow.ConfidenceChip``
-// so the page-level verdict tone and the per-button chip tone agree.
-const HIGH_CONFIDENCE_THRESHOLD = 0.65;
-const MEDIUM_CONFIDENCE_THRESHOLD = 0.40;
 
 // PR-1 / T5: vol-premium chip cutoffs. ≥ 15% premium ⇒ vol-selling
 // edge present; 5–15% ⇒ thinner edge; < 5% ⇒ "thin" caveat. Mirrors the
@@ -53,16 +48,6 @@ const VOL_PREMIUM_THIN_THRESHOLD = 0.05;
 export interface DecisionStripProps {
   structured: ClaudeStructured | null;
   metrics: EarningsMetricsBlock | null;
-}
-
-function verdictPillToneClass(confidence: number): string {
-  if (confidence >= HIGH_CONFIDENCE_THRESHOLD) {
-    return "border border-[color:var(--brand)] u-brand";
-  }
-  if (confidence >= MEDIUM_CONFIDENCE_THRESHOLD) {
-    return "border border-[color:var(--border)] u-muted";
-  }
-  return "border border-state-warning-border text-state-warning-fg";
 }
 
 function formatSignedPct(value: number): string {

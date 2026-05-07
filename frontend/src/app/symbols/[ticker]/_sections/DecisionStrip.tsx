@@ -5,6 +5,7 @@ import RegimePill, {
   type RegimeVol,
 } from "@/components/primitives/RegimePill";
 import StatusDot from "@/components/primitives/StatusDot";
+import { verdictPillToneClass } from "@/lib/verdictPillTone";
 import type { Analysis, ClaudeStructured } from "@/types";
 
 import {
@@ -90,6 +91,13 @@ export function DecisionStrip({
   const hasVerdict = action != null;
   const pillLabel = hasVerdict ? verdictLabel(tone) : null;
   const borderColor = verdictBorderVar(tone);
+  // P1 audit (2026-05-06): confidence-bucket tone overrides the
+  // setup-string mapping when conviction is known. A 30% "long call"
+  // now reads warn-tone here too, matching EOP DecisionStrip's pill.
+  // null conviction falls back to the existing verdictTone setup-string
+  // border so the parity surface remains back-compat.
+  const confidenceToneClass =
+    conviction != null ? verdictPillToneClass(conviction) : null;
 
   return (
     <div
@@ -106,8 +114,11 @@ export function DecisionStrip({
           <span
             data-testid="verdict-pill"
             data-tone={tone}
-            className="inline-flex items-center gap-2 rounded-pill border bg-bg-elev-1 px-3 py-1 font-display text-body-sm text-fg"
-            style={{ borderColor }}
+            className={
+              "inline-flex items-center gap-2 rounded-pill bg-bg-elev-1 px-3 py-1 font-display text-body-sm text-fg "
+              + (confidenceToneClass ?? "border")
+            }
+            style={confidenceToneClass ? undefined : { borderColor }}
           >
             <span className="font-semibold tracking-wide">{pillLabel}</span>
             <span aria-hidden="true">·</span>
