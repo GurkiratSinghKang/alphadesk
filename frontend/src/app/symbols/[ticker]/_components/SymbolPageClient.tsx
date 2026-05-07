@@ -20,6 +20,15 @@ export interface SymbolPageClientProps {
   symbol: string;
 }
 
+// Hide the four "Coming soon" placeholder sections (Strategy reverse lookup,
+// Agents debate, About/Analyst peers, Key stats) until each section has a
+// real backend behind it. Re-enable when a real backend lands for that
+// section by setting NEXT_PUBLIC_SHOW_SYMBOL_PAGE_STUBS=true. Read inside
+// the function so tests that mutate process.env observe the change.
+function showPlaceholderStubs(): boolean {
+  return process.env.NEXT_PUBLIC_SHOW_SYMBOL_PAGE_STUBS === "true";
+}
+
 function pickNumber(value: Record<string, unknown>, key: keyof Quote): number | undefined {
   const raw = value[key as string];
   return typeof raw === "number" && Number.isFinite(raw) ? raw : undefined;
@@ -195,13 +204,13 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
         underlying={quote?.last ?? null}
       />
 
-      <StrategyReverseLookupStub />
+      {showPlaceholderStubs() && <StrategyReverseLookupStub />}
 
       <div
         data-slot="agents-earnings-row"
         className="grid grid-cols-1 gap-4 px-4 sm:px-6 mb-6 xl:grid-cols-2"
       >
-        <AgentsDebateStub />
+        {showPlaceholderStubs() && <AgentsDebateStub />}
         <EarningsPanel
           isETF={data.isETF}
           historicalEarnings={data.earningsDetail?.historicalEarnings ?? null}
@@ -213,7 +222,7 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
 
       <NewsBand news={newsArticles} />
 
-      <AboutAnalystPeersStub />
+      {showPlaceholderStubs() && <AboutAnalystPeersStub />}
     </main>
   );
 }

@@ -1,15 +1,10 @@
 """Round-6 L-5 — JWT iss/aud/iat/nbf claim hardening."""
 from __future__ import annotations
 
-import os
-
-# Set JWT secret BEFORE any module imports core.config so settings boots
-# cleanly. tests/conftest.py adds the backend dir to sys.path; we need
-# the env vars to land before the first ``from core.config import settings``
-# runs in any imported helper.
-os.environ.setdefault("JWT_SECRET", "test-secret-for-l5-" + "x" * 32)
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
-os.environ.setdefault("SKIP_DB_INIT", "true")
+# JWT_SECRET / DATABASE_URL / SKIP_DB_INIT are seeded by the root
+# ``backend/conftest.py`` BEFORE any test module is imported, so the
+# pydantic ``settings`` singleton boots with a usable secret regardless
+# of which test runs first in the collection order.
 
 from datetime import datetime, timedelta, timezone
 from typing import Any

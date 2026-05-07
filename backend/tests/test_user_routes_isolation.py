@@ -33,11 +33,9 @@ from __future__ import annotations
 
 import os
 
-# Settle env BEFORE the first ``from core.config import settings`` lands
-# (transitively pulled by api/routes/user.py via core/auth).
-os.environ.setdefault("JWT_SECRET", "test-secret-for-isolation-" + "x" * 32)
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
-os.environ.setdefault("SKIP_DB_INIT", "false")  # we want the DB-touching path
+# JWT_SECRET / DATABASE_URL / SKIP_DB_INIT are seeded by the root
+# ``backend/conftest.py``. ADMIN_USERNAME is specific to this file's
+# data-setup so it stays here.
 os.environ.setdefault("ADMIN_USERNAME", "user_a")
 
 from typing import Any

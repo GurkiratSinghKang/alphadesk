@@ -4,17 +4,14 @@ L-14: /readyz-full now requires auth; /livez and /readyz no longer
 leak ``git_sha`` to unauthenticated callers.
 L-15: /refresh rejects concurrent calls on the same refresh-token jti
 with 401 ``concurrent_refresh``.
+
+JWT_SECRET / DATABASE_URL / SKIP_DB_INIT are seeded by the root
+``backend/conftest.py`` BEFORE any test module is imported.
 """
 from __future__ import annotations
 
-import os
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
-
-# Set env BEFORE module import.
-os.environ.setdefault("JWT_SECRET", "test-secret-for-l14-l15-" + "x" * 32)
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
-os.environ.setdefault("SKIP_DB_INIT", "true")
 
 import pytest
 

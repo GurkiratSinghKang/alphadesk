@@ -1,12 +1,9 @@
-"""Round-6 L-10 + L-11 — ChatRequest pydantic validators."""
+"""Round-6 L-10 + L-11 — ChatRequest pydantic validators.
+
+JWT_SECRET / DATABASE_URL / SKIP_DB_INIT are seeded by the root
+``backend/conftest.py`` BEFORE any test module is imported.
+"""
 from __future__ import annotations
-
-import os
-
-# Set settings before any module imports core.config.
-os.environ.setdefault("JWT_SECRET", "test-secret-for-l10-l11-" + "x" * 32)
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
-os.environ.setdefault("SKIP_DB_INIT", "true")
 
 import pytest
 
