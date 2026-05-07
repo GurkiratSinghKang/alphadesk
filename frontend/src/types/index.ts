@@ -718,8 +718,12 @@ export interface CalendarResponse {
    * Optional on the wire (field is default_factory=list on the backend) so
    * older clients and test fixtures that pre-date the field don't need to
    * thread an empty array through every invocation.
+   *
+   * Wire convention: backend emits `validation_errors`, FE mapper converts
+   * to `validationErrors` (camelCase) at the transport boundary so
+   * downstream consumers stay snake_case-free.
    */
-  validation_errors?: Array<{ symbol: string | null; error: string }>;
+  validationErrors?: Array<{ symbol: string | null; error: string }>;
   /** Round-4: ISO date "YYYY-MM-DD" — start of the window in NY market
    *  date. Optional so older fixtures don't need to thread it. */
   windowStart?: string;
