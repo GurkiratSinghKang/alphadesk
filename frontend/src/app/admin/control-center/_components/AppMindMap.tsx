@@ -4,20 +4,28 @@ import {
   ArrowSquareOut,
   ArrowsOutCardinal,
   ChartLineUp,
+  Clock,
   Code,
   Crosshair,
   Database,
   Files,
   GearSix,
+  GitBranch,
   Graph,
+  Key,
+  ListChecks,
   MagnifyingGlass,
   MagnifyingGlassMinus,
   MagnifyingGlassPlus,
+  Pulse,
   PlugsConnected,
   Robot,
   ShieldCheck,
+  Siren,
   Stack,
+  TreeStructure,
   Warning,
+  Wrench,
 } from "@phosphor-icons/react";
 import {
   useCallback,
@@ -112,6 +120,16 @@ interface MindNode {
   links?: MindLink[];
 }
 
+interface TriageItem {
+  id: string;
+  label: string;
+  value: string;
+  detail: string;
+  tone: Tone;
+  nodeId: string;
+  icon: PhosphorIcon;
+}
+
 type StrategyList = Awaited<ReturnType<typeof getStrategies>>;
 
 interface RuntimeSnapshot {
@@ -137,6 +155,15 @@ interface ViewTransform {
 
 const WORLD = { width: 2200, height: 1500 };
 const SCALE = { min: 0.32, max: 2.2 };
+const SOURCE_ROOT =
+  "https://github.com/GurkiratSinghKang/alphadesk/blob/feature/deployment/";
+
+const ARCHITECTURE_DEPTHS = [
+  { id: "overview", label: "Overview", detail: "Platform", scale: 0.42 },
+  { id: "systems", label: "Systems", detail: "Domains", scale: 0.82 },
+  { id: "services", label: "Services", detail: "Routes", scale: 1.18 },
+  { id: "state", label: "State", detail: "Files", scale: 1.62 },
+] as const;
 
 const DOMAIN_LABELS: Array<{ id: Domain | "all"; label: string }> = [
   { id: "all", label: "All" },
@@ -1686,6 +1713,65 @@ function textMatches(node: MindNode, query: string) {
   return haystack.includes(query);
 }
 
+function nodeMatchesDomain(
+  node: MindNode,
+  domain: Domain | "all",
+  nodeById: ReadonlyMap<string, MindNode>,
+) {
+  return (
+    domain === "all" ||
+    node.domain === domain ||
+    node.domain === "platform" ||
+    (node.parentId ? nodeById.get(node.parentId)?.domain === domain : false)
+  );
+}
+
+function buildNodePath(node: MindNode, nodeById: ReadonlyMap<string, MindNode>) {
+  const path: MindNode[] = [node];
+  let parentId = node.parentId;
+  while (parentId) {
+    const parent = nodeById.get(parentId);
+    if (!parent) break;
+    path.unshift(parent);
+    parentId = parent.parentId;
+  }
+  return path;
+}
+
+function sourceHref(item: string) {
+  if (/^https?:\/\//.test(item) || item.startsWith("/")) return item;
+  if (item.includes("*")) return null;
+  return `${SOURCE_ROOT}${item.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+function controlHref(item: string) {
+  if (!item.startsWith("/")) return null;
+  return item.split(/\s+/)[0];
+}
+
+function toneRank(tone: Tone) {
+  switch (tone) {
+    case "risk":
+      return 4;
+    case "watch":
+      return 3;
+    case "active":
+      return 2;
+    case "healthy":
+      return 1;
+    case "muted":
+    default:
+      return 0;
+  }
+}
+
+function highestTone(items: Array<{ tone: Tone }>): Tone {
+  return items.reduce<Tone>(
+    (current, item) => (toneRank(item.tone) > toneRank(current) ? item.tone : current),
+    "muted",
+  );
+}
+
 function buildEdges(nodes: MindNode[]) {
   const ids = new Set(nodes.map((node) => node.id));
   const dedup = new Set<string>();
@@ -1853,6 +1939,148 @@ function buildRuntimeOverrides(snapshot: RuntimeSnapshot): Record<string, Partia
   return overrides;
 }
 
+function buildTriageItems(snapshot: RuntimeSnapshot): TriageItem[] {
+  const probeTone: Tone = snapshot.loading ? "active" : snapshot.errors.length ? "watch" : "healthy";
+  const keyCount = snapshot.keys?.length ?? 0;
+  const setKeys = snapshot.keys?.filter((key) => key.set).length ?? 0;
+  const missingKeys = snapshot.keys?.filter((key) => !key.set).map((key) => key.label) ?? [];
+  const brokerTotal = snapshot.brokerConnections?.length ?? 0;
+  const brokerErrors = snapshot.brokerConnections?.filter((item) => item.last_error).length ?? 0;
+  const brokerVerified = snapshot.brokerConnections?.filter((item) => item.verified_at).length ?? 0;
+  const strategyCount = snapshot.strategies?.length ?? 0;
+  const activeStrategies = snapshot.strategies?.filter((item) => item.status === "active").length ?? 0;
+
+  return [
+    {
+      id: "probes",
+      label: "Live probes",
+      value: snapshot.loading ? "Syncing" : snapshot.errors.length ? `${snapshot.errors.length} warning` : "Synced",
+      detail: snapshot.updatedAt ? timeLabel(snapshot.updatedAt) : "Awaiting first probe",
+      tone: probeTone,
+      nodeId: "platform",
+      icon: Pulse,
+    },
+    {
+      id: "keys",
+      label: "Provider keys",
+      value: keyCount ? `${setKeys}/${keyCount} set` : "Loading",
+      detail: missingKeys.length ? `Missing ${missingKeys.slice(0, 2).join(", ")}` : "Runtime keys ready",
+      tone: keyCount === 0 ? "active" : setKeys === 0 ? "risk" : setKeys < keyCount ? "watch" : "healthy",
+      nodeId: "backend-keys",
+      icon: Key,
+    },
+    {
+      id: "halt",
+      label: "Trading safety",
+      value: snapshot.halt ? (snapshot.halt.halted ? "Halted" : "Clear") : "Loading",
+      detail: snapshot.halt?.halted
+        ? snapshot.halt.reason ?? "Admin halt active"
+        : snapshot.halt
+          ? "No admin halt active"
+          : "Checking halt state",
+      tone: snapshot.halt ? (snapshot.halt.halted ? "risk" : "healthy") : "active",
+      nodeId: "system-halt",
+      icon: Siren,
+    },
+    {
+      id: "risk",
+      label: "Risk gates",
+      value: snapshot.riskMonitor
+        ? snapshot.riskMonitor.enabled
+          ? "Enabled"
+          : "Disabled"
+        : "Loading",
+      detail: snapshot.riskMonitor?.message ?? "Checking risk monitor",
+      tone: snapshot.riskMonitor ? (snapshot.riskMonitor.enabled ? "healthy" : "risk") : "active",
+      nodeId: "risk-monitor",
+      icon: ShieldCheck,
+    },
+    {
+      id: "pipeline",
+      label: "Pipeline",
+      value: snapshot.pipeline ? (snapshot.pipeline.running ? "Running" : "Idle") : "Loading",
+      detail: snapshot.pipeline?.running
+        ? snapshot.pipeline.current_strategy ?? snapshot.pipeline.stage ?? "Run active"
+        : snapshot.pipeline?.last_result ?? "No recent result",
+      tone: snapshot.pipeline
+        ? snapshot.pipeline.running
+          ? "active"
+          : snapshot.pipeline.last_result && /(fail|error|halt|cancel)/i.test(snapshot.pipeline.last_result)
+            ? "watch"
+            : "healthy"
+        : "active",
+      nodeId: "pipeline-scheduler",
+      icon: ListChecks,
+    },
+    {
+      id: "brokers",
+      label: "Broker rails",
+      value: snapshot.brokerConnections ? `${brokerVerified}/${brokerTotal} verified` : "Loading",
+      detail: brokerTotal
+        ? brokerErrors
+          ? `${brokerErrors} connection with last error`
+          : "Execution credentials mapped"
+        : "Connect broker before live operations",
+      tone: snapshot.brokerConnections
+        ? brokerTotal === 0 || brokerErrors > 0
+          ? "watch"
+          : "healthy"
+        : "active",
+      nodeId: "broker-connections",
+      icon: PlugsConnected,
+    },
+    {
+      id: "agents",
+      label: "AI research",
+      value: snapshot.tradingAgents
+        ? snapshot.tradingAgents.ready
+          ? "Ready"
+          : "Needs setup"
+        : "Loading",
+      detail: snapshot.tradingAgents
+        ? snapshot.tradingAgents.bootstrap_required
+          ? "Bootstrap required"
+          : `${snapshot.tradingAgents.provider} provider`
+        : "Checking TradingAgents",
+      tone: snapshot.tradingAgents ? (snapshot.tradingAgents.ready ? "healthy" : "watch") : "active",
+      nodeId: "tradingagents-runtime",
+      icon: Robot,
+    },
+    {
+      id: "strategies",
+      label: "Strategies",
+      value: snapshot.strategies ? `${activeStrategies}/${strategyCount} active` : "Loading",
+      detail: snapshot.strategies ? "Registry reachable" : "Checking strategy registry",
+      tone: snapshot.strategies ? (activeStrategies > 0 ? "healthy" : "watch") : "active",
+      nodeId: "strategy-registry",
+      icon: ChartLineUp,
+    },
+    {
+      id: "deploy",
+      label: "Deploy rail",
+      value: snapshot.lastDeploy
+        ? snapshot.lastDeploy.ok === false
+          ? "Failed"
+          : snapshot.lastDeploy.triggered_at
+            ? "Recorded"
+            : "Quiet"
+        : "Loading",
+      detail: snapshot.lastDeploy?.triggered_at
+        ? timeLabel(snapshot.lastDeploy.triggered_at)
+        : "No deploy from UI yet",
+      tone: snapshot.lastDeploy
+        ? snapshot.lastDeploy.ok === false
+          ? "risk"
+          : snapshot.lastDeploy.triggered_at
+            ? "healthy"
+            : "watch"
+        : "active",
+      nodeId: "deploy-trigger",
+      icon: GitBranch,
+    },
+  ];
+}
+
 function useRuntimeSnapshot() {
   const [snapshot, setSnapshot] = useState<RuntimeSnapshot>({
     loading: true,
@@ -1933,6 +2161,24 @@ export function AppMindMap() {
   );
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const query = search.trim().toLowerCase();
+  const triageItems = useMemo(() => buildTriageItems(snapshot), [snapshot]);
+  const topTone = highestTone(triageItems);
+  const riskCount = triageItems.filter((item) => item.tone === "risk").length;
+  const watchCount = triageItems.filter((item) => item.tone === "watch").length;
+  const syncLabel = snapshot.loading
+    ? "Syncing"
+    : riskCount
+      ? "Needs attention"
+      : watchCount
+        ? "Live with warnings"
+        : "Live state synced";
+
+  const matchingNodes = useMemo(() => {
+    if (!query) return [];
+    return nodes
+      .filter((node) => textMatches(node, query) && nodeMatchesDomain(node, domain, nodeById))
+      .sort((a, b) => b.level - a.level || a.label.localeCompare(b.label));
+  }, [domain, nodeById, nodes, query]);
 
   const visibleNodes = useMemo(() => {
     const matchingIds = new Set<string>();
@@ -1952,11 +2198,7 @@ export function AppMindMap() {
       const zoomVisible =
         transform.scale >= node.minZoom &&
         (node.maxZoom === undefined || transform.scale <= node.maxZoom);
-      const domainVisible =
-        domain === "all" ||
-        node.domain === domain ||
-        node.domain === "platform" ||
-        (node.parentId ? nodeById.get(node.parentId)?.domain === domain : false);
+      const domainVisible = nodeMatchesDomain(node, domain, nodeById);
       const searchVisible = !query || matchingIds.has(node.id);
       return domainVisible && searchVisible && (query ? true : zoomVisible);
     });
@@ -1975,6 +2217,13 @@ export function AppMindMap() {
     nodeById.get("platform") ??
     nodes[0];
   const hoveredNode = tooltip ? nodeById.get(tooltip.id) : null;
+  const selectedPath = selectedNode ? buildNodePath(selectedNode, nodeById) : [];
+
+  useEffect(() => {
+    if (!query || matchingNodes.length === 0) return;
+    if (matchingNodes.some((node) => node.id === selectedId)) return;
+    setSelectedId(matchingNodes[0].id);
+  }, [matchingNodes, query, selectedId]);
 
   const fitWorld = useCallback(() => {
     const el = containerRef.current;
@@ -2052,6 +2301,25 @@ export function AppMindMap() {
     [zoomAt],
   );
 
+  const focusDepth = useCallback(
+    (scale: number) => {
+      if (selectedNode) {
+        focusNode(selectedNode, scale);
+        return;
+      }
+      setTransform((current) => ({ ...current, scale: clamp(scale, SCALE.min, SCALE.max) }));
+    },
+    [focusNode, selectedNode],
+  );
+
+  const selectNode = useCallback(
+    (node: MindNode, focus = false) => {
+      setSelectedId(node.id);
+      if (focus) focusNode(node);
+    },
+    [focusNode],
+  );
+
   const handleWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
     event.preventDefault();
     zoomAt(event.clientX, event.clientY, event.deltaY > 0 ? 0.9 : 1.12);
@@ -2090,34 +2358,45 @@ export function AppMindMap() {
     });
   };
 
-  const visibleLeafCount = visibleNodes.filter((node) => node.level >= 2).length;
+  const visibleDeepCount = visibleNodes.filter((node) => node.level >= 2).length;
 
   return (
     <section className="overflow-hidden rounded-[28px] border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] shadow-[0_24px_60px_-32px_rgba(5,5,3,0.72)]">
-      <div className="grid gap-5 border-b border-[color:var(--border)] px-4 py-5 md:grid-cols-[minmax(0,1fr)_auto] md:px-6">
+      <div className="grid gap-5 border-b border-[color:var(--border)] bg-[linear-gradient(135deg,rgba(236,230,210,0.04),transparent_42%)] px-4 py-5 md:grid-cols-[minmax(0,1fr)_auto] md:px-6">
         <div className="max-w-[820px]">
           <p className="t-label u-brand">ADMIN / APPLICATION MIND</p>
           <h2 className="mt-2 font-display text-3xl leading-none text-fg md:text-5xl">
             Master map
           </h2>
           <p className="mt-3 text-body-sm leading-relaxed text-fg-muted">
-            Current architecture and state ownership across browser, API, trading engine, data
-            stores, provider rails, runtime controls, and the future master-agent write surface.
+            Architecture, state ownership, runtime health, and admin write surfaces across the
+            browser, API, trading engine, data stores, provider rails, and master-agent boundary.
           </p>
         </div>
         <div className="grid min-w-[220px] gap-2 text-left md:text-right">
           <StatusChip
-            label={snapshot.loading ? "Syncing" : snapshot.errors.length ? "Partial live state" : "Live state synced"}
-            tone={snapshot.errors.length ? "watch" : snapshot.loading ? "active" : "healthy"}
+            label={syncLabel}
+            tone={snapshot.loading ? "active" : topTone === "risk" ? "risk" : topTone === "watch" ? "watch" : "healthy"}
           />
           <p className="t-mono text-label text-fg-muted">
-            {visibleLeafCount} visible nodes / {COMPONENT_NODES.length} mapped
+            {visibleNodes.length} shown / {COMPONENT_NODES.length} mapped
+          </p>
+          <p className="t-mono text-label text-fg-muted">
+            {riskCount} critical / {watchCount} watch / {visibleDeepCount} deep
           </p>
           <p className="t-mono text-label text-fg-muted">
             {snapshot.updatedAt ? timeLabel(snapshot.updatedAt) : "Awaiting first probe"}
           </p>
         </div>
       </div>
+
+      <TriageRail
+        items={triageItems}
+        onSelect={(item) => {
+          const node = nodeById.get(item.nodeId);
+          if (node) selectNode(node, true);
+        }}
+      />
 
       <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_390px]">
         <div className="min-w-0">
@@ -2157,7 +2436,7 @@ export function AppMindMap() {
               ))}
             </div>
 
-            <div className="flex items-center gap-2 lg:justify-end">
+            <div className="hidden items-center gap-2 lg:flex lg:justify-end">
               <IconButton label="Zoom out" onClick={() => zoomCenter(0.86)}>
                 <MagnifyingGlassMinus size={18} weight="bold" />
               </IconButton>
@@ -2178,9 +2457,30 @@ export function AppMindMap() {
             </div>
           </div>
 
+          {query ? (
+            <SearchShelf
+              matches={matchingNodes}
+              query={search.trim()}
+              selectedId={selectedId}
+              onSelect={(node) => selectNode(node, true)}
+            />
+          ) : (
+            <ArchitectureDepthRail
+              currentScale={transform.scale}
+              onSelect={(scale) => focusDepth(scale)}
+            />
+          )}
+
+          <MobileArchitectureExplorer
+            nodes={visibleNodes}
+            selectedId={selectedId}
+            onSelect={(node) => selectNode(node)}
+            onFocus={(node) => selectNode(node, true)}
+          />
+
           <div
             ref={containerRef}
-            className="relative min-h-[620px] touch-none overflow-hidden bg-[radial-gradient(circle_at_18%_18%,rgba(141,179,196,0.16),transparent_28%),radial-gradient(circle_at_80%_20%,rgba(201,166,107,0.14),transparent_24%),linear-gradient(135deg,var(--bg),var(--bg-elev-1))] md:min-h-[760px]"
+            className="relative hidden min-h-[620px] touch-none overflow-hidden bg-[linear-gradient(rgba(236,230,210,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(236,230,210,0.04)_1px,transparent_1px),linear-gradient(135deg,var(--bg),var(--bg-elev-1))] bg-[length:44px_44px,44px_44px,100%_100%] md:block md:min-h-[760px]"
             onWheel={handleWheel}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
@@ -2243,7 +2543,7 @@ export function AppMindMap() {
                   key={node.id}
                   node={node}
                   selected={node.id === selectedId}
-                  onClick={() => setSelectedId(node.id)}
+                  onClick={() => selectNode(node)}
                   onDoubleClick={() => focusNode(node)}
                   onHover={(event) => {
                     setHoveredId(node.id);
@@ -2286,6 +2586,8 @@ export function AppMindMap() {
 
         <MindInspector
           node={selectedNode}
+          path={selectedPath}
+          snapshot={snapshot}
           loading={snapshot.loading}
           errors={snapshot.errors}
           onFocus={() => {
@@ -2294,6 +2596,205 @@ export function AppMindMap() {
         />
       </div>
     </section>
+  );
+}
+
+function TriageRail({
+  items,
+  onSelect,
+}: {
+  items: TriageItem[];
+  onSelect: (item: TriageItem) => void;
+}) {
+  return (
+    <div className="border-b border-[color:var(--border)] bg-[color:var(--bg)] px-4 py-4 md:px-6">
+      <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-9">
+        {items.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onSelect(item)}
+              className={cn(
+                "group min-h-[112px] rounded-[18px] border p-3 text-left transition duration-300 active:scale-[0.98]",
+                "bg-[linear-gradient(180deg,rgba(236,230,210,0.035),transparent)] hover:-translate-y-0.5",
+                tonePanelClass(item.tone),
+              )}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded border", toneIconClass(item.tone))}>
+                  <Icon size={16} weight="bold" />
+                </span>
+                <StatusDot tone={item.tone} />
+              </div>
+              <p className="mt-3 t-mono text-label text-fg-muted">{item.label}</p>
+              <p className={cn("mt-2 font-display text-xl leading-none text-fg", toneTextClass(item.tone))}>
+                {item.value}
+              </p>
+              <p className="mt-2 line-clamp-2 text-label leading-relaxed text-fg-muted">{item.detail}</p>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ArchitectureDepthRail({
+  currentScale,
+  onSelect,
+}: {
+  currentScale: number;
+  onSelect: (scale: number) => void;
+}) {
+  return (
+    <div className="hidden border-b border-[color:var(--border)] bg-[color:var(--bg)] px-4 py-3 md:block">
+      <div className="grid gap-2 lg:grid-cols-[auto_1fr] lg:items-center">
+        <div className="flex items-center gap-2">
+          <span className="grid h-8 w-8 place-items-center rounded border border-[color:var(--border)] text-fg-muted">
+            <TreeStructure size={16} weight="bold" />
+          </span>
+          <div>
+            <p className="t-mono text-label text-fg">Architecture depth</p>
+            <p className="t-mono text-label text-fg-muted">Zoom {Math.round(currentScale * 100)}%</p>
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-4">
+          {ARCHITECTURE_DEPTHS.map((depth) => {
+            const active = Math.abs(currentScale - depth.scale) < 0.18;
+            return (
+              <button
+                key={depth.id}
+                type="button"
+                onClick={() => onSelect(depth.scale)}
+                className={cn(
+                  "min-h-touch rounded border px-3 py-2 text-left transition active:scale-[0.98]",
+                  active
+                    ? "border-[color:var(--brand)] bg-[color:var(--brand-tint)] text-brand"
+                    : "border-[color:var(--border)] text-fg-muted hover:border-[color:var(--border-strong)] hover:text-fg",
+                )}
+              >
+                <span className="block t-mono text-label">{depth.label}</span>
+                <span className="mt-1 block text-label">{depth.detail}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SearchShelf({
+  matches,
+  query,
+  selectedId,
+  onSelect,
+}: {
+  matches: MindNode[];
+  query: string;
+  selectedId: string;
+  onSelect: (node: MindNode) => void;
+}) {
+  return (
+    <div className="border-b border-[color:var(--border)] bg-[color:var(--bg)] px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex min-h-8 items-center gap-2 rounded-full border border-[color:var(--border)] px-3 t-mono text-label text-fg-muted">
+          <MagnifyingGlass size={15} weight="bold" />
+          {matches.length} match{matches.length === 1 ? "" : "es"} for {query}
+        </span>
+        {matches.slice(0, 8).map((node) => (
+          <button
+            key={node.id}
+            type="button"
+            onClick={() => onSelect(node)}
+            className={cn(
+              "min-h-8 rounded-full border px-3 t-mono text-label transition active:scale-[0.98]",
+              selectedId === node.id
+                ? "border-[color:var(--brand)] bg-[color:var(--brand-tint)] text-brand"
+                : "border-[color:var(--border)] text-fg-muted hover:border-[color:var(--border-strong)] hover:text-fg",
+            )}
+          >
+            {node.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MobileArchitectureExplorer({
+  nodes,
+  selectedId,
+  onSelect,
+  onFocus,
+}: {
+  nodes: MindNode[];
+  selectedId: string;
+  onSelect: (node: MindNode) => void;
+  onFocus: (node: MindNode) => void;
+}) {
+  const levels = [0, 1, 2, 3] as const;
+  return (
+    <div className="border-b border-[color:var(--border)] bg-[color:var(--bg)] p-4 md:hidden">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="t-label u-brand">Architecture stack</p>
+          <p className="mt-1 t-mono text-label text-fg-muted">{nodes.length} shown</p>
+        </div>
+        <span className="grid h-10 w-10 place-items-center rounded border border-[color:var(--border)] text-fg-muted">
+          <TreeStructure size={18} weight="bold" />
+        </span>
+      </div>
+
+      <div className="mt-4 space-y-4">
+        {levels.map((level) => {
+          const levelNodes = nodes.filter((node) => node.level === level);
+          if (!levelNodes.length) return null;
+          return (
+            <div key={level} className="space-y-2">
+              <p className="t-mono text-label text-fg-muted">Level {level}</p>
+              <div className="grid gap-2">
+                {levelNodes.map((node) => {
+                  const Icon = KIND_ICONS[node.kind];
+                  const selected = selectedId === node.id;
+                  return (
+                    <button
+                      key={node.id}
+                      type="button"
+                      onClick={() => onSelect(node)}
+                      onDoubleClick={() => onFocus(node)}
+                      className={cn(
+                        "rounded-[16px] border p-3 text-left transition active:scale-[0.98]",
+                        selected ? "ring-2 ring-[color:var(--brand)]" : "",
+                        tonePanelClass(node.tone),
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded border", toneIconClass(node.tone))}>
+                          <Icon size={16} weight="bold" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-display text-lg leading-tight text-fg">{node.label}</span>
+                          <span className="mt-1 flex items-center gap-2 t-mono text-label text-fg-muted">
+                            <StatusDot tone={node.tone} />
+                            {node.statusLabel}
+                          </span>
+                          <span className="mt-2 line-clamp-2 block text-body-sm leading-relaxed text-fg-muted">
+                            {node.health}
+                          </span>
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -2367,11 +2868,15 @@ function MapNode({
 
 function MindInspector({
   node,
+  path,
+  snapshot,
   loading,
   errors,
   onFocus,
 }: {
   node: MindNode | undefined;
+  path: MindNode[];
+  snapshot: RuntimeSnapshot;
   loading: boolean;
   errors: string[];
   onFocus: () => void;
@@ -2385,6 +2890,10 @@ function MindInspector({
   }
 
   const Icon = KIND_ICONS[node.kind];
+  const sourceLink = node.files?.map(sourceHref).find((href): href is string => Boolean(href));
+  const controlLink = node.controls?.map(controlHref).find((href): href is string => Boolean(href));
+  const primaryLink = node.links?.[0]?.href;
+  const issueNotes = operationalNotes(node, snapshot, errors);
 
   return (
     <aside className="border-t border-[color:var(--border)] bg-[color:var(--bg)] p-5 xl:border-l xl:border-t-0">
@@ -2404,6 +2913,17 @@ function MindInspector({
           </button>
         </div>
 
+        {path.length ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {path.map((item, index) => (
+              <span key={item.id} className="inline-flex items-center gap-1.5 t-mono text-label text-fg-muted">
+                {index > 0 ? <span aria-hidden="true">/</span> : null}
+                <span className={item.id === node.id ? "text-brand" : ""}>{item.label}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap gap-2">
           <StatusChip label={node.statusLabel} tone={node.tone} />
           <span className="inline-flex min-h-8 items-center gap-2 rounded-full border border-[color:var(--border)] px-3 t-mono text-label text-fg-muted">
@@ -2414,24 +2934,38 @@ function MindInspector({
 
         <p className="text-body-sm leading-relaxed text-fg-muted">{node.description}</p>
 
+        <div className="grid grid-cols-2 gap-2">
+          <ActionLink label="Focus" icon={Crosshair} onClick={onFocus} />
+          {sourceLink ? <ActionLink label="Source" icon={Files} href={sourceLink} external /> : null}
+          {primaryLink ? <ActionLink label="View" icon={ArrowSquareOut} href={primaryLink} /> : null}
+          {controlLink ? <ActionLink label="Control" icon={Wrench} href={controlLink} /> : null}
+        </div>
+
         <div className="grid gap-3 border-y border-[color:var(--border)] py-4">
           <InspectorFact label="Health" value={node.health} tone={node.tone} />
           {node.metric ? <InspectorFact label="Metric" value={node.metric} /> : null}
           {node.backlog ? <InspectorFact label="Backlog" value={node.backlog} tone="watch" /> : null}
         </div>
 
+        <div className="grid grid-cols-2 gap-2">
+          <InspectorMetric label="Reads" value={String(node.reads?.length ?? 0)} />
+          <InspectorMetric label="Writes" value={String(node.writes?.length ?? 0)} />
+          <InspectorMetric label="Controls" value={String(node.controls?.length ?? 0)} />
+          <InspectorMetric label="State paths" value={String(node.files?.length ?? 0)} />
+        </div>
+
         {loading ? <InspectorSkeleton compact /> : null}
 
-        {errors.length ? (
+        {issueNotes.length ? (
           <div className="rounded-[18px] border border-[color:var(--state-warning-border)] bg-[color:var(--state-warning-bg)] p-4">
             <div className="flex items-center gap-2 text-[color:var(--state-warning-fg)]">
               <Warning size={17} weight="bold" />
-              <p className="t-mono text-label">Live probe warnings</p>
+              <p className="t-mono text-label">Operator notes</p>
             </div>
             <ul className="mt-3 space-y-2">
-              {errors.slice(0, 4).map((error) => (
-                <li key={error} className="text-label leading-relaxed text-[color:var(--state-warning-fg-muted)]">
-                  {error}
+              {issueNotes.slice(0, 5).map((note) => (
+                <li key={note} className="text-label leading-relaxed text-[color:var(--state-warning-fg-muted)]">
+                  {note}
                 </li>
               ))}
             </ul>
@@ -2462,6 +2996,87 @@ function MindInspector({
         ) : null}
       </div>
     </aside>
+  );
+}
+
+function operationalNotes(node: MindNode, snapshot: RuntimeSnapshot, errors: string[]) {
+  const notes: string[] = [];
+  if (node.tone === "risk") notes.push(`${node.label} is in a risk state: ${node.statusLabel}.`);
+  if (node.tone === "watch") notes.push(`${node.label} needs attention: ${node.statusLabel}.`);
+  if (node.backlog) notes.push(`Backlog: ${node.backlog}`);
+
+  if (node.id === "backend-keys" && snapshot.keys) {
+    const missing = snapshot.keys.filter((key) => !key.set).map((key) => key.label);
+    if (missing.length) notes.push(`Missing provider keys: ${missing.join(", ")}.`);
+  }
+
+  if ((node.id === "platform" || node.id === "backend") && errors.length) {
+    notes.push(...errors.slice(0, 3));
+  }
+
+  if (node.id === "broker-connections" && snapshot.brokerConnections) {
+    const withError = snapshot.brokerConnections.filter((connection) => connection.last_error);
+    if (withError.length) notes.push(`${withError.length} broker connection has a recorded error.`);
+  }
+
+  if (node.id === "tradingagents-runtime" && snapshot.tradingAgents?.warnings.length) {
+    notes.push(snapshot.tradingAgents.warnings[0]);
+  }
+
+  return Array.from(new Set(notes));
+}
+
+function ActionLink({
+  label,
+  icon: Icon,
+  href,
+  external = false,
+  onClick,
+}: {
+  label: string;
+  icon: PhosphorIcon;
+  href?: string;
+  external?: boolean;
+  onClick?: () => void;
+}) {
+  const className =
+    "inline-flex min-h-touch items-center justify-between gap-2 rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 t-mono text-label text-fg transition hover:border-[color:var(--brand)] hover:text-brand active:scale-[0.98]";
+  const content = (
+    <>
+      <span className="inline-flex items-center gap-2">
+        <Icon size={15} weight="bold" />
+        {label}
+      </span>
+      {href ? <ArrowSquareOut size={14} weight="bold" /> : null}
+    </>
+  );
+
+  if (href) {
+    return (
+      <a
+        className={className}
+        href={href}
+        target={external ? "_blank" : undefined}
+        rel={external ? "noreferrer" : undefined}
+      >
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <button type="button" onClick={onClick} className={className}>
+      {content}
+    </button>
+  );
+}
+
+function InspectorMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[14px] border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] p-3">
+      <p className="t-mono text-label text-fg-muted">{label}</p>
+      <p className="mt-2 t-mono text-xl leading-none text-fg">{value}</p>
+    </div>
   );
 }
 
@@ -2509,17 +3124,32 @@ function InfoList({
       <p className="t-mono text-label text-fg-muted">{title}</p>
       {items?.length ? (
         <ul className="mt-2 space-y-2">
-          {items.map((item) => (
-            <li
-              key={item}
-              className={cn(
-                "rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-3 py-2 text-label leading-relaxed text-fg-muted",
-                code && "font-mono",
-              )}
-            >
-              {item}
-            </li>
-          ))}
+          {items.map((item) => {
+            const href = code ? sourceHref(item) : null;
+            return (
+              <li
+                key={item}
+                className={cn(
+                  "rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] text-label leading-relaxed text-fg-muted",
+                  code && "font-mono",
+                )}
+              >
+                {href ? (
+                  <a
+                    className="flex min-h-touch items-center justify-between gap-3 px-3 py-2 transition hover:text-brand"
+                    href={href}
+                    target={href.startsWith("http") ? "_blank" : undefined}
+                    rel={href.startsWith("http") ? "noreferrer" : undefined}
+                  >
+                    <span className="min-w-0 break-words">{item}</span>
+                    <ArrowSquareOut className="shrink-0" size={14} weight="bold" />
+                  </a>
+                ) : (
+                  <span className="block px-3 py-2">{item}</span>
+                )}
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <p className="mt-2 rounded border border-[color:var(--border)] px-3 py-2 text-label text-fg-muted">
@@ -2582,6 +3212,22 @@ function toneNodeClass(tone: Tone) {
       return "border-[color:var(--state-warning-border)] bg-[color:var(--state-warning-bg)]";
     case "risk":
       return "border-[color:var(--loss)] bg-[color:var(--loss-tint)]";
+    case "muted":
+    default:
+      return "border-[color:var(--border)] bg-[color:var(--bg-card)]";
+  }
+}
+
+function tonePanelClass(tone: Tone) {
+  switch (tone) {
+    case "healthy":
+      return "border-[color:var(--profit)]/45 bg-[color:var(--profit-tint)]";
+    case "active":
+      return "border-[color:var(--ice-500)]/55 bg-[color:var(--state-loading-tint)]";
+    case "watch":
+      return "border-[color:var(--state-warning-border)] bg-[color:var(--state-warning-bg)]";
+    case "risk":
+      return "border-[color:var(--loss)]/65 bg-[color:var(--loss-tint)]";
     case "muted":
     default:
       return "border-[color:var(--border)] bg-[color:var(--bg-card)]";

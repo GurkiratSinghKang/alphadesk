@@ -50,12 +50,12 @@ export default function AdminControlCenterPage() {
     <div className="mx-auto max-w-[1600px] space-y-8 px-4 py-8 md:px-6">
       <header className="space-y-1.5">
         <p className="t-label u-brand">ADMIN / CONTROL CENTER</p>
-        <h1 className="font-display text-h1 text-fg">Runtime configuration</h1>
+        <h1 className="font-display text-h1 text-fg">Application control center</h1>
         <p className="t-mono text-body-sm u-muted">
-          Rotate backend keys, toggle dashboard sections, and trigger a
-          production deploy. Every change here is admin-gated server-side
-          and persists to the <code className="font-mono text-label">app_config</code>{" "}
-          table.
+          Inspect architecture, live health, state ownership, backend keys, dashboard layout,
+          and deploy controls. Every write is admin-gated server-side and persists to the{" "}
+          <code className="font-mono text-label">app_config</code> table or the matching
+          runtime control surface.
         </p>
       </header>
 
