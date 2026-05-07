@@ -147,10 +147,23 @@ interface PlainEquityPrefill {
   stop?: string;
 }
 
+// Keep in sync with backend trades.py:_ALLOWED — the frontend allowlist
+// must mirror the server's combo classifier, otherwise deep-links from
+// the symbols page (long_call, long_put, cash_secured_put, …) silently
+// drop combo_type, fall back to per-leg notional pricing, and trip the
+// undefined-risk reject at submit.
 const ALLOWED_COMBO_TYPES = new Set([
   "custom",
+  "cash_secured_put",
+  "covered_call",
+  "diagonal_spread",
   "iron_condor",
   "iron_butterfly",
+  "long_call",
+  "long_put",
+  "married_put",
+  "short_call",
+  "short_put",
   "straddle",
   "strangle",
   "vertical_spread",

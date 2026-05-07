@@ -99,7 +99,15 @@ export function useSymbolPageData(sym: string): UseSymbolPageDataResult {
   // the symbol page silently degraded with no telemetry signal. Now any
   // non-404 (5xx, network, RateLimitError, etc.) rethrows so React Query
   // surfaces it via `isError` and our error boundaries.
-  const earningsEnabled = !!sym && !isETF && !isCryptoForex && symbolMeta != null;
+  //
+  // Audit fix: don't gate on `symbolMeta != null`. The search index
+  // doesn't always carry every valid ticker (BRK.B, recently-listed
+  // names, dot-suffix symbols) and a missing entry shouldn't prevent
+  // the curated-equity earnings/setups fetch. ETF/crypto-forex flags
+  // both default to false when symbolMeta is null, which means we
+  // assume equity and let the backend's 404 be the authoritative
+  // "no curated detail" signal.
+  const earningsEnabled = !!sym && !isETF && !isCryptoForex;
   const earningsQuery = useQuery<EarningsDetail | null>({
     queryKey: ["earnings-detail", sym],
     queryFn: () =>

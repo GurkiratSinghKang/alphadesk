@@ -3292,7 +3292,9 @@ async def _compute_order_notional(request: CreateOrderRequest) -> float:
       * ``iron_butterfly``   : width × qty × 100  (Round-17 / persona-A P0)
       * ``vertical_spread``  : width × qty × 100  (with shape validation)
       * ``cash_secured_put`` : strike × qty × 100  (Round-17 / persona-A P0)
-      * ``strangle``         : max(naked_call_notional, naked_put_notional)
+      * ``strangle`` / ``straddle`` (long, all-BUY) : sum(debit per leg)
+      * ``strangle`` / ``straddle`` (short or mixed) :
+        max(naked_call_notional, naked_put_notional)
 
     For all other shapes (single equity leg, single options leg, no
     combo_type set), notional sums per-leg with the standard contract
@@ -3337,7 +3339,35 @@ async def _compute_order_notional(request: CreateOrderRequest) -> float:
         strike = float(parsed["strike"])
         return strike * float(leg.qty) * 100.0
 
-    if combo == "strangle":
+    if combo in ("strangle", "straddle"):
+        # Long shape (all legs BUY): max notional = total debit paid.
+        # The per-leg debit sum IS the bounded worst-case loss and the
+        # broker won't reserve more than that for a long-vol structure,
+        # so we use it directly instead of routing through the naked
+        # ``_combo_strangle_max_notional`` envelope (which is sized for
+        # SHORT strangles and over-counts long debit by a factor of 2).
+        sides = {
+            (
+                getattr(getattr(leg, "side", None), "value", None)
+                or getattr(leg, "side", None)
+            )
+            for leg in request.legs
+        }
+        if sides == {"buy"}:
+            total = 0.0
+            for leg in request.legs:
+                if not leg.limit_price:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Long {combo} leg {leg.symbol!r} requires "
+                            "limit_price; debit notional cannot be "
+                            "computed deterministically without it."
+                        ),
+                    )
+                total += float(leg.limit_price) * float(leg.qty) * 100.0
+            return total
+        # Short or mixed strangle: keep the naked-side envelope.
         return _combo_strangle_max_notional(request)
 
     # --- Default: per-leg sum with contract multiplier ---------------
@@ -3988,9 +4018,9 @@ async def _compute_order_max_loss(request: CreateOrderRequest) -> tuple[float, b
         actually covering an existing long position will be sized
         correctly by ``_compute_order_notional``; the override path
         is the escape hatch.
-      * ``strangle`` (short undefined-risk on each side). The aggregate
-        risk gate already enforces the strangle envelope; here we
-        treat it as undefined so the gate forces an admin override.
+      * Short or mixed ``straddle`` / ``strangle`` (one or both legs
+        SELL — at least one side has unbounded loss). LONG straddles /
+        strangles (all legs BUY) are defined-risk: max loss = debit.
       * Anything we don't recognise.
 
     Best-effort: when the limit_price is missing on a single-leg path,
@@ -4031,8 +4061,30 @@ async def _compute_order_max_loss(request: CreateOrderRequest) -> tuple[float, b
         # have here. Treat as undefined and require override.
         return 0.0, True
 
-    if combo == "strangle":
-        # Short strangle is undefined risk on both sides.
+    if combo in ("strangle", "straddle"):
+        # Long shape (all legs BUY) has a deterministic max loss = total
+        # debit paid. Short / mixed shapes are undefined risk because at
+        # least one side has unbounded loss (short call) or near-strike
+        # loss (short put × 100 collateral) without a corresponding long
+        # offset.
+        sides = {
+            (
+                getattr(getattr(leg, "side", None), "value", None)
+                or getattr(leg, "side", None)
+            )
+            for leg in legs
+        }
+        if sides == {"buy"}:
+            debit = 0.0
+            for leg in legs:
+                if not leg.limit_price:
+                    # Without a limit price we can't bound the debit
+                    # deterministically; defer to undefined-risk so the
+                    # admin override is the explicit escape hatch.
+                    return 0.0, True
+                debit += float(leg.limit_price) * float(leg.qty) * 100.0
+            return debit, False
+        # All-sell or mixed → keep the conservative undefined-risk gate.
         return 0.0, True
 
     # --- Single-leg / per-leg fall-through ---------------------------
