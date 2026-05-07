@@ -4,7 +4,6 @@ import {
   ArrowSquareOut,
   ArrowsOutCardinal,
   ChartLineUp,
-  Clock,
   Code,
   Crosshair,
   Database,
@@ -2219,12 +2218,6 @@ export function AppMindMap() {
   const hoveredNode = tooltip ? nodeById.get(tooltip.id) : null;
   const selectedPath = selectedNode ? buildNodePath(selectedNode, nodeById) : [];
 
-  useEffect(() => {
-    if (!query || matchingNodes.length === 0) return;
-    if (matchingNodes.some((node) => node.id === selectedId)) return;
-    setSelectedId(matchingNodes[0].id);
-  }, [matchingNodes, query, selectedId]);
-
   const fitWorld = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -2411,7 +2404,16 @@ export function AppMindMap() {
                 />
                 <input
                   value={search}
-                  onChange={(event) => setSearch(event.target.value)}
+                  onChange={(event) => {
+                    const nextSearch = event.target.value;
+                    const nextQuery = nextSearch.trim().toLowerCase();
+                    setSearch(nextSearch);
+                    if (!nextQuery) return;
+                    const firstMatch = nodes
+                      .filter((node) => textMatches(node, nextQuery) && nodeMatchesDomain(node, domain, nodeById))
+                      .sort((a, b) => b.level - a.level || a.label.localeCompare(b.label))[0];
+                    if (firstMatch) setSelectedId(firstMatch.id);
+                  }}
                   placeholder="master agent, Redis, app_config"
                   className="min-h-touch w-full rounded border border-[color:var(--border)] bg-[color:var(--bg)] pl-9 pr-3 t-mono text-label text-fg outline-none transition focus:border-[color:var(--brand)] focus:ring-2 focus:ring-[color:var(--focus-ring-soft)]"
                 />
