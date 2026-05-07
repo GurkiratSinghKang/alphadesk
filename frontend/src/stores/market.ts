@@ -9,7 +9,10 @@ import {
   removeFromUserWatchlist as apiRemoveFromUserWatchlist,
 } from "@/lib/api";
 
-const DEFAULT_WATCHLIST = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "SPY", "QQQ", "META", "AMD"];
+// Exported so the cross-user logout helper (lib/auth/clearPersistedStores)
+// can reset the in-memory watchlist back to the canonical seed without
+// duplicating the literal.
+export const DEFAULT_WATCHLIST = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "SPY", "QQQ", "META", "AMD"];
 
 // TODO(BUG-016): the dashboard currently observes ~295 GETs/min across
 // portfolio/orders/quotes because most surfaces poll on their own

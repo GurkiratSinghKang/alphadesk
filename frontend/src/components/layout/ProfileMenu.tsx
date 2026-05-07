@@ -15,6 +15,7 @@ import { usePortfolioStore } from "@/stores/portfolio";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
 import { env } from "@/env";
+import { clearPersistedStores } from "@/lib/auth/clearPersistedStores";
 
 /** Best-effort JWT payload read for the displayed username. */
 function decodeJwtSub(): string | null {
@@ -96,6 +97,14 @@ export function ProfileMenu() {
       // Best-effort; proceed to the login page even if the POST fails so
       // the user doesn't get stuck.
     }
+    // Cross-user data-leak fix: wipe per-user persisted zustand stores
+    // (watchlist, notifications, preferences, ui + auxiliary keys) and
+    // their in-memory snapshots so user A's state doesn't paint between
+    // logout and user B's hydrate. Runs unconditionally — even if the
+    // /auth/logout POST above failed, we still wipe local state because
+    // the user's intent to sign out should not leave their data behind
+    // on a shared browser.
+    clearPersistedStores();
     // Stop the in-memory refresh-token scheduler so it doesn't fire a
     // 401 storm after the backend revokes the session.
     window.dispatchEvent(new CustomEvent("alphadesk:auth-logout"));
