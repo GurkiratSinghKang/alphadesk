@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, type ReactNode } from "react";
 
-import type { OHLCVBar } from "@/types";
+import type { OHLCVBar, TickerFundamentals } from "@/types";
 
 vi.mock("@/components/composites/PriceChartPanel", () => ({
   __esModule: true,
@@ -17,27 +17,27 @@ vi.mock("@/components/composites/PriceChartPanel", () => ({
 
 vi.mock("@/lib/api", () => ({
   getBars: vi.fn().mockResolvedValue([]),
+  getTickerFundamentals: vi.fn().mockResolvedValue({
+    symbol: "NVDA",
+    name: null,
+    sector: null,
+    industry: null,
+    marketCap: null,
+    sharesOutstanding: null,
+    peRatio: null,
+    epsTtm: null,
+    dividendYield: null,
+    beta: null,
+    fiftyTwoWeekHigh: null,
+    fiftyTwoWeekLow: null,
+    avgVolume30d: null,
+    description: null,
+    fetchedAt: null,
+    isDemo: true,
+  } satisfies TickerFundamentals),
 }));
 
 import { ChartBand } from "../_sections/ChartBand";
-
-// KeyStatsStub is hidden by default in ChartBand (production-default
-// behaviour, see SHOW_PLACEHOLDER_STUBS in ChartBand.tsx). Force it on
-// for these tests so the skeleton-cells assertion runs against a
-// rendered stub. ChartBand reads the flag at render time, so toggling
-// process.env in beforeAll is sufficient.
-let _previousStubsFlag: string | undefined;
-beforeAll(() => {
-  _previousStubsFlag = process.env.NEXT_PUBLIC_SHOW_SYMBOL_PAGE_STUBS;
-  process.env.NEXT_PUBLIC_SHOW_SYMBOL_PAGE_STUBS = "true";
-});
-afterAll(() => {
-  if (_previousStubsFlag === undefined) {
-    delete process.env.NEXT_PUBLIC_SHOW_SYMBOL_PAGE_STUBS;
-  } else {
-    process.env.NEXT_PUBLIC_SHOW_SYMBOL_PAGE_STUBS = _previousStubsFlag;
-  }
-});
 
 function makeWrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -60,12 +60,12 @@ describe("ChartBand", () => {
     expect(getByTestId("mock-chart").getAttribute("data-symbol")).toBe("NVDA");
   });
 
-  it("renders 8 KeyStats skeleton cells when bars are null", () => {
+  it("renders the live KeyStats panel alongside the chart", () => {
     const Wrapper = makeWrapper();
     const { container } = render(
       createElement(Wrapper, null, <ChartBand symbol="NVDA" bars={null} />),
     );
-    const cells = container.querySelectorAll('[data-slot="key-stats-stub"] dl > div');
+    const cells = container.querySelectorAll('[data-slot="key-stats-cell"]');
     expect(cells).toHaveLength(8);
   });
 

@@ -131,6 +131,31 @@ export interface TickerContextResponse {
   generatedAt: string;
 }
 
+// ─── Ticker Fundamentals (KeyStats panel) ─────────────────────
+// Backend wire shape lives at /api/v1/tickers/{sym}/fundamentals
+// (Polygon /v3/reference/tickers + /v2/aggs derived 52w hi/lo + 30d
+// avg vol). All fields are nullable on the wire so the FE can render
+// an em-dash where Polygon doesn't expose data (P/E, EPS, beta, div
+// yield are always null today — placeholder for a richer provider).
+export interface TickerFundamentals {
+  symbol: string;
+  name: string | null;
+  sector: string | null;
+  industry: string | null;
+  marketCap: number | null;
+  sharesOutstanding: number | null;
+  peRatio: number | null;
+  epsTtm: number | null;
+  dividendYield: number | null;
+  beta: number | null;
+  fiftyTwoWeekHigh: number | null;
+  fiftyTwoWeekLow: number | null;
+  avgVolume30d: number | null;
+  description: string | null;
+  fetchedAt: string | null;
+  isDemo: boolean;
+}
+
 // ─── Portfolio ────────────────────────────────────────────────
 
 // Round-11 / Y-12: ``PositionGreeks`` removed alongside ``Position.greeks``

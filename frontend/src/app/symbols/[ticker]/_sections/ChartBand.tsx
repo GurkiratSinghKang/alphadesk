@@ -15,20 +15,10 @@ import { barsRequestForRange } from "@/lib/chartRange";
 import { getBars } from "@/lib/api";
 import type { OHLCVBar } from "@/types";
 
-import { KeyStatsStub } from "./KeyStatsStub";
+import { KeyStats } from "./KeyStats";
 import type { StickyBandQuote } from "./StickyBand";
 
 const DEFAULT_RANGE: ChartRange = "1M";
-
-// Hide KeyStatsStub by default; re-enable when a real backend lands for that
-// section by setting NEXT_PUBLIC_SHOW_SYMBOL_PAGE_STUBS=true. When hidden,
-// the chart panel takes the full 12-column row instead of leaving an empty
-// 4-column gutter to the right. Read inside the function so tests that
-// mutate process.env in beforeAll/beforeEach hooks observe the change
-// (a module-scoped const would be captured at import time).
-function showPlaceholderStubs(): boolean {
-  return process.env.NEXT_PUBLIC_SHOW_SYMBOL_PAGE_STUBS === "true";
-}
 
 export interface ChartBandProps {
   symbol: string;
@@ -122,11 +112,7 @@ export function ChartBand({ symbol, bars, name, quote }: ChartBandProps) {
       data-slot="chart-band"
       className="grid grid-cols-1 gap-4 px-4 py-6 scroll-mt-24 sm:px-6 xl:grid-cols-12"
     >
-      <div
-        className={`rounded-md border border-border-hair bg-bg-elev-1 overflow-hidden ${
-          showPlaceholderStubs() ? "xl:col-span-8" : "xl:col-span-12"
-        }`}
-      >
+      <div className="rounded-md border border-border-hair bg-bg-elev-1 overflow-hidden xl:col-span-8">
         <PriceChartPanel
           symbol={toMarketSymbol(symbol, name)}
           quote={toCompositeQuote(quote)}
@@ -139,11 +125,9 @@ export function ChartBand({ symbol, bars, name, quote }: ChartBandProps) {
           onRetry={() => rangeQuery.refetch()}
         />
       </div>
-      {showPlaceholderStubs() && (
-        <div className="xl:col-span-4">
-          <KeyStatsStub />
-        </div>
-      )}
+      <div className="xl:col-span-4">
+        <KeyStats symbol={symbol} />
+      </div>
     </section>
   );
 }
