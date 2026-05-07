@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func as sa_func, select
 
 from core.config import settings
 
@@ -74,7 +75,89 @@ async def ensure_user_record(
         return row
 
 
-def user_to_dict(row: Any, *, include_email: bool = True) -> dict[str, Any]:
+# ---------------------------------------------------------------------------
+# is_demo_seed derivation (iter 19)
+# ---------------------------------------------------------------------------
+# Audit Batch E P0-05 added a "Connect your broker" CTA to the dashboard
+# Action stack so brand-new operators couldn't mistake the demo seed book
+# for their real one. The frontend was using ``username === "admin"`` as a
+# stop-gap proxy until this flag landed — that proxy is inverted (it fires
+# only for the literal admin username, which is exactly the user least
+# likely to be on demo seed data).
+#
+# Derivation: ``is_demo_seed`` is True iff
+#     * the row's role is NOT "admin"  (admins are operators, not demo
+#       users — they're expected to wire credentials via env or settings)
+#   AND
+#     * the username has no rows in ``broker_connections`` (no broker
+#       connected = still on the demo seed book).
+#
+# The route handlers ``GET /api/v1/user/me`` + ``POST /admin/users``
+# return the dict on every authenticated profile fetch / admin user
+# creation. ``/me`` is the warm path — it's hit on every dashboard load
+# and (depending on the React Query cache TTL) on every navigation
+# back to the desk. We cache the broker count for 60s in-process to keep
+# the extra COUNT(*) off the hot path. Cache key is ``username`` (broker
+# count is what we're caching), value is a tuple ``(count, expires_at)``.
+# A change-to-broker-connections from elsewhere in the app may take up to
+# 60s to flip the flag — acceptable: the CTA is visual nudge, not gating.
+_BROKER_COUNT_TTL_S: float = 60.0
+_broker_count_cache: dict[str, tuple[int, float]] = {}
+
+
+def _clear_broker_count_cache() -> None:
+    """Test hook — drop the in-process cache so each test starts clean."""
+    _broker_count_cache.clear()
+
+
+async def _broker_count_for(username: str) -> int:
+    """Return the cached count of broker_connections rows for ``username``.
+
+    60-second TTL. Read-through on miss / expiry. ``user_to_dict`` is
+    invoked from the warm /me path; without the cache every dashboard
+    load that bypasses React Query's stale window would emit a COUNT
+    query against ``broker_connections``.
+    """
+    now = time.monotonic()
+    cached = _broker_count_cache.get(username)
+    if cached is not None and cached[1] > now:
+        return cached[0]
+
+    if settings.SKIP_DB_INIT:
+        # Degraded mode — assume zero rows so a non-admin still sees the
+        # demo CTA (they cannot have connected a broker without the DB).
+        _broker_count_cache[username] = (0, now + _BROKER_COUNT_TTL_S)
+        return 0
+
+    from core.database import _get_session_factory
+    from data.storage.models import BrokerConnection
+
+    factory = _get_session_factory()
+    async with factory() as session:
+        count = (
+            await session.execute(
+                select(sa_func.count())
+                .select_from(BrokerConnection)
+                .where(BrokerConnection.username == username)
+            )
+        ).scalar_one()
+    count_int = int(count or 0)
+    _broker_count_cache[username] = (count_int, now + _BROKER_COUNT_TTL_S)
+    return count_int
+
+
+async def user_to_dict(row: Any, *, include_email: bool = True) -> dict[str, Any]:
+    """Serialise a user row for the wire.
+
+    Adds the derived ``is_demo_seed`` flag (iter 19, audit Batch E P0-05).
+    Coroutine because the derivation queries ``broker_connections``; all
+    callers are async route handlers so the await is free.
+    """
+    role_lower = (row.role or "").lower()
+    is_demo_seed = False
+    if role_lower != "admin":
+        broker_count = await _broker_count_for(row.username)
+        is_demo_seed = broker_count == 0
     return {
         "id": row.id,
         "username": row.username,
@@ -86,4 +169,5 @@ def user_to_dict(row: Any, *, include_email: bool = True) -> dict[str, Any]:
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         "last_login_at": row.last_login_at.isoformat() if row.last_login_at else None,
+        "is_demo_seed": is_demo_seed,
     }

@@ -2143,13 +2143,14 @@ export async function getOrders(status?: string): Promise<Order[]> {
 
 /**
  * Shape returned by ``GET /api/v1/user/me``. Mirrors the backend's
- * ``user_to_dict`` helper plus an optional ``is_demo_seed`` flag we
- * carry through for the dashboard's "connect your broker" prompt.
+ * ``user_to_dict`` helper plus the derived ``is_demo_seed`` flag the
+ * dashboard reads to drive the "Connect your broker" prompt.
  *
  * Batch E (2026-05-05) — P0-05: when the dashboard sees a demo-seeded
  * account it replaces the Action stack's first card with an explicit
  * "Connect your broker" CTA so brand-new operators can't mistake the
- * demo book for their real one.
+ * demo book for their real one. Iter 19 wired ``is_demo_seed`` through
+ * the backend; the field is set on every authenticated profile fetch.
  */
 export interface CurrentUserProfile {
   id?: number | null;
@@ -2160,10 +2161,15 @@ export interface CurrentUserProfile {
   display_name?: string | null;
   profile?: Record<string, unknown> | null;
   /**
-   * Optional — backend hasn't shipped this flag yet. Until it does,
-   * the dashboard treats ``username === "admin"`` as demo-seed (see
-   * page.tsx). Keep this typed so the wiring is one-line when the
-   * backend lands the field.
+   * Iter 19 — set by the backend (``services.users.user_to_dict``).
+   * True when the row is non-admin AND has no rows in
+   * ``broker_connections``. Drives the "Connect your broker" CTA at
+   * the top of the dashboard Action stack (audit Batch E P0-05).
+   *
+   * Typed as required because every authenticated /me response now
+   * carries it; legacy payloads without the field will read
+   * ``undefined`` and the dashboard's nullish-coalesce fallback to
+   * ``false`` is the safe default (no CTA rather than a misfire).
    */
   is_demo_seed?: boolean;
 }

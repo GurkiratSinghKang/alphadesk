@@ -546,6 +546,31 @@ export function toStatusPills(opts: {
   return pills;
 }
 
+/* ─── Demo-seed CTA gate (iter 19) ─────────────────────────── */
+
+/**
+ * Audit Batch E P0-05 added a "Connect your broker" CTA to the
+ * dashboard's Action stack so brand-new operators don't mistake the
+ * demo seed book for their real one. The CTA is hoisted at the top of
+ * the queue when the user is still on demo data (no broker wired).
+ *
+ * Inputs: the ``is_demo_seed`` flag derived server-side by
+ * ``backend/services/users.py::user_to_dict`` — True for non-admin
+ * users with zero rows in ``broker_connections``.
+ *
+ * Returns ``false`` whenever the flag is missing (degraded /me path,
+ * still-loading React Query state) so the CTA never misfires on a real
+ * operator. The Action stack also AND-gates this with
+ * ``brokerConnected`` at the call site so a user who just wired a
+ * broker but whose React Query cache hasn't refetched /me yet stops
+ * seeing the CTA the moment broker_status flips.
+ */
+export function selectIsDemoSeedAccount(
+  currentUser: { is_demo_seed?: boolean | null } | undefined | null,
+): boolean {
+  return currentUser?.is_demo_seed === true;
+}
+
 /* ─── AI memo placeholder ──────────────────────────────────── */
 
 /** When no pre-trade memo is available, return an "awaiting analysis"
