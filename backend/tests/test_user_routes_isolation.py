@@ -16,11 +16,14 @@ self-service. This module pins the per-user filtering invariants:
 1. ``user_b`` calling /erase MUST NOT delete ``user_a``'s Trade rows.
 2. ``user_b`` calling /export MUST NOT see ``user_a``'s Trade rows in
    the returned bundle.
-3. The five tables that carry NO ``username`` column today (Position,
-   Watchlist, ScreenerPreset, Alert, StrategySignal) must NOT be wiped
-   on a user-scoped erase — the previous unfiltered DELETE was the leak.
+3. The four tables that carry NO ``username`` column today (Position,
+   ScreenerPreset, Alert, StrategySignal) must NOT be wiped on a
+   user-scoped erase — the previous unfiltered DELETE was the leak.
    They are also omitted from the per-user export bundle (empty lists)
-   for the same reason.
+   for the same reason. Iter 17 promoted ``Watchlist`` to per-user
+   ``UserWatchlist`` so it is no longer in this set; the export
+   bundle still ships an empty ``watchlists`` list because the export
+   bundle keys are kept stable across schema migrations.
 
 The tests exercise the helpers directly with an in-memory session spy
 rather than spinning up Postgres — JSONB / INET column types preclude
@@ -213,18 +216,24 @@ def trade_table() -> Any:
 def store_with_two_users(trade_table: Any) -> dict[str, list[_FakeRow]]:
     """Seed the spy store with one trade owned by user_a and one by user_b.
 
-    The five no-per-user-key tables (Position/Watchlist/ScreenerPreset/
-    Alert/StrategySignal) are pre-seeded with one row each so that the
+    The four no-per-user-key tables (Position/ScreenerPreset/Alert/
+    StrategySignal) are pre-seeded with one row each so that the
     test can detect a regression: pre-fix, the unfiltered SELECT/DELETE
     would touch every row in those tables; post-fix the helper must NOT
     enumerate them at all.
+
+    Iter 17: ``Watchlist`` was promoted to per-user ``UserWatchlist`` so
+    it is no longer in the no-key set. The export bundle still serves
+    ``watchlists`` as an empty list (keys are kept stable across the
+    schema migration), so the assertion below still applies for that
+    bundle key — it just no longer corresponds to a global table that
+    the helper might unsafely enumerate.
     """
     from data.storage.models import (
         Alert,
         Position,
         ScreenerPreset,
         StrategySignal,
-        Watchlist,
     )
 
     def _empty_row(table: Any) -> _FakeRow:
@@ -294,12 +303,12 @@ def store_with_two_users(trade_table: Any) -> dict[str, list[_FakeRow]]:
                 filled_qty=None,
             ),
         ],
-        # The five no-key tables. Pre-fill so the test would FAIL loudly
-        # if a regression re-introduces an unfiltered SELECT/DELETE: a
-        # missing WHERE clause would empty these lists or leak the rows
-        # into the export bundle, and we assert later that neither happens.
+        # The four remaining no-key tables. Pre-fill so the test would
+        # FAIL loudly if a regression re-introduces an unfiltered SELECT/
+        # DELETE: a missing WHERE clause would empty these lists or leak
+        # the rows into the export bundle, and we assert later that
+        # neither happens.
         Position.__tablename__: [_empty_row(Position)],
-        Watchlist.__tablename__: [_empty_row(Watchlist)],
         ScreenerPreset.__tablename__: [_empty_row(ScreenerPreset)],
         Alert.__tablename__: [_empty_row(Alert)],
         StrategySignal.__tablename__: [_empty_row(StrategySignal)],
@@ -350,9 +359,12 @@ async def test_export_bundle_excludes_other_users_trades(
     assert trades[0]["username"] == "user_b"
     assert trades[0]["symbol"] == "TSLA"
 
-    # The five no-per-user-column tables must be returned EMPTY in the
+    # The four no-per-user-column tables must be returned EMPTY in the
     # post-fix bundle (cannot safely scope, so omit). The keys must
-    # still exist so downstream consumers don't KeyError.
+    # still exist so downstream consumers don't KeyError. ``watchlists``
+    # is also asserted empty: iter 17 promoted it to per-user
+    # ``UserWatchlist`` but the export bundle still ships the key as an
+    # empty list to keep the wire schema stable across that migration.
     for key in (
         "positions",
         "watchlists",
@@ -409,11 +421,14 @@ async def test_erase_does_not_wipe_other_users_trades(
     response = await erase_user_data(body=body, req=req, username="user_b")
 
     # The DELETE statements must have hit ONLY the trades table — never
-    # positions / watchlists / screener_presets / alerts / strategy_signals.
+    # positions / screener_presets / alerts / strategy_signals.
     # AuditLog DELETE is allowed (it carries a username column).
+    # Iter 17: ``watchlists`` is no longer in the forbidden set — the
+    # table was dropped and replaced by per-user ``user_watchlist`` (which
+    # is safe to user-scoped DELETE because it carries a ``username``
+    # column).
     forbidden = {
         "positions",
-        "watchlists",
         "screener_presets",
         "alerts",
         "strategy_signals",
@@ -437,10 +452,12 @@ async def test_erase_does_not_wipe_other_users_trades(
         getattr(r, "username", None) == "user_b" for r in surviving_trades
     ), "user_b's own Trade row was NOT deleted by their own /erase call."
 
-    # The five no-key tables retained their pre-seeded rows (NOT wiped).
+    # The four no-key tables retained their pre-seeded rows (NOT wiped).
+    # Iter 17: ``Watchlist`` was promoted to per-user ``UserWatchlist``,
+    # dropping it from this set — its old ``watchlists`` table no longer
+    # exists, so the legacy seed no longer appears in ``store_with_two_users``.
     for key in (
         "positions",
-        "watchlists",
         "screener_presets",
         "alerts",
         "strategy_signals",
