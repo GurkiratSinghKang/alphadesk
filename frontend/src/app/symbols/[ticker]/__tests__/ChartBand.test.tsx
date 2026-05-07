@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import { render } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, type ReactNode } from "react";
@@ -20,6 +20,24 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import { ChartBand } from "../_sections/ChartBand";
+
+// KeyStatsStub is hidden by default in ChartBand (production-default
+// behaviour, see SHOW_PLACEHOLDER_STUBS in ChartBand.tsx). Force it on
+// for these tests so the skeleton-cells assertion runs against a
+// rendered stub. ChartBand reads the flag at render time, so toggling
+// process.env in beforeAll is sufficient.
+let _previousStubsFlag: string | undefined;
+beforeAll(() => {
+  _previousStubsFlag = process.env.NEXT_PUBLIC_SHOW_SYMBOL_PAGE_STUBS;
+  process.env.NEXT_PUBLIC_SHOW_SYMBOL_PAGE_STUBS = "true";
+});
+afterAll(() => {
+  if (_previousStubsFlag === undefined) {
+    delete process.env.NEXT_PUBLIC_SHOW_SYMBOL_PAGE_STUBS;
+  } else {
+    process.env.NEXT_PUBLIC_SHOW_SYMBOL_PAGE_STUBS = _previousStubsFlag;
+  }
+});
 
 function makeWrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

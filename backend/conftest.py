@@ -18,6 +18,37 @@ that one in collect_ignore until the legacy bootstrap is retired.
 """
 from __future__ import annotations
 
+# ─── JWT / DB env BEFORE any module imports core.config ────────────
+#
+# Pydantic ``Settings`` is constructed exactly once at module-load time
+# (``settings = Settings()`` at the bottom of ``backend/core/config.py``).
+# That means the FIRST test that triggers ``from main import app`` (or any
+# transitive import that pulls ``core.config``) freezes the ``settings``
+# singleton against whatever environment was live at that moment. Per-file
+# ``os.environ.setdefault("JWT_SECRET", …)`` blocks inside individual
+# test files are no-ops once that singleton exists — the ``setdefault``
+# assigns to ``os.environ`` but never refreshes ``settings.JWT_SECRET``.
+#
+# Result, observed pre-fix: tests pass in isolation but fail in the full
+# suite because the first collected test seeds the singleton without a
+# JWT secret, then later tests that depend on JWT signing get an empty
+# ``SecretStr("")`` and fail with ``JWT_SECRET must be set``.
+#
+# Setting these env vars HERE — at the top of the backend-root conftest,
+# which pytest evaluates before any test file imports — guarantees the
+# singleton sees a fully-populated env on its first construction. We use
+# ``setdefault`` so a developer who exports a real secret (e.g. running
+# the suite against a staging DB) still wins.
+import os
+
+os.environ.setdefault(
+    "JWT_SECRET",
+    "test-secret-for-pytest-suite-" + "x" * 32,
+)
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ.setdefault("SKIP_DB_INIT", "true")
+
+
 collect_ignore = [
     # Legacy backtest-engine tests — the engine itself is gone.
     "backtest/tests",

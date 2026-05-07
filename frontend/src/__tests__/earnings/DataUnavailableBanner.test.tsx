@@ -5,7 +5,7 @@ import {
   ApiDegradedBanner,
   type ApiServiceIssue,
   type ApiServiceKey,
-} from "@/app/(dashboard)/layout";
+} from "@/components/layout/ApiDegradedBanner";
 
 function issue(
   key: ApiServiceKey,
