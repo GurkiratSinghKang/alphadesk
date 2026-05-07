@@ -204,7 +204,7 @@ async def test_aggregate_risk_rejects_option_when_chain_probe_fails(
 ) -> None:
     """Option provenance must fail closed when chain freshness is unknown."""
 
-    async def _tradable(_symbol: str) -> tuple[bool, str]:
+    async def _tradable(_symbol: str, **_kwargs: Any) -> tuple[bool, str]:
         return True, "passed"
 
     monkeypatch.delenv("TRADES_ALLOW_DEMO_CHAIN_ORDERS", raising=False)
@@ -237,7 +237,7 @@ async def test_aggregate_risk_verifies_every_option_leg_contract(
 ) -> None:
     """A later combo leg missing from the live chain must fail closed."""
 
-    async def _tradable(_symbol: str) -> tuple[bool, str]:
+    async def _tradable(_symbol: str, **_kwargs: Any) -> tuple[bool, str]:
         return True, "passed"
 
     async def _fetch_chain(_symbol: str, **_kwargs: Any) -> Any:
@@ -303,10 +303,13 @@ async def test_live_aggregate_risk_rejects_when_account_preflight_unavailable(
 ) -> None:
     """Live mode must not approve orders without current account data."""
 
-    async def _tradable(_symbol: str) -> tuple[bool, str]:
+    async def _tradable(_symbol: str, **_kwargs: Any) -> tuple[bool, str]:
         return True, "passed"
 
-    monkeypatch.setattr(trades_mod, "_live_broker_intent_enabled", lambda: True)
+    async def _live_intent(_username: Any = None) -> bool:
+        return True
+
+    monkeypatch.setattr(trades_mod, "_live_broker_intent_enabled", _live_intent)
     monkeypatch.setattr(trades_mod, "_check_symbol_tradable", _tradable)
     monkeypatch.setattr(trades_mod, "_compute_order_notional", AsyncMock(return_value=100.0))
     monkeypatch.setattr(trades_mod, "_get_todays_gross_notional", AsyncMock(return_value=0.0))
@@ -328,10 +331,13 @@ async def test_live_aggregate_risk_rejects_buy_when_buying_power_zero(
 ) -> None:
     """Live buy orders require a positive buying-power snapshot."""
 
-    async def _tradable(_symbol: str) -> tuple[bool, str]:
+    async def _tradable(_symbol: str, **_kwargs: Any) -> tuple[bool, str]:
         return True, "passed"
 
-    monkeypatch.setattr(trades_mod, "_live_broker_intent_enabled", lambda: True)
+    async def _live_intent(_username: Any = None) -> bool:
+        return True
+
+    monkeypatch.setattr(trades_mod, "_live_broker_intent_enabled", _live_intent)
     monkeypatch.setattr(trades_mod, "_check_symbol_tradable", _tradable)
     monkeypatch.setattr(trades_mod, "_compute_order_notional", AsyncMock(return_value=100.0))
     monkeypatch.setattr(trades_mod, "_get_todays_gross_notional", AsyncMock(return_value=0.0))
@@ -353,10 +359,13 @@ async def test_paper_aggregate_risk_keeps_legacy_account_preflight_skip(
 ) -> None:
     """Paper/dev flows can still run without live broker account data."""
 
-    async def _tradable(_symbol: str) -> tuple[bool, str]:
+    async def _tradable(_symbol: str, **_kwargs: Any) -> tuple[bool, str]:
         return True, "passed"
 
-    monkeypatch.setattr(trades_mod, "_live_broker_intent_enabled", lambda: False)
+    async def _live_intent(_username: Any = None) -> bool:
+        return False
+
+    monkeypatch.setattr(trades_mod, "_live_broker_intent_enabled", _live_intent)
     monkeypatch.setattr(trades_mod, "_check_symbol_tradable", _tradable)
     monkeypatch.setattr(trades_mod, "_compute_order_notional", AsyncMock(return_value=100.0))
     monkeypatch.setattr(trades_mod, "_get_todays_gross_notional", AsyncMock(return_value=0.0))
@@ -464,8 +473,20 @@ async def test_quote_drift_uses_option_mid_for_occ_legs() -> None:
 
 
 @pytest.mark.asyncio
-async def test_symbol_tradable_passes_with_active_status() -> None:
+async def test_symbol_tradable_passes_with_active_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Cached active symbol → passes."""
+    fake_creds = SimpleNamespace(
+        account_env="paper",
+        base_url="https://paper-api.alpaca.markets",
+        headers={"APCA-API-KEY-ID": "k", "APCA-API-SECRET-KEY": "s"},
+    )
+    monkeypatch.setattr(
+        trades_mod,
+        "_resolve_alpaca_creds_for_risk",
+        AsyncMock(return_value=fake_creds),
+    )
     with patch(
         "core.redis.cache_get",
         new=AsyncMock(return_value={"tradable": True, "reason": "passed"}),
@@ -475,8 +496,27 @@ async def test_symbol_tradable_passes_with_active_status() -> None:
 
 
 @pytest.mark.asyncio
-async def test_symbol_tradable_rejects_halted_cached() -> None:
-    """Cached halted symbol → rejected."""
+async def test_symbol_tradable_rejects_halted_cached(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cached halted symbol → rejected.
+
+    Audit MB-P0-2 (commit 32e87479): ``_check_symbol_tradable`` now
+    resolves per-user Alpaca credentials BEFORE consulting the cache.
+    Without creds it short-circuits to ``skipped_no_keys`` (fail-open),
+    so this test must inject a stub credentials object so the cache
+    path actually runs.
+    """
+    fake_creds = SimpleNamespace(
+        account_env="paper",
+        base_url="https://paper-api.alpaca.markets",
+        headers={"APCA-API-KEY-ID": "k", "APCA-API-SECRET-KEY": "s"},
+    )
+    monkeypatch.setattr(
+        trades_mod,
+        "_resolve_alpaca_creds_for_risk",
+        AsyncMock(return_value=fake_creds),
+    )
     with patch(
         "core.redis.cache_get",
         new=AsyncMock(return_value={"tradable": False, "reason": "Symbol halted"}),

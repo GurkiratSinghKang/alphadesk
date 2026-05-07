@@ -1,16 +1,24 @@
 /**
- * Audit Persona F1.8 (2026-05-06) — /trade auto-refresh of
- * `quote_at_fill_ts` for unsubmitted option tickets + inline 422
- * stale-quote surfacing.
+ * Audit Persona F1.8 (2026-05-06) — /trade `quote_at_fill_ts` freshness
+ * chip + inline 422 stale-quote surfacing.
  *
  * Regression context: a deep-link from `/symbols/[ticker]` carries
  * `quote_ts` once. If the trader drafts the ticket for >30s the backend
  * (`QUOTE_STALENESS_MAX_SECONDS = 30`) rejects the submit with HTTP 422
  * "Quote staleness: snapshot is N.Ns old". The earlier flow surfaced the
- * rejection only as a transient toast. This test pins:
+ * rejection only as a transient toast.
  *
- *   1. With option legs staged, an interval fires every 25s and updates
- *      the freshness timestamp.
+ * Commit 32e87479 (broker-reviewed earnings option routing) removed the
+ * frontend auto-refresh interval on option tickets — fabricating a
+ * Date.now() timestamp would make a stale option chain look fresh and
+ * defeat the backend's fail-closed option gate. The chip now passively
+ * displays the snapshot age so the trader can re-stage from the source
+ * surface when it ages out.
+ *
+ * This test pins:
+ *
+ *   1. With option legs staged, the chip displays the actual snapshot
+ *      age and ticks forward as wall-clock advances (no auto-refresh).
  *   2. With only equity legs, no interval fires (equity-only is exempt
  *      from the backend's fail-closed option gate).
  *   3. <QuoteFreshness> renders nothing when the snapshot age is <5s.
@@ -80,9 +88,9 @@ describe("isOccSymbol", () => {
   });
 });
 
-// ─── Auto-refresh quote_at_fill_ts on unsubmitted option tickets ─────────────
+// ─── Quote freshness chip age progression (no auto-refresh) ─────────────────
 
-describe("/trade auto-refresh of quote_at_fill_ts for option tickets", () => {
+describe("/trade quote_at_fill_ts freshness chip ages with wall clock", () => {
   beforeEach(() => {
     _origLocation = window.location;
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -97,15 +105,19 @@ describe("/trade auto-refresh of quote_at_fill_ts for option tickets", () => {
   });
 
   it(
-    "advancing fake timers by 25s with a multi-leg option ticket bumps the freshness chip",
+    "advancing fake timers by 25s with a multi-leg option ticket ages the chip into the warning state",
     async () => {
-      // Pin the wall clock so the deep-link's quote_ts (~30s ago) sits
-      // squarely in the chip's "muted" range until the auto-refresh tick
-      // resets it to ~0s old (chip becomes silent again).
+      // Audit Persona F1.8 (commit 32e87479): the page no longer
+      // auto-refreshes ``quote_at_fill_ts`` — fabricating a fresh
+      // Date.now() would defeat the backend's fail-closed option gate by
+      // making a stale chain look fresh. The chip is now a passive
+      // display: it ticks up once per second so the trader can see the
+      // snapshot age in real time and re-stage from the source surface
+      // when it crosses the 25s warning threshold.
       const baseNow = 1_700_000_000_000; // arbitrary ms
       vi.setSystemTime(new Date(baseNow));
 
-      // quote_ts is 18s ago: chip should appear in muted tone immediately.
+      // quote_ts is 18s ago: chip starts in muted tone.
       const quoteTsSec = baseNow / 1000 - 18;
       setSearch(
         "?symbol=NVDA&legs=" +
@@ -120,30 +132,32 @@ describe("/trade auto-refresh of quote_at_fill_ts for option tickets", () => {
         expect(legEls.length).toBe(2);
       });
 
-      // Initial chip: ~18s old.
+      // Initial chip: ~18s old, muted tone (15s ≤ age < 25s).
       const chipBefore = container.querySelector("[data-slot='quote-freshness']");
       expect(chipBefore).not.toBeNull();
       const ageBefore = Number(chipBefore!.getAttribute("data-age"));
       expect(ageBefore).toBeGreaterThanOrEqual(15);
       expect(ageBefore).toBeLessThan(25);
+      expect(chipBefore!.className).toMatch(/text-fg-muted/);
 
-      // Advance just past the 25s auto-refresh boundary. The setInterval
-      // callback resets quoteAtFillTs to the current Date.now()/1000, so
-      // the chip's perceived age drops back to ~0 and the chip vanishes.
+      // Advance 26s. Without an auto-refresh interval the snapshot age
+      // grows monotonically: 18 + 26 ≈ 44s. The chip stays mounted and
+      // crosses into the state-warning band (age ≥ 25).
       vi.advanceTimersByTime(26_000);
 
       await waitFor(() => {
         const chipAfter = container.querySelector("[data-slot='quote-freshness']");
-        // Either chip is gone (age < 5s) or its age has dropped close to 0.
-        if (chipAfter == null) return;
-        const ageAfter = Number(chipAfter.getAttribute("data-age"));
-        expect(ageAfter).toBeLessThan(ageBefore);
+        expect(chipAfter).not.toBeNull();
+        const ageAfter = Number(chipAfter!.getAttribute("data-age"));
+        expect(ageAfter).toBeGreaterThan(ageBefore);
+        expect(ageAfter).toBeGreaterThanOrEqual(25);
+        expect(chipAfter!.className).toMatch(/text-state-warning-fg/);
       });
     },
   );
 
   it(
-    "does NOT auto-refresh for an equity-only ticket (no option legs to gate)",
+    "does NOT register a 25s auto-refresh interval for an equity-only ticket",
     async () => {
       const baseNow = 1_700_000_000_000;
       vi.setSystemTime(new Date(baseNow));
