@@ -442,6 +442,18 @@ class Settings(BaseSettings):
     # bypass per-order with ``?override_size_limit=true`` on POST /orders.
     MAX_LOSS_PER_TRADE_PCT_OF_EQUITY: float = 0.05
 
+    # SHF-3 (audit 2026-05-06): aggregate-position max-loss cap as a
+    # fraction of current account equity. The per-trade gate above only
+    # checks the new request in isolation, so a trader could stack four
+    # 4.9%-of-equity defined-risk plays for ~20% aggregate exposure
+    # without the gate ever firing. This cap sums the
+    # ``max_loss_at_submit`` of all open trades plus the new request and
+    # rejects when the total exceeds equity * this fraction. Default 20%
+    # = roughly 4× the per-trade cap, so a portfolio of 4 max-sized
+    # bounded-risk trades is the ceiling. Admins override per-deploy via
+    # env or per-order with ``?override_size_limit=true``.
+    MAX_LOSS_AGGREGATE_PCT_OF_EQUITY: float = 0.20
+
     # --- Derived helpers ---
     @property
     def is_production(self) -> bool:
@@ -704,6 +716,49 @@ def get_strategy_layer1_threshold_overlay() -> dict[str, float]:
 
 def get_strategy_layer2_threshold_overlay() -> dict[str, float]:
     return dict(_STRATEGY_LAYER2_THRESHOLD_OVERLAY)
+
+
+# SHF-2 / SHF-3: runtime-tunable overlays for the per-trade and
+# aggregate-position max-loss caps. Same pattern as the strategy
+# threshold overlays above — in-memory wins over env config so an
+# operator can dial caps in/out during incident response without a
+# redeploy. Pass ``None`` to clear the overlay and fall back to the
+# settings field default.
+_MAX_LOSS_PER_TRADE_PCT_OVERLAY: dict[str, float] = {}
+_MAX_LOSS_AGGREGATE_PCT_OVERLAY: dict[str, float] = {}
+
+# Sentinel key for the singleton (no per-user / per-strategy partition).
+_GLOBAL_OVERLAY_KEY = "__global__"
+
+
+def set_max_loss_per_trade_pct_overlay(value: float | None) -> None:
+    """Override the per-trade max-loss cap fraction. ``None`` clears."""
+    if value is None:
+        _MAX_LOSS_PER_TRADE_PCT_OVERLAY.pop(_GLOBAL_OVERLAY_KEY, None)
+        return
+    _MAX_LOSS_PER_TRADE_PCT_OVERLAY[_GLOBAL_OVERLAY_KEY] = float(value)
+
+
+def get_max_loss_per_trade_pct() -> float:
+    """Resolve the active per-trade max-loss cap fraction."""
+    if _GLOBAL_OVERLAY_KEY in _MAX_LOSS_PER_TRADE_PCT_OVERLAY:
+        return float(_MAX_LOSS_PER_TRADE_PCT_OVERLAY[_GLOBAL_OVERLAY_KEY])
+    return float(getattr(settings, "MAX_LOSS_PER_TRADE_PCT_OF_EQUITY", 0.05))
+
+
+def set_max_loss_aggregate_pct_overlay(value: float | None) -> None:
+    """Override the aggregate-position max-loss cap fraction. ``None`` clears."""
+    if value is None:
+        _MAX_LOSS_AGGREGATE_PCT_OVERLAY.pop(_GLOBAL_OVERLAY_KEY, None)
+        return
+    _MAX_LOSS_AGGREGATE_PCT_OVERLAY[_GLOBAL_OVERLAY_KEY] = float(value)
+
+
+def get_max_loss_aggregate_pct() -> float:
+    """Resolve the active aggregate-position max-loss cap fraction."""
+    if _GLOBAL_OVERLAY_KEY in _MAX_LOSS_AGGREGATE_PCT_OVERLAY:
+        return float(_MAX_LOSS_AGGREGATE_PCT_OVERLAY[_GLOBAL_OVERLAY_KEY])
+    return float(getattr(settings, "MAX_LOSS_AGGREGATE_PCT_OF_EQUITY", 0.20))
 
 
 def is_live_alpaca_base_url(url: str | None = None) -> bool:

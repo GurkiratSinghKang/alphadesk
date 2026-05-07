@@ -532,6 +532,19 @@ def _define_models() -> dict[str, Any]:
         # — the engine treats NULL as "abstain" rather than zero.
         expected_move_pct = Column(Float, nullable=True)
 
+        # SHF-3 (2026-05-06) — aggregate max-loss gate snapshot.
+        #
+        # Snapshot of ``_compute_order_max_loss`` at submission time so
+        # the aggregate-position gate doesn't have to reprice open
+        # combos against live quotes on every new POST /orders. Stored
+        # in DOLLARS (same units as the per-trade cap multiplier).
+        # NULL on rows submitted before migration 0022 — the aggregate
+        # gate treats NULL as 0 (those positions are conservatively
+        # excluded; most are stale legacy fills anyway). Defined-risk
+        # combos record the bounded max-loss; undefined-risk shapes
+        # never reach this row because the gate refuses them outright.
+        max_loss_at_submit = Column(Float, nullable=True)
+
         __mapper_args__ = {
             "version_id_col": version,
         }

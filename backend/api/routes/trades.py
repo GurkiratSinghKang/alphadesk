@@ -1965,6 +1965,24 @@ async def create_order(
                 # immediate-limit orders leave these NULL — the
                 # fill_reconciler stamps fills there via filled_avg_price.
                 _fq = locals().get("patient_fill_quality")
+
+                # SHF-3 (2026-05-06): snapshot max-loss at submit so the
+                # aggregate-position gate doesn't have to reprice open
+                # combos on every new POST /orders. Defined-risk shapes
+                # store the bounded max-loss; undefined-risk shapes are
+                # rejected upstream so they never reach this insert
+                # (admin-override path stores NULL — overrides log a
+                # WARN and intentionally bypass the cap accounting).
+                _max_loss_snapshot: float | None = None
+                try:
+                    _ml, _undef = await _compute_order_max_loss(payload)
+                    if not _undef:
+                        _max_loss_snapshot = float(_ml)
+                except Exception:
+                    logger.debug(
+                        "max_loss_at_submit_compute_failed", exc_info=True,
+                    )
+
                 trade = Trade(
                     username=username,
                     symbol=payload.legs[0].symbol,
@@ -1983,6 +2001,7 @@ async def create_order(
                         _fq.actual_fill_price if _fq is not None else None
                     ),
                     slippage_pct=(_fq.slippage_pct if _fq is not None else None),
+                    max_loss_at_submit=_max_loss_snapshot,
                 )
                 db.add(trade)
                 await db.flush()
@@ -4136,6 +4155,53 @@ async def _compute_order_max_loss(request: CreateOrderRequest) -> tuple[float, b
 # --- SHF-2: equity gate -----------------------------------------------------
 
 
+async def _get_open_positions_max_loss_total(username: str) -> float:
+    """Sum ``max_loss_at_submit`` across this user's open / pending trades.
+
+    Used by ``_max_loss_vs_equity_check`` to enforce the aggregate-position
+    max-loss gate (SHF-3, 2026-05-06). Open statuses include both
+    pre-fill (pending / submitted) and post-fill (open / partial) states
+    so a stack of submitted-but-unfilled orders cannot bypass the cap by
+    racing the fill. Closed / cancelled / rejected rows are excluded.
+
+    Legacy rows (pre migration 0022) carry NULL in ``max_loss_at_submit``;
+    SQL ``SUM`` skips NULLs which matches our policy (treat NULL as 0).
+    Returns 0.0 when DB is disabled (tests with SKIP_DB_INIT) so unit
+    tests can mock the helper directly.
+    """
+    try:
+        from core.config import settings as _s
+        if _s.SKIP_DB_INIT:
+            return 0.0
+        from sqlalchemy import select, func as sa_func
+        from core.database import _get_session_factory
+        from data.storage.models import Trade
+
+        factory = _get_session_factory()
+        async with factory() as db:
+            stmt = (
+                select(sa_func.coalesce(sa_func.sum(Trade.max_loss_at_submit), 0.0))
+                .where(Trade.username == username)
+                .where(
+                    Trade.status.in_(
+                        ["pending", "submitted", "open", "partial", "partial_fill"]
+                    )
+                )
+            )
+            result = await db.execute(stmt)
+            total = result.scalar() or 0.0
+            return float(total)
+    except Exception:
+        # DB hiccup → fail open (let per-trade gate stand alone). The
+        # aggregate gate is a defense-in-depth layer; refusing every
+        # order on a transient DB blip would be worse than letting the
+        # per-trade cap carry the load until the DB recovers.
+        logger.warning(
+            "aggregate_max_loss_query_failed", exc_info=True,
+        )
+        return 0.0
+
+
 async def _max_loss_vs_equity_check(
     request: CreateOrderRequest,
     *,
@@ -4143,18 +4209,30 @@ async def _max_loss_vs_equity_check(
 ) -> tuple[bool, str, float, float]:
     """Reject orders whose max loss exceeds a fraction of account equity.
 
-    Returns ``(passed, reason, max_loss, equity)``. The settings field
-    ``MAX_LOSS_PER_TRADE_PCT_OF_EQUITY`` (default 0.05) is the cap; an
-    admin can override per-order with ``?override_size_limit=true``.
+    Returns ``(passed, reason, max_loss, equity)``. Two caps run in series:
+
+      * Per-trade (``MAX_LOSS_PER_TRADE_PCT_OF_EQUITY``, default 0.05) —
+        the new order alone cannot exceed this fraction of equity.
+      * Aggregate (``MAX_LOSS_AGGREGATE_PCT_OF_EQUITY``, default 0.20) —
+        the SUM of all open-position max-loss snapshots PLUS the new
+        order cannot exceed this fraction. Closes the SHF-3 gap where
+        four 4.9%-of-equity trades stacked to ~20% without ever tripping
+        the per-trade gate.
+
+    Admin can override both with ``?override_size_limit=true``.
 
     Fail-open semantics on equity == 0 (broker unreachable). The
     aggregate-risk gate's other layers already fail-closed on critical
     paths; matching ``_daily_loss_check``'s posture here keeps the
     request handler consistent.
     """
-    from core.config import settings as _s
+    from core.config import (
+        get_max_loss_aggregate_pct,
+        get_max_loss_per_trade_pct,
+    )
 
-    pct = float(getattr(_s, "MAX_LOSS_PER_TRADE_PCT_OF_EQUITY", 0.05))
+    pct = get_max_loss_per_trade_pct()
+    agg_pct = get_max_loss_aggregate_pct()
     max_loss, undefined = await _compute_order_max_loss(request)
     equity = await _get_account_equity_cached(username)
     if equity <= 0:
@@ -4181,6 +4259,25 @@ async def _max_loss_vs_equity_check(
             max_loss,
             equity,
         )
+
+    # SHF-3: aggregate-position cap. Sum existing open-position max-loss
+    # snapshots and combine with the new request. Legacy rows with NULL
+    # ``max_loss_at_submit`` are excluded (SQL SUM ignores NULL).
+    open_max_loss = await _get_open_positions_max_loss_total(username)
+    aggregate_total = open_max_loss + max_loss
+    aggregate_cap = equity * agg_pct
+    if aggregate_total > aggregate_cap:
+        return (
+            False,
+            (
+                f"Aggregate open max-loss ${open_max_loss:,.2f} + new order "
+                f"${max_loss:,.2f} = ${aggregate_total:,.2f} exceeds "
+                f"{agg_pct:.0%} of equity (${aggregate_cap:,.2f} cap)."
+            ),
+            max_loss,
+            equity,
+        )
+
     return True, "passed", max_loss, equity
 
 

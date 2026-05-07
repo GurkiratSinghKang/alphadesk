@@ -827,3 +827,264 @@ def test_short_strangle_rejected_as_undefined_risk_via_api(
     detail = resp.json().get("detail", "")
     assert "undefined" in detail.lower() or "naked" in detail.lower()
     assert probes["broker_posts"] == []
+
+
+# ---------------------------------------------------------------------------
+# SHF-3 — aggregate-position max-loss gate
+# ---------------------------------------------------------------------------
+#
+# Per-trade gate fires only on the new request in isolation, so a trader
+# could stack four 4.9%-of-equity defined-risk trades for ~20% aggregate
+# exposure without ever tripping it. The aggregate gate sums
+# ``max_loss_at_submit`` across this user's open / pending trades and
+# combines with the new request before comparing to a higher cap
+# (``MAX_LOSS_AGGREGATE_PCT_OF_EQUITY``, default 0.20).
+#
+# A note on test shapes: tests 4 + 5 mock ``_get_open_positions_max_loss_total``
+# at the route level so we can assert the gate's pass/reject behavior
+# end-to-end without a real DB. Tests 6 + 7 exercise the helper directly
+# against a fake session spy that mirrors PostgreSQL's
+# ``COALESCE(SUM(...), 0)`` over a filtered WHERE ... IN (...) — so the
+# NULL-handling and status-filter semantics are pinned.
+
+
+def _at_5pct_per_trade_cap_payload() -> dict:
+    """4-leg iron condor priced to land EXACTLY at the 5% per-trade cap.
+
+    Equity $100k → cap $5k. Width $50 × 1 contract × 100 = $5,000 max-loss.
+    """
+    return {
+        "legs": [
+            {"symbol": "SPY260424P00500000", "side": "sell", "qty": 1,
+             "order_type": "limit", "limit_price": 1.50, "asset_class": "option"},
+            {"symbol": "SPY260424P00450000", "side": "buy", "qty": 1,
+             "order_type": "limit", "limit_price": 0.50, "asset_class": "option"},
+            {"symbol": "SPY260424C00540000", "side": "sell", "qty": 1,
+             "order_type": "limit", "limit_price": 1.50, "asset_class": "option"},
+            {"symbol": "SPY260424C00590000", "side": "buy", "qty": 1,
+             "order_type": "limit", "limit_price": 0.50, "asset_class": "option"},
+        ],
+        "time_in_force": "day",
+        "combo_type": "iron_condor",
+        "extended_hours": True,
+    }
+
+
+def test_single_trade_at_5pct_per_trade_cap_allowed(
+    risk_gate_app: tuple[FastAPI, dict[str, Any]],
+) -> None:
+    """Single trade exactly at the 5% per-trade cap → 201 (boundary inclusive).
+
+    Width $50 × 1 contract × 100 = $5,000 max-loss; 5% of $100k = $5,000.
+    With ``max_loss > cap`` (strict greater-than) the boundary case must
+    pass — this protects operators from hitting a phantom rejection on
+    a legitimately-sized trade. No existing open positions for the user.
+    """
+    app, probes = risk_gate_app
+    probes["equity_value"] = 100_000.0
+
+    client = TestClient(app)
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json=_at_5pct_per_trade_cap_payload(),
+    )
+    assert resp.status_code == 201, resp.text
+    assert len(probes["broker_posts"]) == 1
+
+
+def test_aggregate_under_20pct_allowed(
+    risk_gate_app: tuple[FastAPI, dict[str, Any]],
+) -> None:
+    """$15k existing + $4k new = $19k vs $100k = 19% → 201.
+
+    Just under the 20% aggregate cap. The per-trade gate at 5% cap also
+    passes ($4k < $5k).
+    """
+    app, probes = risk_gate_app
+    from api.routes import trades as trades_mod
+    probes["equity_value"] = 100_000.0
+
+    async def _fake_open_total(_username: str) -> float:
+        return 15_000.0
+
+    # $4k order: width $40 × 1 contract × 100 = $4,000.
+    payload = _at_5pct_per_trade_cap_payload()
+    payload["legs"] = [
+        {"symbol": "SPY260424P00500000", "side": "sell", "qty": 1,
+         "order_type": "limit", "limit_price": 1.50, "asset_class": "option"},
+        {"symbol": "SPY260424P00460000", "side": "buy", "qty": 1,
+         "order_type": "limit", "limit_price": 0.50, "asset_class": "option"},
+        {"symbol": "SPY260424C00540000", "side": "sell", "qty": 1,
+         "order_type": "limit", "limit_price": 1.50, "asset_class": "option"},
+        {"symbol": "SPY260424C00580000", "side": "buy", "qty": 1,
+         "order_type": "limit", "limit_price": 0.50, "asset_class": "option"},
+    ]
+
+    with patch.object(
+        trades_mod, "_get_open_positions_max_loss_total", new=_fake_open_total,
+    ):
+        client = TestClient(app)
+        resp = client.post("/api/v1/trades/orders", json=payload)
+
+    assert resp.status_code == 201, resp.text
+    assert len(probes["broker_posts"]) == 1
+
+
+def test_aggregate_over_20pct_rejected(
+    risk_gate_app: tuple[FastAPI, dict[str, Any]],
+) -> None:
+    """$18k existing + $3k new = $21k vs $100k = 21% → 422 with aggregate-cap message.
+
+    Per-trade gate alone would let this through ($3k < $5k cap), so this
+    test pins the new behavior end-to-end.
+    """
+    app, probes = risk_gate_app
+    from api.routes import trades as trades_mod
+    probes["equity_value"] = 100_000.0
+
+    async def _fake_open_total(_username: str) -> float:
+        return 18_000.0
+
+    # $3k order: width $30 × 1 contract × 100 = $3,000.
+    payload = {
+        "legs": [
+            {"symbol": "SPY260424P00500000", "side": "sell", "qty": 1,
+             "order_type": "limit", "limit_price": 1.50, "asset_class": "option"},
+            {"symbol": "SPY260424P00470000", "side": "buy", "qty": 1,
+             "order_type": "limit", "limit_price": 0.50, "asset_class": "option"},
+            {"symbol": "SPY260424C00540000", "side": "sell", "qty": 1,
+             "order_type": "limit", "limit_price": 1.50, "asset_class": "option"},
+            {"symbol": "SPY260424C00570000", "side": "buy", "qty": 1,
+             "order_type": "limit", "limit_price": 0.50, "asset_class": "option"},
+        ],
+        "time_in_force": "day",
+        "combo_type": "iron_condor",
+        "extended_hours": True,
+    }
+
+    with patch.object(
+        trades_mod, "_get_open_positions_max_loss_total", new=_fake_open_total,
+    ):
+        client = TestClient(app)
+        resp = client.post("/api/v1/trades/orders", json=payload)
+
+    assert resp.status_code == 422, resp.text
+    detail = resp.json().get("detail", "")
+    # Reject message must include both the existing aggregate AND the
+    # new request's max-loss so the operator can reason about it.
+    assert "aggregate" in detail.lower(), detail
+    assert "$18,000" in detail or "$18,000.00" in detail, detail
+    assert "$3,000" in detail or "$3,000.00" in detail, detail
+    assert "20%" in detail, detail
+    assert probes["broker_posts"] == []
+
+
+def test_aggregate_helper_treats_null_max_loss_as_zero() -> None:
+    """SQL ``SUM`` skips NULLs → legacy rows don't break the aggregate.
+
+    A user with three open trades [4_000, NULL, 1_000] sums to 5,000
+    (the NULL row is skipped — those positions are conservatively
+    excluded from the aggregate, which matches the migration's NULL-
+    backfill policy).
+    """
+    import asyncio
+
+    from api.routes import trades as trades_mod
+    from data.storage.models import Trade
+
+    captured_stmts: list[Any] = []
+
+    class _FakeResult:
+        def __init__(self, scalar_value: float) -> None:
+            self._scalar = scalar_value
+
+        def scalar(self) -> float:
+            return self._scalar
+
+    class _FakeSession:
+        async def __aenter__(self) -> _FakeSession:
+            return self
+
+        async def __aexit__(self, *_a: Any) -> None:
+            return None
+
+        async def execute(self, stmt: Any) -> _FakeResult:
+            captured_stmts.append(stmt)
+            # Simulate ``COALESCE(SUM(max_loss_at_submit), 0)`` across the
+            # filtered WHERE ... IN (...) — NULL row excluded by SUM:
+            # 4_000 + 1_000 = 5_000.
+            return _FakeResult(5_000.0)
+
+    def _fake_factory() -> Any:
+        return _FakeSession()
+
+    async def _run() -> float:
+        with patch("core.config.settings.SKIP_DB_INIT", False):
+            with patch(
+                "core.database._get_session_factory", return_value=_fake_factory,
+            ):
+                return await trades_mod._get_open_positions_max_loss_total("alice")
+
+    total = asyncio.new_event_loop().run_until_complete(_run())
+    assert total == 5_000.0
+    # The query should target the Trade table.
+    assert captured_stmts, "execute() was not called"
+    stmt_str = str(captured_stmts[0]).lower()
+    assert "trades" in stmt_str
+    # And it must reference max_loss_at_submit (not entry_price etc.).
+    assert "max_loss_at_submit" in stmt_str
+
+
+def test_aggregate_helper_excludes_closed_cancelled_rejected_trades() -> None:
+    """Helper's WHERE clause must exclude terminal-state rows.
+
+    Pins the exact status set: pending / submitted / open / partial /
+    partial_fill IN; closed / cancelled / rejected NOT IN. A regression
+    that adds ``closed`` to the IN list (or drops one of the open
+    statuses) would re-introduce the SHF-3 leak.
+    """
+    import asyncio
+
+    from api.routes import trades as trades_mod
+
+    captured_stmts: list[Any] = []
+
+    class _FakeResult:
+        def scalar(self) -> float:
+            return 0.0
+
+    class _FakeSession:
+        async def __aenter__(self) -> _FakeSession:
+            return self
+
+        async def __aexit__(self, *_a: Any) -> None:
+            return None
+
+        async def execute(self, stmt: Any) -> _FakeResult:
+            captured_stmts.append(stmt)
+            return _FakeResult()
+
+    def _fake_factory() -> Any:
+        return _FakeSession()
+
+    async def _run() -> None:
+        with patch("core.config.settings.SKIP_DB_INIT", False):
+            with patch(
+                "core.database._get_session_factory", return_value=_fake_factory,
+            ):
+                await trades_mod._get_open_positions_max_loss_total("alice")
+
+    asyncio.new_event_loop().run_until_complete(_run())
+    assert captured_stmts, "execute() was not called"
+    # Compile the statement so the IN literal is visible — the WHERE
+    # clause must reference each open status and must NOT reference any
+    # of the terminal statuses.
+    compiled = str(captured_stmts[0].compile(compile_kwargs={"literal_binds": True})).lower()
+    for must_have in ("pending", "submitted", "open", "partial", "partial_fill"):
+        assert must_have in compiled, f"open status {must_have!r} missing from WHERE: {compiled}"
+    for must_not_have in ("closed", "cancelled", "rejected"):
+        # Whole-token check — substring of any other column name would
+        # otherwise false-positive (e.g. "open" ⊂ "open_id").
+        assert f"'{must_not_have}'" not in compiled, (
+            f"terminal status {must_not_have!r} unexpectedly in WHERE: {compiled}"
+        )
