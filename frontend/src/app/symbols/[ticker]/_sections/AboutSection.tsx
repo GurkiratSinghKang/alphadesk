@@ -79,25 +79,32 @@ function Shell({ variant, sector, industry, description }: ShellProps) {
   return (
     <section
       id="about"
+      aria-labelledby="about-heading"
       data-testid="about-section"
       data-slot={`about-section-${variant}`}
       className="rounded-md border border-border-hair bg-bg-elev-1 p-4 scroll-mt-24 mx-4 sm:mx-6 mb-6"
     >
       <header className="flex items-baseline justify-between gap-3">
-        <p className="t-label u-muted">ABOUT</p>
+        <h2 id="about-heading" className="t-label u-muted">ABOUT</h2>
         <span className="t-mono text-label u-muted" data-slot="about-sector-industry">
           {sectorIndustryText}
         </span>
       </header>
-      <p className={`${descriptionClass}${muted}`} data-slot="about-description">
+      <p
+        id="about-description-body"
+        className={`${descriptionClass}${muted}`}
+        data-slot="about-description"
+      >
         {body}
       </p>
       {isLong && !showFallback ? (
         <button
           type="button"
           data-slot="about-toggle"
+          aria-expanded={expanded}
+          aria-controls="about-description-body"
           onClick={() => setExpanded((prev) => !prev)}
-          className="mt-2 t-mono text-label u-muted hover:text-fg"
+          className="mt-2 t-mono text-label u-muted hover:text-fg rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
         >
           {expanded ? "Show less" : "Show more"}
         </button>

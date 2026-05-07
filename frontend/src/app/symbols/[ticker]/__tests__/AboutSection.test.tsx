@@ -149,4 +149,26 @@ describe("AboutSection", () => {
     expect(section.getAttribute("id")).toBe("about");
     expect(section.className).toContain("scroll-mt-24");
   });
+
+  it("flips aria-expanded on the toggle button when clicked", async () => {
+    const longDescription = "B".repeat(600);
+    mockedFetch.mockResolvedValue(makeFundamentals({ description: longDescription }));
+    const Wrapper = makeWrapper();
+    const { container, getByTestId } = render(
+      createElement(Wrapper, null, <AboutSection symbol="NVDA" />),
+    );
+    await waitFor(() => {
+      expect(getByTestId("about-section").getAttribute("data-slot")).toBe("about-section-ready");
+    });
+    const toggle = container.querySelector('[data-slot="about-toggle"]') as HTMLButtonElement | null;
+    expect(toggle).not.toBeNull();
+    expect(toggle?.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle?.getAttribute("aria-controls")).toBe("about-description-body");
+
+    fireEvent.click(toggle!);
+    expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(toggle!);
+    expect(toggle?.getAttribute("aria-expanded")).toBe("false");
+  });
 });
