@@ -618,6 +618,7 @@ export function getStrategyDisabledEvents(strategyId: string, includeResolved = 
   const params = includeResolved ? "?include_resolved=true" : "";
   return apiFetch<DisabledEvent[]>(
     `/api/v1/strategies/${encodeURIComponent(strategyId)}/disabled-events${params}`,
+    { suppressGlobalError: true },
   );
 }
 
@@ -1148,6 +1149,76 @@ export async function getMarketDepthCapabilities(): Promise<MarketDepthCapabilit
     trueL2Available: Boolean(raw.true_l2_available ?? raw.trueL2Available),
     providers: Array.isArray(raw.providers) ? raw.providers : [],
     notes: Array.isArray(raw.notes) ? raw.notes : [],
+  };
+}
+
+// ─── Market status (holiday-aware open/closed) ───────────────────
+//
+// Wraps ``GET /api/v1/market/market-status`` (backend/api/routes/market.py:570).
+// The backend proxies Polygon ``/v1/marketstatus/now`` first, falls back to
+// Alpaca ``/v2/clock``, and to a demo response only when both providers are
+// unreachable. Both upstream sources already honour the NYSE-observed US
+// holiday schedule, so a holiday weekday returns ``market: "closed"`` without
+// any local calendar logic on our side.
+//
+// The wire shape (``backend/services/market.py:173``) is:
+//
+//     {
+//       "market": "open" | "closed" | "early_hours" | "late_hours" | …,
+//       "server_time": "2026-05-07T14:32:11Z",
+//       "exchanges": { "nyse": "open", "nasdaq": "open", … },
+//       "is_demo": false
+//     }
+//
+// The backend does NOT currently expose a structured ``is_holiday`` /
+// ``holiday_name`` field on this endpoint, so we don't fabricate one in the FE
+// type. A holiday on the NYSE simply manifests as ``market: "closed"`` on a
+// weekday and is enough to kill the "Market open" lie. If the backend ever
+// gains a holiday-name field this type is the right place to extend.
+export interface MarketStatusResponse {
+  /** True when NYSE regular session is currently open per the upstream provider. */
+  isOpen: boolean;
+  /** Raw upstream label — "open" / "closed" / "early_hours" / "late_hours" / etc. */
+  market: string;
+  /** Per-exchange status map (e.g. ``{nyse: "open", nasdaq: "open"}``). */
+  exchanges: Record<string, string>;
+  /** Server-side timestamp in ISO 8601 UTC. */
+  serverTime: string;
+  /** True when the response came from the demo fallback (no upstream credentials). */
+  isDemo: boolean;
+}
+
+interface BackendMarketStatus {
+  market?: string;
+  server_time?: string;
+  serverTime?: string;
+  exchanges?: Record<string, string>;
+  is_demo?: boolean;
+  isDemo?: boolean;
+}
+
+/**
+ * Fetch the current market status. The returned ``isOpen`` is derived from
+ * the upstream provider (Polygon → Alpaca) so it is correct on US holidays
+ * unlike the local ``isMarketOpen()`` heuristic.
+ */
+export async function getMarketStatus(): Promise<MarketStatusResponse> {
+  const raw = await apiFetch<BackendMarketStatus>("/api/v1/market/market-status");
+  const market = typeof raw?.market === "string" ? raw.market : "unknown";
+  const serverTime = typeof raw?.server_time === "string"
+    ? raw.server_time
+    : typeof raw?.serverTime === "string"
+      ? raw.serverTime
+      : "";
+  return {
+    // Polygon and Alpaca both label a closed exchange ``"closed"``; Polygon
+    // also emits ``"early_hours"`` / ``"late_hours"`` for extended sessions
+    // which we treat as NOT in regular session for trade-gating purposes.
+    isOpen: market === "open",
+    market,
+    exchanges: raw?.exchanges && typeof raw.exchanges === "object" ? raw.exchanges : {},
+    serverTime,
+    isDemo: Boolean(raw?.is_demo ?? raw?.isDemo),
   };
 }
 
@@ -2011,7 +2082,7 @@ export interface HaltStatus {
 }
 
 export async function getHaltStatus(): Promise<HaltStatus> {
-  return apiFetch<HaltStatus>(`/api/v1/trades/halt-status`);
+  return apiFetch<HaltStatus>(`/api/v1/trades/halt-status`, { suppressGlobalError: true });
 }
 
 export async function haltTrading(opts?: { flatten?: boolean; reason?: string }): Promise<{
@@ -3928,7 +3999,7 @@ export interface LayoutConfig {
 }
 
 export async function getLayoutConfig(): Promise<LayoutConfig> {
-  return apiFetch<LayoutConfig>("/api/v1/admin/control-center/layout");
+  return apiFetch<LayoutConfig>("/api/v1/admin/control-center/layout", { suppressGlobalError: true });
 }
 
 export async function patchLayoutConfig(

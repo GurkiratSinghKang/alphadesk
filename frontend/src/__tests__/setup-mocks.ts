@@ -143,6 +143,17 @@ vi.mock('@/lib/api', async (importOriginal) => {
     getMarketRegime: vi.fn().mockResolvedValue({ regime: { regime: 'Bull', label: 'bull', confidence: 0.8, vix_level: 16.5, description: 'test' } }),
     getMarketIndices: vi.fn().mockResolvedValue({ indices: [] }),
     getMarketSectors: vi.fn().mockResolvedValue({ sectors: [] }),
+    // Holiday-aware market status (audit edge-cases-r3 §A P1). The default
+    // mock matches "regular session, market open" — the dominant happy
+    // path. Tests that need to exercise the holiday branch override this
+    // per-test.
+    getMarketStatus: vi.fn().mockResolvedValue({
+      isOpen: true,
+      market: 'open',
+      exchanges: { nyse: 'open', nasdaq: 'open' },
+      serverTime: new Date().toISOString(),
+      isDemo: false,
+    }),
     getMarketNews: vi.fn().mockResolvedValue([]),
     getStrategies: vi.fn().mockResolvedValue([]),
     getStrategyCatalog: vi.fn().mockResolvedValue([]),

@@ -88,7 +88,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import type { Order, Position } from "@/types";
 import { useMarketStore, useQuote } from "@/stores/market";
 import { usePortfolioStore } from "@/stores/portfolio";
-import { useStrategies } from "@/hooks/useQueries";
+import { useMarketStatus, useStrategies } from "@/hooks/useQueries";
 import { useToast } from "@/hooks/useToast";
 
 import {
@@ -814,7 +814,10 @@ export default function TradePage() {
         executionQuote.timestamp == null
           ? null
           : Math.max(0, nowEpochSubmit - executionQuote.timestamp),
-      marketOpen: isMarketOpen(),
+      // ``handleSubmit`` is recreated each render so ``marketOpen`` here is
+      // the freshest derived value: holiday-aware via the React Query hook
+      // when available, falling back to the local heuristic otherwise.
+      marketOpen,
       legReadiness: submittedLegReadiness,
     });
 	    if (!submittedReadiness.canSubmit) {
@@ -1079,11 +1082,18 @@ export default function TradePage() {
     ],
   );
   const [nowEpoch, setNowEpoch] = useState(() => Date.now() / 1000);
-  const [marketOpen, setMarketOpen] = useState(() => isMarketOpen());
+  // Holiday-aware market status (audit edge-cases-r3 §A P1). Fall back to
+  // the local ``isMarketOpen()`` heuristic until the hook resolves and on
+  // any hook failure — preserving the prior behaviour as a safety net.
+  // The hook itself refetches every 60s; the local fallback gets refreshed
+  // by the 30s wall-clock interval below.
+  const { data: marketStatus } = useMarketStatus();
+  const [heuristicMarketOpen, setHeuristicMarketOpen] = useState(() => isMarketOpen());
+  const marketOpen = marketStatus?.isOpen ?? heuristicMarketOpen;
   useEffect(() => {
     const updateWallClockState = () => {
       setNowEpoch(Date.now() / 1000);
-      setMarketOpen(isMarketOpen());
+      setHeuristicMarketOpen(isMarketOpen());
     };
     const id = setInterval(updateWallClockState, 30_000);
     return () => clearInterval(id);

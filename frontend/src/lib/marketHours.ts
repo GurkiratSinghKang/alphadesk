@@ -7,10 +7,17 @@
  *
  * Regular session: 09:30–16:00 ET, Monday–Friday.
  *
- * NOTE: This helper does not know about NYSE-observed US holidays or
- * half-day closes (e.g. day after Thanksgiving closes at 13:00). The
- * authoritative answer lives on the backend `/api/v1/market/status`
- * endpoint. Use this only for a best-effort client-side indicator.
+ * Canonical source of truth: prefer ``useMarketStatus()`` from
+ * ``@/hooks/useQueries``. That hook reads ``/api/v1/market/market-status``
+ * which proxies Polygon and Alpaca, both of which honour the
+ * NYSE-observed US holiday schedule (MLK, Good Friday, Juneteenth,
+ * Independence Day, Labor Day, Thanksgiving, Christmas, ad-hoc closures
+ * like the passing-of-Carter on 2025-01-09 etc.). The helpers in this
+ * file know NOTHING about holidays or half-day closes (day after
+ * Thanksgiving, day before Christmas — both close at 13:00 ET); they
+ * are intentionally retained as a synchronous fallback for first-paint
+ * (before the hook resolves) and React-Query failure modes so the UI
+ * degrades to today's heuristic instead of a hard "unknown" state.
  */
 
 export interface MarketHoursParts {
@@ -45,7 +52,13 @@ function getNYParts(now: Date = new Date()): MarketHoursParts {
   return { weekday, hour, minute };
 }
 
-/** Is the NYSE regular session open right now (Mon–Fri, 09:30–16:00 ET)? */
+/**
+ * Heuristic NYSE-session check: Mon–Fri, 09:30–16:00 ET. Returns ``true``
+ * on every weekday during regular hours including US holidays — see the
+ * file-level docstring. Use ``useMarketStatus()`` for the holiday-aware
+ * answer; this helper is the synchronous fallback for first paint and
+ * hook failures.
+ */
 export function isMarketOpen(now: Date = new Date()): boolean {
   const { weekday, hour, minute } = getNYParts(now);
   if (weekday === "Sat" || weekday === "Sun") return false;
