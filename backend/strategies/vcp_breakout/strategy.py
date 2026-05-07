@@ -50,7 +50,7 @@ from .config import VCP_UNIVERSE_SEED, VCPBreakoutParams
 log = logging.getLogger("alphadesk.strategies.vcp_breakout")
 
 _NS = "vcp_breakout"
-_REQUIRED_LOOKBACK_DAYS = 252  # need 12 months for 200-SMA + 52-week-low gates
+_REQUIRED_LOOKBACK_DAYS = 470  # 200-SMA plus max rising-window gate + buffer
 
 
 @register_strategy(

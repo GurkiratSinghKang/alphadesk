@@ -1852,6 +1852,14 @@ export interface PlaceOrderPayload {
    * to stitch them back into one combo.
    */
   combo_correlation_id?: string;
+  /**
+   * Broker-review routing metadata. Order-entry surfaces preview broker
+   * and risk checks before submit, then pass the returned review id with
+   * the final POST so the request is auditable end-to-end.
+   */
+  route_intent?: "broker_order_review";
+  broker_provider?: OrderBrokerProvider;
+  review_id?: string;
 }
 
 export interface PlaceOrderOptions {
@@ -1867,8 +1875,23 @@ export interface PlaceOrderOptions {
   idempotencyKey?: string;
 }
 
-export function placeOrder(payload: PlaceOrderPayload, options?: PlaceOrderOptions) {
-  // Transform frontend payload to backend CreateOrderRequest format.
+export type OrderBrokerProvider = BrokerProvider;
+
+export interface OrderPreviewCheck {
+  code: string;
+  label: string;
+  passed: boolean;
+  detail?: string | null;
+}
+
+export interface OrderPreviewResponse {
+  review_id: string | null;
+  can_submit: boolean;
+  expires_at?: string | null;
+  checks: OrderPreviewCheck[];
+}
+
+function orderRequestBodyFromPayload(payload: PlaceOrderPayload): Record<string, unknown> {
   const explicitLegs = payload.legs != null;
   if (explicitLegs && payload.legs && payload.legs.length > 1) {
     const pricedCount = payload.legs.filter((leg) => leg.price != null).length;
@@ -1891,6 +1914,44 @@ export function placeOrder(payload: PlaceOrderPayload, options?: PlaceOrderOptio
     };
   });
 
+  // Round-5 F-1 / F-14 — forward strategy + combo metadata so the
+  // backend `CreateOrderRequest.strategy` field is populated and the
+  // ledger row carries the originating strategy + combo type. We omit
+  // undefined keys to keep existing single-leg equity flows tidy.
+  const reqBody: Record<string, unknown> = { legs, time_in_force: payload.time_in_force ?? "day" };
+  if (payload.strategy) reqBody.strategy = payload.strategy;
+  if (payload.combo_type) reqBody.combo_type = payload.combo_type;
+  if (payload.combo_correlation_id) reqBody.combo_correlation_id = payload.combo_correlation_id;
+  if (payload.extended_hours) reqBody.extended_hours = true;
+  if (payload.bracket) reqBody.bracket = payload.bracket;
+  if (payload.route_intent) reqBody.route_intent = payload.route_intent;
+  if (payload.broker_provider) reqBody.broker_provider = payload.broker_provider;
+  if (payload.review_id) reqBody.review_id = payload.review_id;
+  const hasOptionLeg = legs.some((leg) => leg.asset_class === "option");
+  const requiresFreshQuote = payload.type !== "market" || hasOptionLeg;
+  if (payload.quote_at_fill_ts != null) {
+    reqBody.quote_at_fill_ts = normalizeQuoteTimestamp(payload.quote_at_fill_ts);
+  } else if (requiresFreshQuote && !hasOptionLeg) {
+    // Direct UI submissions always include a timestamp so the backend's
+    // stale-quote gate runs instead of silently skipping. Callers that own
+    // a real quote snapshot should pass it; this fallback preserves older
+    // manual equity flows while still enabling server-side drift checks.
+    // Option tickets must carry a real chain snapshot timestamp from the
+    // source surface; fabricating Date.now() would make a stale option chain
+    // look fresh and defeat the backend's fail-closed option gate.
+    reqBody.quote_at_fill_ts = Date.now() / 1000;
+  }
+  return reqBody;
+}
+
+export function previewOrder(payload: PlaceOrderPayload): Promise<OrderPreviewResponse> {
+  return apiFetch<OrderPreviewResponse>("/api/v1/trades/orders/preview", {
+    method: "POST",
+    body: JSON.stringify(orderRequestBodyFromPayload(payload)),
+  });
+}
+
+export function placeOrder(payload: PlaceOrderPayload, options?: PlaceOrderOptions) {
   // Wave B / persona-72 P0: every POST /trades/orders MUST carry an
   // Idempotency-Key so a mid-POST network blip that triggers a client
   // retry doesn't submit the same order twice.  The backend caches the
@@ -1911,38 +1972,12 @@ export function placeOrder(payload: PlaceOrderPayload, options?: PlaceOrderOptio
       ? crypto.randomUUID()
       : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`);
 
-  // Round-5 F-1 / F-14 — forward strategy + combo metadata so the
-  // backend `CreateOrderRequest.strategy` field is populated and the
-  // ledger row carries the originating strategy + combo type. We omit
-  // these keys when undefined to keep existing single-leg equity flows
-  // wire-byte-identical (no backend schema churn).
-  const reqBody: Record<string, unknown> = { legs, time_in_force: payload.time_in_force ?? "day" };
-  if (payload.strategy) reqBody.strategy = payload.strategy;
-  if (payload.combo_type) reqBody.combo_type = payload.combo_type;
-  if (payload.combo_correlation_id) reqBody.combo_correlation_id = payload.combo_correlation_id;
-  if (payload.extended_hours) reqBody.extended_hours = true;
-  if (payload.bracket) reqBody.bracket = payload.bracket;
-  const hasOptionLeg = legs.some((leg) => leg.asset_class === "option");
-  const requiresFreshQuote = payload.type !== "market" || hasOptionLeg;
-  if (payload.quote_at_fill_ts != null) {
-    reqBody.quote_at_fill_ts = normalizeQuoteTimestamp(payload.quote_at_fill_ts);
-  } else if (requiresFreshQuote && !hasOptionLeg) {
-    // Direct UI submissions always include a timestamp so the backend's
-    // stale-quote gate runs instead of silently skipping. Callers that own
-    // a real quote snapshot should pass it; this fallback preserves older
-    // manual equity flows while still enabling server-side drift checks.
-    // Option tickets must carry a real chain snapshot timestamp from the
-    // source surface; fabricating Date.now() would make a stale option chain
-    // look fresh and defeat the backend's fail-closed option gate.
-    reqBody.quote_at_fill_ts = Date.now() / 1000;
-  }
-
   return apiFetch<Order>(`/api/v1/trades/orders`, {
     method: "POST",
     headers: {
       "Idempotency-Key": idempKey,
     },
-    body: JSON.stringify(reqBody),
+    body: JSON.stringify(orderRequestBodyFromPayload(payload)),
   });
 }
 
@@ -2083,7 +2118,7 @@ export interface BrokerConnection {
   metadata: Record<string, unknown>;
 }
 
-export type BrokerProvider = "alpaca" | "ibkr" | "etrade" | "schwab";
+export type BrokerProvider = "alpaca" | "ibkr" | "etrade" | "schwab" | "robinhood";
 
 export interface BrokerProviderInfo {
   provider: BrokerProvider;

@@ -180,6 +180,17 @@ class TestLayer1Drawdown:
         events = [ev for ev in repo._events.values() if ev.strategy == "pead" and ev.layer == 1]
         assert len(events) == 1
 
+    def test_unresolved_event_stays_disabled_after_nav_recovers(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        breached = KillSwitchContext(peak_nav=100.0, current_nav=85.0, alloc_capital=10000.0, realized_today=0.0)
+        recovered = KillSwitchContext(peak_nav=100.0, current_nav=99.0, alloc_capital=10000.0, realized_today=0.0)
+        ks.check_layer1_drawdown("pead", breached)
+        d = ks.check_layer1_drawdown("pead", recovered)
+        assert d.enabled is False
+        assert d.layer == 1
+        assert "manual re-enable" in d.reason
+
     def test_custom_threshold(self) -> None:
         # A stricter -5% threshold means -6% DD triggers it.
         repo = InMemoryDisabledEventsRepo()
@@ -250,6 +261,17 @@ class TestLayer2DailyPnL:
         ks.check_layer2_daily_pnl("pead", ctx)
         events = [ev for ev in repo._events.values() if ev.strategy == "pead" and ev.layer == 2]
         assert len(events) == 1
+
+    def test_unresolved_event_stays_disabled_after_pnl_recovers(self) -> None:
+        repo = InMemoryDisabledEventsRepo()
+        ks = KillSwitch(repo=repo)
+        breached = KillSwitchContext(peak_nav=100.0, current_nav=100.0, alloc_capital=10000.0, realized_today=-300.0)
+        recovered = KillSwitchContext(peak_nav=100.0, current_nav=100.0, alloc_capital=10000.0, realized_today=50.0)
+        ks.check_layer2_daily_pnl("pead", breached)
+        d = ks.check_layer2_daily_pnl("pead", recovered)
+        assert d.enabled is False
+        assert d.layer == 2
+        assert "remains active" in d.reason
 
 
 class TestLayer3Manual:

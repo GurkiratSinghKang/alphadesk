@@ -269,6 +269,14 @@ export function AgentsDebateCard({ symbol, isETF }: AgentsDebateCardProps) {
     },
   });
 
+  useEffect(() => {
+    if (runningId || pollExpired) return;
+    const activeRun = runsQuery.data?.find((run) => !isTerminal(run.status));
+    if (activeRun) {
+      setRunningId(activeRun.run_id);
+    }
+  }, [pollExpired, runningId, runsQuery.data]);
+
   // When the polled run reaches a terminal state, fold it back into the
   // list cache and stop polling. Defer the setState to a microtask so
   // we don't trigger a cascading render inside the effect (lint rule

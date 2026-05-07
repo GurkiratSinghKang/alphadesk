@@ -104,6 +104,12 @@ const BROKER_FORMS: Record<BrokerProvider, {
       { key: "redirect_uri", label: "Redirect URI", placeholder: "https://127.0.0.1", optional: true },
     ],
   },
+  robinhood: {
+    label: "Robinhood",
+    envs: [],
+    note: "No official options order API available",
+    fields: [],
+  },
 };
 
 function formatIsoShort(iso: string | null): string {
@@ -347,7 +353,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const allowed = BROKER_FORMS[brokerProvider].envs;
-    if (!allowed.includes(brokerEnv)) {
+    if (allowed.length > 0 && !allowed.includes(brokerEnv)) {
       setBrokerEnv(allowed[0]);
     }
     if (brokerProvider === "ibkr") {
@@ -763,6 +769,11 @@ export default function SettingsPage() {
                       {env}
                     </button>
                   ))}
+                  {brokerForm.envs.length === 0 && (
+                    <span className="flex flex-1 items-center justify-center px-3 text-label font-semibold uppercase text-muted-foreground">
+                      unavailable
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -791,7 +802,7 @@ export default function SettingsPage() {
               <Button
                 type="submit"
                 className="h-10 text-label"
-                disabled={brokerSaving}
+                disabled={brokerSaving || brokerForm.fields.length === 0}
                 aria-busy={brokerSaving}
               >
                 {brokerSaving ? (

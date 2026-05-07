@@ -103,6 +103,19 @@ class TestCompositeLookbacks:
         assert components[1][1] == pytest.approx(0.3)
 
 
+class TestUniverse:
+    def test_universe_includes_configurable_probe_candidates_and_bond_fallbacks(self):
+        strat = SectorRotationStrategy()
+        universe = set(strat.universe(date(2024, 4, 30), {"sector_rotation.risk_off_probe": "QQQ"}))
+        assert "QQQ" in universe
+        assert {"AGG", "IEF", "TLT", "BIL"}.issubset(universe)
+
+    def test_reverse_lookup_includes_bond_fallback_etfs(self):
+        strat = SectorRotationStrategy()
+        assert strat.is_in_universe("AGG") is True
+        assert strat.is_in_universe("TLT") is True
+
+
 class TestComputeTargets:
     def test_top3_selected_when_all_sectors_valid(self):
         # Build 400 days of data; XLK = strongest uptrend, then XLV, XLF; rest flat.

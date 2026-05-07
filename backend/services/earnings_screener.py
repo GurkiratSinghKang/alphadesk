@@ -619,6 +619,9 @@ async def _load_recent_5d_move_pct(
         return None
 
 
+_RECENT_5D_MOVE_TIMEOUT_SECONDS = 3.0
+
+
 def _recent_beats_misses(quarters: Sequence[Mapping]) -> list[tuple[str, str]]:
     rows: list[tuple[str, str]] = []
     for q in quarters[:8]:
@@ -987,15 +990,19 @@ async def _fmp_upcoming(window: str) -> list[dict]:
     # cleanly. Union the two narrower queries when "both" is requested so
     # we never lose curated names to upstream truncation.
     if window == "both":
+        cache = get_cache()
+        merged_start, merged_end = _resolve_window_dates("both")
+        merged_key = _fmp_upcoming_cache_key("both", merged_start, merged_end)
+        if not settings.SKIP_EARNINGS_FMP_CACHE:
+            cached = await cache.get(merged_key)
+            if isinstance(cached, list):
+                return cached
         current_rows = await _fmp_upcoming("current")
         next_rows = await _fmp_upcoming("next")
         merged = _merge_calendar_rows(current_rows, next_rows)
         # Cache the merged result under the "both" key so subsequent
         # requests skip the merge work. Cache TTL matches the upstream
         # (5 min) so a refresh of "current" or "next" propagates here.
-        cache = get_cache()
-        merged_start, merged_end = _resolve_window_dates("both")
-        merged_key = _fmp_upcoming_cache_key("both", merged_start, merged_end)
         if not settings.SKIP_EARNINGS_FMP_CACHE:
             await cache.set(merged_key, merged, ttl_seconds=_fmp_upcoming_ttl_s())
         return merged
@@ -3709,7 +3716,10 @@ async def get_detail(symbol: str) -> EarningsDetail:
         _load_skew(symbol),
         get_ticker_fact(symbol, "research", on_stale="allow"),
         _load_historical_earnings(symbol, report_date_obj),
-        _load_recent_5d_move_pct(symbol, report_date_obj),
+        asyncio.wait_for(
+            _load_recent_5d_move_pct(symbol, report_date_obj),
+            timeout=_RECENT_5D_MOVE_TIMEOUT_SECONDS,
+        ),
         return_exceptions=True,
     )
     # Round-4 CLUSTER 3: a successful ``None`` is NOT partial (provider

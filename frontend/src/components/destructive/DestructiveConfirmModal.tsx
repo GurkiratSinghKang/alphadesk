@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -58,8 +59,10 @@ export default function DestructiveConfirmModal({
       <DialogContent className="sm:max-w-[440px]">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
+          <DialogDescription className="mt-2 text-body-sm text-fg-muted">
+            {description}
+          </DialogDescription>
         </DialogHeader>
-        <p className="mt-2 text-body-sm text-fg-muted">{description}</p>
         {consequences.length > 0 && (
           <ul className="mt-3 flex flex-col gap-1.5 text-body-sm text-fg-dim">
             {consequences.map((c) => (

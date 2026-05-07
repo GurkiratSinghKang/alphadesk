@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import asyncio
 import hashlib
 import hmac
 import json
@@ -27,7 +28,7 @@ class BrokerCredentialError(RuntimeError):
     pass
 
 
-BrokerProvider = Literal["alpaca", "ibkr", "etrade", "schwab"]
+BrokerProvider = Literal["alpaca", "ibkr", "etrade", "schwab", "robinhood"]
 
 
 SUPPORTED_BROKERS: dict[str, dict[str, Any]] = {
@@ -62,6 +63,14 @@ SUPPORTED_BROKERS: dict[str, dict[str, Any]] = {
         "trading_enabled": False,
         "reconciliation_enabled": False,
         "fields": ["client_id", "client_secret", "refresh_token", "redirect_uri"],
+    },
+    "robinhood": {
+        "label": "Robinhood",
+        "auth_model": "official_options_api_unavailable",
+        "account_envs": [],
+        "trading_enabled": False,
+        "reconciliation_enabled": False,
+        "fields": [],
     },
 }
 
@@ -99,6 +108,15 @@ def _account_env_from_settings() -> str:
 def _env_credentials() -> AlpacaCredentials | None:
     api_key = settings.ALPACA_API_KEY.get_secret_value()
     secret = settings.ALPACA_SECRET_KEY.get_secret_value()
+    return _credentials_from_keypair(api_key, secret, source="environment")
+
+
+def _credentials_from_keypair(
+    api_key: str | None,
+    secret: str | None,
+    *,
+    source: str,
+) -> AlpacaCredentials | None:
     if not api_key or not secret:
         return None
     return AlpacaCredentials(
@@ -106,8 +124,21 @@ def _env_credentials() -> AlpacaCredentials | None:
         secret_key=secret,
         base_url=settings.ALPACA_BASE_URL,
         account_env=_account_env_from_settings(),
-        source="environment",
+        source=source,
     )
+
+
+async def _admin_config_credentials() -> AlpacaCredentials | None:
+    try:
+        from services.app_config import get_backend_key
+
+        api_key, secret = await asyncio.gather(
+            get_backend_key("ALPACA_API_KEY"),
+            get_backend_key("ALPACA_SECRET_KEY"),
+        )
+    except Exception:
+        return None
+    return _credentials_from_keypair(api_key, secret, source="app_config")
 
 
 async def get_alpaca_credentials(
@@ -160,7 +191,9 @@ async def get_alpaca_credentials(
             # still use env credentials.
             if not allow_env_fallback:
                 raise
-    return _env_credentials() if allow_env_fallback else None
+    if not allow_env_fallback:
+        return None
+    return await _admin_config_credentials() or _env_credentials()
 
 
 async def verify_alpaca_credentials(

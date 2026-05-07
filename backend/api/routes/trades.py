@@ -184,6 +184,18 @@ class OrderStatus(str, Enum):
     REJECTED = "rejected"
 
 
+class RouteIntent(str, Enum):
+    BROKER_ORDER_REVIEW = "broker_order_review"
+
+
+class BrokerProvider(str, Enum):
+    ALPACA = "alpaca"
+    ROBINHOOD = "robinhood"
+    IBKR = "ibkr"
+    ETRADE = "etrade"
+    SCHWAB = "schwab"
+
+
 # Wave 4P Fix 4 (P98) — symbol regex covers BOTH equity AND OCC option
 # symbols in a single pattern so ``CreateOrderRequest.legs`` accepts
 # multi-leg option orders without a separate union type.
@@ -387,6 +399,19 @@ class BracketSpec(BaseModel):
 class CreateOrderRequest(BaseModel):
     legs: list[OrderLeg] = Field(..., min_length=1, max_length=4)
     time_in_force: TimeInForce = TimeInForce.DAY
+    route_intent: RouteIntent = Field(
+        RouteIntent.BROKER_ORDER_REVIEW,
+        description="Frontend execution intent; broker_order_review means user-reviewed broker routing.",
+    )
+    broker_provider: BrokerProvider = Field(
+        BrokerProvider.ALPACA,
+        description="Requested broker adapter. Alpaca is the only executable adapter today.",
+    )
+    review_id: str | None = Field(
+        None,
+        max_length=64,
+        description="Server-issued preview token proving the broker review matched this order.",
+    )
     strategy: str | None = Field(None, description="Originating strategy name")
     notes: str | None = Field(None, max_length=1000)
     # Round-5 F-14 — multi-leg combo classification. When set, the broker
@@ -436,7 +461,6 @@ class CreateOrderRequest(BaseModel):
         None,
         description="Optional bracket exit (stop_loss + take_profit) submitted with entry.",
     )
-
     @field_validator("notes")
     @classmethod
     def sanitize_notes(cls, v: str | None) -> str | None:
@@ -613,12 +637,28 @@ class CreateOrderRequest(BaseModel):
             )
         return candidate
 
+    @field_validator("review_id")
+    @classmethod
+    def sanitize_review_id(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        candidate = v.strip()
+        if candidate == "":
+            return None
+        try:
+            _uuid.UUID(candidate)
+        except (ValueError, AttributeError):
+            raise ValueError("review_id must be a valid UUID string")
+        return candidate
+
 
 class OrderResponse(BaseModel):
     id: str
     status: OrderStatus
     legs: list[OrderLeg]
     time_in_force: TimeInForce
+    route_intent: RouteIntent = RouteIntent.BROKER_ORDER_REVIEW
+    broker_provider: BrokerProvider = BrokerProvider.ALPACA
     strategy: str | None = None
     # Round-5 F-14 — combo classification surfaces back to the frontend so
     # the recent-orders strip can render `iron_condor` etc. against a
@@ -633,6 +673,28 @@ class OrderResponse(BaseModel):
     # ``cancelled`` and the reason was discarded — a trader could not tell
     # "I cancelled it" from "broker refused it" nor why it was refused.
     reject_reason: str | None = None
+
+
+class OrderPreviewCheck(BaseModel):
+    code: str
+    label: str
+    passed: bool
+    detail: str
+
+
+class OrderPreviewResponse(BaseModel):
+    route_intent: RouteIntent
+    broker_provider: BrokerProvider
+    review_id: str | None = None
+    expires_at: datetime | None = None
+    account_env: str | None = None
+    can_submit: bool
+    checks: list[OrderPreviewCheck]
+    notional: float | None = None
+    max_loss: float | None = None
+    undefined_risk: bool = False
+    equity: float | None = None
+    previewed_at: datetime
 
 
 def _optional_broker_float(value: Any) -> float | None:
@@ -886,6 +948,98 @@ async def _alpaca_credentials_or_503(username: str | None = None):
     return creds
 
 
+_ORDER_REVIEW_TTL_SECONDS = 90
+
+
+def _reject_unsupported_broker_provider(provider: BrokerProvider) -> None:
+    if provider == BrokerProvider.ALPACA:
+        return
+    labels = {
+        BrokerProvider.ROBINHOOD: "Robinhood",
+        BrokerProvider.IBKR: "Interactive Brokers",
+        BrokerProvider.ETRADE: "E*TRADE",
+        BrokerProvider.SCHWAB: "Schwab",
+    }
+    label = labels.get(provider, provider.value)
+    raise HTTPException(
+        status_code=422,
+        detail={
+            "error": "unsupported_broker_provider",
+            "broker_provider": provider.value,
+            "supported_provider": BrokerProvider.ALPACA.value,
+            "reason": (
+                f"{label} routing is not executable from AlphaDesk yet. "
+                "Connect Alpaca for broker submission, or add a real broker adapter "
+                "with official order-placement support before enabling this provider."
+            ),
+        },
+    )
+
+
+def _order_review_hash(request: CreateOrderRequest) -> str:
+    payload = {
+        "order": _order_dedup_hash(request),
+        "route_intent": request.route_intent.value,
+        "broker_provider": request.broker_provider.value,
+        "combo_type": request.combo_type or "",
+        "combo_correlation_id": request.combo_correlation_id or "",
+        "quote_at_fill_ts": _canonical_float(request.quote_at_fill_ts),
+        "extended_hours": bool(request.extended_hours),
+        "bracket": (
+            {
+                "stop_loss": _canonical_float(request.bracket.stop_loss),
+                "take_profit": _canonical_float(request.bracket.take_profit),
+            }
+            if request.bracket is not None
+            else None
+        ),
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+async def _store_order_review(request: CreateOrderRequest, *, username: str) -> tuple[str | None, datetime | None, str | None]:
+    review_id = _uuid.uuid4().hex
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=_ORDER_REVIEW_TTL_SECONDS)
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        if redis is None:
+            return None, None, "Review cache unavailable."
+        await redis.set(
+            f"order_review:{username}:{review_id}",
+            json.dumps({"hash": _order_review_hash(request), "expires_at": expires_at.isoformat()}, sort_keys=True),
+            ex=_ORDER_REVIEW_TTL_SECONDS,
+        )
+        return review_id, expires_at, None
+    except Exception:
+        logger.warning("order_review cache write failed", exc_info=True)
+        return None, None, "Review cache unavailable."
+
+
+async def _require_matching_order_review(request: CreateOrderRequest, *, username: str) -> None:
+    if "route_intent" not in getattr(request, "model_fields_set", set()):
+        return
+    if not request.review_id:
+        raise HTTPException(status_code=428, detail={"error": "order_review_required", "reason": "Preview the broker-routed order before submitting."})
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        if redis is None:
+            raise RuntimeError("redis unavailable")
+        cached = await redis.get(f"order_review:{username}:{request.review_id}")
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail={"error": "order_review_unavailable", "reason": "Order review cache is unavailable."}) from exc
+    if not cached:
+        raise HTTPException(status_code=428, detail={"error": "order_review_expired", "reason": "Preview the order again before submitting."})
+    raw = cached.decode() if isinstance(cached, (bytes, bytearray)) else cached
+    try:
+        data = json.loads(raw)
+    except Exception as exc:
+        raise HTTPException(status_code=428, detail={"error": "order_review_invalid", "reason": "Preview the order again before submitting."}) from exc
+    if data.get("hash") != _order_review_hash(request):
+        raise HTTPException(status_code=428, detail={"error": "order_review_mismatch", "reason": "Order changed after preview. Preview again before submitting."})
+
+
 def _normalise_alpaca_status(raw: Any) -> str:
     return {
         "new": "submitted",
@@ -1124,6 +1278,96 @@ async def _enforce_order_rate_limit(username: str) -> None:
 # Endpoints
 # ---------------------------------------------------------------------------
 
+def _preview_detail(detail: Any) -> str:
+    if isinstance(detail, dict):
+        for key in ("reason", "detail", "message", "error"):
+            if detail.get(key):
+                return str(detail[key])
+        return json.dumps(detail, sort_keys=True)
+    return str(detail)
+
+
+@router.post("/orders/preview", response_model=OrderPreviewResponse)
+async def preview_order(payload: CreateOrderRequest, username: str = Depends(require_auth)) -> OrderPreviewResponse:
+    _reject_unsupported_broker_provider(payload.broker_provider)
+    checks: list[OrderPreviewCheck] = [
+        OrderPreviewCheck(code="route_intent", label="Order review route", passed=True, detail="Broker order review selected."),
+        OrderPreviewCheck(code="broker_provider", label="Broker adapter", passed=True, detail="Alpaca adapter is available for paper and live accounts."),
+    ]
+    account_env: str | None = None
+    notional: float | None = None
+    max_loss: float | None = None
+    equity: float | None = None
+    undefined_risk = False
+
+    try:
+        halted = await _is_trading_halted()
+        checks.append(OrderPreviewCheck(code="trading_halt", label="Emergency halt", passed=not halted, detail="No emergency halt is active." if not halted else "Emergency halt is active."))
+    except Exception as exc:
+        checks.append(OrderPreviewCheck(code="trading_halt", label="Emergency halt", passed=False, detail=f"Could not verify halt state: {exc}"))
+    try:
+        creds = await _alpaca_credentials_or_503(username)
+        account_env = creds.account_env
+        checks.append(OrderPreviewCheck(code="broker_credentials", label="Broker credentials", passed=True, detail=f"Alpaca {creds.account_env} credentials are configured."))
+    except HTTPException as exc:
+        checks.append(OrderPreviewCheck(code="broker_credentials", label="Broker credentials", passed=False, detail=_preview_detail(exc.detail)))
+    try:
+        _reject_if_live_forbidden(payload.strategy, username=username)
+        checks.append(OrderPreviewCheck(code="strategy_live_gate", label="Strategy live gate", passed=True, detail="Strategy is allowed by the live-trading gate."))
+    except HTTPException as exc:
+        checks.append(OrderPreviewCheck(code="strategy_live_gate", label="Strategy live gate", passed=False, detail=_preview_detail(exc.detail)))
+    try:
+        notional = await _compute_order_notional(payload)
+        checks.append(OrderPreviewCheck(code="notional", label="Notional estimate", passed=True, detail=f"Estimated notional is ${notional:,.2f}."))
+    except Exception as exc:
+        checks.append(OrderPreviewCheck(code="notional", label="Notional estimate", passed=False, detail=f"Could not estimate order notional: {exc}"))
+    try:
+        agg_ok, agg_msg = await _aggregate_risk_check(payload, username=username)
+        checks.append(OrderPreviewCheck(code="aggregate_risk", label="Portfolio risk", passed=agg_ok, detail=agg_msg))
+    except HTTPException as exc:
+        checks.append(OrderPreviewCheck(code="aggregate_risk", label="Portfolio risk", passed=False, detail=_preview_detail(exc.detail)))
+    except Exception as exc:
+        checks.append(OrderPreviewCheck(code="aggregate_risk", label="Portfolio risk", passed=False, detail=f"Portfolio risk preflight unavailable: {exc}"))
+    try:
+        risk_ok, risk_msg = await _risk_check(payload)
+        checks.append(OrderPreviewCheck(code="single_order_risk", label="Single-order risk", passed=risk_ok, detail=risk_msg))
+    except HTTPException as exc:
+        checks.append(OrderPreviewCheck(code="single_order_risk", label="Single-order risk", passed=False, detail=_preview_detail(exc.detail)))
+    except Exception as exc:
+        checks.append(OrderPreviewCheck(code="single_order_risk", label="Single-order risk", passed=False, detail=f"Single-order risk preflight unavailable: {exc}"))
+    try:
+        size_ok, size_msg, max_loss, equity_value = await _max_loss_vs_equity_check(payload, username=username)
+        equity = equity_value
+        undefined_risk = "undefined" in size_msg.lower()
+        checks.append(OrderPreviewCheck(code="max_loss", label="Max-loss gate", passed=size_ok, detail=size_msg))
+    except HTTPException as exc:
+        checks.append(OrderPreviewCheck(code="max_loss", label="Max-loss gate", passed=False, detail=_preview_detail(exc.detail)))
+    except Exception as exc:
+        checks.append(OrderPreviewCheck(code="max_loss", label="Max-loss gate", passed=False, detail=f"Max-loss preflight unavailable: {exc}"))
+
+    can_submit = all(check.passed for check in checks)
+    review_id: str | None = None
+    expires_at: datetime | None = None
+    if can_submit:
+        review_id, expires_at, cache_error = await _store_order_review(payload, username=username)
+        checks.append(OrderPreviewCheck(code="review_cache", label="Review token", passed=cache_error is None, detail=cache_error or "Server review token minted for submit."))
+        can_submit = cache_error is None
+    return OrderPreviewResponse(
+        route_intent=payload.route_intent,
+        broker_provider=payload.broker_provider,
+        review_id=review_id,
+        expires_at=expires_at,
+        account_env=account_env,
+        can_submit=can_submit,
+        checks=checks,
+        notional=notional,
+        max_loss=max_loss,
+        undefined_risk=undefined_risk,
+        equity=equity,
+        previewed_at=datetime.now(timezone.utc),
+    )
+
+
 @router.post("/orders", response_model=OrderResponse, status_code=201)
 async def create_order(
     payload: CreateOrderRequest,
@@ -1169,6 +1413,9 @@ async def create_order(
     Missing / empty header falls back to the payload-hash dedup (30 s
     window) for legacy clients.
     """
+    _reject_unsupported_broker_provider(payload.broker_provider)
+    await _require_matching_order_review(payload, username=username)
+
     # persona-16 P0-1: halt MUST gate every single manual order before any
     # side-effecting check (risk, dedup, broker POST). Previously the halt
     # check was here but the halt gate is now also the first thing that runs
@@ -2014,6 +2261,8 @@ async def create_order(
         status=OrderStatus.SUBMITTED,
         legs=payload.legs,
         time_in_force=payload.time_in_force,
+        route_intent=payload.route_intent,
+        broker_provider=payload.broker_provider,
         strategy=payload.strategy,
         # Round-5 F-14 — surface the combo_type so the frontend's recent
         # orders strip can render the combo classification.
@@ -3845,9 +4094,13 @@ async def _get_account_equity_and_buying_power(
     return 0.0, 0.0
 
 
-def _live_broker_intent_enabled() -> bool:
-    """Return True only when the operator explicitly armed the live broker."""
+async def _live_broker_intent_enabled(username: str | None = None) -> bool:
+    """Return True when the resolved order broker is a live Alpaca account."""
     try:
+        if username:
+            creds = await _resolve_alpaca_creds_for_risk(username)
+            if creds is not None:
+                return creds.account_env == "live"
         from core.config import is_live_alpaca_base_url, settings as _s
         return bool(
             getattr(_s, "LIVE_TRADING_ENABLED", False)
@@ -4184,7 +4437,7 @@ async def _get_open_positions_max_loss_total(username: str) -> float:
                 .where(Trade.username == username)
                 .where(
                     Trade.status.in_(
-                        ["pending", "submitted", "open", "partial", "partial_fill"]
+                        ["pending", "submitted", "open", "partial", "partial_fill", "filled"]
                     )
                 )
             )
@@ -4457,7 +4710,10 @@ async def _quote_staleness_check(
 _SYMBOL_TRADABLE_CACHE_TTL = 60
 
 
-async def _check_symbol_tradable(symbol: str) -> tuple[bool, str]:
+async def _check_symbol_tradable(
+    symbol: str,
+    username: str | None = None,
+) -> tuple[bool, str]:
     """J-11 — refuse orders on symbols flagged halted / non-tradable.
 
     Calls Alpaca ``/v2/assets/{symbol}`` and rejects when ``status !=
@@ -4469,10 +4725,16 @@ async def _check_symbol_tradable(symbol: str) -> tuple[bool, str]:
         return True, "passed"
     upper = symbol.upper()
 
+    creds = await _resolve_alpaca_creds_for_risk(username)
+    if creds is None:
+        return True, "skipped_no_keys"
+
+    cache_key = f"symbol_tradable:{creds.account_env}:{upper}"
+
     # Cache hit?
     try:
         from core.redis import cache_get
-        cached = await cache_get(f"symbol_tradable:{upper}")
+        cached = await cache_get(cache_key)
         if isinstance(cached, dict) and "tradable" in cached:
             if cached["tradable"]:
                 return True, "passed"
@@ -4480,19 +4742,11 @@ async def _check_symbol_tradable(symbol: str) -> tuple[bool, str]:
     except Exception:
         logger.debug("symbol_tradable cache read failed", exc_info=True)
 
-    if _alpaca_keys_empty():
-        return True, "skipped_no_keys"
-
     try:
-        from core.config import settings as _s
-        headers = {
-            "APCA-API-KEY-ID": _s.ALPACA_API_KEY.get_secret_value(),
-            "APCA-API-SECRET-KEY": _s.ALPACA_SECRET_KEY.get_secret_value(),
-        }
         async with httpx.AsyncClient(timeout=3.0) as client:
             resp = await client.get(
-                f"{_s.ALPACA_BASE_URL}/v2/assets/{upper}",
-                headers=headers,
+                f"{creds.base_url}/v2/assets/{upper}",
+                headers=creds.headers,
             )
             if resp.status_code == 200:
                 body = resp.json()
@@ -4506,7 +4760,7 @@ async def _check_symbol_tradable(symbol: str) -> tuple[bool, str]:
                 try:
                     from core.redis import cache_set
                     await cache_set(
-                        f"symbol_tradable:{upper}",
+                        cache_key,
                         {"tradable": not halted, "reason": reason},
                         ttl_seconds=_SYMBOL_TRADABLE_CACHE_TTL,
                     )
@@ -4770,7 +5024,10 @@ async def _aggregate_risk_check(
     # Redis cache) so it runs early — a halted symbol takes priority
     # over the more expensive notional / equity calls below.
     for leg in request.legs:
-        tradable_ok, tradable_reason = await _check_symbol_tradable(leg.symbol)
+        tradable_ok, tradable_reason = await _check_symbol_tradable(
+            leg.symbol,
+            username=username,
+        )
         if not tradable_ok:
             return False, tradable_reason
 
@@ -4812,7 +5069,7 @@ async def _aggregate_risk_check(
     # Audit MB-P0-2: per-user account routing.
     bp_equity, buying_power = await _get_account_equity_and_buying_power(username)
     first_leg_for_bp = request.legs[0]
-    live_broker_enabled = _live_broker_intent_enabled()
+    live_broker_enabled = await _live_broker_intent_enabled(username)
     if live_broker_enabled and bp_equity <= 0:
         return False, (
             "Account preflight unavailable: live trading requires current "

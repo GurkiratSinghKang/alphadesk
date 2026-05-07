@@ -2333,12 +2333,11 @@ async def _close_combo_trade(
             )
             legs_failed.append({"occ_symbol": occ, "error": str(exc)})
 
-    # Mark the trade closed regardless of partial leg failures — leaving
-    # status='open' would have the next exit-monitor tick re-attempt the
-    # full unwind, which is wrong if some legs actually closed. Operators
-    # audit ``legs_failed`` to catch stragglers and finish them manually.
+    # Only mark the trade closed once every leg unwind has been accepted.
+    # A partial combo failure must stay open so the next exit-monitor tick
+    # can retry the remaining exposure instead of hiding it as closed.
     trade_id = trade.get("id")
-    if trade_id is not None:
+    if trade_id is not None and not legs_failed:
         try:
             ledger.update(int(trade_id), {
                 "status": "closed",
@@ -2362,6 +2361,8 @@ async def _close_combo_trade(
         "combo_mark": combo_mark,
         "legs_closed": legs_closed,
         "legs_failed": legs_failed,
+        "status": "closed" if not legs_failed else "partial_exit_failed",
+        "trade_id": trade_id,
         "strategy": trade.get("strategy", "unknown"),
     }
 

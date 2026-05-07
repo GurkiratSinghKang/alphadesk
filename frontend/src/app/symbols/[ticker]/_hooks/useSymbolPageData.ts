@@ -80,13 +80,13 @@ export function useSymbolPageData(sym: string): UseSymbolPageDataResult {
 
   const symbolMeta =
     searchQuery.data && searchQuery.data.length > 0
-      ? (searchQuery.data.find((r) => r.symbol.toUpperCase() === sym.toUpperCase()) ??
-        searchQuery.data[0])
+      ? searchQuery.data.find((r) => r.symbol.toUpperCase() === sym.toUpperCase()) ?? null
       : null;
 
-  const isETF = symbolMeta != null && (ETF_TYPES as readonly string[]).includes(symbolMeta.type);
+  const symbolType = symbolMeta?.type?.toUpperCase() ?? null;
+  const isETF = symbolType != null && (ETF_TYPES as readonly string[]).includes(symbolType);
   const isCryptoForex =
-    symbolMeta != null && (CRYPTO_FOREX_TYPES as readonly string[]).includes(symbolMeta.type);
+    symbolType != null && (CRYPTO_FOREX_TYPES as readonly string[]).includes(symbolType);
 
   // T7 / D-05: cached-only mount of the earnings detail payload. The
   // /detail endpoint serves curated-universe symbols and 404s otherwise;
@@ -143,7 +143,12 @@ export function useSymbolPageData(sym: string): UseSymbolPageDataResult {
   });
 
   const isLoading =
-    ctx.isLoading || analysisQuery.isLoading || ivQuery.isLoading || barsQuery.isLoading || searchQuery.isLoading;
+    ctx.isLoading ||
+    analysisQuery.isLoading ||
+    ivQuery.isLoading ||
+    barsQuery.isLoading ||
+    searchQuery.isLoading ||
+    (earningsEnabled && (earningsQuery.isLoading || setupsQuery.isLoading));
   const isError =
     ctx.isError || analysisQuery.isError || ivQuery.isError || barsQuery.isError || searchQuery.isError;
 

@@ -136,7 +136,7 @@ async def save_broker_connection(
 ) -> dict[str, Any]:
     await _broker_rate_limit_or_429(username, "save_provider")
     provider_key = provider.strip().lower()
-    if provider_key not in {"alpaca", "ibkr", "etrade", "schwab"}:
+    if provider_key not in {"alpaca", "ibkr", "etrade", "schwab", "robinhood"}:
         raise HTTPException(status_code=422, detail="Unsupported broker provider")
     try:
         row = await upsert_broker_connection(

@@ -8,7 +8,7 @@ spec's parity-test acceptance criteria.
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Iterable
 
@@ -82,7 +82,7 @@ class FillSimulator:
             # legacy path. Otherwise log+skip with a clear warning so the
             # gap is explicit instead of silently producing nothing.
             if s.legs:
-                multileg_fill = self._fill_multileg(s, asof)
+                multileg_fill = self._fill_multileg(s, asof, next_bars.get(s.symbol))
                 if multileg_fill is not None:
                     fills.append(multileg_fill)
                 continue
@@ -200,7 +200,12 @@ class FillSimulator:
     # ── Plan B.1: multi-leg options dispatch ────────────────────────────
     _multileg_warned: bool = False  # class-level, log warning once per process
 
-    def _fill_multileg(self, signal: "Signal", asof: date) -> "Fill | None":
+    def _fill_multileg(
+        self,
+        signal: "Signal",
+        asof: date,
+        underlying_bar: pd.Series | None = None,
+    ) -> "Fill | None":
         """Multi-leg (spread) options pricing.
 
         Plan B.1 (full port): tries the **native** in-shell pricer first
@@ -251,6 +256,10 @@ class FillSimulator:
         try:
             from backtest.execution import ExecutionSimulator, PendingOrder
             from backtest.costs import DefaultCostModel
+            from backtest.types import Bar, OptionLeg as BacktestOptionLeg
+            from backtest.types import OrderType as BacktestOrderType
+            from backtest.types import Side as BacktestSide
+            from backtest.types import TimeInForce as BacktestTimeInForce
         except Exception as exc:  # pragma: no cover
             log.warning(
                 "FillSimulator: legacy backtest.execution import failed (%s); "
@@ -265,17 +274,47 @@ class FillSimulator:
             options_provider=self._config.options_provider,
         )
         try:
+            if underlying_bar is None:
+                return None
+            close = Decimal(str(underlying_bar.get("close", 0) or 0))
+            open_px = Decimal(str(underlying_bar.get("open", close) or close))
+            high = Decimal(str(underlying_bar.get("high", max(open_px, close)) or max(open_px, close)))
+            low = Decimal(str(underlying_bar.get("low", min(open_px, close)) or min(open_px, close)))
+            bar = Bar(
+                symbol=signal.symbol,
+                ts=datetime.combine(asof, datetime.min.time(), tzinfo=timezone.utc),
+                open=open_px,
+                high=high,
+                low=low,
+                close=close,
+                volume=underlying_bar.get("volume", 0) or 0,
+            )
+            legs = tuple(
+                BacktestOptionLeg(
+                    contract_id=leg.occ_symbol,
+                    side=BacktestSide.BUY if leg.side == "buy" else BacktestSide.SELL,
+                    qty=int(leg.quantity),
+                    underlying=signal.symbol,
+                )
+                for leg in (signal.legs or [])
+            )
+            order_type_value = "STOP" if signal.order_type.value == "STP" else signal.order_type.value
+            tif_value = "IOC" if signal.time_in_force.value == "FOK" else signal.time_in_force.value
             order = PendingOrder(
                 signal=signal,
+                staged_on=bar.ts,
+                submitted_on=bar.ts,
                 symbol=signal.symbol,
+                side=BacktestSide.BUY if (signal.quantity or 0) >= 0 else BacktestSide.SELL,
                 quantity=signal.quantity or 0,
-                order_type=signal.order_type,
-                limit_price=signal.limit_price,
-                stop_price=signal.stop_price,
-                legs=signal.legs,
+                order_type=BacktestOrderType(order_type_value),
+                time_in_force=BacktestTimeInForce(tif_value),
+                limit_price=Decimal(str(signal.limit_price)) if signal.limit_price is not None else None,
+                stop_price=Decimal(str(signal.stop_price)) if signal.stop_price is not None else None,
+                legs=legs,
                 tag=signal.tag,
             )
-            legacy_fill = sim._fill_multileg_option(order, bar=None)
+            legacy_fill = sim._fill_multileg_option(order, bar=bar)
         except Exception as exc:
             log.warning(
                 "FillSimulator: legacy multi-leg dispatch raised %s for %s; "

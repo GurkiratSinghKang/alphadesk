@@ -49,7 +49,7 @@ jobs:
           - earnings_vol
           - ts_momentum
           - regime_adaptive
-          - kama
+          - kama_breakout
           - dual_momentum
           - orb
     steps:
@@ -67,6 +67,8 @@ jobs:
           if [[ "$subset" == "all" || -z "$subset" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           elif [[ ",${subset}," == *",${{ matrix.strategy_name }},"* ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ matrix.strategy_name }}" == "kama_breakout" && ",${subset}," == *",kama,"* ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -104,6 +106,9 @@ jobs:
           name="${{ matrix.strategy_name }}"
           override='${{ github.event.inputs.n_trials_override }}'
           script="scripts/tune_${name}.py"
+          if [[ "$name" == "kama_breakout" ]]; then
+            script="scripts/tune_kama.py"
+          fi
           # vrp_harvest takes --trials, others take a positional n_trials,
           # and tune_orb.py takes no arg. Map per-strategy.
           case "$name" in
@@ -123,7 +128,7 @@ jobs:
             ts_momentum|regime_adaptive)
               .venv/bin/python "$script" "${override:-40}"
               ;;
-            kama)
+            kama_breakout)
               .venv/bin/python "$script" "${override:-50}"
               ;;
             dual_momentum)
@@ -150,7 +155,7 @@ jobs:
           name="${{ matrix.strategy_name }}"
           # OOS eval scripts have a few different naming patterns.
           case "$name" in
-            kama)              eval_script="scripts/kama_oos_eval.py" ;;
+            kama_breakout)     eval_script="scripts/kama_oos_eval.py" ;;
             rsi2_reversal)     eval_script="scripts/rsi2_oos_eval.py" ;;
             ts_momentum)       eval_script="scripts/ts_momentum_oos_eval.py" ;;
             *)                 eval_script="scripts/${name}_oos_eval.py" ;;

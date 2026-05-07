@@ -1339,6 +1339,7 @@ def _resolve_strategy_instance(route_id: str):
 @router.get("/by-symbol/{symbol}", response_model=StrategyMatchesResponse)
 async def get_strategies_by_symbol(
     symbol: str = Path(..., description="Ticker symbol (e.g. NVDA)"),
+    username: str = Depends(require_auth),
 ) -> StrategyMatchesResponse:
     """Return per-strategy reverse-lookup matches for a symbol.
 
@@ -1360,14 +1361,14 @@ async def get_strategies_by_symbol(
       defaults so the symbols-page chip degrades to "In universe" rather than
       lighting up a stale signal.
 
-    Cached in Redis for 60s keyed on the symbol so the symbols-page card doesn't
-    hammer the ledger when a user flips between tabs.
+    Cached in Redis for 60s keyed on the user + symbol so the symbols-page
+    card doesn't hammer the ledger when a user flips between tabs.
     """
     sym_upper = symbol.upper().strip()
     if not sym_upper:
         raise HTTPException(status_code=400, detail="symbol must be non-empty")
 
-    cache_key = f"strategies_by_symbol:{sym_upper}"
+    cache_key = f"strategies_by_symbol:{username}:{sym_upper}"
     cache_get_fn = None
     cache_set_fn = None
     try:
@@ -1399,7 +1400,7 @@ async def get_strategies_by_symbol(
         from data.ingestion.trade_ledger import TradeLedger
 
         ledger = TradeLedger()
-        rows = ledger.list({"symbol": sym_upper})
+        rows = ledger.list({"symbol": sym_upper, "username": username})
         for row in rows:
             status = (row.get("status") or "").lower()
             if status not in _OPEN_TRADE_STATUSES:
@@ -1484,15 +1485,35 @@ async def get_strategies_by_symbol(
         # because the per-strategy signal surface is async (Redis); pushing
         # it into the strategy class would force every strategy to learn
         # about Redis. Instead, after the no-op defaults we look up the
-        # cache here and override on hit. The cache is keyed by the snake_case
-        # registry name (``momentum_quality``) since that's what the daily
-        # ``UnifiedStrategyRunner`` writes under; we cross-walk the route's
-        # hyphenated id to that name via ``_ID_TO_NAME`` (already used a few
-        # lines up to look up the open ledger row). A miss -- including a
-        # Redis outage -- preserves the iter-11 falsy/None contract.
+        # cache here and override on hit. The cache key uses the strategy's
+        # own ``META.name`` (== ``self.name`` in the daily
+        # ``UnifiedStrategyRunner`` -- the runner factory at
+        # ``strategy_runner.py`` does ``"name": meta.name`` so the writer
+        # and the class agree on the same string byte-for-byte). We
+        # deliberately *don't* use the dict-inverted ``_ID_TO_NAME`` here
+        # because ``_STRATEGY_NAME_TO_ID`` has duplicate values (vwap-strategy
+        # has both ``vwap`` and ``vwap_strategy`` aliases mapping to it), and
+        # ``{v: k for k, v in ...}`` lossy-collapses those: last-write-wins
+        # picks ``vwap_strategy`` so the reader ends up looking up
+        # ``signal_cache:vwap_strategy:SYMBOL:v1`` while the writer wrote
+        # ``signal_cache:vwap:SYMBOL:v1`` -- eternal cache miss for vwap.
+        # Falling back to ``ledger_name`` is fine for catalogue-only entries
+        # (claude-alpha, manual-discretionary) where no class is registered;
+        # there's no runner writing to the cache for those either.
+        # A miss -- including a Redis outage -- preserves the iter-11
+        # falsy/None contract.
+        cache_strategy_name: str | None = None
+        if instance is not None:
+            try:
+                cache_strategy_name = instance.META.name
+            except AttributeError:
+                cache_strategy_name = None
+        if cache_strategy_name is None:
+            cache_strategy_name = ledger_name
+
         try:
             from services.signal_cache import get_signal as _get_cached_signal
-            cached = await _get_cached_signal(ledger_name, sym_upper)
+            cached = await _get_cached_signal(cache_strategy_name, sym_upper)
         except Exception:
             cached = None
 

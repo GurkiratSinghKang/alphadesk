@@ -161,7 +161,7 @@ class ContractSnapshot(BaseModel):
       1. Polygon ``/v3/snapshot/options/{underlying}/{contract}`` — preferred
          because the response carries top-of-book bid/ask exchange IDs which
          Alpaca does not expose.
-      2. Alpaca ``/v1beta1/options/snapshots/{contract}`` — fallback when
+      2. Alpaca ``/v1beta1/options/snapshots?symbols={contract}`` — fallback when
          Polygon errors / is rate-limited / key missing. Bid/ask exchange
          IDs end up null because Alpaca returns aggregated NBBO without
          the originating venue.
@@ -1846,9 +1846,7 @@ async def _fetch_polygon_contract_snapshot(occ_symbol: str) -> ContractSnapshot 
 async def _fetch_alpaca_contract_snapshot(occ_symbol: str) -> ContractSnapshot | None:
     """Fetch a single-contract NBBO snapshot from Alpaca OPRA.
 
-    Endpoint: ``/v1beta1/options/snapshots/{symbol}`` (the singular path
-    accepts the OCC symbol directly and returns the same envelope shape
-    used by the chain endpoint).
+    Endpoint: ``/v1beta1/options/snapshots?symbols={contract}``.
 
     Returns None on missing keys / HTTP failure / missing ``latestQuote``.
     Alpaca does NOT expose the originating venue per quote, so
@@ -1861,8 +1859,9 @@ async def _fetch_alpaca_contract_snapshot(occ_symbol: str) -> ContractSnapshot |
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(
-                f"{_ALPACA_OPTIONS_BASE}/snapshots/{occ_symbol}",
+                f"{_ALPACA_OPTIONS_BASE}/snapshots",
                 headers=_alpaca_headers(),
+                params={"symbols": occ_symbol},
             )
         if resp.status_code != 200:
             log.debug(

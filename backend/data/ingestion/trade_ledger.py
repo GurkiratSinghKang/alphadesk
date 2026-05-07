@@ -195,13 +195,17 @@ def _ensure_schema(engine: Any) -> None:
         pnl                      DOUBLE PRECISION,
         pnl_pct                  DOUBLE PRECISION,
         side                     VARCHAR(8)   DEFAULT 'long',
+        username                 VARCHAR(128),
         legs                     TEXT
     );
     ALTER TABLE trade_ledger ADD COLUMN IF NOT EXISTS side VARCHAR(8) DEFAULT 'long';
+    ALTER TABLE trade_ledger ADD COLUMN IF NOT EXISTS username VARCHAR(128);
     ALTER TABLE trade_ledger ADD COLUMN IF NOT EXISTS legs TEXT;
     ALTER TABLE trade_ledger ADD COLUMN IF NOT EXISTS stop_loss_combo_mark DOUBLE PRECISION;
     CREATE INDEX IF NOT EXISTS ix_trade_ledger_status ON trade_ledger(status);
     CREATE INDEX IF NOT EXISTS ix_trade_ledger_symbol ON trade_ledger(symbol);
+    CREATE INDEX IF NOT EXISTS ix_trade_ledger_username_symbol
+        ON trade_ledger(username, symbol);
     CREATE INDEX IF NOT EXISTS ix_trade_ledger_strategy ON trade_ledger(strategy);
     CREATE INDEX IF NOT EXISTS ix_trade_ledger_status_exit_time
         ON trade_ledger(status, exit_time);
@@ -647,13 +651,13 @@ class TradeLedger:
                         id, symbol, shares, entry_price, entry_time,
                         stop_loss, take_profit, conviction, rationale,
                         strategy, status, exit_price, exit_time,
-                        exit_reason, pnl, pnl_pct, side
+                        exit_reason, pnl, pnl_pct, side, username
                     )
                     VALUES (
                         :id, :symbol, :shares, :entry_price, :entry_time,
                         :stop_loss, :take_profit, :conviction, :rationale,
                         :strategy, :status, :exit_price, :exit_time,
-                        :exit_reason, :pnl, :pnl_pct, :side
+                        :exit_reason, :pnl, :pnl_pct, :side, :username
                     )
                     """
                 ),
@@ -675,6 +679,7 @@ class TradeLedger:
                     "pnl": trade.get("pnl"),
                     "pnl_pct": trade.get("pnl_pct"),
                     "side": trade.get("side"),
+                    "username": trade.get("username"),
                 },
             )
         return trade["id"]
@@ -690,7 +695,7 @@ class TradeLedger:
             "symbol", "shares", "entry_price", "entry_time", "stop_loss",
             "take_profit", "conviction", "rationale", "strategy", "status",
             "exit_price", "exit_time", "exit_reason", "pnl", "pnl_pct",
-            "side",
+            "side", "username",
             # OE-2 (combo-exit hardening, 2026-05-05): combo-mark stop
             # level + legs JSON. Required so the exit checker can
             # persist a combo-aware close (status='closed' +

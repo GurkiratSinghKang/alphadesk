@@ -131,23 +131,20 @@ function SetupCard({
     confidencePct: number;
   }) => void;
 }) {
-  const router = useRouter();
   const draft = payoffDraftFromSetup(setup, symbol, underlying);
   const tradeHref = buildTradeHref(symbol, setup);
   const isSkip = setup.setupId === "skip";
   const setupLabelText = humanLabel(setup.setupId);
 
-  const handleTradeClick = (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
+  const handleTradeClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
     if (isLowConfDirectional(setup.setupLabel, setup.confidence)) {
+      event.preventDefault();
       onLowConfClick({
         href: tradeHref,
         setupName: setupLabelText,
         confidencePct: Math.round((setup.confidence as number) * 100),
       });
-      return;
     }
-    router.push(tradeHref);
   };
 
   return (
@@ -202,16 +199,16 @@ function SetupCard({
 
       {!isSkip ? (
         <div className="mt-3 flex items-center justify-end">
-          <button
-            type="button"
+          <a
+            href={tradeHref}
+            data-href={tradeHref}
             data-testid="setup-trade-cta"
             data-slot="setup-trade-cta"
-            data-href={tradeHref}
             onClick={handleTradeClick}
             className="inline-flex min-h-9 items-center rounded-sm border border-border bg-bg px-3 text-label font-semibold u-muted transition hover:border-primary hover:text-fg"
           >
             Trade this setup
-          </button>
+          </a>
         </div>
       ) : null}
     </article>
@@ -275,6 +272,11 @@ export function buildTradeHref(symbol: string, setup: EarningsSetup): string {
     symbol,
     legs: legParts.join(","),
     strategy: "earnings-options-play",
+    route_intent: "broker_order_review",
+    broker_provider: "alpaca",
+    asset_class: "option",
+    order_type: "limit",
+    time_in_force: "day",
   });
   const comboType = setupIdToComboType(setup.setupId);
   if (comboType) params.set("combo_type", comboType);

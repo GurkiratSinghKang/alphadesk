@@ -138,12 +138,16 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
   // the spine and per-symbol queries return. NotFound now requires the
   // page to be done loading AND every primary data source to be empty.
   const ctxData = data.ctx.data?.symbols?.[symbol] ?? null;
+  const newsFromContext = envelopeToNewsArticles(ctxData?.news?.value);
   const hasAnyData =
     data.symbolMeta != null ||
     ctxData?.quote?.value != null ||
     (data.bars && data.bars.length > 0) ||
     data.analysis != null ||
-    data.ivData != null;
+    data.ivData != null ||
+    data.earningsDetail != null ||
+    (data.recommendedSetups != null && data.recommendedSetups.length > 0) ||
+    (newsFromContext != null && newsFromContext.length > 0);
 
   if (!data.isLoading && !hasAnyData) {
     return <NotFound symbol={symbol} />;
@@ -152,7 +156,7 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
   const quote = envelopeToQuote(ctxData?.quote?.value);
   const marketRegime = envelopeToMarketRegime(ctxData?.marketRegime?.value);
   const newsArticles =
-    envelopeToNewsArticles(ctxData?.news?.value) ?? data.earningsDetail?.news ?? null;
+    newsFromContext ?? data.earningsDetail?.news ?? null;
 
   const claudeStructured = data.earningsDetail?.claudeStructured ?? null;
   const claudeFullResearch = data.earningsDetail?.claudeFullResearch ?? null;

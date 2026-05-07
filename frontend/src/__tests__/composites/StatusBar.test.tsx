@@ -67,12 +67,25 @@ describe("StatusBar", () => {
       <StatusBar
         pills={[
           { label: "Alpaca paper · connected", tone: "profit" },
-          { label: "Mode · PAPER", tone: "amber" },
+          { label: "Market data · delayed", tone: "amber" },
         ]}
         buildVersion="1.0.0"
       />,
     );
     expect(screen.getByText(/Degraded/)).toBeDefined();
+  });
+
+  it("does not treat paper mode as degraded in fallback aggregation", () => {
+    render(
+      <StatusBar
+        pills={[
+          { label: "Alpaca paper · connected", tone: "profit" },
+          { label: "Mode · PAPER", tone: "amber" },
+        ]}
+        buildVersion="1.0.0"
+      />,
+    );
+    expect(screen.getByText(/Operational/)).toBeDefined();
   });
 
   it("respects explicit healthState prop over pill aggregation", () => {

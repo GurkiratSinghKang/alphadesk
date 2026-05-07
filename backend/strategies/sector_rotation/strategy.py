@@ -43,6 +43,8 @@ from strategies._core.contracts import (
 from strategies._core.protocol import Strategy, StrategyMeta, register_strategy
 
 from .config import (
+    BOND_CHOICES,
+    DEFAULT_RISK_OFF_PROBE,
     SECTOR_ETFS,
     SectorRotationParams,
     composite_lookbacks,
@@ -81,16 +83,18 @@ class SectorRotationStrategy(Strategy):
     def universe(self, asof: date, state: dict[str, Any]) -> list[str]:
         """All sector ETFs + bond-fallback choices + the SPY risk-off probe."""
         syms: set[str] = set(SECTOR_ETFS)
-        syms.update({"AGG", "IEF", "TLT", "BIL"})
-        syms.add("SPY")
+        syms.update(BOND_CHOICES)
+        syms.update({DEFAULT_RISK_OFF_PROBE, "QQQ", "IWM", "DIA"})
+        configured_probe = state.get(f"{_NS}.risk_off_probe") or state.get("risk_off_probe")
+        if configured_probe:
+            syms.add(str(configured_probe).upper())
         return sorted(syms)
 
-    # T11 reverse-lookup: the user-facing universe is the 11 GICS sector
-    # SPDR ETFs only — the bond-fallback / SPY-probe symbols ride along
-    # for runtime needs but they're not "we trade these" candidates that
-    # belong on a symbol-page card.
+    # T11 reverse-lookup: the user-facing universe includes the 11 GICS
+    # sector SPDR ETFs plus the bond-fallback ETFs the strategy can
+    # actively allocate to during risk-off regimes.
     def is_in_universe(self, symbol: str) -> bool:
-        return symbol.upper() in set(SECTOR_ETFS)
+        return symbol.upper() in set(SECTOR_ETFS) | set(BOND_CHOICES)
 
     # ------------------------------------------------------------------ #
     # Pure-function alpha                                                #

@@ -237,6 +237,8 @@ export default function EarningsOptionsPlayPage() {
       const isUrlPinned =
         urlSymbolRef.current && urlSymbolRef.current === selectedSymbol;
       shouldClearSelection = !isUrlPinned && selectedSymbol !== null;
+    } else if (userClearedRef.current) {
+      return;
     } else if (urlSymbolRef.current) {
       // URL-pinned symbol: rehydrate it regardless of first-paint state.
       if (selectedSymbol !== urlSymbolRef.current) {
@@ -346,6 +348,7 @@ export default function EarningsOptionsPlayPage() {
   useEffect(() => {
     const h = () => {
       userClearedRef.current = true;
+      urlSymbolRef.current = null;
       setSelectedSymbol(null, null);
     };
     document.addEventListener("alphadesk:earnings-clear-selection", h);
@@ -604,8 +607,8 @@ function StrategyIntroCard() {
           <p className="mt-2 max-w-[72ch] font-sans text-body-sm leading-relaxed text-[color:var(--fg-muted)]">
             The score is not a price target. It is a 0-100 setup-quality composite from live IV regime,
             ATM premium yield, implied move versus prior earnings moves, AI confidence, and event timing.
-            A score now stays hidden until at least two market signals are present, so sparse data no
-            longer masquerades as edge.
+            Sparse data is labeled directly, so incomplete IV or premium context no longer masquerades
+            as a complete edge.
           </p>
         </div>
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-[color:var(--border)] bg-[color:var(--border)]">

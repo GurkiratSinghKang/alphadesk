@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS trade_ledger (
     exit_reason   VARCHAR(60),
     pnl           REAL,
     pnl_pct       REAL,
-    side          VARCHAR(8)   DEFAULT 'long'
+    side          VARCHAR(8)   DEFAULT 'long',
+    username      VARCHAR(128)
 )
 """
 

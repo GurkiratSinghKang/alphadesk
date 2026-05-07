@@ -94,6 +94,46 @@ export default function EarningsCalendarSidebar({
   // B-56: first row across all day groups gets the shared ref so the
   // parent page can restore focus after a filter refetch.
   const firstSymbol = grouped[0]?.rows[0]?.symbol ?? null;
+  const partialIssueCount = partial
+    ? countPartialIssues(validationErrors, rows)
+    : 0;
+  const partialBanner = partial ? (
+    <>
+      <p
+        data-slot="calendar-partial-banner"
+        className="mt-1 mb-2 flex items-center gap-1.5 rounded-sm border border-state-warning-border bg-state-warning-bg px-2 py-1 t-meta text-state-warning-fg"
+        role="status"
+        aria-live="polite"
+      >
+        <WarningCircle size={14} aria-hidden="true" />
+        <span>{`Partial data - ${partialIssueCount} ${partialIssueCount === 1 ? "row" : "rows"} may be missing IV / yield`}</span>
+      </p>
+      {validationErrors && validationErrors.length > 0 ? (
+        <details
+          data-slot="calendar-partial-disclosure"
+          className="mb-2 font-mono text-label text-[color:var(--fg-muted)]"
+        >
+          <summary className="cursor-pointer underline decoration-dotted underline-offset-4 hover:text-[color:var(--fg-base)]">
+            {`View ${validationErrors.length} ${validationErrors.length === 1 ? "issue" : "issues"}`}
+          </summary>
+          <ul className="mt-1 space-y-0.5 pl-2">
+            {validationErrors.map((entry, idx) => (
+              <li
+                key={`${entry.symbol ?? "_catalog"}:${idx}`}
+                data-slot="calendar-partial-disclosure-item"
+              >
+                <span className="text-[color:var(--fg-base)]">
+                  {entry.symbol ?? "(catalog)"}
+                </span>
+                {": "}
+                {entry.error}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+    </>
+  ) : null;
 
   if (error) {
     return (
@@ -131,6 +171,7 @@ export default function EarningsCalendarSidebar({
     });
     return (
       <aside data-slot="earnings-calendar-sidebar" className="rounded border border-border-hair bg-bg-elev-1/60 p-3">
+        {partialBanner}
         <p className="font-mono text-body-sm text-fg-muted">
           {emptyMessage}
           {onResetFilters && (
@@ -162,13 +203,6 @@ export default function EarningsCalendarSidebar({
       ? "Next week"
       : "This + next week");
 
-  // Iteration 9: count once so the banner template doesn't double-call
-  // the helper. ``partialIssueCount`` falls back to a heuristic over the
-  // visible rows when the backend didn't enumerate per-symbol failures.
-  const partialIssueCount = partial
-    ? countPartialIssues(validationErrors, rows)
-    : 0;
-
   return (
     <aside
       data-slot="earnings-calendar-sidebar"
@@ -182,43 +216,7 @@ export default function EarningsCalendarSidebar({
       <p className="t-label mb-2 text-[color:var(--fg-muted)]" data-slot="calendar-summary">
         CALENDAR <span className="text-[color:var(--fg-muted)]">· {headerLabel} · {fmtPlural(rows.length, "report")}</span>
       </p>
-      {partial ? (
-        <>
-          <p
-            data-slot="calendar-partial-banner"
-            className="mt-1 mb-2 flex items-center gap-1.5 rounded-sm border border-state-warning-border bg-state-warning-bg px-2 py-1 t-meta text-state-warning-fg"
-            role="status"
-            aria-live="polite"
-          >
-            <WarningCircle size={14} aria-hidden="true" />
-            <span>{`Partial data - ${partialIssueCount} ${partialIssueCount === 1 ? "row" : "rows"} may be missing IV / yield`}</span>
-          </p>
-          {validationErrors && validationErrors.length > 0 ? (
-            <details
-              data-slot="calendar-partial-disclosure"
-              className="mb-2 font-mono text-label text-[color:var(--fg-muted)]"
-            >
-              <summary className="cursor-pointer underline decoration-dotted underline-offset-4 hover:text-[color:var(--fg-base)]">
-                {`View ${validationErrors.length} ${validationErrors.length === 1 ? "issue" : "issues"}`}
-              </summary>
-              <ul className="mt-1 space-y-0.5 pl-2">
-                {validationErrors.map((entry, idx) => (
-                  <li
-                    key={`${entry.symbol ?? "_catalog"}:${idx}`}
-                    data-slot="calendar-partial-disclosure-item"
-                  >
-                    <span className="text-[color:var(--fg-base)]">
-                      {entry.symbol ?? "(catalog)"}
-                    </span>
-                    {": "}
-                    {entry.error}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          ) : null}
-        </>
-      ) : null}
+      {partialBanner}
       {grouped.map(({ date, label, rows: dayRows }) => (
         <div key={date} data-slot="day-group" className="mb-3">
           <h3 className="t-section-cap italic pb-1 border-b border-[color:var(--fg-border)]">

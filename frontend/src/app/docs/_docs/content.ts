@@ -101,7 +101,7 @@ export const DOC_SECTIONS: DocSection[] = [
       "Login fails: confirm you're using the credentials your administrator issued. If you need a password reset, see /login/reset — the desk rotates passwords on request by email to support@tradingalpha.net.",
       "Dashboard shows stale data: hard-refresh with Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows) to bust the browser cache. If data is still stale after the refresh, the backend may be mid-deployment — check /pipeline for the last completed run timestamp.",
       "WebSocket indicator stays red: the real-time feed disconnects during server deployments and some network transitions. The client reconnects automatically. If the indicator stays red longer than 30 seconds, refresh the page.",
-      "Strategies page stuck on loading skeleton: the strategy-store hydration likely lost its WebSocket. Check /pipeline for upstream status; the page recovers on the next backfill tick without a manual refresh.",
+      "Strategies page stuck on loading skeleton: refresh the page, then check /pipeline for upstream status if it repeats. The current strategies page fetches once on mount.",
       "Strategy not executing: confirm the strategy is toggled active in the Strategy Grid, your Alpaca API keys are valid (Settings > API Keys), and your account has sufficient buying power. Review the pipeline run log for the specific error message.",
     ],
   },

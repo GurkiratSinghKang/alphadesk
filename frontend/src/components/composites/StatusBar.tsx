@@ -60,12 +60,13 @@ const pillDotTone: Record<StatusPill["tone"], "profit" | "amber" | "muted"> = {
 
 /** Derive aggregate system health from all pills. */
 function aggregateTone(pills: StatusPill[]): "profit" | "amber" | "muted" {
-  const tones = pills.map((p) => p.tone);
+  const healthPills = pills.filter((p) => !p.label.startsWith("Mode · "));
+  const tones = healthPills.map((p) => p.tone);
   // If any pill is amber (non-healthy but non-critical), surface amber.
   // Muted pills are informational; profit pills are explicitly healthy.
   // There is no explicit "loss" tone in StatusPill — amber is the warning floor.
   if (tones.some((t) => t === "amber")) return "amber";
-  if (tones.every((t) => t === "muted")) return "muted";
+  if (tones.length > 0 && tones.every((t) => t === "muted")) return "muted";
   return "profit";
 }
 

@@ -64,9 +64,17 @@ import type { ChartOrderPlacement, ChartTradeOverlay } from "@/components/charts
 import OptionsPayoffPanel from "@/components/options/OptionsPayoffPanel";
 import OptionsStrategyBuilder from "@/components/options/OptionsStrategyBuilder";
 import { ExtendedHoursBadge } from "@/components/primitives/ExtendedHoursBadge";
-import { getBars, getOrders, getSnapshots, placeOrder } from "@/lib/api";
+import {
+  getBars,
+  getOrders,
+  getSnapshots,
+  placeOrder,
+  previewOrder,
+  type OrderBrokerProvider,
+  type PlaceOrderPayload,
+} from "@/lib/api";
 import { barsRequestForRange } from "@/lib/chartRange";
-import { isOccSymbol, parseOccSymbol } from "@/lib/occ";
+import { parseOccSymbol } from "@/lib/occ";
 import { ORDER_BAR_DEFAULTS, isValidOrderQty } from "@/lib/orderDefaults";
 import { isMarketOpen } from "@/lib/marketHours";
 import { isWorkingOrderStatus } from "@/lib/orders";
@@ -187,6 +195,14 @@ const ALLOWED_COMBO_TYPES = new Set([
   "vertical_spread",
 ]);
 
+const ALLOWED_ORDER_BROKERS = new Set<OrderBrokerProvider>([
+  "alpaca",
+  "robinhood",
+  "ibkr",
+  "etrade",
+  "schwab",
+]);
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function TradePage() {
@@ -225,6 +241,8 @@ export default function TradePage() {
   // recognises a defined-risk spread. Round-5 F-14.
   const [comboType, setComboType] = useState<string | null>(null);
   const [quoteAtFillTs, setQuoteAtFillTs] = useState<number | null>(null);
+  const [routeIntent, setRouteIntent] = useState<"broker_order_review">("broker_order_review");
+  const [brokerProvider, setBrokerProvider] = useState<OrderBrokerProvider>("alpaca");
   const [plainEquityPrefill, setPlainEquityPrefill] =
     useState<PlainEquityPrefill | null>(null);
   const [builderOpen, setBuilderOpen] = useState(false);
@@ -235,6 +253,8 @@ export default function TradePage() {
     const legsParam = params.get("legs");
     const strategyParam = params.get("strategy");
     const comboParam = params.get("combo_type");
+    const routeIntentParam = params.get("route_intent");
+    const brokerProviderParam = (params.get("broker_provider") ?? "alpaca").trim().toLowerCase();
     const quoteTsParam = parseQuoteSnapshotTs(params.get("quote_ts"));
     const underlyingFromUrl = normalizeUnderlyingSymbol(params.get("symbol"));
     let firstParsedUnderlying: string | null = null;
@@ -242,6 +262,12 @@ export default function TradePage() {
     setUrlStrategy(strategyParam || null);
     const normalizedCombo = (comboParam ?? "").trim().toLowerCase();
     setComboType(ALLOWED_COMBO_TYPES.has(normalizedCombo) ? normalizedCombo : null);
+    setRouteIntent(routeIntentParam === "broker_order_review" ? "broker_order_review" : "broker_order_review");
+    setBrokerProvider(
+      ALLOWED_ORDER_BROKERS.has(brokerProviderParam as OrderBrokerProvider)
+        ? (brokerProviderParam as OrderBrokerProvider)
+        : "alpaca",
+    );
     setQuoteAtFillTs(quoteTsParam);
     setActiveContract(null);
     setActiveLegs([]);
@@ -321,30 +347,6 @@ export default function TradePage() {
       setSelectedSymbol(nextUnderlying);
     }
   }, [searchKey, setSelectedSymbol]);
-
-  // Audit Persona F1.8 (2026-05-06): auto-refresh ``quote_at_fill_ts`` while
-  // a multi-leg option ticket is being drafted. The URL pre-fill captures
-  // ``quote_ts`` ONCE at deep-link time; if the user then drafts the
-  // ticket for >30s the backend's stale-quote gate
-  // (``QUOTE_STALENESS_MAX_SECONDS = 30``) trips on submit and the trader
-  // sees a generic "Order submission failed" toast.
-  //
-  // Auto-refresh ONLY changes the freshness timestamp — it does NOT
-  // re-fetch the chain or re-price legs (out of scope). The 25s cadence
-  // keeps it just below the backend's 30s gate so the most pessimistic
-  // round-trip still lands inside the window.
-  //
-  // Equity-only tickets are exempt: the backend doesn't fail-closed on
-  // equity quote staleness, and pumping ``quote_at_fill_ts`` for them
-  // would mask genuinely-stale equity quotes from the drift gate.
-  useEffect(() => {
-    const hasOptionLegs = activeLegs.some((leg) => isOccSymbol(leg.occ));
-    if (!hasOptionLegs) return;
-    const interval = setInterval(() => {
-      setQuoteAtFillTs(Date.now() / 1000);
-    }, 25_000);
-    return () => clearInterval(interval);
-  }, [activeLegs]);
 
   useEffect(() => {
     function onAddAlert(e: Event) {
@@ -576,6 +578,8 @@ export default function TradePage() {
             occ: activeContract.occ,
             underlying: activeContract.symbol,
           });
+        } else {
+          setOptionsUnavailable(null);
         }
         // R6-5: on a total network failure, every leg is effectively
         // unavailable. Mark the whole array so the pill goes coral.
@@ -587,6 +591,8 @@ export default function TradePage() {
               reason: "generic",
             })),
           );
+        } else {
+          setLegsUnavailable([]);
         }
       });
     return () => {
@@ -818,22 +824,24 @@ export default function TradePage() {
       // become the first leg's by convention but the canonical legs
       // array is what reaches the broker.
       const hasLegs = activeLegs.length > 0;
-      const placed = await placeOrder({
+      const orderPayload = {
         symbol: sym,
         side: order.side,
         type: order.type,
-	        quantity: qty,
-	        price: order.price,
-	        stop_price: stopNum,
-	        time_in_force: order.timeInForce,
-	        extended_hours: order.extendedHours,
-	        bracket: order.bracket
-	          ? {
-	              stop_loss: order.bracket.stopLoss,
-	              take_profit: order.bracket.takeProfit,
-	            }
-	          : undefined,
-	        quote_at_fill_ts: quoteAtFillTs ?? undefined,
+        quantity: qty,
+        price: order.price,
+        stop_price: stopNum,
+        time_in_force: order.timeInForce,
+        route_intent: routeIntent,
+        broker_provider: brokerProvider,
+        extended_hours: order.extendedHours,
+        bracket: order.bracket
+          ? {
+              stop_loss: order.bracket.stopLoss,
+              take_profit: order.bracket.takeProfit,
+            }
+          : undefined,
+        quote_at_fill_ts: quoteAtFillTs ?? undefined,
         // Round-5 F-1: thread the URL's strategy tag through to the
         // backend `CreateOrderRequest.strategy` field. When the user
         // changes the Strategy select on /trade, the current ticket
@@ -852,6 +860,16 @@ export default function TradePage() {
               })),
             }
           : {}),
+      } satisfies PlaceOrderPayload;
+      const review = await previewOrder(orderPayload);
+      if (!review.can_submit || !review.review_id) {
+        const failed = review.checks.find((check) => !check.passed);
+        fail(failed?.detail ?? "Broker review did not approve this order.");
+        return false;
+      }
+      const placed = await placeOrder({
+        ...orderPayload,
+        review_id: review.review_id,
       });
       usePortfolioStore.getState().addOrder(placed);
       const placedStatus = (placed.status ?? "pending").toLowerCase();
@@ -1051,6 +1069,17 @@ export default function TradePage() {
       tradeContextSymbol,
     ],
   );
+  const [nowEpoch, setNowEpoch] = useState(() => Date.now() / 1000);
+  const [marketOpen, setMarketOpen] = useState(() => isMarketOpen());
+  useEffect(() => {
+    const updateWallClockState = () => {
+      setNowEpoch(Date.now() / 1000);
+      setMarketOpen(isMarketOpen());
+    };
+    const id = setInterval(updateWallClockState, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   const quoteAgeSeconds = useMemo(() => {
     // QA r1 A1 fix: use executionQuote.timestamp (already passed through
     // normalizeEpochSeconds), NOT raw quote.timestamp — provider payloads
@@ -1059,8 +1088,8 @@ export default function TradePage() {
     // suppressing the entire stale-feed branch.
     const ts = executionQuote.timestamp;
     if (ts == null) return null;
-    return Math.max(0, Date.now() / 1000 - ts);
-  }, [executionQuote.timestamp]);
+    return Math.max(0, nowEpoch - ts);
+  }, [executionQuote.timestamp, nowEpoch]);
   // Audit MF-P0-1 (2026-05-05): the prior ``useMemo(() => isMarketOpen(), [])``
   // cached the boolean from the FIRST render and never recomputed it. A
   // user opening /trade pre-market saw ``marketOpen=false`` for the rest
@@ -1070,11 +1099,6 @@ export default function TradePage() {
   // The submit-path itself called ``isMarketOpen()`` directly so the
   // server-side gate was correct; only the UI lied. Tick a state
   // variable every 30s so the pill state tracks reality.
-  const [marketOpen, setMarketOpen] = useState(() => isMarketOpen());
-  useEffect(() => {
-    const id = setInterval(() => setMarketOpen(isMarketOpen()), 30_000);
-    return () => clearInterval(id);
-  }, []);
   // R6-5: derive the leg-quote readiness state once and reuse it for both
   // the live-render readiness pill and the on-submit readiness re-check.
   // `deriveLegReadiness` is pure — see lib/legQuoteReadiness.ts.
@@ -1405,7 +1429,10 @@ export default function TradePage() {
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-2">
                   <QuoteFreshness tsSeconds={quoteAtFillTs} />
-                  <TradeStatusPill label="Paper" tone="muted" />
+                  <TradeStatusPill
+                    label={brokerProvider === "alpaca" ? "Alpaca review" : `${brokerProvider.toUpperCase()} gated`}
+                    tone={brokerProvider === "alpaca" ? "muted" : "amber"}
+                  />
                 </div>
               </header>
               <ExecutionQuotePanel
@@ -2230,14 +2257,14 @@ function TradeStatusPill({
 /**
  * Audit Persona F1.8 (2026-05-06): freshness indicator chip rendered in
  * the ticket header when an option ticket is staged with a deep-linked
- * ``quote_ts``. The auto-refresh effect (above) keeps ``quote_at_fill_ts``
- * inside the backend's 30s gate, but a trader still benefits from seeing
- * the actual age of the snapshot they're working from — short ages are
+ * ``quote_ts``. The timestamp only changes when a new option snapshot is
+ * staged, so a trader benefits from seeing the actual age of the snapshot
+ * they're working from — short ages are
  * silent, mid ages render as a muted hint, and ages approaching the
  * 25s refresh boundary surface as a state-warning chip.
  *
  * Updates once per second internally so the visible age tracks the
- * passage of real time even between auto-refresh ticks.
+ * passage of real time while the staged ticket sits open.
  */
 function QuoteFreshness({ tsSeconds }: { tsSeconds: number | null }) {
   const [now, setNow] = useState(() => Date.now() / 1000);
@@ -2249,9 +2276,8 @@ function QuoteFreshness({ tsSeconds }: { tsSeconds: number | null }) {
   const age = Math.max(0, Math.round(now - tsSeconds));
   // <5s: too noisy at deep-link arrival to render anything.
   if (age < 5) return null;
-  // ≥25s aligns with the auto-refresh cadence — the timer should already
-  // have fired; if we're here it likely hasn't yet (or the user is on an
-  // equity-only ticket that is exempt). Either way, surface the warning.
+  // ≥25s is close to the backend stale-quote gate; surface the warning
+  // instead of pretending the staged option prices were refreshed.
   const tone =
     age >= 25
       ? "border-state-warning/30 bg-state-warning/10 text-state-warning-fg"

@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
+import { env } from "@/env";
 
 type RuleType = "profit_pct" | "time_dte" | "loss_pct" | "delta_breach";
 type RuleAction = "close" | "roll" | "alert";
@@ -33,14 +34,18 @@ interface ExitRule {
 
 const ENDPOINT = "/api/v1/exit-rules";
 
+function endpoint(path = ""): string {
+  return `${env.API_URL}${ENDPOINT}${path}`;
+}
+
 async function apiList(): Promise<ExitRule[]> {
-  const res = await fetch(ENDPOINT, { credentials: "include" });
+  const res = await fetch(endpoint(), { credentials: "include" });
   if (!res.ok) throw new Error(`list failed: ${res.status}`);
   return res.json();
 }
 
 async function apiPatch(id: number, patch: Partial<ExitRule>): Promise<void> {
-  const res = await fetch(`${ENDPOINT}/${id}`, {
+  const res = await fetch(endpoint(`/${id}`), {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -50,7 +55,7 @@ async function apiPatch(id: number, patch: Partial<ExitRule>): Promise<void> {
 }
 
 async function apiCreate(payload: Omit<ExitRule, "id">): Promise<void> {
-  const res = await fetch(ENDPOINT, {
+  const res = await fetch(endpoint(), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -60,7 +65,7 @@ async function apiCreate(payload: Omit<ExitRule, "id">): Promise<void> {
 }
 
 async function apiDelete(id: number): Promise<void> {
-  const res = await fetch(`${ENDPOINT}/${id}`, {
+  const res = await fetch(endpoint(`/${id}`), {
     method: "DELETE",
     credentials: "include",
   });

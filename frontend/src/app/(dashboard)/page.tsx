@@ -1108,7 +1108,7 @@ function DashboardCommandCenter({
           </header>
 
           <div className="hidden gap-px bg-border-hair lg:grid xl:grid-cols-[minmax(320px,0.82fr)_minmax(320px,0.72fr)_minmax(0,1.05fr)]">
-            <ConfigurableSection id="decision_queue">
+            <ConfigurableSection id="decision_queue" applyOrder>
               <DecisionQueue
                 items={actionItems}
                 onTrade={onTrade}
@@ -1118,13 +1118,13 @@ function DashboardCommandCenter({
                 onConnectBroker={onConnectBroker}
               />
             </ConfigurableSection>
-            <ConfigurableSection id="risk_escalation">
+            <ConfigurableSection id="risk_escalation" applyOrder>
               <RiskEscalationPanel
                 items={riskEscalations}
                 account={account}
               />
             </ConfigurableSection>
-            <ConfigurableSection id="portfolio_canvas">
+            <ConfigurableSection id="portfolio_canvas" applyOrder>
               <PortfolioCanvas
                 account={account}
                 greeks={greeks}
@@ -1138,14 +1138,14 @@ function DashboardCommandCenter({
         </section>
 
         <section className="grid gap-5 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-          <ConfigurableSection id="risk_panel">
+          <ConfigurableSection id="risk_panel" applyOrder>
             <RiskPanel account={account} greeks={greeks} />
           </ConfigurableSection>
           <section className="grid gap-5 lg:grid-cols-[minmax(0,0.84fr)_minmax(0,1.16fr)] xl:grid-cols-1">
-            <ConfigurableSection id="audit_trail">
+            <ConfigurableSection id="audit_trail" applyOrder>
               <AuditTrailPanel items={auditItems} />
             </ConfigurableSection>
-            <ConfigurableSection id="session_snapshot">
+            <ConfigurableSection id="session_snapshot" applyOrder>
               <SessionSnapshot
                 selectedSymbol={selectedSymbol}
                 quoteValue={quoteValue}
@@ -1158,7 +1158,7 @@ function DashboardCommandCenter({
                 onPipeline={onPipeline}
               />
             </ConfigurableSection>
-            <ConfigurableSection id="strategy_panel">
+            <ConfigurableSection id="strategy_panel" applyOrder>
               <StrategyPanel
                 strategies={strategyCards}
                 activeStrategyCount={activeStrategyCount}

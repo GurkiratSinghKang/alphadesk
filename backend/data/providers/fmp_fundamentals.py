@@ -12,6 +12,9 @@ from data.providers._fmp_http import FMPHTTP
 from data.providers.cache import TTL_ANNUAL, cached
 
 
+TTL_SP500_MEMBERSHIP = 60 * 60 * 24
+
+
 class FMPFundamentalsProvider:
     """Satisfies :class:`backend.data.providers.base.FundamentalsProvider`."""
 
@@ -70,7 +73,7 @@ class FMPFundamentalsProvider:
         return pd.DataFrame(data)
 
     # ---- sp500 point-in-time membership (Plan B.2) -------------------------
-    @cached(ttl_seconds=TTL_ANNUAL)
+    @cached(ttl_seconds=TTL_SP500_MEMBERSHIP)
     def _sp500_current(self) -> pd.DataFrame:
         """Current S&P 500 constituents (FMP stable ``/sp500-constituent``)."""
         data = self._http.get("/sp500-constituent", {})
@@ -78,7 +81,7 @@ class FMPFundamentalsProvider:
             return pd.DataFrame()
         return pd.DataFrame(data)
 
-    @cached(ttl_seconds=TTL_ANNUAL)
+    @cached(ttl_seconds=TTL_SP500_MEMBERSHIP)
     def _sp500_historical_changes(self) -> pd.DataFrame:
         """Historical add/remove events for the S&P 500.
 

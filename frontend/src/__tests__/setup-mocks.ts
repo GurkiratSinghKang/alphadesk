@@ -207,6 +207,12 @@ vi.mock('@/lib/api', async (importOriginal) => {
     screenStocks: vi.fn().mockResolvedValue([]),
     searchSymbols: vi.fn().mockResolvedValue([]),
     chatWithAgent: vi.fn().mockResolvedValue({ message: 'Test response', actions_taken: [], suggestions: [], conversation_id: '1', timestamp: '' }),
+    previewOrder: vi.fn().mockResolvedValue({
+      review_id: 'review-test-token',
+      can_submit: true,
+      expires_at: new Date(Date.now() + 90_000).toISOString(),
+      checks: [],
+    }),
     placeOrder: vi.fn().mockResolvedValue({ id: '1', symbol: 'SPY', side: 'buy', type: 'market', quantity: 10, status: 'filled', createdAt: '' }),
     getOrders: vi.fn().mockResolvedValue([]),
     cancelOrder: vi.fn().mockResolvedValue({ success: true }),

@@ -348,14 +348,20 @@ class TickerContextService:
         # different symbols don't contend.
         normalized_needs = [_normalize_need(n) for n in (needs or ["quote", "options_summary", "earnings", "research"])]
         unique_symbols = list(dict.fromkeys(_normalize_symbol(s) for s in symbols))
-        results = await asyncio.gather(
-            *(
-                self.get(
+        semaphore = asyncio.Semaphore(10)
+
+        async def get_one(symbol: str) -> TickerContext:
+            async with semaphore:
+                return await self.get(
                     symbol,
                     needs=normalized_needs,
                     max_age_seconds=max_age_seconds,
                     on_stale=on_stale,
                 )
+
+        results = await asyncio.gather(
+            *(
+                get_one(symbol)
                 for symbol in unique_symbols
             ),
             return_exceptions=False,

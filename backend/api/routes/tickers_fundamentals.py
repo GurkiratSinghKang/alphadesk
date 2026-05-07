@@ -32,6 +32,7 @@ router = APIRouter()
 # call against a global per-minute budget. Anything shorter and the
 # /symbols page would hammer the upstream on every navigation.
 FUNDAMENTALS_CACHE_TTL = 24 * 60 * 60
+FUNDAMENTALS_NEGATIVE_CACHE_TTL = 5 * 60
 
 
 class TickerFundamentals(BaseModel):
@@ -221,5 +222,9 @@ async def get_fundamentals(symbol: str) -> TickerFundamentals:
     else:
         payload = _build_payload(sym, poly, bars)
 
-    await cache_set(cache_key, payload.model_dump(mode="json"), FUNDAMENTALS_CACHE_TTL)
+    await cache_set(
+        cache_key,
+        payload.model_dump(mode="json"),
+        FUNDAMENTALS_NEGATIVE_CACHE_TTL if payload.is_demo else FUNDAMENTALS_CACHE_TTL,
+    )
     return payload

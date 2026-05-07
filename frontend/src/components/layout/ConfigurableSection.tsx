@@ -21,11 +21,20 @@ import { useSectionConfig } from "@/hooks/useLayoutConfig";
 export function ConfigurableSection({
   id,
   children,
+  applyOrder = false,
 }: {
   id: string;
   children: React.ReactNode;
+  applyOrder?: boolean;
 }) {
   const section = useSectionConfig(id);
   if (section && section.visible === false) return null;
+  if (applyOrder) {
+    return (
+      <div className="min-w-0" style={{ order: section?.order }}>
+        {children}
+      </div>
+    );
+  }
   return <>{children}</>;
 }

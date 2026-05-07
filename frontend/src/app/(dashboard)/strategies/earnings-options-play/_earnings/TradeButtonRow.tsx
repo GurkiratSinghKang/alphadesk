@@ -775,6 +775,14 @@ function addQuoteSnapshotParam(params: URLSearchParams, quoteTs?: string | null)
   params.set("quote_ts", quoteTs);
 }
 
+function addBrokerReviewParams(params: URLSearchParams): void {
+  params.set("route_intent", "broker_order_review");
+  params.set("broker_provider", "alpaca");
+  params.set("asset_class", "option");
+  params.set("order_type", "limit");
+  params.set("time_in_force", "day");
+}
+
 export function buildSingleLegURL(opts: {
   symbol: string;
   row: LadderRow;
@@ -793,6 +801,7 @@ export function buildSingleLegURL(opts: {
   });
   const lim = fmtMid(opts.row.mid);
   if (lim) params.set("limit", lim);
+  addBrokerReviewParams(params);
   addQuoteSnapshotParam(params, opts.quoteTs);
   return `/trade?${params.toString()}`;
 }
@@ -823,6 +832,7 @@ export function buildVerticalSpreadURL(opts: {
     strategy: STRATEGY_TAG,
     combo_type: opts.comboType,
   });
+  addBrokerReviewParams(params);
   addQuoteSnapshotParam(params, opts.quoteTs);
   return `/trade?${params.toString()}`;
 }
@@ -852,6 +862,7 @@ export function buildDebitVerticalSpreadURL(opts: {
     strategy: STRATEGY_TAG,
     combo_type: opts.comboType,
   });
+  addBrokerReviewParams(params);
   addQuoteSnapshotParam(params, opts.quoteTs);
   return `/trade?${params.toString()}`;
 }
@@ -891,6 +902,7 @@ export function buildIronCondorURL(opts: {
     strategy: STRATEGY_TAG,
     combo_type: "iron_condor",
   });
+  addBrokerReviewParams(params);
   addQuoteSnapshotParam(params, opts.quoteTs);
   return `/trade?${params.toString()}`;
 }
@@ -922,6 +934,7 @@ export function buildStraddleURL(opts: {
     // two-leg debit position, not a credit combo) — so omit combo_type
     // and let the per-leg notional path price it. Net debit = max loss.
   });
+  addBrokerReviewParams(params);
   addQuoteSnapshotParam(params, opts.quoteTs);
   return `/trade?${params.toString()}`;
 }

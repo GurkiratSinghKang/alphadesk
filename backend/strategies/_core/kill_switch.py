@@ -183,6 +183,19 @@ class KillSwitch:
             )
         dd = (ctx.current_nav - ctx.peak_nav) / ctx.peak_nav
         threshold = self._resolve_layer1_threshold(strategy)
+        existing = self.repo.latest_unresolved_for_strategy(strategy, layer=1)
+        if existing is not None:
+            return Decision(
+                enabled=False,
+                layer=1,
+                reason="layer1: unresolved drawdown disable requires manual re-enable",
+                metrics={
+                    "peak_nav": ctx.peak_nav,
+                    "current_nav": ctx.current_nav,
+                    "dd": dd,
+                    "event_id": existing.id,
+                },
+            )
         if dd > threshold:
             return Decision(
                 enabled=True,
@@ -191,7 +204,6 @@ class KillSwitch:
                 metrics={"peak_nav": ctx.peak_nav, "current_nav": ctx.current_nav, "dd": dd},
             )
         # Triggered: log idempotently, return disabled
-        existing = self.repo.latest_unresolved_for_strategy(strategy, layer=1)
         if existing is None:
             self.repo.insert(
                 DisabledEvent(
@@ -224,6 +236,19 @@ class KillSwitch:
             )
         ratio = ctx.realized_today / ctx.alloc_capital
         threshold = self._resolve_layer2_threshold(strategy)
+        existing = self.repo.latest_unresolved_for_strategy(strategy, layer=2)
+        if existing is not None:
+            return Decision(
+                enabled=False,
+                layer=2,
+                reason="layer2: daily loss disable remains active for the session",
+                metrics={
+                    "alloc_capital": ctx.alloc_capital,
+                    "realized_today": ctx.realized_today,
+                    "ratio": ratio,
+                    "event_id": existing.id,
+                },
+            )
         if ratio > threshold:
             return Decision(
                 enabled=True,
@@ -231,7 +256,6 @@ class KillSwitch:
                 reason=f"layer2: ratio {ratio:.2%} > threshold {threshold:.2%}",
                 metrics={"alloc_capital": ctx.alloc_capital, "realized_today": ctx.realized_today, "ratio": ratio},
             )
-        existing = self.repo.latest_unresolved_for_strategy(strategy, layer=2)
         if existing is None:
             self.repo.insert(
                 DisabledEvent(

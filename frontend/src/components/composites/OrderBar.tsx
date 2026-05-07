@@ -511,9 +511,9 @@ export default function OrderBar({
           <span className="min-w-0">
             Options data unavailable for{" "}
             <span className="font-mono">{optionsUnavailable.occ}</span> —
-            trading underlying{" "}
+            order submission is blocked until option data for{" "}
             <span className="font-mono">{optionsUnavailable.underlying}</span>{" "}
-            instead.
+            refreshes.
           </span>
           {onRetryOptions ? (
             <button
@@ -625,7 +625,7 @@ export default function OrderBar({
         <div
           role="radiogroup"
           aria-label="Order side"
-          className="flex border border-border-hair rounded-sm overflow-hidden col-span-2 md:col-span-1"
+          className="flex rounded-sm border border-border-hair col-span-2 md:col-span-1"
         >
           <button
             type="button"
@@ -635,7 +635,7 @@ export default function OrderBar({
             disabled={ticketLocked}
             onClick={() => handleSideClick("buy")}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 text-body-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:pointer-events-none disabled:opacity-55 transition-colors",
+              "flex items-center gap-2 px-4 py-2 text-body-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand disabled:pointer-events-none disabled:opacity-55 transition-colors",
               side === "buy"
                 ? "bg-bg-elev-2 border-r border-profit/40 text-fg"
                 : "bg-transparent border-r border-border-hair text-fg-muted hover:text-fg"
@@ -658,7 +658,7 @@ export default function OrderBar({
             disabled={ticketLocked}
             onClick={() => handleSideClick("sell")}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 text-body-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:pointer-events-none disabled:opacity-55 transition-colors",
+              "flex items-center gap-2 px-4 py-2 text-body-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand disabled:pointer-events-none disabled:opacity-55 transition-colors",
               side === "sell"
                 ? "bg-bg-elev-2 border-l border-down-500/40 text-fg"
                 : "bg-transparent border-l border-border-hair text-fg-muted hover:text-fg"

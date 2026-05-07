@@ -160,6 +160,8 @@ describe("RecommendedSetups", () => {
     const params = new URLSearchParams(href.split("?")[1] ?? "");
     expect(params.get("symbol")).toBe("NVDA");
     expect(params.get("strategy")).toBe("earnings-options-play");
+    expect(params.get("route_intent")).toBe("broker_order_review");
+    expect(params.get("broker_provider")).toBe("alpaca");
     // bull_put_spread → vertical_spread per the SETUP_ID_TO_COMBO_TYPE map.
     expect(params.get("combo_type")).toBe("vertical_spread");
     // OCC: NVDA + 260516 + P + 00195000  → NVDA260516P00195000.
@@ -356,7 +358,7 @@ describe("RecommendedSetups", () => {
           underlying={200}
         />,
       );
-      const cta = getByTestId("setup-trade-cta") as HTMLButtonElement;
+      const cta = getByTestId("setup-trade-cta") as HTMLAnchorElement;
       fireEvent.click(cta);
       const modal = queryModal();
       expect(modal).not.toBeNull();
@@ -365,7 +367,7 @@ describe("RecommendedSetups", () => {
       expect(mockPush).not.toHaveBeenCalled();
     });
 
-    it("does NOT open modal for iron condor at 0.30 confidence — vol-selling exempt — and navigates", () => {
+    it("does NOT open modal for iron condor at 0.30 confidence — vol-selling exempt — and preserves link navigation", () => {
       const setup = makeSetup(
         "iron_condor",
         [makeLeg({ side: "sell", contractType: "put", strike: 195, mid: 2.4 })],
@@ -379,13 +381,15 @@ describe("RecommendedSetups", () => {
           underlying={200}
         />,
       );
-      const cta = getByTestId("setup-trade-cta") as HTMLButtonElement;
+      const cta = getByTestId("setup-trade-cta") as HTMLAnchorElement;
+      cta.addEventListener("click", (event) => event.preventDefault());
       fireEvent.click(cta);
       expect(queryModal()).toBeNull();
-      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(cta.href).toContain("/trade?");
+      expect(mockPush).not.toHaveBeenCalled();
     });
 
-    it("does NOT open modal for directional setup at 0.65 confidence — above threshold — and navigates", () => {
+    it("does NOT open modal for directional setup at 0.65 confidence — above threshold — and preserves link navigation", () => {
       const setup = makeSetup(
         "long_call",
         [makeLeg({ side: "buy", contractType: "call", strike: 200, mid: 1.25 })],
@@ -399,10 +403,12 @@ describe("RecommendedSetups", () => {
           underlying={200}
         />,
       );
-      const cta = getByTestId("setup-trade-cta") as HTMLButtonElement;
+      const cta = getByTestId("setup-trade-cta") as HTMLAnchorElement;
+      cta.addEventListener("click", (event) => event.preventDefault());
       fireEvent.click(cta);
       expect(queryModal()).toBeNull();
-      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(cta.href).toContain("/trade?");
+      expect(mockPush).not.toHaveBeenCalled();
     });
 
     it("Override on the modal pushes the original deep-link via Next router and closes the modal", () => {

@@ -86,11 +86,23 @@ def app_with_trades(
     async def _fake_per(_payload: Any) -> tuple[bool, str]:
         return True, "ok"
 
+    async def _fake_notional(_payload: Any) -> float:
+        return 150.0
+
+    async def _fake_max_loss(
+        _payload: Any,
+        *,
+        username: str,
+    ) -> tuple[bool, str, float, float]:
+        return True, "passed", 150.0, 100_000.0
+
     monkeypatch.setattr(trades_mod, "_submit_to_broker", _fake_submit)
     monkeypatch.setattr(trades_mod, "_is_trading_halted", _fake_is_halted)
     monkeypatch.setattr(trades_mod, "_check_duplicate_order", _fake_dup)
     monkeypatch.setattr(trades_mod, "_aggregate_risk_check", _fake_agg)
     monkeypatch.setattr(trades_mod, "_risk_check", _fake_per)
+    monkeypatch.setattr(trades_mod, "_compute_order_notional", _fake_notional)
+    monkeypatch.setattr(trades_mod, "_max_loss_vs_equity_check", _fake_max_loss)
 
     from core import config as core_config
     monkeypatch.setattr(core_config.settings, "SKIP_DB_INIT", True, raising=False)
@@ -229,6 +241,107 @@ def test_order_without_strategy_returns_null_strategy(
     )
     assert resp.status_code == 201, resp.text
     assert resp.json().get("strategy") is None
+
+
+def test_broker_review_preview_mints_submit_token(
+    app_with_trades: tuple[FastAPI, dict[str, Any]],
+) -> None:
+    """Broker-routed orders must submit with the matching server preview."""
+    app, probes = app_with_trades
+    client = TestClient(app)
+    payload = {
+        **_single_leg_payload(strategy="earnings-options-play"),
+        "route_intent": "broker_order_review",
+        "broker_provider": "alpaca",
+    }
+
+    preview = client.post("/api/v1/trades/orders/preview", json=payload)
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["can_submit"] is True
+    assert isinstance(body["review_id"], str)
+
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json={**payload, "review_id": body["review_id"]},
+        headers={"Idempotency-Key": "broker-review-submit"},
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["broker_provider"] == "alpaca"
+    assert len(probes["broker_posts"]) == 1
+
+
+def test_broker_review_submit_requires_preview_token(
+    app_with_trades: tuple[FastAPI, dict[str, Any]],
+) -> None:
+    app, probes = app_with_trades
+    client = TestClient(app)
+
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json={
+            **_single_leg_payload(strategy="earnings-options-play"),
+            "route_intent": "broker_order_review",
+            "broker_provider": "alpaca",
+        },
+        headers={"Idempotency-Key": "broker-review-missing-token"},
+    )
+    assert resp.status_code == 428, resp.text
+    assert resp.json()["detail"]["error"] == "order_review_required"
+    assert probes["broker_posts"] == []
+
+
+def test_broker_review_submit_rejects_changed_order_after_preview(
+    app_with_trades: tuple[FastAPI, dict[str, Any]],
+) -> None:
+    app, probes = app_with_trades
+    client = TestClient(app)
+    payload = {
+        **_single_leg_payload(strategy="earnings-options-play"),
+        "route_intent": "broker_order_review",
+        "broker_provider": "alpaca",
+    }
+    preview = client.post("/api/v1/trades/orders/preview", json=payload)
+    assert preview.status_code == 200, preview.text
+    changed = _single_leg_payload(strategy="earnings-options-play")
+    changed["legs"][0]["limit_price"] = 151.0
+    changed["route_intent"] = "broker_order_review"
+    changed["broker_provider"] = "alpaca"
+    changed["review_id"] = preview.json()["review_id"]
+
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json=changed,
+        headers={"Idempotency-Key": "broker-review-changed-order"},
+    )
+    assert resp.status_code == 428, resp.text
+    assert resp.json()["detail"]["error"] == "order_review_mismatch"
+    assert probes["broker_posts"] == []
+
+
+def test_unsupported_broker_provider_rejects_before_broker_submit(
+    app_with_trades: tuple[FastAPI, dict[str, Any]],
+) -> None:
+    app, probes = app_with_trades
+    client = TestClient(app)
+    payload = {
+        **_single_leg_payload(strategy="earnings-options-play"),
+        "route_intent": "broker_order_review",
+        "broker_provider": "robinhood",
+    }
+
+    preview = client.post("/api/v1/trades/orders/preview", json=payload)
+    assert preview.status_code == 422, preview.text
+    assert preview.json()["detail"]["error"] == "unsupported_broker_provider"
+
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json=payload,
+        headers={"Idempotency-Key": "robinhood-provider-gate"},
+    )
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["error"] == "unsupported_broker_provider"
+    assert probes["broker_posts"] == []
 
 
 # ---------------------------------------------------------------------------#

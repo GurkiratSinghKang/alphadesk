@@ -808,7 +808,13 @@ def _symbol_has_earnings_in_window(
         return False
     if not isinstance(earnings, pd.DataFrame) or earnings.empty:
         return False
-    if "symbol" not in earnings.columns or "date" not in earnings.columns:
+    if "symbol" not in earnings.columns:
+        return False
+    date_col = next(
+        (col for col in ("date", "report_date", "ts") if col in earnings.columns),
+        None,
+    )
+    if date_col is None:
         return False
     sym = symbol.upper()
     sub = earnings[earnings["symbol"].astype(str).str.upper() == sym]
@@ -816,7 +822,7 @@ def _symbol_has_earnings_in_window(
         return False
     lo = asof - timedelta(days=skip_days)
     hi = asof + timedelta(days=skip_days)
-    for d in sub["date"]:
+    for d in sub[date_col]:
         try:
             d_val = d.date() if isinstance(d, datetime) else (
                 d if isinstance(d, date) else pd.Timestamp(d).date()
