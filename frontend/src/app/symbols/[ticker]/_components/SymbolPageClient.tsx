@@ -4,7 +4,7 @@ import type { EarningsNewsArticle, Quote } from "@/types";
 
 import { useSymbolPageData } from "../_hooks/useSymbolPageData";
 import { AboutAnalystPeersStub } from "../_sections/AboutAnalystPeersStub";
-import { AgentsDebateStub } from "../_sections/AgentsDebateStub";
+import { AgentsDebateCard } from "../_sections/AgentsDebateCard";
 import { ChartBand } from "../_sections/ChartBand";
 import { DecisionStrip, type DecisionStripMarketRegime } from "../_sections/DecisionStrip";
 import { EarningsPanel } from "../_sections/EarningsPanel";
@@ -210,7 +210,7 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
         data-slot="agents-earnings-row"
         className="grid grid-cols-1 gap-4 px-4 sm:px-6 mb-6 xl:grid-cols-2"
       >
-        {showPlaceholderStubs() && <AgentsDebateStub />}
+        <AgentsDebateCard symbol={symbol} isETF={data.isETF} />
         <EarningsPanel
           isETF={data.isETF}
           historicalEarnings={data.earningsDetail?.historicalEarnings ?? null}
