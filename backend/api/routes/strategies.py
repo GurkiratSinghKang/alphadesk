@@ -1255,11 +1255,14 @@ async def strategy_catalog() -> list[StrategyCatalogEntry]:
 #
 # Iter 11 wires real per-strategy ``in_universe`` via the new ``Strategy.is_in_universe``
 # hook (default True for back-compat, overridden by ~6 strategies with bounded
-# static universes). ``has_entry_signal`` / ``score`` / ``side`` remain deferred
-# globally because there is no per-strategy signal-cache surface yet — the
-# daily pipeline writes ledger trades, not a "live signals" cache. The endpoint
-# still calls into ``has_entry_signal`` / ``signal_score`` / ``signal_side`` so
-# wiring a real cache later is one method override per strategy, no route edit.
+# static universes). Iter 16 wires the deferred third chip state: the daily
+# strategy runner now bulk-writes per-symbol entry signals to a Redis cache
+# (``services.signal_cache``); this endpoint reads from that cache *after*
+# the strategy class's no-op defaults run, so a cache hit lights up
+# ``has_entry_signal=True`` + ``score`` + ``side`` while a miss preserves the
+# iter-11 falsy/None contract. Strategy classes themselves remain pure / sync /
+# Redis-unaware -- the layering keeps strategies unit-testable without an
+# async Redis stub.
 
 
 class StrategyMatchPosition(BaseModel):
@@ -1347,12 +1350,15 @@ async def get_strategies_by_symbol(
     - ``current_position`` — populated from the trade ledger when an open trade
       exists for ``(strategy=ledger_name, symbol=SYM)``. Statuses considered
       "open" are ``open``, ``partial``, ``partial_fill``.
-    - ``has_entry_signal`` / ``score`` / ``side`` — read from
-      ``Strategy.has_entry_signal`` / ``signal_score`` / ``signal_side`` but
-      every default returns falsy until a per-strategy signal cache lands
-      (the daily pipeline currently writes ledger trades, not a "live signals"
-      surface). Wiring later requires only per-strategy method overrides — no
-      route edit.
+    - ``has_entry_signal`` / ``score`` / ``side`` — first try the strategy
+      class's no-op default hooks (``Strategy.has_entry_signal`` / ``signal_score``
+      / ``signal_side``), then fall through to the iter-16 signal cache
+      (``services.signal_cache``). The daily strategy runner writes per-symbol
+      entries on each run; on a cache hit the endpoint surfaces
+      ``has_entry_signal=True`` with the cached ``score`` (conviction/100) and
+      ``side`` (``long``/``short``). On a miss we preserve the iter-11 falsy
+      defaults so the symbols-page chip degrades to "In universe" rather than
+      lighting up a stale signal.
 
     Cached in Redis for 60s keyed on the symbol so the symbols-page card doesn't
     hammer the ledger when a user flips between tabs.
@@ -1473,6 +1479,29 @@ async def get_strategies_by_symbol(
                 side = str(side_raw) if side_raw is not None else None
             except Exception:
                 side = None
+
+        # Iter 16: cache fallback. Strategy classes default to False/None
+        # because the per-strategy signal surface is async (Redis); pushing
+        # it into the strategy class would force every strategy to learn
+        # about Redis. Instead, after the no-op defaults we look up the
+        # cache here and override on hit. The cache is keyed by the snake_case
+        # registry name (``momentum_quality``) since that's what the daily
+        # ``UnifiedStrategyRunner`` writes under; we cross-walk the route's
+        # hyphenated id to that name via ``_ID_TO_NAME`` (already used a few
+        # lines up to look up the open ledger row). A miss -- including a
+        # Redis outage -- preserves the iter-11 falsy/None contract.
+        try:
+            from services.signal_cache import get_signal as _get_cached_signal
+            cached = await _get_cached_signal(ledger_name, sym_upper)
+        except Exception:
+            cached = None
+
+        if cached is not None:
+            has_signal = True
+            if cached["score"] is not None:
+                score = cached["score"]
+            if cached["side"] is not None:
+                side = cached["side"]
 
         matches.append(
             StrategyMatch(

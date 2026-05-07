@@ -592,6 +592,34 @@ class UnifiedStrategyRunner(BaseStrategyRunner):
             trades.append(trade)
 
         approved = [t for t in trades if t.get("approved")]
+
+        # Iter 16: bulk-write per-symbol entry signals to the signal cache so
+        # the symbols-page reverse-lookup endpoint can surface the 3rd chip
+        # state ("Active signal . long . score 0.87"). Wrapped in a try/except
+        # so a Redis hiccup doesn't crash the daily run -- the API endpoint
+        # falls through to the no-op defaults on a miss anyway. ``score`` is
+        # ``conviction / 100`` so the 70-95 conviction band lines up with the
+        # chip's 0.65 brand threshold; ``side`` collapses ``buy``->``long``
+        # and ``short``->``short``. ``sell`` analyses are exits, not entries,
+        # so they're skipped (they'd otherwise advertise a stale "active
+        # signal" the moment the position closed).
+        try:
+            from services.signal_cache import set_signals_for_strategy
+            signals_by_symbol: dict[str, dict[str, Any]] = {}
+            for a in analyses:
+                sig_type = a.get("signal")
+                if sig_type not in ("buy", "short"):
+                    continue
+                signals_by_symbol[a["symbol"]] = {
+                    "score": float(a.get("conviction", 80)) / 100.0,
+                    "side": "long" if sig_type == "buy" else "short",
+                    "conviction": int(a.get("conviction", 80)),
+                }
+            if signals_by_symbol:
+                await set_signals_for_strategy(self.name, signals_by_symbol)
+        except Exception:
+            logger.warning("strategy_runner: signal_cache write failed", exc_info=True)
+
         return {
             "screened": len(signals),        # best-effort: new shell doesn't separate screen vs emit
             "analyzed": len(analyses),
