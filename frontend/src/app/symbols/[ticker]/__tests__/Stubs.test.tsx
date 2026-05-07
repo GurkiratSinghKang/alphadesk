@@ -3,28 +3,10 @@ import { render } from "@testing-library/react";
 
 import { AboutAnalystPeersStub } from "../_sections/AboutAnalystPeersStub";
 import { AgentsDebateStub } from "../_sections/AgentsDebateStub";
-import { StrategyReverseLookupStub } from "../_sections/StrategyReverseLookupStub";
 
-describe("StrategyReverseLookupStub", () => {
-  it("anchors at id='strategies' with scroll-mt-24", () => {
-    const { getByTestId } = render(<StrategyReverseLookupStub />);
-    const stub = getByTestId("strategy-reverse-lookup-stub");
-    expect(stub.getAttribute("id")).toBe("strategies");
-    expect(stub.className).toContain("scroll-mt-24");
-  });
-
-  it("renders 4 ghost cards", () => {
-    const { getAllByTestId, container } = render(<StrategyReverseLookupStub />);
-    const ghosts = container.querySelectorAll('[data-slot="ghost-card"]');
-    expect(ghosts).toHaveLength(4);
-    expect(getAllByTestId("strategy-reverse-lookup-stub")).toHaveLength(1);
-  });
-
-  it("renders the 'Coming soon' eyebrow", () => {
-    const { getByTestId } = render(<StrategyReverseLookupStub />);
-    expect(getByTestId("strategy-reverse-lookup-stub").textContent).toContain("Coming soon");
-  });
-});
+// T11: StrategyReverseLookupStub was deleted along with its assertions;
+// the section is now wired to a real backend via StrategyReverseLookup.
+// See StrategyReverseLookup.test.tsx for the live coverage.
 
 describe("AgentsDebateStub", () => {
   it("anchors at id='agents' with scroll-mt-24", () => {

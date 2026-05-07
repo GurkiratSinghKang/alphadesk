@@ -1240,6 +1240,190 @@ async def strategy_catalog() -> list[StrategyCatalogEntry]:
     return entries
 
 
+# ---------------------------------------------------------------------------
+# Strategy reverse-lookup by symbol (T11 — symbols-page strategy band)
+# ---------------------------------------------------------------------------
+# Frontend usage: /symbols/[ticker] StrategyReverseLookup section. For a given
+# symbol, fan out across the strategy catalogue and report whether the user
+# already holds the symbol under each strategy. Read-only; no DB writes.
+#
+# Declared BEFORE ``/{strategy_id}/...`` so FastAPI's order-based matcher
+# resolves ``/by-symbol/<sym>`` to this route instead of falling through to a
+# variadic-id route. (No real conflict today because the second segment of
+# ``/{strategy_id}/positions`` etc. is a literal, but order-first registration
+# keeps the route resilient to future literal-segment additions.)
+#
+# MVP scope (positions-only): we return one row per known strategy with
+# ``current_position`` populated from the trade ledger, ``in_universe=True``
+# for every strategy (a real per-strategy universe filter is deferred), and
+# ``has_entry_signal=False`` / ``score=None`` / ``side=None`` everywhere
+# until the per-strategy signal-cache integration lands.
+
+
+class StrategyMatchPosition(BaseModel):
+    qty: int
+    entry_price: float
+    unrealized_pnl: float
+
+
+class StrategyMatch(BaseModel):
+    strategy_id: str
+    name: str
+    in_universe: bool
+    has_entry_signal: bool
+    current_position: StrategyMatchPosition | None = None
+    score: float | None = None
+    side: str | None = None  # "long" | "short" | null
+    last_evaluated: str  # ISO 8601 UTC
+
+
+class StrategyMatchesResponse(BaseModel):
+    symbol: str
+    matches: list[StrategyMatch]
+    generated_at: str  # ISO 8601 UTC
+
+
+_OPEN_TRADE_STATUSES: frozenset[str] = frozenset({"open", "partial", "partial_fill"})
+
+
+@router.get("/by-symbol/{symbol}", response_model=StrategyMatchesResponse)
+async def get_strategies_by_symbol(
+    symbol: str = Path(..., description="Ticker symbol (e.g. NVDA)"),
+) -> StrategyMatchesResponse:
+    """Return per-strategy reverse-lookup matches for a symbol.
+
+    Read-only fan-out across the catalogue. For each strategy, reports:
+
+    - ``in_universe`` — MVP: True for every catalogue entry. A real per-strategy
+      universe filter (Russell-1000 vs ETF rotation vs intraday liquid names) is
+      deferred to a follow-up; rendering "you have an existing position" is the
+      most valuable bit and that doesn't depend on universe membership.
+    - ``current_position`` — populated from the trade ledger when an open trade
+      exists for ``(strategy=ledger_name, symbol=SYM)``. Statuses considered
+      "open" are ``open``, ``partial``, ``partial_fill``.
+    - ``has_entry_signal`` / ``score`` / ``side`` — MVP-deferred; always
+      ``False`` / ``None`` / ``None``. Will be wired to the per-strategy signal
+      cache when those caches expose a stable read API.
+
+    Cached in Redis for 60s keyed on the symbol so the symbols-page card doesn't
+    hammer the ledger when a user flips between tabs.
+    """
+    sym_upper = symbol.upper().strip()
+    if not sym_upper:
+        raise HTTPException(status_code=400, detail="symbol must be non-empty")
+
+    cache_key = f"strategies_by_symbol:{sym_upper}"
+    cache_get_fn = None
+    cache_set_fn = None
+    try:
+        from core.redis import cache_get as _cg, cache_set as _cs
+        cache_get_fn = _cg
+        cache_set_fn = _cs
+    except Exception:
+        pass
+
+    if cache_get_fn is not None:
+        cached = await cache_get_fn(cache_key)
+        if cached is not None:
+            try:
+                return StrategyMatchesResponse(**cached)
+            except Exception:
+                # Corrupt cache value — fall through to recompute.
+                logger.warning(
+                    "strategies_by_symbol: discarding bad cached payload for %s",
+                    sym_upper,
+                )
+
+    # ------------------------------------------------------------------
+    # Build a {ledger_strategy_name -> open_trade_dict} map for this symbol
+    # ------------------------------------------------------------------
+    # SQL-bounded scan via the ``symbol`` index on trade_ledger; one query
+    # answers the whole fan-out instead of N per-strategy queries.
+    open_by_ledger_name: dict[str, dict[str, Any]] = {}
+    try:
+        from data.ingestion.trade_ledger import TradeLedger
+
+        ledger = TradeLedger()
+        rows = ledger.list({"symbol": sym_upper})
+        for row in rows:
+            status = (row.get("status") or "").lower()
+            if status not in _OPEN_TRADE_STATUSES:
+                continue
+            strat = row.get("strategy")
+            if not strat:
+                continue
+            # Multiple open rows under the same strategy aggregate by qty;
+            # entry_price stays as the first row's. The symbols-page card just
+            # needs "you're holding this" + qty, so exact-cost-basis decomp
+            # isn't required.
+            existing = open_by_ledger_name.get(strat)
+            if existing is None:
+                open_by_ledger_name[strat] = dict(row)
+            else:
+                existing["shares"] = (existing.get("shares") or 0) + (row.get("shares") or 0)
+                if row.get("pnl") is not None:
+                    existing["pnl"] = (existing.get("pnl") or 0) + (row.get("pnl") or 0)
+    except Exception:
+        logger.warning(
+            "strategies_by_symbol: ledger lookup failed for %s; returning empty positions",
+            sym_upper,
+            exc_info=True,
+        )
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    matches: list[StrategyMatch] = []
+    # Iterate the canonical hyphen-id catalogue. The sort guarantees a stable
+    # order for the frontend (and tests).
+    for route_id in sorted(_STRATEGIES.keys()):
+        catalog_entry = _STRATEGIES[route_id]
+        ledger_name = _ID_TO_NAME.get(route_id, route_id)
+        open_trade = open_by_ledger_name.get(ledger_name)
+
+        position: StrategyMatchPosition | None = None
+        if open_trade is not None:
+            try:
+                qty_raw = open_trade.get("shares") or 0
+                entry_raw = open_trade.get("entry_price") or 0
+                pnl_raw = open_trade.get("pnl")  # nullable on open rows
+                position = StrategyMatchPosition(
+                    qty=int(qty_raw),
+                    entry_price=float(entry_raw),
+                    unrealized_pnl=float(pnl_raw) if pnl_raw is not None else 0.0,
+                )
+            except (TypeError, ValueError):
+                # Malformed row — treat as no position rather than 500.
+                position = None
+
+        matches.append(
+            StrategyMatch(
+                strategy_id=route_id,
+                name=str(catalog_entry.get("name") or route_id),
+                in_universe=True,  # MVP: defer real universe filter
+                has_entry_signal=False,  # MVP: defer signal-cache integration
+                current_position=position,
+                score=None,
+                side=None,
+                last_evaluated=now_iso,
+            )
+        )
+
+    response = StrategyMatchesResponse(
+        symbol=sym_upper,
+        matches=matches,
+        generated_at=now_iso,
+    )
+
+    if cache_set_fn is not None:
+        try:
+            await cache_set_fn(cache_key, response.model_dump(), ttl_seconds=60)
+        except Exception:
+            # cache_set already logs at WARNING; nothing else to do.
+            pass
+
+    return response
+
+
 @router.get("/", response_model=list[StrategySummary])
 async def list_strategies() -> list[StrategySummary]:
     """List all strategies with real ledger data including unrealized P&L.

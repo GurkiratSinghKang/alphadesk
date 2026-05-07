@@ -1168,3 +1168,33 @@ export interface StrategyMetaInfo {
   minUniverseSize: number;
   paperOnly: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Strategy reverse-lookup (symbols-page section)
+// ---------------------------------------------------------------------------
+// Source: GET /api/v1/strategies/by-symbol/{symbol}. The symbols ticker page
+// renders one card per match, color-coded by status (holding / entry signal /
+// in universe / not in universe).
+
+export interface StrategyMatchPosition {
+  qty: number;
+  entryPrice: number;
+  unrealizedPnl: number;
+}
+
+export interface StrategyMatch {
+  strategyId: string;
+  name: string;
+  inUniverse: boolean;
+  hasEntrySignal: boolean;
+  currentPosition: StrategyMatchPosition | null;
+  score: number | null;
+  side: "long" | "short" | null;
+  lastEvaluated: string;
+}
+
+export interface StrategyMatchesResponse {
+  symbol: string;
+  matches: StrategyMatch[];
+  generatedAt: string;
+}
