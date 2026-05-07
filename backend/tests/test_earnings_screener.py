@@ -6,6 +6,7 @@ from services.earnings_screener import (
     compute_earnings_edge_score,
     compute_expected_move_from_straddle,
     compute_historical_stats,
+    compute_recent_5d_move_pct,
     compute_vol_premium_score,
 )
 
@@ -91,6 +92,104 @@ def test_vol_premium_score_returns_none_when_both_missing():
 def test_vol_premium_score_returns_none_for_non_finite_inputs():
     assert compute_vol_premium_score(float("nan"), 0.08) is None
     assert compute_vol_premium_score(0.10, float("inf")) is None
+
+
+# ─── compute_recent_5d_move_pct (PR-2 / fix Audit-P1) ───────────
+# Pre-event 5-session % change anchors the prompt's PRE-RALLY GUARD.
+# Need 6 daily closes in chronological order — close[-1] vs close[-6].
+
+def test_recent_5d_move_pct_six_bars_seven_pct_rally():
+    # close[-6]=$93.46 → close[-1]=$100.00 → (100-93.46)/93.46 ≈ 0.07
+    bars = [
+        {"close": 93.46},
+        {"close": 95.00},
+        {"close": 96.00},
+        {"close": 97.00},
+        {"close": 98.50},
+        {"close": 100.00},
+    ]
+    result = compute_recent_5d_move_pct(bars)
+    assert result is not None
+    assert round(result, 4) == 0.07
+
+
+def test_recent_5d_move_pct_returns_none_for_fewer_than_six_bars():
+    bars = [{"close": 100.0}] * 5
+    assert compute_recent_5d_move_pct(bars) is None
+
+
+def test_recent_5d_move_pct_returns_none_on_empty_list():
+    assert compute_recent_5d_move_pct([]) is None
+
+
+def test_recent_5d_move_pct_returns_none_with_nan_close():
+    bars = [
+        {"close": 100.0},
+        {"close": 101.0},
+        {"close": float("nan")},
+        {"close": 103.0},
+        {"close": 104.0},
+        {"close": 105.0},
+    ]
+    assert compute_recent_5d_move_pct(bars) is None
+
+
+def test_recent_5d_move_pct_returns_none_when_base_is_zero():
+    """close[-6] == 0 would divide by zero — must short-circuit to None."""
+    bars = [
+        {"close": 0.0},
+        {"close": 1.0},
+        {"close": 2.0},
+        {"close": 3.0},
+        {"close": 4.0},
+        {"close": 5.0},
+    ]
+    assert compute_recent_5d_move_pct(bars) is None
+
+
+def test_recent_5d_move_pct_uses_last_six_when_more_than_six_bars():
+    """Trailing window — extra leading bars are ignored."""
+    # Older bars (ignored): noise
+    # Last 6: 50 → 55 → +10%
+    bars = [
+        {"close": 200.0},
+        {"close": 1.0},  # ignored leading bar
+        {"close": 50.0},
+        {"close": 51.0},
+        {"close": 52.0},
+        {"close": 53.0},
+        {"close": 54.0},
+        {"close": 55.0},
+    ]
+    result = compute_recent_5d_move_pct(bars)
+    assert result is not None
+    assert round(result, 4) == 0.10
+
+
+def test_recent_5d_move_pct_negative_drawdown():
+    """Symmetric path: -7% drawdown into the print."""
+    bars = [
+        {"close": 100.00},
+        {"close": 98.00},
+        {"close": 96.00},
+        {"close": 95.00},
+        {"close": 94.50},
+        {"close": 93.00},
+    ]
+    result = compute_recent_5d_move_pct(bars)
+    assert result is not None
+    assert round(result, 4) == -0.07
+
+
+def test_recent_5d_move_pct_accepts_attribute_style_objects():
+    """A namedtuple-like object with a ``close`` attr also works."""
+    class _Bar:
+        def __init__(self, close):
+            self.close = close
+    bars = [_Bar(c) for c in [93.46, 95.0, 96.0, 97.0, 98.5, 100.0]]
+    result = compute_recent_5d_move_pct(bars)
+    assert result is not None
+    assert round(result, 4) == 0.07
 
 
 def test_earnings_edge_score_rewards_rich_premium_and_overpriced_move():

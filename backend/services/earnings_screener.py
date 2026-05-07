@@ -149,6 +149,46 @@ def compute_vol_premium_score(
     return (em - hist) / denom
 
 
+def compute_recent_5d_move_pct(bars: Sequence[Any]) -> float | None:
+    """Pre-event 5-session % change on the underlying.
+
+    Reads the close from the last 6 daily bars (chronological order) and
+    returns ``(close[-1] - close[-6]) / close[-6]`` as a signed decimal
+    ratio (e.g. ``+0.07`` for a +7% rally into the print). The prompt's
+    PRE-RALLY GUARD and bear-against-rally rules anchor against this
+    value; absence forces the prompt to fall back to vol-tier-only
+    calibration, which can leave directional confidence too high on a
+    name that already moved (the AMD/ARM-class regression).
+
+    Bars may be a list of Pydantic / dict / namedtuple-style records —
+    anything where each element exposes ``close`` via attribute or
+    ``["close"]``. Returns ``None`` for any condition that would mislead
+    the model: fewer than 6 bars, a non-finite close, or close[-6] == 0.
+    """
+    if bars is None or len(bars) < 6:
+        return None
+    closes: list[float] = []
+    for bar in bars[-6:]:
+        if hasattr(bar, "close"):
+            raw = bar.close
+        else:
+            try:
+                raw = bar["close"]
+            except (KeyError, TypeError):
+                return None
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(value):
+            return None
+        closes.append(value)
+    base = closes[0]
+    if base == 0:
+        return None
+    return (closes[-1] - base) / base
+
+
 def compute_historical_stats(quarters: Sequence[Mapping]) -> dict:
     """Roll up per-quarter earnings history into screener summary stats.
 
@@ -530,6 +570,53 @@ async def _load_historical_earnings(
     if payload:
         await cache.set(cache_key, payload, ttl_seconds=24 * 3600)
     return payload
+
+
+async def _load_recent_5d_move_pct(
+    symbol: str,
+    report_date: date,
+) -> float | None:
+    """Pull 6 daily bars ending the trading day before the report and
+    return the 5-session % change. Anchors the prompt's PRE-RALLY GUARD
+    and bear-against-rally calibration rules.
+
+    Pulls a 14-day calendar window so weekends + holidays still yield 6
+    trading bars. Returns ``None`` on any provider error or insufficient
+    history — the prompt then falls back to vol-tier-only calibration.
+    """
+    def _load_sync() -> float | None:
+        from data.providers.alpaca import AlpacaBarProvider
+
+        bars_end = report_date - timedelta(days=1)
+        bars_start = bars_end - timedelta(days=14)
+        with AlpacaBarProvider(timeout=20.0) as bar_provider:
+            frame = bar_provider.bars([symbol], bars_start, bars_end, tf="1D")
+        if getattr(frame, "empty", True):
+            return None
+        sym = symbol.upper()
+        sub = frame[frame["symbol"].astype(str).str.upper() == sym]
+        if getattr(sub, "empty", True):
+            return None
+        sub = sub.sort_values("ts")
+        closes = sub["close"].astype(float).tolist()
+        return compute_recent_5d_move_pct(
+            [{"close": c} for c in closes],
+        )
+
+    try:
+        return await asyncio.to_thread(_load_sync)
+    except Exception as e:
+        log.debug(
+            "recent_5d_move_pct load failed for %s: %s",
+            symbol,
+            _scrub_fmp_error(str(e)),
+            extra=_log_ctx(
+                endpoint="earnings._load_recent_5d_move_pct",
+                symbol=symbol,
+                error=_scrub_fmp_error(str(e)),
+            ),
+        )
+        return None
 
 
 def _recent_beats_misses(quarters: Sequence[Mapping]) -> list[tuple[str, str]]:
@@ -3602,7 +3689,7 @@ async def get_detail(symbol: str) -> EarningsDetail:
     # call when metrics is None.
     (
         quote_t, metrics_t, ladder_t, news_payload_t, regime_t,
-        iv_term_t, skew_t, research_t, historical_t,
+        iv_term_t, skew_t, research_t, historical_t, recent_5d_move_t,
     ) = await asyncio.gather(
         _load_quote(symbol),
         _load_metrics(
@@ -3622,6 +3709,7 @@ async def get_detail(symbol: str) -> EarningsDetail:
         _load_skew(symbol),
         get_ticker_fact(symbol, "research", on_stale="allow"),
         _load_historical_earnings(symbol, report_date_obj),
+        _load_recent_5d_move_pct(symbol, report_date_obj),
         return_exceptions=True,
     )
     # Round-4 CLUSTER 3: a successful ``None`` is NOT partial (provider
@@ -3729,10 +3817,14 @@ async def get_detail(symbol: str) -> EarningsDetail:
     # CALIBRATION block can anchor against the same number the
     # recommender consumes. The metrics block already stores it
     # (services.earnings_screener:_load_metrics computes it once).
-    # recent_5d_move_pct isn't computed in the detail-hydration path
-    # yet — left as ``None`` so the prompt simply omits the pre-rally
-    # guard line and falls back to vol-tier calibration alone.
+    # recent_5d_move_pct rides its own gather leg above so an Alpaca
+    # bars hiccup doesn't block the rest of the panel; it stays None
+    # on provider error and the prompt then falls back to vol-tier
+    # calibration alone instead of firing the pre-rally guard.
     _vol_premium_score = metrics.get("vol_premium_score") if metrics else None
+    _recent_5d_move_pct = (
+        recent_5d_move_t if isinstance(recent_5d_move_t, (int, float)) else None
+    )
     claude_ctx = {
         "symbol": symbol,
         "company": meta["company"],
@@ -3754,7 +3846,7 @@ async def get_detail(symbol: str) -> EarningsDetail:
         "market_regime": market_regime,
         "external_research": external_research,
         "vol_premium_score": _vol_premium_score,
-        "recent_5d_move_pct": None,
+        "recent_5d_move_pct": _recent_5d_move_pct,
     }
     try:
         claude = await _load_claude_structured(symbol, context=claude_ctx)
