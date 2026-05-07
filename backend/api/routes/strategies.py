@@ -1253,11 +1253,13 @@ async def strategy_catalog() -> list[StrategyCatalogEntry]:
 # ``/{strategy_id}/positions`` etc. is a literal, but order-first registration
 # keeps the route resilient to future literal-segment additions.)
 #
-# MVP scope (positions-only): we return one row per known strategy with
-# ``current_position`` populated from the trade ledger, ``in_universe=True``
-# for every strategy (a real per-strategy universe filter is deferred), and
-# ``has_entry_signal=False`` / ``score=None`` / ``side=None`` everywhere
-# until the per-strategy signal-cache integration lands.
+# Iter 11 wires real per-strategy ``in_universe`` via the new ``Strategy.is_in_universe``
+# hook (default True for back-compat, overridden by ~6 strategies with bounded
+# static universes). ``has_entry_signal`` / ``score`` / ``side`` remain deferred
+# globally because there is no per-strategy signal-cache surface yet — the
+# daily pipeline writes ledger trades, not a "live signals" cache. The endpoint
+# still calls into ``has_entry_signal`` / ``signal_score`` / ``signal_side`` so
+# wiring a real cache later is one method override per strategy, no route edit.
 
 
 class StrategyMatchPosition(BaseModel):
@@ -1286,6 +1288,51 @@ class StrategyMatchesResponse(BaseModel):
 _OPEN_TRADE_STATUSES: frozenset[str] = frozenset({"open", "partial", "partial_fill"})
 
 
+def _resolve_strategy_instance(route_id: str):
+    """Return a transient instance of the strategy registered under ``route_id``.
+
+    Catalogue route-ids use hyphens (``momentum-quality``) while the
+    in-process registry uses underscores (``momentum_quality``); we
+    cross-walk via ``_ROUTE_TO_REGISTRY`` and fall back to the route id
+    itself for entries (claude-alpha, manual-discretionary, …) that are
+    listed in the catalogue but not registered.
+
+    Strategies are stateless from the reverse-lookup perspective —
+    instantiating a fresh one per lookup is fine; it's a few-line ``__init__``
+    that runs in microseconds. Returns ``None`` when no class is registered
+    or instantiation raises (a misconfigured strategy must not 500 the
+    whole symbols page).
+    """
+    try:
+        from strategies.registry import get_strategy as _get_strategy, load_all as _load_all
+    except Exception:  # pragma: no cover — strategies pkg missing
+        return None
+
+    canonical = _ROUTE_TO_REGISTRY.get(route_id, route_id.replace("-", "_"))
+    try:
+        cls = _get_strategy(canonical)
+    except KeyError:
+        # First lookup may race the lazy loader; try once more after walk.
+        try:
+            _load_all()
+            cls = _get_strategy(canonical)
+        except (KeyError, Exception):
+            return None
+    except Exception:
+        return None
+
+    try:
+        return cls()
+    except Exception:
+        logger.debug(
+            "strategies_by_symbol: cannot instantiate %s (%s)",
+            canonical,
+            route_id,
+            exc_info=True,
+        )
+        return None
+
+
 @router.get("/by-symbol/{symbol}", response_model=StrategyMatchesResponse)
 async def get_strategies_by_symbol(
     symbol: str = Path(..., description="Ticker symbol (e.g. NVDA)"),
@@ -1294,16 +1341,18 @@ async def get_strategies_by_symbol(
 
     Read-only fan-out across the catalogue. For each strategy, reports:
 
-    - ``in_universe`` — MVP: True for every catalogue entry. A real per-strategy
-      universe filter (Russell-1000 vs ETF rotation vs intraday liquid names) is
-      deferred to a follow-up; rendering "you have an existing position" is the
-      most valuable bit and that doesn't depend on universe membership.
+    - ``in_universe`` — read from ``Strategy.is_in_universe`` (iter 11). The
+      base ABC defaults to ``True`` for back-compat; ~6 strategies override
+      with their static universe (sector ETFs, factor seeds, mega-cap pairs).
     - ``current_position`` — populated from the trade ledger when an open trade
       exists for ``(strategy=ledger_name, symbol=SYM)``. Statuses considered
       "open" are ``open``, ``partial``, ``partial_fill``.
-    - ``has_entry_signal`` / ``score`` / ``side`` — MVP-deferred; always
-      ``False`` / ``None`` / ``None``. Will be wired to the per-strategy signal
-      cache when those caches expose a stable read API.
+    - ``has_entry_signal`` / ``score`` / ``side`` — read from
+      ``Strategy.has_entry_signal`` / ``signal_score`` / ``signal_side`` but
+      every default returns falsy until a per-strategy signal cache lands
+      (the daily pipeline currently writes ledger trades, not a "live signals"
+      surface). Wiring later requires only per-strategy method overrides — no
+      route edit.
 
     Cached in Redis for 60s keyed on the symbol so the symbols-page card doesn't
     hammer the ledger when a user flips between tabs.
@@ -1395,15 +1444,45 @@ async def get_strategies_by_symbol(
                 # Malformed row — treat as no position rather than 500.
                 position = None
 
+        # T11: pull universe + signal status from the strategy's own hooks.
+        # When no strategy class is registered (catalogue-only entries like
+        # ``claude-alpha`` and ``manual-discretionary``), default to the
+        # legacy iter-10 shape: in-universe / no signal.
+        instance = _resolve_strategy_instance(route_id)
+        if instance is None:
+            in_universe = True
+            has_signal = False
+            score: float | None = None
+            side: str | None = None
+        else:
+            try:
+                in_universe = bool(instance.is_in_universe(sym_upper))
+            except Exception:
+                in_universe = True
+            try:
+                has_signal = bool(instance.has_entry_signal(sym_upper))
+            except Exception:
+                has_signal = False
+            try:
+                score_raw = instance.signal_score(sym_upper)
+                score = float(score_raw) if score_raw is not None else None
+            except Exception:
+                score = None
+            try:
+                side_raw = instance.signal_side(sym_upper)
+                side = str(side_raw) if side_raw is not None else None
+            except Exception:
+                side = None
+
         matches.append(
             StrategyMatch(
                 strategy_id=route_id,
                 name=str(catalog_entry.get("name") or route_id),
-                in_universe=True,  # MVP: defer real universe filter
-                has_entry_signal=False,  # MVP: defer signal-cache integration
+                in_universe=in_universe,
+                has_entry_signal=has_signal,
                 current_position=position,
-                score=None,
-                side=None,
+                score=score,
+                side=side,
                 last_evaluated=now_iso,
             )
         )

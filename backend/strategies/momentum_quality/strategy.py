@@ -85,6 +85,13 @@ class MomentumQualityStrategy(Strategy):
         held = set(state.get(f"{_NS}.held_symbols", []))
         return sorted(set(cached) | held)
 
+    # T11 reverse-lookup: the universe is the eligible_universe seed list
+    # (UNIVERSE_SEED minus Financials / Utilities). Held-symbols carve-out
+    # only matters at run-time for closing legacy positions and is not
+    # part of the candidate universe presented to a user browsing /symbols.
+    def is_in_universe(self, symbol: str) -> bool:
+        return symbol.upper() in set(eligible_universe())
+
     # ------------------------------------------------------------------ #
     # Pure-function alpha                                                #
     # ------------------------------------------------------------------ #

@@ -113,6 +113,16 @@ class PEADStrategy(Strategy):
         held = set(state.get(f"{_NS}.held_symbols", []))
         return sorted(set(cached) | held)
 
+    # T11 reverse-lookup: PEAD's universe is its UNIVERSE_SEED list (US
+    # large-caps with reliable earnings coverage). We use the static seed
+    # rather than ``load_universe`` here because the latter takes an asof
+    # and a fundamentals provider — neither is appropriate on a synchronous
+    # symbols-page render. The seed is a strict superset of the dynamic
+    # output for any post-2024 asof, so false-negatives on /symbols are
+    # not a concern.
+    def is_in_universe(self, symbol: str) -> bool:
+        return symbol.upper() in set(UNIVERSE_SEED)
+
     # ------------------------------------------------------------------ #
     # Pure-function alpha                                                #
     # ------------------------------------------------------------------ #

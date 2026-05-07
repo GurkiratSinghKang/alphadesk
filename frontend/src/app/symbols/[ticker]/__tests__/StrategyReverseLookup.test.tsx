@@ -211,4 +211,149 @@ describe("StrategyReverseLookup", () => {
       "watching",
     ]);
   });
+
+  // -------------------------------------------------------------------------
+  // Iter 11 — 4 chip states (holding / signal+side+score / watching / hidden)
+  // -------------------------------------------------------------------------
+
+  it("renders 'Active signal · long · score 0.87' on a card with hasEntrySignal+side+score", async () => {
+    const matches: StrategyMatch[] = [
+      makeMatch({
+        strategyId: "momentum-quality",
+        name: "Momentum + Quality",
+        hasEntrySignal: true,
+        side: "long",
+        score: 0.87,
+      }),
+    ];
+    mockedFetch.mockResolvedValue(makeResponse(matches));
+    const Wrapper = makeWrapper();
+    const { getByTestId } = render(
+      createElement(Wrapper, null, <StrategyReverseLookup symbol="NVDA" />),
+    );
+    await waitFor(() => {
+      const card = getByTestId("strategy-card-momentum-quality");
+      expect(card.getAttribute("data-strategy-status")).toBe("signal");
+    });
+    const card = getByTestId("strategy-card-momentum-quality");
+    expect(card.textContent).toContain("Active signal");
+    expect(card.textContent).toContain("long");
+    expect(card.textContent).toContain("score 0.87");
+    // Brand/dim chip class — not green, not muted.
+    const chip = card.querySelector('[data-slot="strategy-status-chip"]');
+    expect(chip?.className).toContain("text-brand-dim");
+  });
+
+  it("renders 'Active signal' alone when side and score are null (cache-not-yet-wired)", async () => {
+    // The signal cache backing has_entry_signal/score/side is deferred —
+    // until then, the endpoint always returns null score/side. The chip
+    // must degrade to a bare "Active signal" rather than "Active signal · null · score NaN".
+    const matches: StrategyMatch[] = [
+      makeMatch({
+        strategyId: "pead",
+        name: "PEAD",
+        hasEntrySignal: true,
+        side: null,
+        score: null,
+      }),
+    ];
+    mockedFetch.mockResolvedValue(makeResponse(matches));
+    const Wrapper = makeWrapper();
+    const { getByTestId } = render(
+      createElement(Wrapper, null, <StrategyReverseLookup symbol="NVDA" />),
+    );
+    await waitFor(() => {
+      const card = getByTestId("strategy-card-pead");
+      expect(card.getAttribute("data-strategy-status")).toBe("signal");
+    });
+    const card = getByTestId("strategy-card-pead");
+    const chip = card.querySelector('[data-slot="strategy-status-chip"]');
+    // Exactly "Active signal" — no trailing separators or null side.
+    expect(chip?.textContent?.trim()).toBe("Active signal");
+  });
+
+  it("renders 'In universe' on a watching card and uses the muted chip tone", async () => {
+    const matches: StrategyMatch[] = [
+      makeMatch({
+        strategyId: "sector-rotation",
+        name: "Sector Rotation",
+        inUniverse: true,
+        hasEntrySignal: false,
+        currentPosition: null,
+      }),
+    ];
+    mockedFetch.mockResolvedValue(makeResponse(matches));
+    const Wrapper = makeWrapper();
+    const { getByTestId } = render(
+      createElement(Wrapper, null, <StrategyReverseLookup symbol="XLK" />),
+    );
+    await waitFor(() => {
+      const card = getByTestId("strategy-card-sector-rotation");
+      expect(card.getAttribute("data-strategy-status")).toBe("watching");
+    });
+    const card = getByTestId("strategy-card-sector-rotation");
+    const chip = card.querySelector('[data-slot="strategy-status-chip"]');
+    expect(chip?.textContent?.trim()).toBe("In universe");
+    // Muted chip — no green, no brand.
+    expect(chip?.className).toContain("u-muted");
+    expect(chip?.className).not.toContain("text-up-500");
+    expect(chip?.className).not.toContain("text-brand-dim");
+  });
+
+  it("does not render a card for a strategy whose universe excludes the symbol (hide, not show as 'out')", async () => {
+    // Iter 11: the "not in universe" state is rendered as nothing — we
+    // hide the card entirely rather than emitting a fourth muted chip.
+    // Two strategies, only one is in-universe.
+    const matches: StrategyMatch[] = [
+      makeMatch({
+        strategyId: "in-universe-strat",
+        name: "In Universe",
+        inUniverse: true,
+      }),
+      makeMatch({
+        strategyId: "out-of-universe-strat",
+        name: "Out Of Universe",
+        inUniverse: false,
+      }),
+    ];
+    mockedFetch.mockResolvedValue(makeResponse(matches));
+    const Wrapper = makeWrapper();
+    const { container, queryByTestId } = render(
+      createElement(Wrapper, null, <StrategyReverseLookup symbol="NVDA" />),
+    );
+    await waitFor(() => {
+      const cards = container.querySelectorAll('[data-slot="strategy-card"]');
+      expect(cards).toHaveLength(1);
+    });
+    expect(queryByTestId("strategy-card-out-of-universe-strat")).toBeNull();
+    expect(queryByTestId("strategy-card-in-universe-strat")).not.toBeNull();
+    // No card should have a status of "out".
+    const allCards = container.querySelectorAll('[data-slot="strategy-card"]');
+    for (const c of allCards) {
+      expect(c.getAttribute("data-strategy-status")).not.toBe("out");
+    }
+  });
+
+  it("uses the green/up chip tone on a holding card", async () => {
+    const matches: StrategyMatch[] = [
+      makeMatch({
+        strategyId: "momentum-quality",
+        name: "Momentum + Quality",
+        currentPosition: { qty: 25, entryPrice: 410, unrealizedPnl: 50 },
+      }),
+    ];
+    mockedFetch.mockResolvedValue(makeResponse(matches));
+    const Wrapper = makeWrapper();
+    const { getByTestId } = render(
+      createElement(Wrapper, null, <StrategyReverseLookup symbol="NVDA" />),
+    );
+    await waitFor(() => {
+      const card = getByTestId("strategy-card-momentum-quality");
+      expect(card.getAttribute("data-strategy-status")).toBe("holding");
+    });
+    const card = getByTestId("strategy-card-momentum-quality");
+    const chip = card.querySelector('[data-slot="strategy-status-chip"]');
+    expect(chip?.className).toContain("text-up-500");
+    expect(chip?.className).not.toContain("u-muted");
+  });
 });
