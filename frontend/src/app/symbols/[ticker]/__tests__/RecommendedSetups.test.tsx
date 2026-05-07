@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
 
 import type { EarningsSetup, EarningsSetupLeg } from "@/types";
+import { SETUP_ID_TO_LABEL } from "@/lib/api";
 
 import { RecommendedSetups } from "../_sections/RecommendedSetups";
 
@@ -34,6 +35,7 @@ function makeSetup(
 ): EarningsSetup {
   return {
     setupId: setupId as EarningsSetup["setupId"],
+    setupLabel: SETUP_ID_TO_LABEL[setupId] ?? null,
     legs,
     netCreditOrDebit: -2.5,
     maxProfit: 250,

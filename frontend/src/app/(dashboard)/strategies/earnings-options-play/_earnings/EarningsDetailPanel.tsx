@@ -183,16 +183,22 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
     [detail],
   );
 
-  // PR-1 / T3: collapse the ranked setups list into a map keyed by
-  // setup_id so TradeButtonRow can look up each card's confidence
-  // without iterating the array per render. setup_id strings are the
-  // ``EarningsTopSetup`` literal union; non-matching ids (legacy or
-  // ``skip`` placeholders) fall through and won't be queried by name.
+  // PR-1 / T3: collapse the ranked setups list into a map keyed by the
+  // space-delimited ``setupLabel`` (``EarningsTopSetup``) so TradeButtonRow
+  // can look up each card's confidence by the same label it renders.
+  //
+  // P0 fix: previously keyed by ``setupId`` (snake_case wire form) while
+  // TradeButtonRow looked up by space-delimited label ("bull put spread"),
+  // so every confidence chip silently resolved to ``undefined`` and the
+  // low-confidence warning modal never fired. ``setupLabel`` is ``null``
+  // for unrecognized backend setup IDs (legacy / future) — skip those.
   const setupConfidenceMap = useMemo(() => {
     if (!recommendedSetups || recommendedSetups.length === 0) return undefined;
     const map: Partial<Record<EarningsTopSetup, number | null>> = {};
     for (const setup of recommendedSetups) {
-      map[setup.setupId as EarningsTopSetup] = setup.confidence;
+      if (setup.setupLabel) {
+        map[setup.setupLabel] = setup.confidence;
+      }
     }
     return map;
   }, [recommendedSetups]);

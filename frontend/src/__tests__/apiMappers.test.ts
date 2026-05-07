@@ -48,7 +48,9 @@ import {
   postEarningsBacktest,
   mapPipelineRun,
   mapEarningsDetail,
+  mapEarningsSetup,
   mapEarningsBacktestResponse,
+  SETUP_ID_TO_LABEL,
 } from '@/lib/api';
 
 // ─── Mock setup ──────────────────────────────────────────────────────────────
@@ -353,6 +355,129 @@ describe('mapEarningsDetail', () => {
       },
     });
     expect(out.strikeLadder?.fetchedAt).toBe('2026-04-23T15:00:00Z');
+  });
+});
+
+// ─── mapEarningsSetup (P0: setup_id → setupLabel normalization) ──────────────
+//
+// The backend ships ``setup_id`` in snake_case ("bull_put_spread"); the
+// frontend ``EarningsTopSetup`` literal union is space-delimited
+// ("bull put spread"). Without ``setupLabel`` the per-setup confidence map
+// in EarningsDetailPanel keys by snake_case while TradeButtonRow looks up
+// by space-delimited label, and every confidence chip silently resolves
+// to ``undefined``. These tests pin the round-trip wire→mapper→label
+// shape so the mismatch can't reappear.
+
+describe('mapEarningsSetup setup label normalization', () => {
+  // Minimal but complete wire shape — matches the FE mapper's required
+  // discriminators (setup_id + at least one parsable leg).
+  const baseLeg = {
+    side: 'buy' as const,
+    contract_type: 'call' as const,
+    strike: 200,
+    expiry: '2026-05-16',
+    qty: 1,
+    mid: 1.25,
+  };
+  const baseRaw = {
+    legs: [baseLeg],
+    net_credit_or_debit: -2.5,
+    max_profit: 250,
+    max_loss: -250,
+    breakevens: [201.25],
+    pop_estimate: 0.6,
+    expected_value: 12,
+    risk_reward: null,
+    rationale: 'test rationale',
+    sizing_kelly_pct: 0.012,
+    is_defined_risk: true,
+    confidence: 0.42,
+  };
+
+  it('maps snake_case bull_put_spread → "bull put spread"', () => {
+    const result = mapEarningsSetup({ ...baseRaw, setup_id: 'bull_put_spread' });
+    expect(result).not.toBeNull();
+    expect(result!.setupId).toBe('bull_put_spread');
+    expect(result!.setupLabel).toBe('bull put spread');
+  });
+
+  it('maps iron_condor → "iron condor"', () => {
+    const result = mapEarningsSetup({ ...baseRaw, setup_id: 'iron_condor' });
+    expect(result).not.toBeNull();
+    expect(result!.setupId).toBe('iron_condor');
+    expect(result!.setupLabel).toBe('iron condor');
+  });
+
+  it('maps long_straddle → "long straddle"', () => {
+    const result = mapEarningsSetup({ ...baseRaw, setup_id: 'long_straddle' });
+    expect(result).not.toBeNull();
+    expect(result!.setupId).toBe('long_straddle');
+    expect(result!.setupLabel).toBe('long straddle');
+  });
+
+  it('preserves the snake_case wire ID verbatim (does not rewrite setupId)', () => {
+    // The wire contract is intentionally unchanged — only setupLabel is
+    // derived. Other consumers (combo_type lookup, payoff draft) still
+    // dispatch off setupId in its raw snake_case form.
+    const result = mapEarningsSetup({ ...baseRaw, setup_id: 'bear_call_spread' });
+    expect(result!.setupId).toBe('bear_call_spread');
+    expect(result!.setupLabel).toBe('bear call spread');
+  });
+
+  it('returns null setupLabel for unknown setup_id (e.g. future backend addition)', () => {
+    const result = mapEarningsSetup({ ...baseRaw, setup_id: 'unknown_future_setup' });
+    expect(result).not.toBeNull();
+    expect(result!.setupId).toBe('unknown_future_setup');
+    expect(result!.setupLabel).toBeNull();
+  });
+
+  it('returns null setupLabel for the "skip" sentinel (no-trade callout)', () => {
+    // Backend emits setup_id="skip" when the recommender decides no
+    // setup is credible; SHR-4/SHR-6 has the FE render a no-trade
+    // callout. The label is null since "skip" is not in the
+    // EarningsTopSetup union.
+    const result = mapEarningsSetup({ ...baseRaw, setup_id: 'skip' });
+    expect(result!.setupLabel).toBeNull();
+  });
+
+  it('round-trips: wire → mapper → confidence map keyed by label resolves', () => {
+    // This pins the exact failure mode that motivated the fix: a payload
+    // with setup_id="bull_put_spread" must end up addressable in the
+    // confidence map by the space-delimited label "bull put spread".
+    const result = mapEarningsSetup({ ...baseRaw, setup_id: 'bull_put_spread', confidence: 0.73 });
+    const map: Partial<Record<string, number | null>> = {};
+    if (result?.setupLabel) {
+      map[result.setupLabel] = result.confidence;
+    }
+    expect(map['bull put spread']).toBe(0.73);
+    // Negative assertion: the snake_case key must NOT carry the value.
+    expect(map['bull_put_spread']).toBeUndefined();
+  });
+
+  it('SETUP_ID_TO_LABEL covers the full snake_case set the backend currently emits', () => {
+    // Lock the table so adding a backend setup without a frontend entry
+    // breaks this test loudly rather than silently dropping confidence
+    // chips. Mirror of backend earnings_recommender._SETUP_ID_TO_LEGACY
+    // (excluding the "skip" sentinel which intentionally has no label).
+    const expected = [
+      'iron_condor',
+      'iron_butterfly',
+      'bear_call_spread',
+      'bull_put_spread',
+      'bull_call_spread',
+      'bear_put_spread',
+      'long_call',
+      'long_put',
+      'long_straddle',
+      'long_strangle',
+      'calendar_spread',
+      'diagonal_spread',
+      'short_strangle',
+      'short_straddle',
+    ];
+    for (const id of expected) {
+      expect(SETUP_ID_TO_LABEL[id], `missing label for ${id}`).toBeDefined();
+    }
   });
 });
 

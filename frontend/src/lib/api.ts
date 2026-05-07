@@ -3158,6 +3158,34 @@ export function mapFillForecast(raw: unknown): ComboFillForecast | null {
 }
 
 /**
+ * Mirrors backend ``earnings_recommender._SETUP_ID_TO_LEGACY``: snake_case
+ * wire IDs → space-delimited ``EarningsTopSetup`` literals. Without this
+ * normalization the FE keys per-setup confidence by ``setup_id``
+ * ("bull_put_spread") while consumers (TradeButtonRow) look up by label
+ * ("bull put spread"), so every chip silently disappears in prod.
+ *
+ * Keep aligned with the backend table; new entries should be added in
+ * tandem. Unknown IDs fall through to ``null`` so future backend setups
+ * degrade gracefully rather than mis-key into existing slots.
+ */
+export const SETUP_ID_TO_LABEL: Record<string, EarningsTopSetup> = {
+  iron_condor: "iron condor",
+  iron_butterfly: "iron butterfly",
+  bear_call_spread: "bear call spread",
+  bull_put_spread: "bull put spread",
+  bull_call_spread: "bull call spread",
+  bear_put_spread: "bear put spread",
+  long_call: "long call",
+  long_put: "long put",
+  long_straddle: "long straddle",
+  long_strangle: "long straddle", // backend collapses; FE union lacks long_strangle
+  calendar_spread: "calendar spread",
+  diagonal_spread: "diagonal spread",
+  short_strangle: "short strangle", // legacy, defined-risk gate blocks new emissions
+  short_straddle: "short strangle", // legacy collapse, mirrors backend
+};
+
+/**
  * Wave 4a / Batch Q — map a backend EarningsSetup wire payload to the
  * frontend EarningsSetup shape. Tolerant of missing optional fields
  * (older cached responses, demo data) so unknown fields fall to safe
@@ -3168,6 +3196,11 @@ export function mapEarningsSetup(raw: unknown): EarningsSetup | null {
   const r = raw as Record<string, unknown>;
   const setupId = typeof r.setup_id === "string" ? r.setup_id : null;
   if (!setupId) return null;
+  // Normalize snake_case wire ID → space-delimited EarningsTopSetup label.
+  // ``null`` when the backend ships an ID we don't recognize (e.g. a new
+  // setup type), so callers either skip the lookup or render a fallback
+  // rather than mis-keying into an unrelated label.
+  const setupLabel = SETUP_ID_TO_LABEL[setupId] ?? null;
   const legsRaw = Array.isArray(r.legs) ? (r.legs as unknown[]) : [];
   const legs: EarningsSetupLeg[] = legsRaw
     .map((legRaw): EarningsSetupLeg | null => {
@@ -3195,6 +3228,7 @@ export function mapEarningsSetup(raw: unknown): EarningsSetup | null {
     .filter((l): l is EarningsSetupLeg => l !== null);
   return {
     setupId,
+    setupLabel,
     legs,
     netCreditOrDebit: typeof r.net_credit_or_debit === "number" ? r.net_credit_or_debit : 0,
     maxProfit: typeof r.max_profit === "number" ? r.max_profit : null,

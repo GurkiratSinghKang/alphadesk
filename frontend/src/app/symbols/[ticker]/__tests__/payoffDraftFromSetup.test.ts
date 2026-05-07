@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { EarningsSetup, EarningsSetupLeg } from "@/types";
+import { SETUP_ID_TO_LABEL } from "@/lib/api";
 
 import { payoffDraftFromSetup } from "../_lib/payoffDraftFromSetup";
 
@@ -25,6 +26,7 @@ function makeSetup(
 ): EarningsSetup {
   return {
     setupId: setupId as EarningsSetup["setupId"],
+    setupLabel: SETUP_ID_TO_LABEL[setupId] ?? null,
     legs,
     netCreditOrDebit: -2.5,
     maxProfit: null,
