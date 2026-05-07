@@ -14,32 +14,9 @@ import { fmtNumber } from "@/lib/intl";
 import { cn } from "@/lib/utils";
 import type { OptionStrategyDraft } from "@/lib/optionsPayoff";
 import { buildEarningsStrategyDraft } from "./payoffDraft";
-import LowConfidenceWarningModal from "./LowConfidenceWarningModal";
-
-/**
- * PR-1 / T4 (earnings discipline gates): directional setups that should
- * trigger the low-confidence warning modal when ``confidence < 0.50``.
- *
- * Mirrors backend ``_BULL_SETUPS ∪ _BEAR_SETUPS`` in
- * ``earnings_recommender.py`` — duplicated here as plain string keys
- * because the backend uses underscore IDs (``bull_put_spread``) while
- * the FE has always used the human-readable ``EarningsTopSetup`` form
- * (``"bull put spread"``).
- *
- * Iron condor / iron butterfly / long straddle (vol-selling, non-
- * directional) are deliberately ABSENT — those harvest IV crush
- * regardless of direction and shouldn't carry friction.
- */
-const DIRECTIONAL_SETUPS = new Set<EarningsTopSetup>([
-  "long call",
-  "long put",
-  "bull put spread",
-  "bear call spread",
-  "bull call spread",
-  "bear put spread",
-]);
-
-const LOW_CONFIDENCE_THRESHOLD = 0.5;
+import LowConfidenceWarningModal from "@/components/options/LowConfidenceWarningModal";
+import ConfidenceChip from "@/components/options/ConfidenceChip";
+import { isLowConfDirectional } from "@/lib/confidenceThresholds";
 
 /**
  * TradeButtonRow — earnings → /trade deep-link builder.
@@ -141,17 +118,11 @@ export default function TradeButtonRow({
     label: string,
     href: string,
   ): boolean => {
-    if (
-      typeof setupKind === "string"
-      && DIRECTIONAL_SETUPS.has(setupKind as EarningsTopSetup)
-      && confidence != null
-      && Number.isFinite(confidence)
-      && confidence < LOW_CONFIDENCE_THRESHOLD
-    ) {
+    if (isLowConfDirectional(setupKind, confidence)) {
       setWarningModal({
         href,
         setupName: label,
-        confidencePct: Math.round(confidence * 100),
+        confidencePct: Math.round((confidence as number) * 100),
       });
       return true;
     }
@@ -735,38 +706,6 @@ function DefinedRiskTradeLink({
         {riskCopy}
       </span>
     </Link>
-  );
-}
-
-/**
- * PR-1 / T3 (earnings discipline gates): tone-mapped per-setup
- * credibility chip. Score blends PoP × vol_premium_score × Claude
- * confidence × direction alignment on the backend (see
- * ``EarningsRecommender._compute_setup_confidence``); this surface is
- * the per-trade credibility readout the user inspects before clicking.
- *
- * Tone buckets mirror the recommender's internal "high / medium / low"
- * cutoffs:
- *   ≥ 0.65 → brand (high conviction)
- *   0.40 – 0.65 → muted (mid conviction)
- *   < 0.40 → warn (low conviction; reconsider before trading)
- *
- * Null/undefined/non-finite hides the chip (back-compat: old payloads
- * without the field, ``skip`` setups with no PoP).
- */
-function ConfidenceChip({ confidence }: { confidence: number | null | undefined }) {
-  if (confidence == null || !Number.isFinite(confidence)) return null;
-  const pct = Math.round(confidence * 100);
-  const tone =
-    confidence >= 0.65
-      ? "u-brand"
-      : confidence >= 0.40
-      ? "u-muted"
-      : "text-state-warning-fg";
-  return (
-    <span data-slot="confidence-chip" className={cn("t-meta tabular-nums", tone)}>
-      {pct}% conf
-    </span>
   );
 }
 

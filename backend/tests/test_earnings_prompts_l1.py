@@ -334,6 +334,40 @@ def test_existing_kwargs_still_work_without_calibration_anchors():
     assert "Earnings setup" in prompt["user"]
 
 
+def test_no_history_does_not_auto_cap_confidence_at_45():
+    """P1 audit (2026-05-06): a recent IPO or any symbol with no prior
+    earnings on file should NOT be auto-capped at 0.45 just because
+    vol_premium_score is null. The prompt must spell out a separate
+    fallback path (use iv_rank / iv_percentile alone) rather than
+    treating "history unknown" the same as "no harvestable edge"."""
+    from services.earnings_prompts import build_structured_prompt
+
+    prompt = build_structured_prompt(
+        **_calibration_kwargs(
+            vol_premium_score=None,
+            hist_avg_abs_move_pct=None,
+        ),
+    )
+    system = prompt["system"]
+    user = prompt["user"]
+
+    # The "< 0.05 → ceiling 0.45" branch must NOT mention "or null" or
+    # otherwise extend its scope to history-unknown symbols.
+    assert "ceiling 0.45" in system  # the < 0.05 rule itself is preserved
+    assert "or null when history is unknown" not in system
+    assert "(or null when history is unknown)" not in system
+    # A separate fallback paragraph must spell out the no-history path.
+    assert "VOL-PREMIUM UNAVAILABLE" in system
+    # Fallback must reference iv_rank / iv_percentile so the model knows
+    # what to lean on when vol_premium_score is missing.
+    assert "iv_rank" in system or "IV rank" in system
+    # The user prompt's hist_avg_abs_move_pct line is the existing
+    # "unavailable" copy; sanity-check it is still emitted so the model
+    # reads "history unknown" rather than "history is zero".
+    assert "Historical avg" in user
+    assert "unavailable" in user
+
+
 @pytest.mark.asyncio
 async def test_adversarial_headline_does_not_change_claude_verdict():
     """A mocked claude client returns whatever it gets prompted with;

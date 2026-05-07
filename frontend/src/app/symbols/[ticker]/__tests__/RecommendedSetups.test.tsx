@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
-import { render } from "@testing-library/react";
+import { mockPush } from "../../../../__tests__/setup-mocks";
+import { describe, expect, it, beforeEach, vi } from "vitest";
+import { fireEvent, render } from "@testing-library/react";
 
 import type { EarningsSetup, EarningsSetupLeg } from "@/types";
 import { SETUP_ID_TO_LABEL } from "@/lib/api";
@@ -154,7 +155,7 @@ describe("RecommendedSetups", () => {
     );
 
     const cta = getByTestId("setup-trade-cta");
-    const href = cta.getAttribute("href") ?? "";
+    const href = cta.getAttribute("data-href") ?? "";
     expect(href.startsWith("/trade?")).toBe(true);
     const params = new URLSearchParams(href.split("?")[1] ?? "");
     expect(params.get("symbol")).toBe("NVDA");
@@ -191,7 +192,7 @@ describe("RecommendedSetups", () => {
         />,
       );
       const cta = getByTestId("setup-trade-cta");
-      const href = cta.getAttribute("href") ?? "";
+      const href = cta.getAttribute("data-href") ?? "";
       const params = new URLSearchParams(href.split("?")[1] ?? "");
       expect(params.get("combo_type"), `combo_type for ${setupId}`).toBe(
         expectedComboType,
@@ -215,7 +216,7 @@ describe("RecommendedSetups", () => {
         underlying={200}
       />,
     );
-    const href = getByTestId("setup-trade-cta").getAttribute("href") ?? "";
+    const href = getByTestId("setup-trade-cta").getAttribute("data-href") ?? "";
     const params = new URLSearchParams(href.split("?")[1] ?? "");
     expect(params.has("combo_type")).toBe(false);
     expect(params.get("legs")).toBe("NVDA260516C00200000:buy:1:1.25");
@@ -262,5 +263,171 @@ describe("RecommendedSetups", () => {
     );
 
     expect(getByTestId("payoff-panel").getAttribute("data-combo")).toBe("iron_condor");
+  });
+
+  // ─── P0 audit (2026-05-06): chip + warning modal parity with EOP ──
+  describe("P0 audit (2026-05-06) — confidence chip + warning modal", () => {
+    beforeEach(() => {
+      mockPush.mockReset();
+      // base-ui's Dialog portal mounts to document.body; clean up any
+      // leftover modal nodes between tests so queries don't see stale
+      // dialogs.
+      document
+        .querySelectorAll('[data-slot="low-confidence-warning-modal"]')
+        .forEach((n) => n.remove());
+    });
+
+    // base-ui's Dialog leaves the popup in the DOM with ``data-closed``
+    // during the close animation; "open" means ``data-open`` is present.
+    const queryModal = () =>
+      document.querySelector(
+        '[data-slot="low-confidence-warning-modal"][data-open]',
+      );
+
+    it("renders a confidence chip when setup.confidence is non-null", () => {
+      const setup = makeSetup("bull_put_spread", undefined, { confidence: 0.72 });
+      const { container } = render(
+        <RecommendedSetups
+          symbol="NVDA"
+          setups={[setup]}
+          isETF={false}
+          underlying={200}
+        />,
+      );
+      const chip = container.querySelector('[data-slot="confidence-chip"]');
+      expect(chip).not.toBeNull();
+      expect(chip!.textContent).toBe("72% conf");
+      expect(chip!.className).toContain("u-brand");
+    });
+
+    it("does NOT render a confidence chip when setup.confidence is null", () => {
+      const setup = makeSetup("iron_condor", undefined, { confidence: null });
+      const { container } = render(
+        <RecommendedSetups
+          symbol="NVDA"
+          setups={[setup]}
+          isETF={false}
+          underlying={200}
+        />,
+      );
+      expect(container.querySelector('[data-slot="confidence-chip"]')).toBeNull();
+    });
+
+    it("opens warning modal and prevents navigation on directional setup with confidence < 0.50 (long call @ 0.30)", () => {
+      const setup = makeSetup(
+        "long_call",
+        [makeLeg({ side: "buy", contractType: "call", strike: 200, mid: 1.25 })],
+        { confidence: 0.30 },
+      );
+      const { getByTestId } = render(
+        <RecommendedSetups
+          symbol="NVDA"
+          setups={[setup]}
+          isETF={false}
+          underlying={200}
+        />,
+      );
+      const cta = getByTestId("setup-trade-cta") as HTMLButtonElement;
+      fireEvent.click(cta);
+      const modal = queryModal();
+      expect(modal).not.toBeNull();
+      expect(modal!.textContent).toMatch(/Low conviction directional trade/i);
+      expect(modal!.textContent).toMatch(/30%/);
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it("does NOT open modal for iron condor at 0.30 confidence — vol-selling exempt — and navigates", () => {
+      const setup = makeSetup(
+        "iron_condor",
+        [makeLeg({ side: "sell", contractType: "put", strike: 195, mid: 2.4 })],
+        { confidence: 0.30 },
+      );
+      const { getByTestId } = render(
+        <RecommendedSetups
+          symbol="NVDA"
+          setups={[setup]}
+          isETF={false}
+          underlying={200}
+        />,
+      );
+      const cta = getByTestId("setup-trade-cta") as HTMLButtonElement;
+      fireEvent.click(cta);
+      expect(queryModal()).toBeNull();
+      expect(mockPush).toHaveBeenCalledTimes(1);
+    });
+
+    it("does NOT open modal for directional setup at 0.65 confidence — above threshold — and navigates", () => {
+      const setup = makeSetup(
+        "long_call",
+        [makeLeg({ side: "buy", contractType: "call", strike: 200, mid: 1.25 })],
+        { confidence: 0.65 },
+      );
+      const { getByTestId } = render(
+        <RecommendedSetups
+          symbol="NVDA"
+          setups={[setup]}
+          isETF={false}
+          underlying={200}
+        />,
+      );
+      const cta = getByTestId("setup-trade-cta") as HTMLButtonElement;
+      fireEvent.click(cta);
+      expect(queryModal()).toBeNull();
+      expect(mockPush).toHaveBeenCalledTimes(1);
+    });
+
+    it("Override on the modal pushes the original deep-link via Next router and closes the modal", () => {
+      const setup = makeSetup(
+        "bull_put_spread",
+        [
+          makeLeg({ side: "sell", contractType: "put", strike: 195, mid: 2.4 }),
+          makeLeg({ side: "buy", contractType: "put", strike: 190, mid: 1.1 }),
+        ],
+        { confidence: 0.20 },
+      );
+      const { getByTestId } = render(
+        <RecommendedSetups
+          symbol="NVDA"
+          setups={[setup]}
+          isETF={false}
+          underlying={200}
+        />,
+      );
+      const cta = getByTestId("setup-trade-cta") as HTMLButtonElement;
+      const expectedHref = cta.getAttribute("data-href") ?? "";
+      fireEvent.click(cta);
+      expect(queryModal()).not.toBeNull();
+      const override = document.querySelector(
+        '[data-slot="low-confidence-warning-override"]',
+      ) as HTMLButtonElement;
+      fireEvent.click(override);
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith(expectedHref);
+    });
+
+    it("Cancel on the modal closes without navigating", () => {
+      const setup = makeSetup(
+        "long_put",
+        [makeLeg({ side: "buy", contractType: "put", strike: 200, mid: 1.5 })],
+        { confidence: 0.20 },
+      );
+      const { getByTestId } = render(
+        <RecommendedSetups
+          symbol="NVDA"
+          setups={[setup]}
+          isETF={false}
+          underlying={200}
+        />,
+      );
+      const cta = getByTestId("setup-trade-cta") as HTMLButtonElement;
+      fireEvent.click(cta);
+      expect(queryModal()).not.toBeNull();
+      const cancel = document.querySelector(
+        '[data-slot="low-confidence-warning-cancel"]',
+      ) as HTMLButtonElement;
+      fireEvent.click(cancel);
+      expect(queryModal()).toBeNull();
+      expect(mockPush).not.toHaveBeenCalled();
+    });
   });
 });

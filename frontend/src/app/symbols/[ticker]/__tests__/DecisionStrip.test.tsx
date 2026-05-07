@@ -157,4 +157,68 @@ describe("DecisionStrip", () => {
     expect(bar.getAttribute("aria-label")).toBe("Conviction");
     expect(bar.getAttribute("aria-valuetext")).toBe("74%");
   });
+
+  // ─── P1 audit (2026-05-06): confidence-bucket tone parity with EOP ─
+  describe("P1 audit (2026-05-06) — confidence-bucket pill tone", () => {
+    it("verdict pill carries brand tone when conviction >= 0.65 (high)", () => {
+      const { getByTestId } = render(
+        <DecisionStrip
+          symbol="NVDA"
+          claudeStructured={makeClaude({ suggestedPlay: "long call", confidence: 0.75 })}
+          analysis={makeAnalysis({ composite: 0.75 })}
+        />,
+      );
+      const pill = getByTestId("verdict-pill");
+      expect(pill.className).toMatch(/u-brand/);
+      expect(pill.className).toMatch(/border-\[color:var\(--brand\)\]/);
+    });
+
+    it("verdict pill carries muted tone when conviction is in [0.40, 0.65) (medium)", () => {
+      const { getByTestId } = render(
+        <DecisionStrip
+          symbol="NVDA"
+          claudeStructured={makeClaude({ suggestedPlay: "long call", confidence: 0.50 })}
+          analysis={makeAnalysis({ composite: 0.50 })}
+        />,
+      );
+      const pill = getByTestId("verdict-pill");
+      expect(pill.className).toMatch(/u-muted/);
+      expect(pill.className).toMatch(/border-\[color:var\(--border\)\]/);
+    });
+
+    it("verdict pill carries warn tone when conviction < 0.40 (low)", () => {
+      const { getByTestId } = render(
+        <DecisionStrip
+          symbol="NVDA"
+          claudeStructured={makeClaude({ suggestedPlay: "long call", confidence: 0.30 })}
+          analysis={makeAnalysis({ composite: 0.30 })}
+        />,
+      );
+      const pill = getByTestId("verdict-pill");
+      expect(pill.className).toMatch(/text-state-warning-fg/);
+      expect(pill.className).toMatch(/border-state-warning-border/);
+    });
+
+    it("falls back to verdictTone setup-string mapping when conviction is null (no analysis composite, no claude confidence)", () => {
+      // ClaudeStructured.confidence is required but is non-finite here so
+      // pickConviction returns null; analysis composite is also non-finite.
+      const { getByTestId } = render(
+        <DecisionStrip
+          symbol="NVDA"
+          claudeStructured={makeClaude({
+            suggestedPlay: "long call",
+            confidence: Number.NaN,
+          })}
+          analysis={makeAnalysis({ composite: Number.NaN, summary: "long call" })}
+        />,
+      );
+      const pill = getByTestId("verdict-pill");
+      // Without conviction we keep the legacy tone (BUY/profit) via the
+      // borderColor inline-style; no warn or muted class applied.
+      expect(pill.className).not.toMatch(/text-state-warning-fg/);
+      expect(pill.className).not.toMatch(/u-muted/);
+      // Tone attribute still derives from the setup string ("long call" → buy).
+      expect(pill.getAttribute("data-tone")).toBe("buy");
+    });
+  });
 });
