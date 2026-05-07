@@ -55,6 +55,54 @@ describe("clearPersistedStores — cross-user data-leak fix", () => {
     expect(PERSIST_KEYS_TO_CLEAR).toContain("alphadesk-ui");
   });
 
+  it("key-set sanity: the canonical wipe list has the expected size", () => {
+    // Sanity check: when someone adds or removes a key, this assertion
+    // forces an explicit decision rather than silently accepting drift.
+    // Current set: 4 zustand persist stores + 2 aux prefs + 6 high-
+    // privacy per-user keys (iter 20 follow-up) = 12.
+    expect(PERSIST_KEYS_TO_CLEAR).toHaveLength(12);
+  });
+
+  it("wipes trade journal on logout (highest-risk privacy)", () => {
+    // The trade journal stores free-form user notes — by far the most
+    // sensitive of the per-user localStorage keys. If a previous user's
+    // notes survive logout on a shared browser, the next user can read
+    // them on the next mount of TradePanel. Lock this in explicitly so a
+    // future refactor can't silently drop the journal from the wipe list.
+    localStorage.setItem("alphadesk-journal", JSON.stringify([
+      { id: "j1", content: "private trade thesis from user A", ts: 1 },
+    ]));
+    localStorage.setItem("journal-notes", "private freeform notes");
+    localStorage.setItem("journal-tags", JSON.stringify(["private-tag"]));
+
+    // Pre-condition: all three journal keys present.
+    expect(localStorage.getItem("alphadesk-journal")).not.toBeNull();
+    expect(localStorage.getItem("journal-notes")).not.toBeNull();
+    expect(localStorage.getItem("journal-tags")).not.toBeNull();
+
+    clearPersistedStores();
+
+    expect(localStorage.getItem("alphadesk-journal")).toBeNull();
+    expect(localStorage.getItem("journal-notes")).toBeNull();
+    expect(localStorage.getItem("journal-tags")).toBeNull();
+  });
+
+  it("wipes screener presets, strategy view, and workspace selection (per-user prefs)", () => {
+    // Screener presets are saved filters per user; strategy view is a
+    // per-user grid mode; workspace selection routes the whole layout.
+    // None are catastrophic on their own but each fingerprints the
+    // previous user, so we wipe them along with the journal.
+    localStorage.setItem("alphadesk-screener-presets", JSON.stringify([{ name: "user-a-preset" }]));
+    localStorage.setItem("alphadesk-strategy-view", "grid");
+    localStorage.setItem("alphadesk-workspace", "user-a-workspace");
+
+    clearPersistedStores();
+
+    expect(localStorage.getItem("alphadesk-screener-presets")).toBeNull();
+    expect(localStorage.getItem("alphadesk-strategy-view")).toBeNull();
+    expect(localStorage.getItem("alphadesk-workspace")).toBeNull();
+  });
+
   it("resets useMarketStore.watchlist to DEFAULT_WATCHLIST", () => {
     // Seed pollution: in-memory state for the previous user.
     useMarketStore.setState({

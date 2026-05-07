@@ -3,17 +3,26 @@
  *
  * Called from ProfileMenu.executeLogout(), the cross-tab logout handler in
  * api.ts, and the 401-redirect path. Removes localStorage keys for the 4
- * zustand-persisted stores (plus auxiliary per-user keys), then resets the
- * in-memory zustand state so the same-tab post-logout paint isn't stale.
+ * zustand-persisted stores (plus auxiliary per-user keys and high-privacy
+ * content keys), then resets the in-memory zustand state so the same-tab
+ * post-logout paint isn't stale.
+ *
+ * The HIGHEST-RISK leak among the cleared keys is `alphadesk-journal`
+ * (plus `journal-notes` / `journal-tags`) — these store free-form trade
+ * journal entries containing the user's private notes and theses. On a
+ * shared browser, the next mount of TradePanel must NOT see the previous
+ * user's journal.
  *
  * Without this, after user A logs out and user B logs in on a shared
- * browser, user A's watchlist / unread alert messages / preferences leak
- * before WatchlistHydrator (gated on auth) replaces them. Worse, an
- * unauth'd visit in between would also paint user A's persisted blob,
- * because hydrateFromServer is a no-op when not authenticated.
+ * browser, user A's watchlist / unread alert messages / preferences /
+ * trade journal leak before WatchlistHydrator (gated on auth) replaces
+ * them. Worse, an unauth'd visit in between would also paint user A's
+ * persisted blob, because hydrateFromServer is a no-op when not
+ * authenticated.
  *
  * Closes a privacy/data-leak introduced by iter 17 (PR #82 — persisted
- * watchlist).
+ * watchlist) and extended in iter 20 to cover the trade journal and
+ * other high-privacy per-user keys.
  */
 import { useMarketStore, DEFAULT_WATCHLIST } from "@/stores/market";
 import { useNotificationsStore } from "@/stores/notifications";
@@ -33,6 +42,23 @@ import { useUIStore } from "@/stores/ui";
  *  - alphadesk:keybindings        (hooks/useKeyboardShortcuts.ts)
  *  - alphadesk-watchlist-columns  (components/panels/WatchlistPanel.tsx)
  *
+ * High-privacy per-user content keys (iter 20 follow-up):
+ *  - alphadesk-journal            (components/panels/TradePanel.tsx)
+ *      ^^^ HIGHEST-RISK LEAK among the cleared keys: free-form trade
+ *          journal entries with user notes. A returning user on a
+ *          shared browser must NOT see the previous user's notes.
+ *  - journal-notes                (components/panels/TradePanel.tsx)
+ *  - journal-tags                 (components/panels/TradePanel.tsx)
+ *  - alphadesk-screener-presets   (components/panels/WatchlistPanel.tsx)
+ *  - alphadesk-strategy-view      (components/dashboard/StrategyGrid.tsx)
+ *  - alphadesk-workspace          (components/layout/WorkspaceSelector.tsx)
+ *
+ * Intentionally NOT cleared (clearing would be UX regression, not a leak):
+ *  - alphadesk-tour-complete / alphadesk-tour-dismissed (re-shows the
+ *    onboarding tour to returning users)
+ *  - alphadesk-brief-dismissed-* (wildcard for dismissed morning briefs)
+ *  - useChartDrawings:<symbol> (power-user chart studies)
+ *
  * Exported for the unit test so it can iterate the same canonical list
  * the helper itself mutates.
  */
@@ -43,6 +69,12 @@ export const PERSIST_KEYS_TO_CLEAR = [
   "alphadesk-ui",
   "alphadesk:keybindings",
   "alphadesk-watchlist-columns",
+  "alphadesk-journal",
+  "journal-notes",
+  "journal-tags",
+  "alphadesk-screener-presets",
+  "alphadesk-strategy-view",
+  "alphadesk-workspace",
 ] as const;
 
 export function clearPersistedStores(): void {
