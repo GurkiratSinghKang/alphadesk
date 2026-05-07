@@ -8,6 +8,7 @@ import type {
   CalendarMetaReason,
   EarningsCalendarFilters,
 } from "@/types";
+import { WarningCircle } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { fmtDate, fmtPlural } from "@/lib/intl";
 import EmptyState from "@/components/primitives/EmptyState";
@@ -28,7 +29,7 @@ export interface EarningsCalendarSidebarProps {
   firstRowRef?: RefObject<HTMLButtonElement | null>;
   candidateDecisions?: Partial<Record<string, EarningsCandidateDecision>>;
   /** Round-4 (CLUSTER A/2): backend-rendered window label for the header
-   *  ("§ CALENDAR · Apr 27 – May 1, 2026 · 12 reports"). */
+   *  ("CALENDAR · Apr 27 - May 1, 2026 · 12 reports"). */
   windowLabel?: string | null;
   /** Round-4 (CLUSTER A/3): backend hint for empty-state copy
    *  (weekend_no_reports, fmp_unavailable, no_curated_matches). */
@@ -42,6 +43,24 @@ export interface EarningsCalendarSidebarProps {
   /** Pillar-6: callback so the error state can surface a Retry CTA instead
    *  of a dead-end message when the calendar fetch times out. */
   onRetry?: () => void;
+  /**
+   * Iteration 9: ``true`` when the backend response was assembled from a
+   * degraded provider mix (FMP returned zero rows but Alpaca cache had
+   * meta, or vice versa). The sidebar surfaces a small warning band so
+   * users know rows on screen may be missing IV / yield / verdict.
+   *
+   * Suppressed when ``error`` is set — the destructive empty-state takes
+   * precedence so we don't double-stack two failure surfaces.
+   */
+  partial?: boolean;
+  /**
+   * Iteration 9: per-symbol Pydantic validation failures the backend
+   * encountered while assembling the calendar. Drives the banner's count
+   * + the optional disclosure that lists each issue. Each entry is
+   * ``{symbol, error}`` where ``symbol`` may be null for catalog-level
+   * problems (e.g. provider response unparseable).
+   */
+  validationErrors?: Array<{ symbol: string | null; error: string }>;
 }
 
 // B-40: build a same-route deeplink that carries the currently-active
@@ -68,6 +87,8 @@ export default function EarningsCalendarSidebar({
   filters,
   onResetFilters,
   onRetry,
+  partial = false,
+  validationErrors,
 }: EarningsCalendarSidebarProps) {
   const grouped = useMemo(() => groupByDate(rows), [rows]);
   // B-56: first row across all day groups gets the shared ref so the
@@ -141,6 +162,13 @@ export default function EarningsCalendarSidebar({
       ? "Next week"
       : "This + next week");
 
+  // Iteration 9: count once so the banner template doesn't double-call
+  // the helper. ``partialIssueCount`` falls back to a heuristic over the
+  // visible rows when the backend didn't enumerate per-symbol failures.
+  const partialIssueCount = partial
+    ? countPartialIssues(validationErrors, rows)
+    : 0;
+
   return (
     <aside
       data-slot="earnings-calendar-sidebar"
@@ -152,8 +180,45 @@ export default function EarningsCalendarSidebar({
       )}
     >
       <p className="t-label mb-2 text-[color:var(--fg-muted)]" data-slot="calendar-summary">
-        § CALENDAR <span className="text-[color:var(--fg-muted)]">· {headerLabel} · {fmtPlural(rows.length, "report")}</span>
+        CALENDAR <span className="text-[color:var(--fg-muted)]">· {headerLabel} · {fmtPlural(rows.length, "report")}</span>
       </p>
+      {partial ? (
+        <>
+          <p
+            data-slot="calendar-partial-banner"
+            className="mt-1 mb-2 flex items-center gap-1.5 rounded-sm border border-state-warning-border bg-state-warning-bg px-2 py-1 t-meta text-state-warning-fg"
+            role="status"
+            aria-live="polite"
+          >
+            <WarningCircle size={14} aria-hidden="true" />
+            <span>{`Partial data - ${partialIssueCount} ${partialIssueCount === 1 ? "row" : "rows"} may be missing IV / yield`}</span>
+          </p>
+          {validationErrors && validationErrors.length > 0 ? (
+            <details
+              data-slot="calendar-partial-disclosure"
+              className="mb-2 font-mono text-label text-[color:var(--fg-muted)]"
+            >
+              <summary className="cursor-pointer underline decoration-dotted underline-offset-4 hover:text-[color:var(--fg-base)]">
+                {`View ${validationErrors.length} ${validationErrors.length === 1 ? "issue" : "issues"}`}
+              </summary>
+              <ul className="mt-1 space-y-0.5 pl-2">
+                {validationErrors.map((entry, idx) => (
+                  <li
+                    key={`${entry.symbol ?? "_catalog"}:${idx}`}
+                    data-slot="calendar-partial-disclosure-item"
+                  >
+                    <span className="text-[color:var(--fg-base)]">
+                      {entry.symbol ?? "(catalog)"}
+                    </span>
+                    {": "}
+                    {entry.error}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+        </>
+      ) : null}
       {grouped.map(({ date, label, rows: dayRows }) => (
         <div key={date} data-slot="day-group" className="mb-3">
           <h3 className="t-section-cap italic pb-1 border-b border-[color:var(--fg-border)]">
@@ -172,9 +237,9 @@ export default function EarningsCalendarSidebar({
               const reportedSuffix = isReported ? " (reported)" : "";
               const edgeScore = r.edgeScore;
               const edgeReasons = r.edgeScoreReasons ?? [];
-              const edgeTitle = edgeReasons.length > 0
-                ? `Edge ${Math.round(edgeScore ?? 0)}: ${edgeReasons.join("; ")}`
-                : `Edge ${Math.round(edgeScore ?? 0)}`;
+              const scoreTitle = edgeReasons.length > 0
+                ? `Setup score ${Math.round(edgeScore ?? 0)}: ${edgeReasons.join("; ")}`
+                : `Setup score ${Math.round(edgeScore ?? 0)}`;
               const candidateDecision =
                 candidateDecisions[candidateDecisionKey(r.symbol, r.reportDate)] ?? null;
               const candidateDecisionLabel =
@@ -218,8 +283,8 @@ export default function EarningsCalendarSidebar({
                         );
                       }
                     }}
-                    title={`${r.symbol} — ${candidateDecisionLabel ? `${candidateDecisionLabel}. ` : ""}${edgeScore != null ? `${edgeTitle}. ` : ""}⌘/Ctrl-click to open in a new tab`}
-                    aria-label={`Select ${r.symbol} · reports ${fmtDate(r.reportDate, { weekday: "long", month: "long", day: "numeric" })}${candidateDecisionLabel ? ' · ' + candidateDecisionLabel : ''}${edgeScore != null ? ' · edge score ' + Math.round(edgeScore) : ''}${r.ivRank != null ? ' · IV rank ' + Math.round(r.ivRank) : ''}${reportedSuffix}`}
+                    title={`${r.symbol} - ${candidateDecisionLabel ? `${candidateDecisionLabel}. ` : ""}${edgeScore != null ? `${scoreTitle}. ` : ""}Ctrl-click to open in a new tab`}
+                    aria-label={`Select ${r.symbol} · reports ${fmtDate(r.reportDate, { weekday: "long", month: "long", day: "numeric" })}${candidateDecisionLabel ? ' · ' + candidateDecisionLabel : ''}${edgeScore != null ? ' · setup score ' + Math.round(edgeScore) : ''}${r.ivRank != null ? ' · IV rank ' + Math.round(r.ivRank) : ''}${reportedSuffix}`}
                     // Round-8 / AX-04: ``aria-current="true"`` on the
                     // selected calendar row is the canonical SR cue
                     // for "this is the active item in a list of
@@ -280,9 +345,9 @@ export default function EarningsCalendarSidebar({
                           <span
                             data-slot="edge-score-chip"
                             className="rounded border border-[color:var(--brand)] px-1.5 py-0.5 text-label tabular-nums text-[color:var(--brand)]"
-                            title={edgeTitle}
+                            title={scoreTitle}
                           >
-                            Edge {Math.round(edgeScore)}
+                            Score {Math.round(edgeScore)}
                           </span>
                         )}
                         <span
@@ -318,6 +383,39 @@ function candidateDecisionKey(symbol: string, reportDate: string | null | undefi
   return reportDate && /^\d{4}-\d{2}-\d{2}$/.test(reportDate)
     ? `${normalized}@${reportDate}`
     : normalized;
+}
+
+/**
+ * Iteration 9: pick the count to show in the partial-data banner.
+ *
+ * When the backend supplied a per-symbol ``validationErrors`` array we
+ * trust that as the authoritative count of degraded rows — this is what
+ * the disclosure also enumerates so the banner stays in sync.
+ *
+ * Otherwise we fall back to a heuristic that counts rows whose key
+ * options-screener fields (IV rank + ATM premium yield) are both null,
+ * which is the failure mode FMP/Alpaca degradation produces. Returning
+ * 0 here is fine — the banner still renders to signal "partial=true",
+ * just without a row count.
+ */
+function countPartialIssues(
+  validationErrors: Array<{ symbol: string | null; error: string }> | undefined,
+  rows: CalendarRow[],
+): number {
+  if (validationErrors && validationErrors.length > 0) {
+    return validationErrors.length;
+  }
+  let degraded = 0;
+  for (const r of rows) {
+    if (
+      r.ivRank == null &&
+      r.premiumYieldCallAtm == null &&
+      r.premiumYieldPutAtm == null
+    ) {
+      degraded += 1;
+    }
+  }
+  return degraded;
 }
 
 function groupByDate(rows: CalendarRow[]): { date: string; label: string; rows: CalendarRow[] }[] {

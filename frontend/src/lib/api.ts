@@ -2830,6 +2830,9 @@ interface RawCalendarResponse {
   generated_at: string;
   partial: boolean;
   error?: string | null;
+  /** Per-symbol Pydantic validation failures from earnings_screener.
+   *  Backend emits snake_case; mapper renames to ``validationErrors``. */
+  validation_errors?: Array<{ symbol: string | null; error: string }>;
   /** Round-4: window honesty fields. Optional so older response shapes
    *  still parse (UI falls back to local titles when absent). */
   window_start?: string;
@@ -3511,6 +3514,15 @@ export async function getEarningsCalendar(
     generatedAt: raw.generated_at,
     partial: raw.partial,
     error: raw.error ?? null,
+    // Iteration 9: pass-through per-symbol validation failures so the
+    // sidebar can surface a partial-data banner + per-row issue
+    // disclosure. Only emitted when the backend produced any
+    // (default_factory=list); we skip the field on empty payloads so
+    // consumers can rely on ``Array.isArray(...)`` checks rather than
+    // length-zero guards.
+    ...(Array.isArray(raw.validation_errors) && raw.validation_errors.length > 0
+      ? { validationErrors: raw.validation_errors }
+      : {}),
     // Round-4: window-honesty fields. Each is optional on the wire so
     // we pass through `undefined` when the backend hasn't emitted them
     // (older deployments + most existing test fixtures).

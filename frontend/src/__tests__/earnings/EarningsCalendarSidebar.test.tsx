@@ -51,7 +51,7 @@ describe("EarningsCalendarSidebar", () => {
     expect(container.textContent).toContain("84");
   });
 
-  it("shows explainable edge score chips when backend ranks candidates", () => {
+  it("shows explainable setup score chips when backend ranks candidates", () => {
     const rankedRows: CalendarRow[] = [
       {
         ...rows[0],
@@ -64,9 +64,9 @@ describe("EarningsCalendarSidebar", () => {
     );
     const chip = container.querySelector('[data-slot="edge-score-chip"]');
     const row = container.querySelector("button");
-    expect(chip?.textContent).toMatch(/edge\s+83/i);
+    expect(chip?.textContent).toMatch(/score\s+83/i);
     expect(chip?.getAttribute("title")).toMatch(/Implied move/i);
-    expect(row?.getAttribute("aria-label")).toMatch(/edge score 83/i);
+    expect(row?.getAttribute("aria-label")).toMatch(/setup score 83/i);
   });
 
   it("surfaces saved/discarded/order queue status on candidate rows", () => {
@@ -115,7 +115,7 @@ describe("EarningsCalendarSidebar", () => {
     expect(container.textContent).toMatch(/no earnings|empty/i);
   });
 
-  it("renders the § CALENDAR summary with window label + N reporting count (B-108)", () => {
+  it("renders the calendar summary with window label + N reporting count (B-108)", () => {
     const { container } = render(
       <EarningsCalendarSidebar
         rows={rows}
@@ -128,7 +128,7 @@ describe("EarningsCalendarSidebar", () => {
     );
     const summary = container.querySelector('[data-slot="calendar-summary"]');
     expect(summary).not.toBeNull();
-    expect(summary?.textContent).toContain("§ CALENDAR");
+    expect(summary?.textContent).toContain("CALENDAR");
     expect(summary?.textContent).toMatch(/this week/i);
     // 3 rows in fixture → pluralized "reports"
     expect(summary?.textContent).toMatch(/3\s+reports/i);
@@ -212,7 +212,7 @@ describe("EarningsCalendarSidebar", () => {
 
   // ── Round-4 additions ──────────────────────────────────────
 
-  it("renders the backend windowLabel in the § CALENDAR header (CLUSTER A/2)", () => {
+  it("renders the backend windowLabel in the calendar header (CLUSTER A/2)", () => {
     const { container } = render(
       <EarningsCalendarSidebar
         rows={rows}
@@ -360,6 +360,124 @@ describe("EarningsCalendarSidebar", () => {
       />,
     );
     expect(container.querySelector('[title*="Timing unconfirmed"]')).not.toBeNull();
+  });
+
+  // ── Iteration 9: partial-data banner ─────────────────────────────
+  // FMP returns zero rows but Alpaca cache still has earnings_meta (or
+  // vice versa) → backend tags the response with ``partial=true`` and
+  // any per-symbol Pydantic failures land in ``validation_errors``.
+  // The sidebar must surface a small warning band so users don't trust
+  // a degraded screener silently.
+
+  it("hides the partial-data banner when partial=false (Iteration 9)", () => {
+    const { container } = render(
+      <EarningsCalendarSidebar
+        rows={rows}
+        loading={false}
+        error={null}
+        selected={null}
+        onSelect={() => {}}
+        partial={false}
+      />,
+    );
+    expect(
+      container.querySelector('[data-slot="calendar-partial-banner"]'),
+    ).toBeNull();
+  });
+
+  it("shows banner with row count = 0 when partial=true and no validationErrors (Iteration 9)", () => {
+    // All three fixture rows have ivRank populated, so the heuristic
+    // fallback doesn't increment the degraded counter — rendering
+    // "0 rows may be missing IV / yield". This is the "backend
+    // flagged degraded providers but didn't enumerate the failures"
+    // case (e.g. a meta-level FMP outage).
+    const { container } = render(
+      <EarningsCalendarSidebar
+        rows={rows}
+        loading={false}
+        error={null}
+        selected={null}
+        onSelect={() => {}}
+        partial={true}
+        validationErrors={[]}
+      />,
+    );
+    const banner = container.querySelector(
+      '[data-slot="calendar-partial-banner"]',
+    );
+    expect(banner).not.toBeNull();
+    expect(banner?.textContent).toMatch(/Partial data/i);
+    expect(banner?.textContent).toMatch(/0 rows? may be missing/i);
+    // No disclosure when validationErrors is empty.
+    expect(
+      container.querySelector('[data-slot="calendar-partial-disclosure"]'),
+    ).toBeNull();
+  });
+
+  it("shows banner count + expandable issues disclosure when validationErrors has entries (Iteration 9)", () => {
+    const { container } = render(
+      <EarningsCalendarSidebar
+        rows={rows}
+        loading={false}
+        error={null}
+        selected={null}
+        onSelect={() => {}}
+        partial={true}
+        validationErrors={[
+          { symbol: "AAPL", error: "IV unavailable" },
+          { symbol: "NVDA", error: "premium yield missing" },
+        ]}
+      />,
+    );
+    const banner = container.querySelector(
+      '[data-slot="calendar-partial-banner"]',
+    );
+    expect(banner?.textContent).toMatch(/2 rows may be missing/i);
+
+    const disclosure = container.querySelector(
+      '[data-slot="calendar-partial-disclosure"]',
+    );
+    expect(disclosure).not.toBeNull();
+    // ``<details>`` + ``<summary>`` is native disclosure — the prompt
+    // explicitly chose this so the sidebar has zero JS state. Check
+    // the summary copy and the per-symbol entries.
+    const summary = disclosure?.querySelector("summary");
+    expect(summary?.textContent).toMatch(/View 2 issues/i);
+    const items = disclosure?.querySelectorAll(
+      '[data-slot="calendar-partial-disclosure-item"]',
+    );
+    expect(items?.length).toBe(2);
+    expect(items?.[0].textContent).toContain("AAPL");
+    expect(items?.[0].textContent).toContain("IV unavailable");
+    expect(items?.[1].textContent).toContain("NVDA");
+    expect(items?.[1].textContent).toContain("premium yield missing");
+  });
+
+  it("suppresses partial banner when error is set (full-error state takes precedence)", () => {
+    // The error empty-state already tells the user the screener is
+    // unavailable end-to-end; stacking a second yellow "partial data"
+    // banner on top of a red "calendar unavailable" panel adds noise
+    // without information. Sidebar early-returns before the calendar
+    // summary, so the banner is naturally suppressed — this test pins
+    // that contract.
+    const { container } = render(
+      <EarningsCalendarSidebar
+        rows={[]}
+        loading={false}
+        error="provider down"
+        selected={null}
+        onSelect={() => {}}
+        partial={true}
+        validationErrors={[
+          { symbol: "AAPL", error: "IV unavailable" },
+        ]}
+      />,
+    );
+    expect(
+      container.querySelector('[data-slot="calendar-partial-banner"]'),
+    ).toBeNull();
+    // The destructive empty state still renders.
+    expect(container.textContent).toMatch(/calendar unavailable|feed timed out/i);
   });
 });
 

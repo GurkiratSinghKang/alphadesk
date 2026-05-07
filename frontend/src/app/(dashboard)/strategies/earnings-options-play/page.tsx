@@ -38,6 +38,14 @@ import { useTickerContext } from "@/hooks/useQueries";
  */
 export type SelectionSource = "pointer" | "keyboard" | "url" | null;
 
+const SORT_LABELS: Record<NonNullable<EarningsCalendarFilters["sort"]>, string> = {
+  date: "Earnings date",
+  iv_rank: "IV rank",
+  yield: "Premium yield",
+  claude_confidence: "AI confidence",
+  edge_score: "Setup score",
+};
+
 /**
  * /strategies/earnings-options-play — research screener.
  *
@@ -442,7 +450,7 @@ export default function EarningsOptionsPlayPage() {
       className="t-meta tabular-nums text-[color:var(--fg-muted)]"
     >
       {calendar
-        ? `${calendar.earnings.length} earnings · sorted by ${filters.sort ?? "date"}${
+        ? `${calendar.earnings.length} earnings · sorted by ${SORT_LABELS[filters.sort ?? "date"]}${
             decisionCounts.total > 0
               ? ` · ${decisionCounts.saved} saved · ${decisionCounts.order} marked for order review`
               : ""
@@ -462,7 +470,7 @@ export default function EarningsOptionsPlayPage() {
 
   return (
     <DashboardPageLayout
-      eyebrow="§ EARNINGS · OPTIONS PLAY"
+      eyebrow="EARNINGS · OPTIONS PLAY"
       title={title}
       actions={actions}
     >
@@ -514,6 +522,13 @@ export default function EarningsOptionsPlayPage() {
           onResetFilters={() => setFilters({ window: "both", minIvRank: 0, sort: "date" })}
           // Pillar-6: surface a Retry CTA when the calendar fetch errors.
           onRetry={() => calendarQuery.refetch()}
+          // Iteration 9: surface the backend's degraded-data flag and the
+          // per-symbol validation failures so users see a warning band
+          // when FMP/Alpaca disagree on coverage. The full-error empty
+          // state still takes precedence (sidebar suppresses the banner
+          // when ``error`` is set).
+          partial={calendar?.partial ?? false}
+          validationErrors={calendar?.validationErrors}
         />
         {/* Round-8 / AX-05: id target for the skip-to-detail link. */}
         <div id="earnings-detail-panel">
@@ -574,26 +589,54 @@ function StrategyIntroCard() {
   return (
     <aside
       data-slot="earnings-intro"
-      className="mb-3 rounded border border-[color:var(--border)] bg-[color:var(--bg-elev-1)] px-4 py-3 text-body-sm leading-relaxed text-fg-muted"
+      className="relative mb-4 overflow-hidden rounded-md border border-[color:var(--border)] bg-[linear-gradient(135deg,color-mix(in_oklab,var(--bg-card)_88%,var(--brand)_12%),var(--bg-elev-1))] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_24px_60px_-44px_rgba(0,0,0,0.72)]"
     >
-      <p>
-        <strong className="u-brand">This strategy looks for defined-risk earnings option trades.</strong>{" "}
-        High IV often favors credit spreads or iron condors that profit if the move stays inside the
-        implied range; lower IV or a strong catalyst can favor debit spreads, long calls/puts, or long
-        straddles. Naked short calls have <span className="u-loss">unlimited risk</span>; every actionable
-        setup here should cap max loss before it becomes tradable.
-      </p>
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,var(--brand),transparent)]"
+      />
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1.5fr)_minmax(260px,0.9fr)] md:items-start">
+        <div>
+          <p className="t-label text-[color:var(--brand)]">Event Volatility Command Deck</p>
+          <h2 className="mt-1 font-sans text-h2 font-semibold leading-tight tracking-tight text-[color:var(--fg)]">
+            Defined-risk earnings trades, ranked by evidence quality.
+          </h2>
+          <p className="mt-2 max-w-[72ch] font-sans text-body-sm leading-relaxed text-[color:var(--fg-muted)]">
+            The score is not a price target. It is a 0-100 setup-quality composite from live IV regime,
+            ATM premium yield, implied move versus prior earnings moves, AI confidence, and event timing.
+            A score now stays hidden until at least two market signals are present, so sparse data no
+            longer masquerades as edge.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-[color:var(--border)] bg-[color:var(--border)]">
+          <IntroStat label="Risk frame" value="Defined loss" />
+          <IntroStat label="Vol gate" value="IV vs history" />
+          <IntroStat label="Primary sort" value="Score" />
+          <IntroStat label="Trade rule" value="Capped only" />
+        </div>
+      </div>
       <button
         type="button"
         onClick={() => {
           safeSetItem(INTRO_DISMISS_KEY, "1");
           window.dispatchEvent(new Event(INTRO_DISMISS_EVENT));
         }}
-        className="mt-2 t-meta underline text-fg-muted hover:text-primary"
+        className="mt-3 min-h-8 rounded-sm border border-transparent px-1 font-sans text-label text-fg-muted underline decoration-[color:var(--border-strong)] underline-offset-4 transition-colors hover:text-primary active:scale-[0.98]"
       >
         Don&apos;t show again
       </button>
     </aside>
+  );
+}
+
+function IntroStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-[color:var(--bg-card)] px-3 py-3">
+      <p className="t-label text-[color:var(--fg-muted)]">{label}</p>
+      <p className="mt-1 font-mono text-body-sm font-semibold tabular-nums text-[color:var(--fg)]">
+        {value}
+      </p>
+    </div>
   );
 }
 
