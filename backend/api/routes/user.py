@@ -378,7 +378,7 @@ async def _erase_preview_counts(username: str) -> dict[str, int]:
         ScreenerPreset,
         StrategySignal,
         Trade,
-        Watchlist,
+        UserWatchlist,
     )
 
     counts: dict[str, int] = {
@@ -403,8 +403,15 @@ async def _erase_preview_counts(username: str) -> dict[str, int]:
         counts["positions"] = (
             await session.execute(select(sa_func.count()).select_from(Position))
         ).scalar_one()
+        # Iter 17: ``UserWatchlist`` carries a ``username`` column so this
+        # count is now per-user (unlike Position/ScreenerPreset/Alert/
+        # StrategySignal which still lack the column and remain global).
         counts["watchlists"] = (
-            await session.execute(select(sa_func.count()).select_from(Watchlist))
+            await session.execute(
+                select(sa_func.count())
+                .select_from(UserWatchlist)
+                .where(UserWatchlist.username == username)
+            )
         ).scalar_one()
         counts["screener_presets"] = (
             await session.execute(select(sa_func.count()).select_from(ScreenerPreset))
@@ -788,3 +795,191 @@ async def erase_user_data(
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("refresh_token", path="/api/v1/auth")
     return response
+
+
+# ---------------------------------------------------------------------------
+# Per-user watchlist (iter 17)
+# ---------------------------------------------------------------------------
+# The frontend's zustand market store keeps an optimistic local copy and
+# syncs through these endpoints so the watchlist follows the user across
+# devices. Replaces the ``/api/v1/symbols/watchlist`` stub which always
+# returned an empty list with a deprecation note.
+#
+# Design notes:
+#
+# * Idempotency. POST /watchlist/{symbol} returns 200 + the full list on a
+#   duplicate insert (caught by the (username, symbol) UNIQUE constraint
+#   and rolled back without emitting a 409). DELETE /watchlist/{symbol}
+#   returns 200 + the full list when the symbol isn't present (rather than
+#   404). Both behaviours match the optimistic UX in the frontend: a
+#   stale tab POSTing a symbol it already had locally must not surface as
+#   an error.
+#
+# * Wire shape. GET returns ``{symbols: [...], as_of: ISO}``. ``as_of`` is
+#   the server clock at read time so the client can stamp staleness
+#   independently of any per-row timestamp. POST and DELETE return the
+#   same shape so callers can swap their local optimistic array for the
+#   server's authoritative one in a single line.
+#
+# * Symbol validation. ``^[A-Z0-9.\\-]{1,12}$`` mirrors the pattern used
+#   for the cached agent runner in ``services.tradingagents_research``.
+#   Rejects 422 (FastAPI's default for path-param regex mismatch).
+# ---------------------------------------------------------------------------
+
+
+_WATCHLIST_SYMBOL_RE: Any = None
+
+
+def _watchlist_symbol_re() -> Any:
+    """Lazy-compile the symbol regex once.
+
+    Module-level compile would force ``re`` into the cold-start import
+    path even for callers that never touch this surface; doing it on
+    first call keeps the bare /api/v1/user/me path uncluttered.
+    """
+    global _WATCHLIST_SYMBOL_RE
+    if _WATCHLIST_SYMBOL_RE is None:
+        import re as _re
+
+        _WATCHLIST_SYMBOL_RE = _re.compile(r"^[A-Z0-9.\-]{1,12}$")
+    return _WATCHLIST_SYMBOL_RE
+
+
+def _validate_watchlist_symbol(symbol: str) -> str:
+    """Normalize + validate a path-param symbol for watchlist routes.
+
+    Returns the upper-cased symbol on success or raises 422 (FastAPI's
+    default for client-supplied invalid input). The regex matches the
+    pattern used elsewhere in the codebase so a watchlist add can never
+    persist a symbol that other endpoints reject.
+    """
+    upper = (symbol or "").strip().upper()
+    if not _watchlist_symbol_re().match(upper):
+        # 422: starlette/fastapi renamed the constant in newer versions
+        # (UNPROCESSABLE_ENTITY -> UNPROCESSABLE_CONTENT). Use the literal
+        # status code so the route works across both vintages.
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Symbol must be 1-12 chars of uppercase letters, digits, "
+                "dot, or hyphen."
+            ),
+        )
+    return upper
+
+
+async def _watchlist_for_user(username: str) -> list[str]:
+    """Return the user's watchlist symbols, alphabetically sorted.
+
+    Sort order is stable on the wire so a client can byte-compare the
+    response against its local optimistic copy without worrying about
+    insert-order drift between sessions.
+    """
+    if settings.SKIP_DB_INIT:
+        return []
+    from core.database import _get_session_factory
+    from data.storage.models import UserWatchlist
+
+    factory = _get_session_factory()
+    async with factory() as session:
+        rows = (
+            await session.execute(
+                select(UserWatchlist.symbol).where(
+                    UserWatchlist.username == username
+                )
+            )
+        ).scalars().all()
+    return sorted(rows)
+
+
+def _watchlist_response(symbols: list[str]) -> dict[str, Any]:
+    """Build the wire envelope. ``as_of`` is server clock at call time."""
+    return {
+        "symbols": symbols,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/watchlist")
+async def get_user_watchlist(
+    username: str = Depends(require_auth),
+) -> dict[str, Any]:
+    """Return the authenticated user's watchlist.
+
+    Empty list for a brand-new user (no rows yet). Symbols come back
+    alphabetically sorted for stable wire order.
+    """
+    symbols = await _watchlist_for_user(username)
+    return _watchlist_response(symbols)
+
+
+@router.post("/watchlist/{symbol}")
+async def add_user_watchlist(
+    symbol: str,
+    username: str = Depends(require_auth),
+) -> dict[str, Any]:
+    """Add ``symbol`` to the user's watchlist.
+
+    Idempotent: re-adding an existing symbol returns 200 + the current
+    list (no 409). Symbol validated against
+    ``^[A-Z0-9.\\-]{1,12}$``; 422 on mismatch.
+    """
+    upper = _validate_watchlist_symbol(symbol)
+
+    if settings.SKIP_DB_INIT:
+        # Degraded mode: the frontend optimistic path already added the
+        # symbol locally, and there is no DB to write to. Return what the
+        # client passed so the wire stays consistent.
+        return _watchlist_response([upper])
+
+    from core.database import _get_session_factory
+    from data.storage.models import UserWatchlist
+    from sqlalchemy.exc import IntegrityError
+
+    factory = _get_session_factory()
+    async with factory() as session:
+        row = UserWatchlist(username=username, symbol=upper)
+        session.add(row)
+        try:
+            await session.commit()
+        except IntegrityError:
+            # (username, symbol) already exists. Roll back the failed
+            # insert so the session is reusable, then fall through to
+            # the read-after-write below. This is the idempotent path.
+            await session.rollback()
+
+    symbols = await _watchlist_for_user(username)
+    return _watchlist_response(symbols)
+
+
+@router.delete("/watchlist/{symbol}")
+async def remove_user_watchlist(
+    symbol: str,
+    username: str = Depends(require_auth),
+) -> dict[str, Any]:
+    """Remove ``symbol`` from the user's watchlist.
+
+    Idempotent: removing an absent symbol returns 200 + the current list
+    (no 404). Symbol validated against ``^[A-Z0-9.\\-]{1,12}$``; 422 on
+    mismatch.
+    """
+    upper = _validate_watchlist_symbol(symbol)
+
+    if settings.SKIP_DB_INIT:
+        return _watchlist_response([])
+
+    from core.database import _get_session_factory
+    from data.storage.models import UserWatchlist
+
+    factory = _get_session_factory()
+    async with factory() as session:
+        await session.execute(
+            delete(UserWatchlist).where(
+                UserWatchlist.username == username,
+                UserWatchlist.symbol == upper,
+            )
+        )
+        await session.commit()
+
+    symbols = await _watchlist_for_user(username)
+    return _watchlist_response(symbols)

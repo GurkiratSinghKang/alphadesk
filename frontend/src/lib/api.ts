@@ -2101,6 +2101,55 @@ export function getCurrentUser(): Promise<CurrentUserProfile> {
   return apiFetch<CurrentUserProfile>("/api/v1/user/me");
 }
 
+// ─── User Watchlist (iter 17) ────────────────────────────────
+//
+// Per-user watchlist persisted server-side (migration 0023). The market
+// zustand store keeps an optimistic local copy and reconciles with these
+// endpoints; consumers should call into the store rather than these
+// wrappers directly. Wire envelope is `{symbols, as_of}` snake-case from
+// the backend; the mapper rewrites `as_of` -> `asOf` to match the rest
+// of the frontend's camelCase convention.
+
+export interface UserWatchlist {
+  symbols: string[];
+  /** ISO-8601 timestamp the server stamped on the read. */
+  asOf: string;
+}
+
+interface RawUserWatchlist {
+  symbols: string[];
+  as_of: string;
+}
+
+function mapUserWatchlist(raw: RawUserWatchlist): UserWatchlist {
+  return { symbols: raw.symbols, asOf: raw.as_of };
+}
+
+export async function getUserWatchlist(): Promise<UserWatchlist> {
+  const raw = await apiFetch<RawUserWatchlist>("/api/v1/user/watchlist");
+  return mapUserWatchlist(raw);
+}
+
+export async function addToUserWatchlist(symbol: string): Promise<UserWatchlist> {
+  const upper = symbol.trim().toUpperCase();
+  const raw = await apiFetch<RawUserWatchlist>(
+    `/api/v1/user/watchlist/${encodeURIComponent(upper)}`,
+    { method: "POST" },
+  );
+  return mapUserWatchlist(raw);
+}
+
+export async function removeFromUserWatchlist(
+  symbol: string,
+): Promise<UserWatchlist> {
+  const upper = symbol.trim().toUpperCase();
+  const raw = await apiFetch<RawUserWatchlist>(
+    `/api/v1/user/watchlist/${encodeURIComponent(upper)}`,
+    { method: "DELETE" },
+  );
+  return mapUserWatchlist(raw);
+}
+
 // ─── Broker Connections & Reconciliation ─────────────────────
 
 export interface BrokerConnection {

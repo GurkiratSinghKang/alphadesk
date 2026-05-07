@@ -3,6 +3,11 @@ import { persist } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 import { useMemo } from "react";
 import type { Quote } from "@/types";
+import {
+  addToUserWatchlist as apiAddToUserWatchlist,
+  getUserWatchlist as apiGetUserWatchlist,
+  removeFromUserWatchlist as apiRemoveFromUserWatchlist,
+} from "@/lib/api";
 
 const DEFAULT_WATCHLIST = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "SPY", "QQQ", "META", "AMD"];
 
@@ -52,8 +57,24 @@ interface MarketState {
 
   setSelectedSymbol: (symbol: string) => void;
   setGroupSymbol: (group: 1 | 2 | 3 | 4, symbol: string) => void;
+  /**
+   * Add a symbol to the watchlist. Optimistic — the local array updates
+   * synchronously so consumers reading state right after the call (e.g.
+   * the HeroCTAs button) see the new symbol immediately. The server
+   * sync runs as a background promise; on success the local array is
+   * replaced with the server's authoritative ordering, on failure the
+   * local optimistic add stays in place and a console warning fires.
+   */
   addToWatchlist: (symbol: string) => void;
+  /** Remove a symbol from the watchlist. Optimistic + background sync. */
   removeFromWatchlist: (symbol: string) => void;
+  /**
+   * Iter 17: pull the authoritative watchlist from the server and
+   * replace the local array. No-op when ``authenticated=false`` (per-
+   * browser fallback for unauth'd visitors). Should be called from a
+   * top-level effect on app boot, gated on the auth query result.
+   */
+  hydrateFromServer: (authenticated: boolean) => Promise<void>;
   updateQuote: (quote: Quote) => void;
   updateQuotes: (quotes: Quote[]) => void;
   /**
@@ -92,18 +113,41 @@ export const useMarketStore = create<MarketState>()(
           },
         })),
 
-      addToWatchlist: (symbol) =>
+      // Iter 17: optimistic-local + background server-sync. The local
+      // array updates synchronously so HeroCTAs (and any other watcher)
+      // gets the new symbol before this function returns; the server
+      // call runs in the background and replaces the local array with
+      // the server's authoritative ordering on success. On failure
+      // (offline, 401, 5xx) the optimistic add stays so the UX never
+      // regresses below the pre-iter-15 local-only behaviour.
+      addToWatchlist: (symbol) => {
+        const upper = symbol.toUpperCase();
         set((state) => {
-          const upper = symbol.toUpperCase();
           if (state.watchlist.includes(upper)) return state;
           return { watchlist: [...state.watchlist, upper] };
-        }),
+        });
+        // Fire-and-forget server sync. We deliberately do NOT await:
+        // callers like HeroCTAs read state synchronously after the
+        // click, and React's reconciliation should not block on the
+        // network round-trip.
+        void apiAddToUserWatchlist(upper)
+          .then((fresh) => {
+            set({ watchlist: fresh.symbols });
+          })
+          .catch((err) => {
+            // 401 / network blip / server error — keep the local
+            // optimistic add so the user's intent isn't silently lost.
+            // eslint-disable-next-line no-console -- intentional diagnostic
+            console.warn("[watchlist] server sync failed; keeping local-only", err);
+          });
+      },
 
       // long-session-audit-r4 P0 #4: also evict the corresponding quote
       // so the `quotes` record doesn't accumulate entries for symbols the
       // user no longer cares about. Without this the watchlist churn
       // (add/search/select/remove) leaks a quote entry per cycle.
-      removeFromWatchlist: (symbol) =>
+      removeFromWatchlist: (symbol) => {
+        const upper = symbol.toUpperCase();
         set((state) => {
           if (!(symbol in state.quotes) && !state.watchlist.includes(symbol)) {
             return state;
@@ -114,7 +158,35 @@ export const useMarketStore = create<MarketState>()(
             watchlist: state.watchlist.filter((s) => s !== symbol),
             quotes: nextQuotes,
           };
-        }),
+        });
+        void apiRemoveFromUserWatchlist(upper)
+          .then((fresh) => {
+            set({ watchlist: fresh.symbols });
+          })
+          .catch((err) => {
+            // eslint-disable-next-line no-console -- intentional diagnostic
+            console.warn("[watchlist] server sync failed; keeping local-only", err);
+          });
+      },
+
+      hydrateFromServer: async (authenticated) => {
+        if (!authenticated) {
+          // Unauth'd visitor — keep the local persisted watchlist as a
+          // per-browser fallback. The DataPipelineBridge already
+          // rehydrated localStorage at this point so DEFAULT_WATCHLIST
+          // is in place for first-time visitors.
+          return;
+        }
+        try {
+          const fresh = await apiGetUserWatchlist();
+          set({ watchlist: fresh.symbols });
+        } catch (err) {
+          // Server unreachable on boot — keep the local copy so the
+          // watchlist panel doesn't go blank on a transient outage.
+          // eslint-disable-next-line no-console -- intentional diagnostic
+          console.warn("[watchlist] hydrate failed; using local copy", err);
+        }
+      },
 
       updateQuote: (quote) =>
         set((state) => {

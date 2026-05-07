@@ -5,6 +5,7 @@ import random
 from typing import Optional
 
 from fastapi import APIRouter, Query
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -1974,36 +1975,35 @@ def _map_polygon_type(polygon_type: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Watchlist stub (B2.43) — the FE's ``useWatchlist`` hook + DataPipelineBridge
-# probed ``/api/v1/symbols/watchlist`` and got a 404, which surfaced as a
-# "symbol watchlist unavailable" toast at every page load. The persistent
-# watchlist storage lives elsewhere (``services.watchlist`` is the planned
-# home, but at this writing the schema/migration is still in flight). Until
-# that lands we serve an empty watchlist with a deprecation hint so callers
-# can detect the stub and stop logging the error. Returning a structured
-# 200 keeps frontends happy while the persistence layer is finished.
+# Watchlist redirect (iter 17 — was B2.43 stub).
+#
+# Original B2.43 stub (returned ``{"symbols": []}`` with a deprecation
+# note) lived here while the persistence layer was in flight. Iter 17
+# stood up the real per-user table (``user_watchlist``, alembic 0023)
+# and the canonical routes at ``/api/v1/user/watchlist``. This handler
+# now redirects to the new home so any straggler caller (e.g. an older
+# bookmark, a cached browser tab) lands on the live endpoint instead of
+# the dead stub.
+#
+# 308 (Permanent Redirect) preserves the HTTP method on the redirect —
+# 301 historically allowed clients to downgrade POST/DELETE to GET
+# during the redirect, which would silently break the new POST and
+# DELETE methods. 308 is the spec-correct status for a permanent move
+# that preserves method.
 # ---------------------------------------------------------------------------
 
 
-class WatchlistResponse(BaseModel):
-    symbols: list[str]
-    deprecated: bool = True
-    note: str = (
-        "Watchlist storage is not wired through the symbols router yet — "
-        "expect this endpoint to move to /api/v1/user/watchlist when "
-        "persistence ships. Returning an empty list to unblock the UI."
-    )
+@router.get("/watchlist")
+@router.post("/watchlist")
+@router.delete("/watchlist")
+async def watchlist_legacy_redirect() -> Response:
+    """Permanent redirect to ``/api/v1/user/watchlist`` (iter 17).
 
-
-@router.get("/watchlist", response_model=WatchlistResponse)
-async def get_watchlist() -> WatchlistResponse:
-    """Stub watchlist endpoint (B2.43).
-
-    Returns an empty list with a deprecation note so the FE's
-    ``useWatchlist`` hook + ``DataPipelineBridge`` import stop emitting
-    the "symbols watchlist unavailable" 404 error on every page load.
-    The real persistence layer will live under
-    ``/api/v1/user/watchlist`` (or a dedicated watchlists router) once
-    the migration ships.
+    Replaces the empty-list stub. Returns 308 so the method is preserved
+    across the redirect — the new endpoint surfaces full CRUD, not just
+    GET.
     """
-    return WatchlistResponse(symbols=[])
+    return Response(
+        status_code=308,
+        headers={"Location": "/api/v1/user/watchlist"},
+    )

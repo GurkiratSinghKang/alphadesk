@@ -106,16 +106,23 @@ def test_invalid_ticker_format_returns_friendly_message():
     assert "pattern" not in err["msg"].lower()
 
 
-# ─── B2.43: watchlist endpoint exists (no 404) ────────────────────
+# ─── B2.43 / iter 17: legacy watchlist endpoint redirects to /user ────
 
 
-def test_watchlist_endpoint_returns_200_with_empty_list():
-    """``/api/v1/symbols/watchlist`` must not 404."""
-    r = client.get("/api/v1/symbols/watchlist")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["symbols"] == []
-    assert body["deprecated"] is True
+def test_watchlist_legacy_endpoint_redirects_to_user_route():
+    """``/api/v1/symbols/watchlist`` 308-redirects to ``/api/v1/user/watchlist``.
+
+    Iter 17 promoted the empty-list stub to a real per-user surface.
+    The legacy path stays as a 308 permanent redirect so any straggler
+    bookmark or cached tab lands on the live endpoint with its method
+    preserved (308 vs 301 keeps POST/DELETE intact).
+    """
+    # ``allow_redirects=False`` (httpx) / ``follow_redirects=False`` —
+    # depending on starlette/httpx version. TestClient's ``get`` accepts
+    # ``follow_redirects``.
+    r = client.get("/api/v1/symbols/watchlist", follow_redirects=False)
+    assert r.status_code == 308
+    assert r.headers["location"] == "/api/v1/user/watchlist"
 
 
 # ─── B2.38 / B2.44: error_codes is always a list ──────────────────

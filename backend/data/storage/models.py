@@ -576,16 +576,27 @@ def _define_models() -> dict[str, Any]:
         asset_class = Column(String(20), nullable=False, default="equity")
         updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    class Watchlist(Base):
-        """User-defined watchlist."""
+    class UserWatchlist(Base):
+        """Per-user watchlist row. (username, symbol) is unique.
 
-        __tablename__ = "watchlists"
+        Iter 17: replaces the dead global ``Watchlist`` model that had a
+        unique ``name`` column and a JSONB ``symbols`` array but was never
+        wired to any shipping code path. The new shape is one row per
+        (username, symbol) so per-user watchlists are filterable and
+        idempotent at the DB layer (UniqueConstraint catches a duplicate
+        POST so the route becomes naturally idempotent).
+        """
+
+        __tablename__ = "user_watchlist"
 
         id = Column(Integer, primary_key=True, autoincrement=True)
-        name = Column(String(100), nullable=False, unique=True)
-        symbols = Column(JSONB, nullable=False, default=list)
+        username = Column(String(255), nullable=False, index=True)
+        symbol = Column(String(20), nullable=False)
         created_at = Column(DateTime(timezone=True), server_default=func.now())
-        updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+        __table_args__ = (
+            UniqueConstraint("username", "symbol", name="user_watchlist_unique"),
+        )
 
     class ScreenerPreset(Base):
         """Saved screener filter configuration."""
@@ -968,7 +979,7 @@ def _define_models() -> dict[str, Any]:
         "ReconciliationIssue": ReconciliationIssue,
         "Trade": Trade,
         "Position": Position,
-        "Watchlist": Watchlist,
+        "UserWatchlist": UserWatchlist,
         "ScreenerPreset": ScreenerPreset,
         "AgentAnalysis": AgentAnalysis,
         "StrategySignal": StrategySignal,
