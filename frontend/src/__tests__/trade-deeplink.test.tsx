@@ -133,9 +133,13 @@ describe("Trade page deep-link pre-fill", () => {
 
 describe("Trade page chart range data requests", () => {
   it("uses intraday bars for short ranges so structure overlays have enough data", () => {
-    expect(barsRequestForRange("1D")).toEqual({ timeframe: "5m", limit: 100 });
-    expect(barsRequestForRange("5D")).toEqual({ timeframe: "15m", limit: 160 });
-    expect(barsRequestForRange("1M")).toEqual({ timeframe: "1H", limit: 180 });
-    expect(barsRequestForRange("ALL")).toEqual({ timeframe: "W", limit: 520 });
+    // 2026-05-07: limits doubled-plus to give the user a meaningful
+    // pan-back buffer beyond the labelled window. The infinite-scroll
+    // path in ChartBand fetches additional pages on top of these once
+    // the user scrolls past the leftmost loaded bar.
+    expect(barsRequestForRange("1D")).toEqual({ timeframe: "5m", limit: 200 });
+    expect(barsRequestForRange("5D")).toEqual({ timeframe: "15m", limit: 250 });
+    expect(barsRequestForRange("1M")).toEqual({ timeframe: "1H", limit: 350 });
+    expect(barsRequestForRange("ALL")).toEqual({ timeframe: "W", limit: 1300 });
   });
 });

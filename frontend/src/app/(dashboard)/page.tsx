@@ -423,7 +423,12 @@ export default function DeskPage() {
   }
 
   function handleSelectSymbol(symbol: string) {
+    // 2026-05-07: ticker clicks across the app now land on the dedicated
+    // research page. We still write the global selection so that when the
+    // user returns to the dashboard the right row is highlighted and the
+    // Trade/Alert quick-actions point at the same symbol.
     setSelectedSymbol(symbol);
+    router.push(`/symbols/${encodeURIComponent(symbol)}`);
   }
 
   /**

@@ -981,7 +981,21 @@ export async function getQuote(symbol: string): Promise<Quote> {
   return normalizeQuotePayloadTimestamp(resp);
 }
 
-export async function getBars(symbol: string, timeframe: TimeFrame = "D", limit = 500): Promise<OHLCVBar[]> {
+export interface GetBarsOptions {
+  /** ISO YYYY-MM-DD lower bound (inclusive). Maps to backend `start`. */
+  start?: string;
+  /** ISO YYYY-MM-DD upper bound (inclusive). Maps to backend `end`.
+   *  Used to page older bars: pass the timestamp of the earliest
+   *  currently-loaded bar to fetch the bars immediately before it. */
+  end?: string;
+}
+
+export async function getBars(
+  symbol: string,
+  timeframe: TimeFrame = "D",
+  limit = 500,
+  options: GetBarsOptions = {},
+): Promise<OHLCVBar[]> {
   // Map frontend timeframe codes to backend Timeframe enum values
   const tfMap: Record<string, string> = {
     "1m": "1min", "5m": "5min", "15m": "15min",
@@ -998,8 +1012,11 @@ export async function getBars(symbol: string, timeframe: TimeFrame = "D", limit 
     volume: number;
     vwap?: number;
   }
+  const params = new URLSearchParams({ timeframe: tf, limit: String(limit) });
+  if (options.start) params.set("start", options.start);
+  if (options.end) params.set("end", options.end);
   const raw = await apiFetch<BackendBar[]>(
-    `/api/v1/market/bars/${symbol}?timeframe=${tf}&limit=${limit}`
+    `/api/v1/market/bars/${symbol}?${params.toString()}`
   );
   return raw.map((b) => ({
     time: Math.floor(new Date(b.timestamp).getTime() / 1000),

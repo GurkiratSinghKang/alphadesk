@@ -128,6 +128,19 @@ interface TradingChartProps {
   drawings?: Drawing[];
   /** Bumps when the active UI theme changes so token-derived chart colors refresh. */
   themeKey?: string;
+  /**
+   * Fired when the user has panned/zoomed near the leftmost loaded bar so
+   * the parent can fetch and merge older history. The chart subscribes to
+   * `subscribeVisibleLogicalRangeChange` and emits this when `range.from`
+   * is within ~5 logical units of the start of the data array. The chart
+   * will attempt to preserve the user's visible window after the parent
+   * supplies more bars (caller MUST replace `data` with the merged set).
+   * Caller should also flip `loadingMoreHistory` to true while the fetch
+   * is in flight so the chart suppresses repeated callbacks.
+   */
+  onLoadMoreHistory?: () => void;
+  /** When true the load-more debounce stays armed until the next setData. */
+  loadingMoreHistory?: boolean;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -429,7 +442,7 @@ function computeATR(bars: OHLCVBar[], period = 14): SingleValueData<Time>[] {
 
 export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
   function TradingChart(
-    { data, chartType = "candle", indicators = [], onCrosshairMove, onAlertHover, compareSeries, anchoredVwapIndex, events, onTimeRangeChange, positionLines, drawingPriceLines, overlayPrices, onOverlayPriceCoordinates, onChartClick, onDrawCrosshair, drawMode, drawings, themeKey },
+    { data, chartType = "candle", indicators = [], onCrosshairMove, onAlertHover, compareSeries, anchoredVwapIndex, events, onTimeRangeChange, positionLines, drawingPriceLines, overlayPrices, onOverlayPriceCoordinates, onChartClick, onDrawCrosshair, drawMode, drawings, themeKey, onLoadMoreHistory, loadingMoreHistory },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -439,6 +452,13 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
     const lastBarRef = useRef<OHLCVBar | null>(null);
     const overlaySeriesRef = useRef<ISeriesApi<SeriesType>[]>([]);
     const drawingPaneRef = useRef<DrawingPaneHandle | null>(null);
+    // Mirror the parent's load-more callback + loading flag so the chart's
+    // subscribeVisibleLogicalRangeChange handler reads fresh values without
+    // re-subscribing when they change.
+    const loadMoreRef = useRef(onLoadMoreHistory);
+    const loadingMoreRef = useRef<boolean>(Boolean(loadingMoreHistory));
+    useEffect(() => { loadMoreRef.current = onLoadMoreHistory; }, [onLoadMoreHistory]);
+    useEffect(() => { loadingMoreRef.current = Boolean(loadingMoreHistory); }, [loadingMoreHistory]);
     // Plugin handle must be detached to avoid stacking instances on
     // every setData; we keep it in a ref and clear before re-attaching.
     const seriesMarkersRef = useRef<ReturnType<typeof createSeriesMarkers<Time>> | null>(null);
@@ -670,6 +690,22 @@ export const TradingChart = forwardRef<TradingChartHandle, TradingChartProps>(
           emitOverlayPriceCoordinates();
         });
       }
+
+      // Infinite-history fetch: fire onLoadMoreHistory when the user pans
+      // near the leftmost loaded bar (logical-range.from within 5 bars of
+      // index 0). lightweight-charts uses fractional logical positions
+      // outside the data range so range.from goes negative when scrolled
+      // past the start; trigger then. Debounce via the parent's
+      // loadingMoreRef so we don't fire while a fetch is already in flight.
+      chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+        if (!range) return;
+        const cb = loadMoreRef.current;
+        if (!cb) return;
+        if (loadingMoreRef.current) return;
+        if (range.from <= 5) {
+          cb();
+        }
+      });
 
       // Drawing-path click: translates the mouse event into a {time, price}
       // pair for the state machine in ChartPane. LWC v5 fires subscribeClick

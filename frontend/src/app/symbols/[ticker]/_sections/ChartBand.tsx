@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import PriceChartPanel from "@/components/composites/PriceChartPanel";
@@ -19,6 +19,9 @@ import { KeyStats } from "./KeyStats";
 import type { StickyBandQuote } from "./StickyBand";
 
 const DEFAULT_RANGE: ChartRange = "1M";
+
+/** Bars to fetch per "load more older history" page. */
+const HISTORY_PAGE_SIZE = 500;
 
 export interface ChartBandProps {
   symbol: string;
@@ -103,31 +106,104 @@ export function ChartBand({ symbol, bars, name, quote }: ChartBandProps) {
     retry: 1,
   });
 
-  const series: ChartBar[] = (rangeQuery.data ?? bars ?? []) as ChartBar[];
+  // Older bars fetched after the user pans past the leftmost loaded bar.
+  // Stored separately so React Query's range fetch isn't affected. Reset
+  // whenever the symbol or the (range-derived) timeframe changes — older
+  // hourly bars don't merge cleanly into a daily-bar request.
+  const [olderBars, setOlderBars] = useState<OHLCVBar[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [exhausted, setExhausted] = useState(false);
+  // Track the (symbol, timeframe) the older-bars cache belongs to so we
+  // know when to drop it. Strings keep the comparison cheap.
+  const olderBarsKeyRef = useRef<string>("");
+  const currentKey = `${symbol}|${timeframe}`;
+
+  useEffect(() => {
+    if (olderBarsKeyRef.current !== currentKey) {
+      olderBarsKeyRef.current = currentKey;
+      setOlderBars([]);
+      setExhausted(false);
+    }
+  }, [currentKey]);
+
+  // Merge older bars (paginated history) with the latest range query result.
+  // Dedupe by `time` so re-fetches from the React Query cache or overlapping
+  // pages don't render duplicate candles.
+  const mergedBars: ChartBar[] = useMemo(() => {
+    const latest = (rangeQuery.data ?? bars ?? []) as OHLCVBar[];
+    if (olderBars.length === 0) return latest as ChartBar[];
+    const seen = new Set<number>();
+    const out: OHLCVBar[] = [];
+    for (const bar of [...olderBars, ...latest]) {
+      if (seen.has(bar.time)) continue;
+      seen.add(bar.time);
+      out.push(bar);
+    }
+    out.sort((a, b) => a.time - b.time);
+    return out as ChartBar[];
+  }, [olderBars, rangeQuery.data, bars]);
+
+  const handleLoadMoreHistory = useCallback(async () => {
+    if (loadingMore || exhausted || mergedBars.length === 0) return;
+    const earliest = mergedBars[0];
+    if (!earliest) return;
+
+    // Backend `end` is a YYYY-MM-DD date and is inclusive — pass the day
+    // before the earliest loaded bar to avoid re-fetching the same day's
+    // candles. For intraday timeframes this still leaves room for the
+    // server's per-day cap so we get a full page.
+    const earliestDate = new Date(earliest.time * 1000);
+    const endDate = new Date(earliestDate.getTime() - 24 * 60 * 60 * 1000);
+    const isoEnd = endDate.toISOString().slice(0, 10);
+
+    setLoadingMore(true);
+    try {
+      const olderPage = await getBars(symbol, timeframe, HISTORY_PAGE_SIZE, { end: isoEnd });
+      // Filter any bars that overlap the already-loaded range — defensive
+      // since some providers return inclusive `end` despite our offset.
+      const fresh = olderPage.filter((b) => b.time < earliest.time);
+      if (fresh.length === 0) {
+        setExhausted(true);
+        return;
+      }
+      setOlderBars((prev) => [...fresh, ...prev]);
+    } catch {
+      // Swallow — if the backend errors, we just stop trying. Showing a
+      // toast would be noisy for a panning gesture; silent stop matches
+      // TradingView/Webull behavior.
+      setExhausted(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, exhausted, mergedBars, symbol, timeframe]);
 
   return (
     <section
       id="chart"
       data-testid="chart-band"
       data-slot="chart-band"
-      className="grid grid-cols-1 gap-4 px-4 py-6 scroll-mt-24 sm:px-6 xl:grid-cols-12"
+      // 2026-05-07: chart was previously squeezed into 8/12 columns and
+      // capped to 220-420px tall. The hero of a research page should be
+      // the chart itself — let it span the full width and slot KeyStats
+      // beneath as a horizontal stat strip on desktop.
+      className="flex flex-col gap-4 px-4 py-6 scroll-mt-24 sm:px-6"
     >
-      <div className="rounded-md border border-border-hair bg-bg-elev-1 overflow-hidden xl:col-span-8">
+      <div className="rounded-md border border-border-hair bg-bg-elev-1 overflow-hidden">
         <PriceChartPanel
           symbol={toMarketSymbol(symbol, name)}
           quote={toCompositeQuote(quote)}
           meta={toMetaCells(quote)}
-          series={series}
+          series={mergedBars}
           activeRange={range}
           onRangeChange={setRange}
           isLoading={rangeQuery.isLoading}
           error={rangeQuery.isError}
           onRetry={() => rangeQuery.refetch()}
+          onLoadMoreHistory={handleLoadMoreHistory}
+          loadingMoreHistory={loadingMore}
         />
       </div>
-      <div className="xl:col-span-4">
-        <KeyStats symbol={symbol} />
-      </div>
+      <KeyStats symbol={symbol} />
     </section>
   );
 }

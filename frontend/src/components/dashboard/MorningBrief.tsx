@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { Sun, Moon, Sunrise, X, TrendingUp, TrendingDown, Zap, BarChart3, Sparkles } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useMarketStatus, useMorningBrief } from "@/hooks/useQueries";
@@ -266,9 +267,12 @@ function MorningBriefContent({
                 const mUp = m.change_pct >= 0;
                 return (
                   <div key={m.symbol} className="flex items-center justify-between">
-                    <span className="text-body-sm font-mono font-medium text-foreground">
+                    <Link
+                      href={`/symbols/${encodeURIComponent(m.symbol)}`}
+                      className="text-body-sm font-mono font-medium text-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
+                    >
                       {m.symbol}
-                    </span>
+                    </Link>
                     <div className="flex items-center gap-2">
                       <span
                         className={cn(

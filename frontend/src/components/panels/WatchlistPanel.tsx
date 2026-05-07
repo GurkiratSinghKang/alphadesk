@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Plus, X, TrendingUp, TrendingDown, MoreHorizontal, ChevronUp, ChevronDown, Save, Settings } from "lucide-react";
 import { HelpCircle } from "@/components/ui/HelpCircle";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -875,6 +876,7 @@ function SignalsTab() {
 // ─── Main Panel ──────────────────────────────────────────────
 
 export function WatchlistPanel() {
+  const router = useRouter();
   const watchlist = useMarketStore((s) => s.watchlist);
   // Wave 14 perf-audit-r3 P0 #3: was `useMarketStore((s) => s.quotes)` which
   // returned the whole map ref and rerendered this ~1000-LOC panel on every
@@ -886,6 +888,18 @@ export function WatchlistPanel() {
   const addToWatchlist = useMarketStore((s) => s.addToWatchlist);
   const removeFromWatchlist = useMarketStore((s) => s.removeFromWatchlist);
   const { activePanels, setActiveTab } = useUIStore();
+
+  // 2026-05-07: row click now opens the symbol research page rather than
+  // toggling the global selection. Still mirror the selection so the
+  // dashboard's per-symbol state (Trade/Analyze buttons in the side
+  // panels) stays coherent when the user comes back.
+  const handleRowSelect = useCallback(
+    (sym: string) => {
+      setSelectedSymbol(sym);
+      router.push(`/symbols/${encodeURIComponent(sym)}`);
+    },
+    [router, setSelectedSymbol],
+  );
   const { toast } = useToast();
   const [addInput, setAddInput] = useState("");
   const [sortKey, setSortKey] = useState<"default" | "symbol" | "last" | "changePct">("default");
@@ -1065,7 +1079,7 @@ export function WatchlistPanel() {
                     symbol={symbol}
                     quote={quotes[symbol]}
                     isSelected={symbol === selectedSymbol}
-                    onSelect={() => setSelectedSymbol(symbol)}
+                    onSelect={() => handleRowSelect(symbol)}
                     onRemove={() => removeFromWatchlist(symbol)}
                     onAnalyze={() => handleAnalyze(symbol)}
                     onTrade={() => handleTrade(symbol)}
