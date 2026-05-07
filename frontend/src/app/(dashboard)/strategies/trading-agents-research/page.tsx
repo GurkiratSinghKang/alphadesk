@@ -1,6 +1,7 @@
 "use client";
 
 import { type CSSProperties, type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowClockwise,
   CaretRight,
@@ -373,7 +374,15 @@ function analystLabel(value: string) {
 }
 
 export default function TradingAgentsResearchPage() {
-  const [symbol, setSymbol] = useState("AAPL");
+  // Iter 15 — symbols-page hero `Run agents` button deep-links here as
+  // `?symbol={SYMBOL}`. Seed initial state from the query param so the
+  // landing page is pre-filled instead of snapping back to AAPL. The
+  // `useState` initializer runs once on mount, so user edits to the
+  // input afterwards are preserved (the query param does NOT keep
+  // overwriting on re-render).
+  const sp = useSearchParams();
+  const initialSymbol = (sp?.get("symbol") || "AAPL").toUpperCase();
+  const [symbol, setSymbol] = useState(initialSymbol);
   const [tradeDate, setTradeDate] = useState(todayIso);
   const [provider, setProvider] = useState("");
   const [researchDepth, setResearchDepth] = useState(1);

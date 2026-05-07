@@ -92,12 +92,20 @@ describe("StickyBand", () => {
     expect(getByTestId("sticky-band-skeleton")).toBeInTheDocument();
   });
 
-  it("disables the 'Run agents' CTA in MVP", () => {
+  it("links the 'Run agents' CTA to the trading-agents-research page with ?symbol", () => {
+    // iter 15: was disabled in MVP; now navigates to the trading-agents
+    // research workflow that shipped in iter 12 (PR #76), pre-filling
+    // the symbol via query param so the landing page lands ready-to-run.
     const { getByTestId } = render(
       <StickyBand symbol="NVDA" quote={makeQuote()} />,
     );
     const runAgents = getByTestId("hero-cta-run-agents");
-    expect(runAgents).toBeDisabled();
+    expect(runAgents).not.toBeDisabled();
+    expect(runAgents.tagName.toLowerCase()).toBe("a");
+    expect(runAgents.getAttribute("href")).toBe(
+      "/strategies/trading-agents-research?symbol=NVDA",
+    );
+    expect(runAgents.textContent).toContain("Run agents");
   });
 
   it("uses a sticky positioning class on the host element", () => {
