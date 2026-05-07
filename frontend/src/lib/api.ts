@@ -8,6 +8,7 @@ import type {
   TickerContextResponse,
   TickerFactEnvelope,
   TickerFreshnessMeta,
+  TickerFundamentals,
   OptionsChain,
   ContractSnapshot,
   RawContractSnapshot,
@@ -900,6 +901,53 @@ export async function getTickerContext(
     ),
     generatedAt: raw.generated_at,
   };
+}
+
+interface RawTickerFundamentals {
+  symbol: string;
+  name: string | null;
+  sector: string | null;
+  industry: string | null;
+  market_cap: number | null;
+  shares_outstanding: number | null;
+  pe_ratio: number | null;
+  eps_ttm: number | null;
+  dividend_yield: number | null;
+  beta: number | null;
+  fifty_two_week_high: number | null;
+  fifty_two_week_low: number | null;
+  avg_volume_30d: number | null;
+  description: string | null;
+  fetched_at: string | null;
+  is_demo: boolean;
+}
+
+function mapTickerFundamentals(raw: RawTickerFundamentals): TickerFundamentals {
+  return {
+    symbol: raw.symbol,
+    name: raw.name,
+    sector: raw.sector,
+    industry: raw.industry,
+    marketCap: raw.market_cap,
+    sharesOutstanding: raw.shares_outstanding,
+    peRatio: raw.pe_ratio,
+    epsTtm: raw.eps_ttm,
+    dividendYield: raw.dividend_yield,
+    beta: raw.beta,
+    fiftyTwoWeekHigh: raw.fifty_two_week_high,
+    fiftyTwoWeekLow: raw.fifty_two_week_low,
+    avgVolume30d: raw.avg_volume_30d,
+    description: raw.description,
+    fetchedAt: raw.fetched_at,
+    isDemo: raw.is_demo,
+  };
+}
+
+export async function getTickerFundamentals(symbol: string): Promise<TickerFundamentals> {
+  const raw = await apiFetch<RawTickerFundamentals>(
+    `/api/v1/tickers/${encodeURIComponent(symbol)}/fundamentals`,
+  );
+  return mapTickerFundamentals(raw);
 }
 
 export async function getQuote(symbol: string): Promise<Quote> {

@@ -20,11 +20,11 @@ export interface SymbolPageClientProps {
   symbol: string;
 }
 
-// Hide the four "Coming soon" placeholder sections (Strategy reverse lookup,
-// Agents debate, About/Analyst peers, Key stats) until each section has a
-// real backend behind it. Re-enable when a real backend lands for that
-// section by setting NEXT_PUBLIC_SHOW_SYMBOL_PAGE_STUBS=true. Read inside
-// the function so tests that mutate process.env observe the change.
+// Hide the remaining "Coming soon" placeholder section (About / Analyst
+// peers) until a real backend lands. Strategy reverse lookup, Agents
+// debate, and Key stats now ship live and no longer gate on this flag.
+// Re-enable the placeholder by setting NEXT_PUBLIC_SHOW_SYMBOL_PAGE_STUBS=true.
+// Read inside the function so tests that mutate process.env observe the change.
 function showPlaceholderStubs(): boolean {
   return process.env.NEXT_PUBLIC_SHOW_SYMBOL_PAGE_STUBS === "true";
 }

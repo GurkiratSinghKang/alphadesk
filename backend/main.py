@@ -33,6 +33,7 @@ from core.logging import REQUEST_ID, configure_logging
 from core.redis import get_redis, close_redis
 from api.routes import market, screener, analysis, options, trades, portfolio, agents, webhooks
 from api.routes import symbols, strategies, market_overview, risk, pipeline, news, tickers
+from api.routes import tickers_fundamentals
 from api.routes import analytics as analytics_routes
 from api.routes import tradingagents
 from api.routes import broker as broker_routes
@@ -574,6 +575,11 @@ app.include_router(risk.router, prefix="/api/v1/risk", tags=["Risk"], dependenci
 app.include_router(pipeline.router, prefix="/api/v1/pipeline", tags=["Pipeline"], dependencies=[Depends(require_auth)])
 app.include_router(news.router, prefix="/api/v1/news", tags=["News"], dependencies=[Depends(require_auth)])
 app.include_router(tickers.router, prefix="/api/v1/tickers", tags=["Tickers"], dependencies=[Depends(require_auth)])
+# Fundamental snapshot endpoint — split out of the main tickers router to
+# keep the per-symbol cache key + response model isolated. Same prefix so
+# clients see ``/api/v1/tickers/{sym}/fundamentals`` alongside the
+# existing ``/api/v1/tickers/context`` endpoint.
+app.include_router(tickers_fundamentals.router, prefix="/api/v1/tickers", tags=["Tickers"], dependencies=[Depends(require_auth)])
 app.include_router(earnings.router, prefix="/api/v1", tags=["Earnings"], dependencies=[Depends(require_auth)])
 app.include_router(tradingagents.router, prefix="/api/v1/tradingagents", tags=["TradingAgents"], dependencies=[Depends(require_auth)])
 app.include_router(broker_routes.router, prefix="/api/v1/broker", tags=["Broker"], dependencies=[Depends(require_auth)])
