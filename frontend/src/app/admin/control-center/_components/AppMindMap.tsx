@@ -1677,6 +1677,32 @@ function nodeCenter(node: MindNode) {
   };
 }
 
+function connectionPath(from: MindNode, to: MindNode) {
+  const fromCenter = nodeCenter(from);
+  const toCenter = nodeCenter(to);
+  const dx = toCenter.x - fromCenter.x;
+  const dy = toCenter.y - fromCenter.y;
+  const horizontalRoute = Math.abs(dx) >= Math.abs(dy);
+
+  if (horizontalRoute) {
+    const startX = dx >= 0 ? from.x + from.width : from.x;
+    const endX = dx >= 0 ? to.x : to.x + to.width;
+    const startY = fromCenter.y;
+    const endY = toCenter.y;
+    const elbowX = Math.round((startX + endX) / 2);
+
+    return `M ${startX} ${startY} H ${elbowX} V ${endY} H ${endX}`;
+  }
+
+  const startX = fromCenter.x;
+  const endX = toCenter.x;
+  const startY = dy >= 0 ? from.y + from.height : from.y;
+  const endY = dy >= 0 ? to.y : to.y + to.height;
+  const elbowY = Math.round((startY + endY) / 2);
+
+  return `M ${startX} ${startY} V ${elbowY} H ${endX} V ${endY}`;
+}
+
 function timeLabel(value: string | null | undefined) {
   if (!value) return "No timestamp";
   const date = new Date(value);
@@ -2512,19 +2538,18 @@ export function AppMindMap() {
                   const from = nodeById.get(edge.from);
                   const to = nodeById.get(edge.to);
                   if (!from || !to) return null;
-                  const start = nodeCenter(from);
-                  const end = nodeCenter(to);
-                  const dx = Math.abs(end.x - start.x);
-                  const curve = Math.max(80, dx * 0.42);
-                  const path = `M ${start.x} ${start.y} C ${start.x + curve} ${start.y}, ${end.x - curve} ${end.y}, ${end.x} ${end.y}`;
                   return (
                     <path
                       key={`${edge.from}-${edge.to}`}
-                      d={path}
+                      d={connectionPath(from, to)}
                       fill="none"
+                      shapeRendering="crispEdges"
                       stroke={edgeStroke(from, to)}
+                      strokeLinecap="square"
+                      strokeLinejoin="miter"
                       strokeOpacity={selectedId === edge.from || selectedId === edge.to ? 0.86 : 0.34}
                       strokeWidth={selectedId === edge.from || selectedId === edge.to ? 2.5 : 1.4}
+                      vectorEffect="non-scaling-stroke"
                     />
                   );
                 })}
