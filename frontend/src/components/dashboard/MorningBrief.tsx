@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import { Sun, Moon, Sunrise, X, TrendingUp, TrendingDown, Zap, BarChart3, Sparkles } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
-import { useMorningBrief } from "@/hooks/useQueries";
+import { useMarketStatus, useMorningBrief } from "@/hooks/useQueries";
 import type { MorningBriefData } from "@/lib/api";
 import { getMarketSession } from "@/lib/marketHours";
 import { safeSetItem, safeGetItem } from "@/lib/storage";
@@ -27,10 +27,21 @@ function getGreeting(): { text: string; icon: typeof Sun } {
  * distinguished from generic "post" here because the extended window
  * runs 16:00–20:00 ET; we render it as "After Hours" for any `post`
  * session between 16:00 and 20:00, falling back to "Closed" later.
+ *
+ * Audit edge-cases-r3 §A P1: when ``upstreamIsOpen`` is provided (the
+ * holiday-aware ``useMarketStatus`` hook has resolved) and reports
+ * ``false`` while the local heuristic thinks the regular session is
+ * open, prefer the upstream truth — almost always means an
+ * NYSE-observed US holiday.
  */
-function getMarketStatus(): { label: string; color: string } {
+function getMarketStatusLabel(upstreamIsOpen?: boolean): { label: string; color: string } {
   const session = getMarketSession();
-  if (session === "open") return { label: "Market Open", color: "text-profit" };
+  if (session === "open") {
+    if (upstreamIsOpen === false) {
+      return { label: "Closed", color: "text-muted-foreground" };
+    }
+    return { label: "Market Open", color: "text-profit" };
+  }
   if (session === "pre") return { label: "Pre-Market", color: "text-ice" };
   if (session === "post") {
     // After-hours extended session is 16:00–20:00 ET; past 20:00 we're
@@ -143,7 +154,11 @@ function MorningBriefContent({
   rail: boolean;
 }) {
   const greeting = getGreeting();
-  const market = getMarketStatus();
+  // Audit edge-cases-r3 §A P1 — backend ``/api/v1/market/market-status`` is
+  // holiday-aware (Polygon → Alpaca). Until the hook resolves we fall back
+  // to the local heuristic so the brief never blocks on the network.
+  const { data: marketStatus } = useMarketStatus();
+  const market = getMarketStatusLabel(marketStatus?.isOpen);
   const GreetingIcon = greeting.icon;
 
   const isUp = data.portfolio.overnight_change >= 0;
@@ -369,7 +384,11 @@ function MorningBriefContent({
 
 function MorningBriefUnavailable({ onDismiss }: { onDismiss: () => void }) {
   const greeting = getGreeting();
-  const market = getMarketStatus();
+  // Same holiday-aware override as ``MorningBriefContent`` so the
+  // unavailable-fallback header doesn't proudly say "Market Open" on
+  // Independence Day either.
+  const { data: marketStatus } = useMarketStatus();
+  const market = getMarketStatusLabel(marketStatus?.isOpen);
   const GreetingIcon = greeting.icon;
 
   return (

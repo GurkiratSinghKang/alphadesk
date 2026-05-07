@@ -1,7 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { getMarketRegime, getMarketIndices, getStrategies, getPortfolioSummary, getPipelineStatus, getOptionsChain, getIVData, getPnlCalendar, getIndexSparklines, getMorningBrief, getTickerContext, getCurrentUser, getBrokerConnections } from "@/lib/api";
+import { getMarketRegime, getMarketIndices, getMarketStatus, getStrategies, getPortfolioSummary, getPipelineStatus, getOptionsChain, getIVData, getPnlCalendar, getIndexSparklines, getMorningBrief, getTickerContext, getCurrentUser, getBrokerConnections } from "@/lib/api";
+import type { MarketStatusResponse } from "@/lib/api";
 
 export function useRegime() {
   return useQuery({
@@ -20,6 +21,34 @@ export function useIndices() {
     staleTime: 60 * 1000, // 1 minute
     refetchInterval: 60 * 1000,
     retry: 2,
+  });
+}
+
+/**
+ * Holiday-aware market open/closed status. The backend
+ * ``/api/v1/market/market-status`` endpoint proxies Polygon and Alpaca,
+ * both of which honour the NYSE-observed US holiday schedule, so
+ * ``data?.isOpen`` is correct on Independence Day, MLK Day, Thanksgiving,
+ * Good Friday, Juneteenth, etc. — situations the local ``isMarketOpen()``
+ * heuristic gets wrong.
+ *
+ * Callers should fall back to ``isMarketOpen()`` while ``isLoading`` is
+ * true (first paint) and on a hook failure so the change is a strict
+ * improvement on the prior heuristic — never a regression.
+ *
+ * The 60-second cadence covers the boundary transitions we actually care
+ * about (open at 09:30 ET, close at 16:00 ET, ad-hoc closures). The
+ * upstream providers themselves only update at minute-level granularity
+ * for the open/closed flag.
+ */
+export function useMarketStatus() {
+  return useQuery<MarketStatusResponse>({
+    queryKey: ["market-status"],
+    queryFn: getMarketStatus,
+    staleTime: 60 * 1000,
+    refetchInterval: 60 * 1000,
+    refetchOnWindowFocus: true,
+    retry: 1,
   });
 }
 

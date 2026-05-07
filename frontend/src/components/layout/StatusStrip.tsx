@@ -7,7 +7,7 @@ import { useWs } from "@/lib/providers";
 import { useUIStore } from "@/stores/ui";
 import { formatCurrency, cn } from "@/lib/utils";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
-import { useRegime, usePortfolioSummary, useBrokerConnections } from "@/hooks/useQueries";
+import { useRegime, usePortfolioSummary, useBrokerConnections, useMarketStatus } from "@/hooks/useQueries";
 import { getMarketSession } from "@/lib/marketHours";
 
 // EH-3d: derive the global session pill label from the NY clock.
@@ -16,15 +16,35 @@ import { getMarketSession } from "@/lib/marketHours";
 //   · "OVERNIGHT" — 00:00–04:00 ET (technically still "after hours" the
 //     next morning but the term in industry use is "overnight"; the
 //     EH brief calls this state out separately)
+//   · "MARKET CLOSED" — weekday during the would-be regular session, but
+//     the upstream market-status provider (Polygon/Alpaca) reports the
+//     exchange as closed. Almost always means "NYSE-observed US holiday".
 //   · null — regular session or weekend (regular pill display only)
 //
 // Defensive: ``getMarketSession`` already handles weekends (returns
 // "closed") and the helper is browser-time-zone safe via Intl. We keep
 // the exported tester so the unit test below can mock the clock.
-export type SessionPillLabel = "PRE-MARKET" | "AFTER HOURS" | "OVERNIGHT";
+export type SessionPillLabel = "PRE-MARKET" | "AFTER HOURS" | "OVERNIGHT" | "MARKET CLOSED";
 
-export function getSessionPillLabel(now: Date = new Date()): SessionPillLabel | null {
+export function getSessionPillLabel(
+  now: Date = new Date(),
+  /** When supplied, overrides the local-clock heuristic with the holiday-aware
+   *  upstream status. Pass ``true`` when the server says the market is open and
+   *  ``false`` when it's closed; pass ``undefined`` to fall back to the
+   *  pre-existing local heuristic (preserves prior behaviour). */
+  upstreamIsOpen?: boolean,
+): SessionPillLabel | null {
   const session = getMarketSession(now);
+  // Audit edge-cases-r3 §A P1 — kill the "no pill at all" lie on US
+  // holidays. When the local heuristic thinks we're in the regular
+  // session but the upstream market-status feed says the exchange is
+  // closed, the only honest signal is a "MARKET CLOSED" pill. We
+  // intentionally only override the "open" case: weekend + extended
+  // bands already have their own pills (or null) and the upstream feed
+  // rarely disagrees with them. Skipped when ``upstreamIsOpen`` is
+  // undefined so callers without the React Query hook (server render,
+  // unit tests with no provider) keep the prior behaviour.
+  if (session === "open" && upstreamIsOpen === false) return "MARKET CLOSED";
   if (session === "open" || session === "closed") return null;
   if (session === "pre") {
     // OVERNIGHT band 00:00–04:00 ET. Reuse Intl to avoid host-tz drift.
@@ -54,22 +74,31 @@ export function StatusStrip() {
     return () => window.clearTimeout(timeout);
   }, []);
 
-  // EH-3d: keep the session pill label fresh. We refresh once per
-  // minute — the bands transition at :00 of an even half-hour (09:30
-  // open, 16:00 close, 04:00 overnight→pre) so 60s is plenty of
-  // resolution and avoids burning re-renders on a 1Hz timer.
-  const [sessionLabel, setSessionLabel] = useState<SessionPillLabel | null>(() =>
-    getSessionPillLabel(),
-  );
+  // Holiday-aware market status from the backend (audit edge-cases-r3
+  // §A P1). Falls back to the local heuristic via ``getSessionPillLabel``
+  // when the hook hasn't resolved or the request fails.
+  const { data: marketStatus } = useMarketStatus();
+  const upstreamIsOpen = marketStatus?.isOpen;
+
+  // EH-3d: keep the session pill label fresh. The pill itself is derived
+  // from the host clock + the holiday-aware upstream signal, but we still
+  // need to nudge React when the clock crosses a boundary the upstream
+  // doesn't push us through (open→pre, post→overnight at midnight, etc.).
+  // Bumping ``clockTick`` once per minute is enough — the bands transition
+  // at :00 of an even half-hour so 60s is plenty of resolution.
+  const [clockTick, setClockTick] = useState(0);
   useEffect(() => {
-    // Sync immediately on mount in case our SSR/initial-state read
-    // happened against a stale Date.
-    setSessionLabel(getSessionPillLabel());
     const interval = window.setInterval(() => {
-      setSessionLabel(getSessionPillLabel());
+      setClockTick((n) => n + 1);
     }, 60_000);
     return () => window.clearInterval(interval);
   }, []);
+  // Derived value — recomputes on every render so a change in either
+  // ``upstreamIsOpen`` (React Query) or ``clockTick`` (one-minute nudge)
+  // surfaces immediately. ``clockTick`` is read here so the dependency is
+  // explicit even though the value isn't used in the call itself.
+  void clockTick;
+  const sessionLabel = getSessionPillLabel(undefined, upstreamIsOpen);
 
   const summary = usePortfolioStore((s) => s.summary);
   const { isConnected } = useWs();

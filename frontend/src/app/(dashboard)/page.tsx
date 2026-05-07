@@ -66,6 +66,7 @@ import { cn, formatCurrency, formatGreek, formatPercent } from "@/lib/utils";
 // `/strategies` page header.
 import {
   useCurrentUser,
+  useMarketStatus,
   usePipelineStatus,
   useRegime,
   useStrategies,
@@ -320,7 +321,12 @@ export default function DeskPage() {
   // pushes ~10Hz on liquid tickers, the desk was reshaping the
   // entire prop set continuously. Wrap each selector in useMemo
   // keyed on the actual inputs so the references stay stable.
-  const marketOpen = isMarketOpen();
+  // Holiday-aware market status (audit edge-cases-r3 §A P1) — the backend
+  // proxies Polygon/Alpaca which honour the NYSE holiday calendar. Fall
+  // back to the local heuristic on first paint or hook failure so this
+  // is a strict improvement over the prior behaviour, never a regression.
+  const { data: marketStatus } = useMarketStatus();
+  const marketOpen = marketStatus?.isOpen ?? isMarketOpen();
   const regime = useMemo(() => toRegime(regimeResp?.regime), [regimeResp?.regime]);
   const quote = useMemo(() => toQuote(selectedQuote ?? undefined), [selectedQuote]);
   // BUG-11: Capital Canvas on the dashboard route is the book-equity hero.
