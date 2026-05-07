@@ -204,7 +204,7 @@ async def test_aggregate_risk_rejects_option_when_chain_probe_fails(
 ) -> None:
     """Option provenance must fail closed when chain freshness is unknown."""
 
-    async def _tradable(_symbol: str) -> tuple[bool, str]:
+    async def _tradable(_symbol: str, username: str | None = None) -> tuple[bool, str]:
         return True, "passed"
 
     monkeypatch.delenv("TRADES_ALLOW_DEMO_CHAIN_ORDERS", raising=False)
@@ -237,7 +237,7 @@ async def test_aggregate_risk_verifies_every_option_leg_contract(
 ) -> None:
     """A later combo leg missing from the live chain must fail closed."""
 
-    async def _tradable(_symbol: str) -> tuple[bool, str]:
+    async def _tradable(_symbol: str, username: str | None = None) -> tuple[bool, str]:
         return True, "passed"
 
     async def _fetch_chain(_symbol: str, **_kwargs: Any) -> Any:
@@ -303,10 +303,10 @@ async def test_live_aggregate_risk_rejects_when_account_preflight_unavailable(
 ) -> None:
     """Live mode must not approve orders without current account data."""
 
-    async def _tradable(_symbol: str) -> tuple[bool, str]:
+    async def _tradable(_symbol: str, username: str | None = None) -> tuple[bool, str]:
         return True, "passed"
 
-    monkeypatch.setattr(trades_mod, "_live_broker_intent_enabled", lambda: True)
+    monkeypatch.setattr(trades_mod, "_live_broker_intent_enabled", AsyncMock(return_value=True))
     monkeypatch.setattr(trades_mod, "_check_symbol_tradable", _tradable)
     monkeypatch.setattr(trades_mod, "_compute_order_notional", AsyncMock(return_value=100.0))
     monkeypatch.setattr(trades_mod, "_get_todays_gross_notional", AsyncMock(return_value=0.0))
@@ -328,10 +328,10 @@ async def test_live_aggregate_risk_rejects_buy_when_buying_power_zero(
 ) -> None:
     """Live buy orders require a positive buying-power snapshot."""
 
-    async def _tradable(_symbol: str) -> tuple[bool, str]:
+    async def _tradable(_symbol: str, username: str | None = None) -> tuple[bool, str]:
         return True, "passed"
 
-    monkeypatch.setattr(trades_mod, "_live_broker_intent_enabled", lambda: True)
+    monkeypatch.setattr(trades_mod, "_live_broker_intent_enabled", AsyncMock(return_value=True))
     monkeypatch.setattr(trades_mod, "_check_symbol_tradable", _tradable)
     monkeypatch.setattr(trades_mod, "_compute_order_notional", AsyncMock(return_value=100.0))
     monkeypatch.setattr(trades_mod, "_get_todays_gross_notional", AsyncMock(return_value=0.0))
@@ -353,10 +353,10 @@ async def test_paper_aggregate_risk_keeps_legacy_account_preflight_skip(
 ) -> None:
     """Paper/dev flows can still run without live broker account data."""
 
-    async def _tradable(_symbol: str) -> tuple[bool, str]:
+    async def _tradable(_symbol: str, username: str | None = None) -> tuple[bool, str]:
         return True, "passed"
 
-    monkeypatch.setattr(trades_mod, "_live_broker_intent_enabled", lambda: False)
+    monkeypatch.setattr(trades_mod, "_live_broker_intent_enabled", AsyncMock(return_value=False))
     monkeypatch.setattr(trades_mod, "_check_symbol_tradable", _tradable)
     monkeypatch.setattr(trades_mod, "_compute_order_notional", AsyncMock(return_value=100.0))
     monkeypatch.setattr(trades_mod, "_get_todays_gross_notional", AsyncMock(return_value=0.0))

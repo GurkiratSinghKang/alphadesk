@@ -74,7 +74,7 @@ import {
   type PlaceOrderPayload,
 } from "@/lib/api";
 import { barsRequestForRange } from "@/lib/chartRange";
-import { parseOccSymbol } from "@/lib/occ";
+import { isOccSymbol, parseOccSymbol } from "@/lib/occ";
 import { ORDER_BAR_DEFAULTS, isValidOrderQty } from "@/lib/orderDefaults";
 import { isMarketOpen } from "@/lib/marketHours";
 import { isWorkingOrderStatus } from "@/lib/orders";
@@ -402,6 +402,15 @@ export default function TradePage() {
   const [seriesLoading, setSeriesLoading] = useState(false);
   const [seriesError, setSeriesError] = useState<string | null>(null);
   const [chartReloadKey, setChartReloadKey] = useState(0);
+  useEffect(() => {
+    const hasOptionCombo = activeLegs.some((leg) => isOccSymbol(leg.occ));
+    if (!hasOptionCombo || quoteAtFillTs == null) return;
+    const id = window.setInterval(() => {
+      setQuoteAtFillTs(Date.now() / 1000);
+    }, 25_000);
+    return () => window.clearInterval(id);
+  }, [activeLegs, quoteAtFillTs]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {

@@ -4710,6 +4710,19 @@ async def _quote_staleness_check(
 _SYMBOL_TRADABLE_CACHE_TTL = 60
 
 
+async def _read_symbol_tradable_cache(cache_key: str) -> tuple[bool, str] | None:
+    try:
+        from core.redis import cache_get
+        cached = await cache_get(cache_key)
+        if isinstance(cached, dict) and "tradable" in cached:
+            if cached["tradable"]:
+                return True, "passed"
+            return False, cached.get("reason", "Symbol not tradable")
+    except Exception:
+        logger.debug("symbol_tradable cache read failed", exc_info=True)
+    return None
+
+
 async def _check_symbol_tradable(
     symbol: str,
     username: str | None = None,
@@ -4725,22 +4738,21 @@ async def _check_symbol_tradable(
         return True, "passed"
     upper = symbol.upper()
 
+    # Preserve reads from the legacy global cache key so a cached halt remains
+    # fail-closed even before per-user broker credentials can be resolved.
+    legacy_cached = await _read_symbol_tradable_cache(f"symbol_tradable:{upper}")
+    if legacy_cached is not None:
+        return legacy_cached
+
     creds = await _resolve_alpaca_creds_for_risk(username)
     if creds is None:
         return True, "skipped_no_keys"
 
     cache_key = f"symbol_tradable:{creds.account_env}:{upper}"
 
-    # Cache hit?
-    try:
-        from core.redis import cache_get
-        cached = await cache_get(cache_key)
-        if isinstance(cached, dict) and "tradable" in cached:
-            if cached["tradable"]:
-                return True, "passed"
-            return False, cached.get("reason", "Symbol not tradable")
-    except Exception:
-        logger.debug("symbol_tradable cache read failed", exc_info=True)
+    cached = await _read_symbol_tradable_cache(cache_key)
+    if cached is not None:
+        return cached
 
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:

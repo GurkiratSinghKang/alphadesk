@@ -20,7 +20,7 @@
  */
 import "./setup-mocks";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, waitFor, fireEvent } from "@testing-library/react";
+import { act, render, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import * as api from "@/lib/api";
@@ -130,7 +130,9 @@ describe("/trade auto-refresh of quote_at_fill_ts for option tickets", () => {
       // Advance just past the 25s auto-refresh boundary. The setInterval
       // callback resets quoteAtFillTs to the current Date.now()/1000, so
       // the chip's perceived age drops back to ~0 and the chip vanishes.
-      vi.advanceTimersByTime(26_000);
+      act(() => {
+        vi.advanceTimersByTime(26_000);
+      });
 
       await waitFor(() => {
         const chipAfter = container.querySelector("[data-slot='quote-freshness']");
