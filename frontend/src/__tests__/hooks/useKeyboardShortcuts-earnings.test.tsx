@@ -8,7 +8,7 @@ vi.mock("next/navigation", () => ({
   usePathname: () => currentPath,
 }));
 vi.mock("@/stores/ui", () => ({
-  useUIStore: () => ({ setCommandPaletteOpen: vi.fn() }),
+  useUIStore: () => ({ setCommandPaletteOpen: vi.fn(), toggleCommandPalette: vi.fn() }),
 }));
 vi.mock("@/stores/market", () => ({
   useMarketStore: {

@@ -71,7 +71,7 @@ export function TopBar() {
             <Button
               variant="ghost"
               size="icon"
-              className="min-h-touch min-w-touch md:hidden"
+              className="min-h-touch min-w-touch lg:hidden"
               aria-label="Open menu"
             >
               <Menu className="h-4 w-4 text-muted-foreground" />
@@ -114,7 +114,7 @@ export function TopBar() {
           <span className="truncate">AlphaDesk</span>
         </button>
         {/* Desktop navigation -- hidden on mobile */}
-        <nav aria-label="Main navigation" className="ml-2 hidden items-center gap-1 md:flex">
+        <nav aria-label="Main navigation" className="ml-2 hidden items-center gap-1 lg:flex">
           {navItems.map(({ path, label, icon: Icon, active }) => (
             <button
               key={path}
@@ -133,7 +133,7 @@ export function TopBar() {
         {/* Round-11 / W-1: workspace selector removed (was a placebo). */}
       </div>
 
-      <button data-tour="search-bar" onClick={() => setCommandPaletteOpen(true)} aria-label="Open command palette to search symbols and commands" className="hidden h-9 min-w-[180px] max-w-[520px] flex-1 items-center gap-2 rounded-sm border border-border-hair bg-bg-elev-1/80 px-3 text-sm text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:border-primary/40 hover:text-foreground md:flex">
+      <button data-tour="search-bar" onClick={() => setCommandPaletteOpen(true)} aria-label="Open command palette to search symbols and commands" className="hidden h-9 min-w-[180px] max-w-[520px] flex-1 items-center gap-2 rounded-sm border border-border-hair bg-bg-elev-1/80 px-3 text-sm text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:border-primary/40 hover:text-foreground xl:flex">
         <Search className="h-3.5 w-3.5" aria-hidden="true" />
         <span className="flex-1 text-left">Search symbols, commands...</span>
         <kbd className="rounded-sm border border-border-hair bg-bg px-2 py-0.5 text-label font-mono text-muted-foreground">{isMac ? "\u2318K" : "Ctrl+K"}</kbd>

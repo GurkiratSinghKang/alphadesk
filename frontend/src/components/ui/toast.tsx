@@ -176,7 +176,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         aria-label="Notifications"
         aria-live="polite"
         aria-atomic="false"
-        className="fixed bottom-4 right-4 z-[55] flex w-[calc(100vw-2rem)] max-w-[380px] flex-col-reverse gap-2 pointer-events-none sm:w-[380px]"
+        className="fixed bottom-20 right-4 z-[55] flex w-[calc(100vw-2rem)] max-w-[380px] flex-col-reverse gap-2 pointer-events-none sm:bottom-4 sm:w-[380px]"
       >
         {toasts.map((t) => (
           <div key={t.id} className="pointer-events-auto">

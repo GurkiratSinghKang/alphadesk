@@ -84,18 +84,18 @@ export default function MarketingShell({
       >
         Skip to content
       </a>
-      <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12">
+      <div className="mx-auto max-w-[1440px] px-4 sm:px-8 lg:px-12">
         <nav
           aria-label="Primary"
-          className="flex h-[72px] items-center gap-8"
+          className="flex h-[72px] items-center gap-3 sm:gap-8"
         >
           <Link
             href="/"
-            className="flex items-baseline gap-1 font-display italic text-h2 text-ink-1000"
-            style={{ letterSpacing: "-0.02em" }}
+            className="flex min-w-0 items-baseline gap-1 font-display italic text-[28px] text-ink-1000 sm:text-h2"
+            style={{ letterSpacing: 0 }}
           >
             <span className="text-primary">α</span>
-            <span>AlphaDesk</span>
+            <span className="truncate">AlphaDesk</span>
           </Link>
 
           <ul className="ml-6 hidden items-center gap-6 sm:flex">
@@ -121,14 +121,14 @@ export default function MarketingShell({
           <div className="ml-auto flex items-center gap-3">
             <Link
               href="/login"
-              className="inline-flex min-h-11 items-center rounded-sm px-2 font-sans text-body-sm text-fg-dim transition-colors hover:text-fg"
+              className="inline-flex min-h-11 items-center whitespace-nowrap rounded-sm px-2 font-sans text-body-sm text-fg-dim transition-colors hover:text-fg"
             >
               Sign in
             </Link>
             <Link
               href="/request-access"
-              className="inline-flex min-h-11 items-center rounded-sm bg-primary px-4 py-2 font-sans text-body-sm font-semibold text-primary-foreground transition-colors hover:bg-gold-300"
-              style={{ letterSpacing: "0.01em" }}
+              className="inline-flex min-h-11 items-center whitespace-nowrap rounded-sm bg-primary px-3 py-2 font-sans text-body-sm font-semibold text-primary-foreground transition-colors hover:bg-gold-300 sm:px-4"
+              style={{ letterSpacing: 0 }}
             >
               Request access
             </Link>

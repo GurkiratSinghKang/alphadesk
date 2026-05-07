@@ -9,6 +9,7 @@ import { useMarketStore } from "@/stores/market";
 // dedicated confirmation flow; re-add when that ships.
 export const DEFAULT_BINDINGS: Record<string, string> = {
   "?": "toggle:shortcuts",
+  "Ctrl+k": "toggle:command-palette",
   "/": "focus:search",
   "Escape": "dismiss",
   "g d": "navigate:dashboard",
@@ -215,7 +216,7 @@ export function useShortcutHandler(action: string, handler: ShortcutHandler) {
 export function useKeyboardShortcuts() {
   const router = useRouter();
   const pathname = usePathname();
-  const { setCommandPaletteOpen } = useUIStore();
+  const { setCommandPaletteOpen, toggleCommandPalette } = useUIStore();
   const [overlayOpen, setOverlayOpen] = useState(false);
 
   const bindingsRef = useRef(loadBindings());
@@ -248,6 +249,8 @@ export function useKeyboardShortcuts() {
           setOverlayOpen((prev) => !prev);
           break;
         case "toggle:command-palette":
+          toggleCommandPalette();
+          break;
         case "focus:search":
           setCommandPaletteOpen(true);
           break;
@@ -367,11 +370,24 @@ export function useKeyboardShortcuts() {
           break;
       }
     },
-    [router, pathname, setCommandPaletteOpen]
+    [router, pathname, setCommandPaletteOpen, toggleCommandPalette]
   );
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      const isCommandPaletteShortcut =
+        (e.ctrlKey || e.metaKey) &&
+        !e.altKey &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === "k";
+
+      if (isCommandPaletteShortcut) {
+        e.preventDefault();
+        lastKeyRef.current = null;
+        handleAction("toggle:command-palette");
+        return;
+      }
+
       if (isShortcutInteractiveTarget(e.target)) {
         return;
       }
@@ -450,8 +466,8 @@ export function useKeyboardShortcuts() {
       lastKeyRef.current = isPotentialChordStart ? { key: keyStr, time: now } : null;
     }
 
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [handleAction, pathname]);
 
   // CommandPalette dispatches ``alphadesk:open-shortcuts`` from its
