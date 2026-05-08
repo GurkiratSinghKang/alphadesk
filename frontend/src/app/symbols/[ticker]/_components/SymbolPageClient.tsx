@@ -16,6 +16,11 @@ import { RecommendedSetups } from "../_sections/RecommendedSetups";
 import { StickyBand, type StickyBandQuote } from "../_sections/StickyBand";
 import { StrategyReverseLookup } from "../_sections/StrategyReverseLookup";
 import { UnsupportedAsset } from "../_sections/UnsupportedAsset";
+// v2 phase 1.3 — 5-tab navigation per v2-plan §1.3. Tabs are rendered
+// below the sticky band; URL-state-backed via ?tab=… so deep links
+// + back/forward work. Existing sections are reused; the tab pivot
+// only changes which sections render at any one time.
+import SymbolTabs, { useSymbolTab } from "../_v2/SymbolTabs";
 
 export interface SymbolPageClientProps {
   symbol: string;
@@ -232,6 +237,8 @@ function makePreviewBars(symbol: string): OHLCVBar[] {
 
 export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
   const data = useSymbolPageData(symbol);
+  // v2 phase 1.3 — active tab from URL ?tab=… ; defaults to overview.
+  const [activeTab, setActiveTab] = useSymbolTab();
 
   if (data.isCryptoForex) {
     return <UnsupportedAsset symbol={symbol} />;
@@ -373,52 +380,76 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
         />
       </StickyBand>
 
-      <ChartBand
-        symbol={symbol}
-        bars={effectiveBars}
-        name={chartName}
-        quote={effectiveQuote}
-        dataMode={canShowPublicPreview ? "preview" : "live"}
-      />
+      {/* v2 phase 1.3 — 5-tab navigation. Sections below are routed by
+       * `activeTab` per v2-plan §1.3. Existing components (ChartBand,
+       * OptionsThesisBand, RecommendedSetups, StrategyReverseLookup,
+       * EarningsPanel, AgentsDebateCard, NewsBand, AboutSection) are
+       * preserved — the pivot only changes which set renders. */}
+      <SymbolTabs active={activeTab} onTabChange={setActiveTab} />
 
-      <OptionsThesisBand
-        symbol={symbol}
-        ivData={data.ivData}
-        claudeStructured={claudeStructured}
-        claudeFullResearch={claudeFullResearch}
-        ivTermStructure={ivTermStructure}
-        skew={skew}
-        metrics={metrics}
-        analysisSummary={data.analysis?.summary ?? null}
-        isETF={data.isETF}
-      />
+      {activeTab === "overview" && (
+        <div role="tabpanel" id="symbol-tab-panel-overview" aria-labelledby="symbol-tab-overview">
+          <ChartBand
+            symbol={symbol}
+            bars={effectiveBars}
+            name={chartName}
+            quote={effectiveQuote}
+            dataMode={canShowPublicPreview ? "preview" : "live"}
+          />
+          <RecommendedSetups
+            symbol={symbol}
+            setups={data.recommendedSetups}
+            isETF={data.isETF}
+            underlying={effectiveQuote?.last ?? null}
+          />
+          <StrategyReverseLookup symbol={symbol} />
+        </div>
+      )}
 
-      <RecommendedSetups
-        symbol={symbol}
-        setups={data.recommendedSetups}
-        isETF={data.isETF}
-        underlying={effectiveQuote?.last ?? null}
-      />
+      {activeTab === "fundamentals" && (
+        <div role="tabpanel" id="symbol-tab-panel-fundamentals" aria-labelledby="symbol-tab-fundamentals">
+          <div className="px-4 sm:px-6 py-4">
+            <EarningsPanel
+              isETF={data.isETF}
+              historicalEarnings={data.earningsDetail?.historicalEarnings ?? null}
+              ivTermStructure={ivTermStructure}
+              nextReportDate={data.earningsDetail?.reportDate ?? null}
+              nextReportTime={data.earningsDetail?.reportTime ?? null}
+            />
+          </div>
+          <AboutSection symbol={symbol} />
+        </div>
+      )}
 
-      <StrategyReverseLookup symbol={symbol} />
+      {activeTab === "news" && (
+        <div role="tabpanel" id="symbol-tab-panel-news" aria-labelledby="symbol-tab-news">
+          <NewsBand news={newsArticles} />
+        </div>
+      )}
 
-      <div
-        data-slot="agents-earnings-row"
-        className="grid grid-cols-1 gap-4 px-4 sm:px-6 mb-6 xl:grid-cols-2"
-      >
-        <AgentsDebateCard symbol={symbol} isETF={data.isETF} />
-        <EarningsPanel
-          isETF={data.isETF}
-          historicalEarnings={data.earningsDetail?.historicalEarnings ?? null}
-          ivTermStructure={ivTermStructure}
-          nextReportDate={data.earningsDetail?.reportDate ?? null}
-          nextReportTime={data.earningsDetail?.reportTime ?? null}
-        />
-      </div>
+      {activeTab === "options" && (
+        <div role="tabpanel" id="symbol-tab-panel-options" aria-labelledby="symbol-tab-options">
+          <OptionsThesisBand
+            symbol={symbol}
+            ivData={data.ivData}
+            claudeStructured={claudeStructured}
+            claudeFullResearch={claudeFullResearch}
+            ivTermStructure={ivTermStructure}
+            skew={skew}
+            metrics={metrics}
+            analysisSummary={data.analysis?.summary ?? null}
+            isETF={data.isETF}
+          />
+        </div>
+      )}
 
-      <NewsBand news={newsArticles} />
-
-      <AboutSection symbol={symbol} />
+      {activeTab === "history" && (
+        <div role="tabpanel" id="symbol-tab-panel-history" aria-labelledby="symbol-tab-history">
+          <div className="px-4 sm:px-6 py-4">
+            <AgentsDebateCard symbol={symbol} isETF={data.isETF} />
+          </div>
+        </div>
+      )}
     </main>
   );
 }

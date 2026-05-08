@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, type ReactNode } from "react";
 
@@ -7,6 +7,11 @@ import type { UseSymbolPageDataResult } from "../_hooks/useSymbolPageData";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), forward: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
+  // v2 phase 1.3 — SymbolTabs reads ?tab=… from useSearchParams and
+  // usePathname for URL-state routing. Tests pin the default ("overview"
+  // when no `tab` param) and don't exercise tab switching.
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/symbols/AAPL",
 }));
 
 vi.mock("../_hooks/useSymbolPageData", () => ({
@@ -247,6 +252,8 @@ describe("SymbolPageClient gates", () => {
     expect(screen.getByTestId("symbol-page")).toBeInTheDocument();
     expect(screen.getByTestId("sticky-band")).toBeInTheDocument();
     expect(screen.getByTestId("decision-strip")).toBeInTheDocument();
+    // v2 phase 1.3 — Options content lives behind the Options tab now.
+    fireEvent.click(screen.getByRole("tab", { name: /Options/i }));
     expect(screen.getByTestId("options-thesis-band")).toBeInTheDocument();
     expect(screen.queryByTestId("etf-thesis-placeholder")).toBeNull();
     const empty = screen.getByTestId("thesis-empty-state");
@@ -267,6 +274,8 @@ describe("SymbolPageClient gates", () => {
 
     expect(screen.getByTestId("symbol-page")).toBeInTheDocument();
     expect(screen.getByTestId("sticky-band")).toBeInTheDocument();
+    // v2 phase 1.3 — Options content lives behind the Options tab now.
+    fireEvent.click(screen.getByRole("tab", { name: /Options/i }));
     expect(screen.getByTestId("options-thesis-band")).toBeInTheDocument();
     expect(screen.queryByTestId("etf-thesis-placeholder")).toBeNull();
     expect(screen.queryByTestId("symbol-not-found")).toBeNull();
