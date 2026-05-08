@@ -21,6 +21,14 @@ let preferencesHydrationStarted = false;
  */
 export default function ThemeController() {
   const theme = usePreferencesStore((s) => s.display.theme);
+  const density = usePreferencesStore((s) => s.display.density);
+
+  useEffect(() => {
+    // v2 redesign: cascade `data-density` onto <body> so all spacing
+    // tokens and density-aware components reflow without prop drilling.
+    if (typeof document === "undefined") return;
+    document.body.dataset.density = density === "dense" ? "dense" : "quiet";
+  }, [density]);
 
   useEffect(() => {
     // Preferences use skipHydration because the trading data bridge hydrates
@@ -39,8 +47,13 @@ export default function ThemeController() {
     const root = document.documentElement;
 
     const apply = (mode: "dark" | "light") => {
+      // v2 redesign: write BOTH the class (existing) and the
+      // [data-theme] attribute so v2 stylesheets that follow the
+      // attribute-selector convention see the theme too. The
+      // .light class stays load-bearing; this is purely additive.
       root.classList.toggle("dark", mode === "dark");
       root.classList.toggle("light", mode === "light");
+      root.dataset.theme = mode;
       root.style.colorScheme = mode;
     };
 

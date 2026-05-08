@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Newsreader } from "next/font/google";
 import { Providers } from "@/lib/providers";
 import WebVitalsReporter from "@/components/layout/WebVitalsReporter";
 import ServiceWorkerRegistrar from "@/components/layout/ServiceWorkerRegistrar";
@@ -42,6 +42,21 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
   display: "swap",
   fallback: ["SF Mono", "Menlo", "monospace"],
+});
+
+// v2 redesign — editorial display serif. Used by `.t-display-*`,
+// `.t-section-display`, `.t-eyebrow-italic`, EmptyState titles, AIStrip
+// body copy. Italic only; weight 400. Optical-size axis (`opsz` 6..72)
+// is consumed via `font-variation-settings` in the typography classes.
+// Adds ~120-160KB to first paint; verified within budget by
+// WebVitalsReporter LCP traces.
+const newsreader = Newsreader({
+  variable: "--font-newsreader",
+  subsets: ["latin"],
+  style: ["italic", "normal"],
+  weight: ["400"],
+  display: "swap",
+  fallback: ["Iowan Old Style", "Times New Roman", "Georgia", "serif"],
 });
 
 // Wave 3N persona-94/95 tagline-drift fix: three different descriptions
@@ -114,7 +129,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`dark ${geist.variable} ${geistMono.variable} h-full antialiased`}
+      className={`dark ${geist.variable} ${geistMono.variable} ${newsreader.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>

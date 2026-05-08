@@ -19,6 +19,7 @@ export interface NotificationPrefs {
 }
 
 export type ThemePreference = "system" | "dark" | "light";
+export type DensityPreference = "quiet" | "dense";
 
 export interface DisplayPrefs {
   /**
@@ -36,6 +37,19 @@ export interface DisplayPrefs {
    * the current OS preference.
    */
   theme: ThemePreference;
+  /**
+   * v2 redesign — visual density.
+   *
+   * ``"quiet"`` (default per v2-plan locked decision #14) — editorial
+   * spacing rhythm; section gaps breathe; appropriate for the dashboard,
+   * symbol research, marketing, and reports surfaces.
+   *
+   * ``"dense"`` — opt-in compact mode for active-trader workflows
+   * (more rows on screen, tighter padding). Toggled via Settings →
+   * Appearance. Cascades through the app via ``body[data-density]``
+   * which overrides ``--space-*`` tokens; no prop drilling.
+   */
+  density: DensityPreference;
   // animationSpeed: REMOVED (persona-8 #2) — no consumer. Wiring a single
   // global speed knob across lightweight-charts, the marquee, the pulse
   // dots, etc. is a real project; the rest of the app honours
@@ -79,6 +93,9 @@ const defaultDisplay: DisplayPrefs = {
   // Default to "dark" to preserve the established desk look for existing
   // users; the header toggle and Settings page now expose light mode.
   theme: "dark",
+  // v2 lock: editorial-quiet default. Active traders opt into dense
+  // via Settings → Appearance.
+  density: "quiet",
 };
 
 const defaultData: DataPrefs = {
