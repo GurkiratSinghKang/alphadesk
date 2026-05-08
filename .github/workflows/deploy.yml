@@ -398,15 +398,34 @@ jobs:
             # the database/redis data intact across this reconcile.
             docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml \
               up -d --no-deps timescaledb redis
-            for svc in alphadesk-timescaledb alphadesk-redis; do
+
+            wait_for_data_service() {
+              svc="$1"
               for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24; do
-                health=$(docker inspect "${svc}" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' 2>/dev/null || echo "missing")
-                echo "  [${i}/24] ${svc} health=${health}"
-                if [ "${health}" = "healthy" ] || [ "${health}" = "running" ]; then break; fi
+                svc_health=$(docker inspect "${svc}" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' 2>/dev/null || echo "missing")
+                echo "  [${i}/24] ${svc} health=${svc_health}"
+                if [ "${svc_health}" = "healthy" ] || [ "${svc_health}" = "running" ]; then break; fi
                 sleep 5
               done
-              [ "${health}" = "healthy" ] || [ "${health}" = "running" ] || { echo "FATAL: ${svc} not ready for migration"; exit 1; }
-            done
+              [ "${svc_health}" = "healthy" ] || [ "${svc_health}" = "running" ] || { echo "FATAL: ${svc} not ready for migration"; exit 1; }
+            }
+            wait_for_data_service alphadesk-timescaledb
+            wait_for_data_service alphadesk-redis
+
+            check_data_dns() {
+              docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml \
+                run --rm -T --no-deps backend \
+                python -c "import socket; [socket.getaddrinfo(host, port) for host, port in (('timescaledb', 5432), ('redis', 6379))]" \
+                </dev/null >/dev/null
+            }
+            if ! check_data_dns; then
+              echo "WARN: data service aliases missing on current compose network; recreating data containers"
+              docker compose -f docker-compose.yml -f infrastructure/docker-compose.prod.yml \
+                up -d --no-deps --force-recreate timescaledb redis
+              wait_for_data_service alphadesk-timescaledb
+              wait_for_data_service alphadesk-redis
+              check_data_dns || { echo "FATAL: data service aliases still unavailable to backend"; exit 1; }
+            fi
 
             echo "─── Pre-swap migrations ────────────────────────────────"
             # Round-5 Cluster F H-11: run ``alembic upgrade head`` against
