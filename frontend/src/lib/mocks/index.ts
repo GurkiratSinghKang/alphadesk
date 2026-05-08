@@ -35,3 +35,11 @@ export type {
 
 export { MOCK_DASHBOARD_SECTIONS } from "./dashboard";
 export type { DashboardSection } from "./dashboard";
+
+export { MOCK_WATCHLISTS } from "./watchlists";
+export type {
+  Watchlist,
+  WatchlistRow,
+  WatchlistKind,
+  WatchlistShare,
+} from "./watchlists";
