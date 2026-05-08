@@ -82,7 +82,13 @@ export async function proxy(request: NextRequest) {
   const isPublicPage = [
     "/privacy",
     "/terms",
+    // v2 redesign — /risk moved to /legal/risk; the legacy slug is still
+    // listed so the 301 redirect from next.config.ts fires before the
+    // proxy decides to bounce unauthenticated users to /login. Without
+    // this entry, a public visitor hitting /risk would be redirected
+    // to /login first and lose the deep link.
     "/risk",
+    "/legal/risk",
     "/docs",
     "/request-access",
   ].includes(pathname);

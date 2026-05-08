@@ -86,7 +86,7 @@ export const TERMS_CLAUSES: StaticClause[] = [
           <EditorialP>
             See our{" "}
             <Link
-              href="/risk"
+              href="/legal/risk"
               className="text-primary underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
             >
               Risk Disclosure

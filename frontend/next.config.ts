@@ -51,6 +51,11 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: "/dashboard", destination: "/", permanent: true },
+      // v2 redesign: the public Risk Disclosure page moved from /risk
+      // to /legal/risk to free /risk-dashboard for the new authenticated
+      // trading risk surface. Permanent (308) redirect preserves SEO
+      // for the ~7 internal + external links that referenced /risk.
+      { source: "/risk", destination: "/legal/risk", permanent: true },
     ];
   },
   async headers() {

@@ -4,12 +4,20 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useUIStore } from "@/stores/ui";
 import { useMarketStore } from "@/stores/market";
+import { useJarvisStore } from "@/stores/jarvis";
 
 // Shift+C/F/S removed in Wave 32 — position-flatten + stop-loss actions need a
 // dedicated confirmation flow; re-add when that ships.
+//
+// v2 redesign: added `Ctrl+Shift+j` (Jarvis ⌘⇧J), `g w` (Watchlists), and
+// retargeted `g r` from `/reports` → `/risk-dashboard` per v2-plan §0.6/§1.1.
+// Reports kept `g R` (Shift) so the existing chord remains accessible.
+// Risk dashboard is the trader-facing page; the public /risk legal page
+// migrates to /legal/risk in the same Phase 0 commit.
 export const DEFAULT_BINDINGS: Record<string, string> = {
   "?": "toggle:shortcuts",
   "Ctrl+k": "toggle:command-palette",
+  "Ctrl+Shift+j": "toggle:jarvis",
   "/": "focus:search",
   "Escape": "dismiss",
   "g d": "navigate:dashboard",
@@ -18,7 +26,9 @@ export const DEFAULT_BINDINGS: Record<string, string> = {
   "g s": "navigate:strategies",
   "g a": "navigate:analytics",
   "g l": "navigate:alerts",
-  "g r": "navigate:reports",
+  "g r": "navigate:risk-dashboard",
+  "g R": "navigate:reports",
+  "g w": "navigate:watchlists",
   "g e": "navigate:earnings-options-play",
   "n": "navigate:next-tab",
   "p": "navigate:prev-tab",
@@ -55,10 +65,13 @@ export const NEW_SHORTCUTS = new Set([
   "f",
   "r",
   "Ctrl+j",
+  "Ctrl+Shift+j",  // v2 — Jarvis command bar
   "g s",
   "g a",
   "g l",
-  "g r",
+  "g r",            // v2 — re-targeted to /risk-dashboard
+  "g R",            // v2 — Reports moved to Shift+R
+  "g w",            // v2 — Watchlists
   // P2-27: cancel-order key joins the new-shortcut set so the overlay
   // surfaces a "new" pip until enough operators have used it.
   "c",
@@ -96,7 +109,9 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { key: "g a", action: "navigate:analytics", description: "Go to Analytics", isNew: true },
       { key: "g p", action: "navigate:pipeline", description: "Go to Pipeline" },
       { key: "g l", action: "navigate:alerts", description: "Go to Alerts", isNew: true },
-      { key: "g r", action: "navigate:reports", description: "Go to Reports", isNew: true },
+      { key: "g r", action: "navigate:risk-dashboard", description: "Go to Risk dashboard", isNew: true },
+      { key: "g R", action: "navigate:reports", description: "Go to Reports", isNew: true },
+      { key: "g w", action: "navigate:watchlists", description: "Go to Watchlists", isNew: true },
       { key: "g e", action: "navigate:earnings-options-play", description: "Go to Earnings Play", isNew: true },
       { key: "n", action: "navigate:next-tab", description: "Next tab", isNew: true },
       { key: "p", action: "navigate:prev-tab", description: "Previous tab", isNew: true },
@@ -141,6 +156,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     icon: "brain",
     items: [
       { key: "Cmd+J", action: "copilot:toggle", description: "Toggle AI Copilot sidebar", isNew: true },
+      { key: "Cmd+Shift+J", action: "toggle:jarvis", description: "Open Jarvis command bar (find a control)", isNew: true },
     ],
   },
 ];
@@ -251,6 +267,12 @@ export function useKeyboardShortcuts() {
         case "toggle:command-palette":
           toggleCommandPalette();
           break;
+        case "toggle:jarvis":
+          // v2 — open the conversational command bar. Phase 0 ships
+          // fuzzy-search-only over MOCK_CONTROLS; Phase 2 swaps for
+          // backend B.7 intent parsing + dry-run + typed-confirm.
+          useJarvisStore.getState().setOpen(!useJarvisStore.getState().open);
+          break;
         case "focus:search":
           setCommandPaletteOpen(true);
           break;
@@ -258,6 +280,10 @@ export function useKeyboardShortcuts() {
           setOverlayOpen(false);
           // Also close command palette if open
           setCommandPaletteOpen(false);
+          // v2 — close Jarvis if open. The Dialog's own Esc handler
+          // also closes; this guarantees the chord works even if a
+          // nested input has captured key events.
+          useJarvisStore.getState().setOpen(false);
           break;
         case "navigate:dashboard":
           router.push("/");
@@ -279,6 +305,16 @@ export function useKeyboardShortcuts() {
           break;
         case "navigate:reports":
           router.push("/reports");
+          break;
+        case "navigate:risk-dashboard":
+          // v2 — `g r` chord re-targeted from /reports to the new
+          // trading risk dashboard. The public Risk Disclosure page
+          // moves to /legal/risk in the same Phase 0 commit.
+          router.push("/risk-dashboard");
+          break;
+        case "navigate:watchlists":
+          // v2 — first-class watchlists page (replaces panel-only access).
+          router.push("/watchlists");
           break;
         case "navigate:earnings-options-play":
           // Phase-1 / KB-1: dedicated keybinding for the earnings page

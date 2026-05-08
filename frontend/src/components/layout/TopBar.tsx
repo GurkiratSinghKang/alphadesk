@@ -24,6 +24,7 @@ import HaltTradingButton from "./HaltTradingButton";
 import { NotificationCenter } from "./NotificationCenter";
 import { ThemeToggle } from "./ThemeToggle";
 import StatusPills from "./StatusPills";
+import PaperLiveToggle from "@/components/composites/PaperLiveToggle";
 // Round-11 / W-1 (P0): WorkspaceSelector was a placebo — selecting
 // "Morning Research" persisted to localStorage, dispatched
 // ``alphadesk:workspace-change`` into the void (zero subscribers
@@ -159,6 +160,13 @@ export function TopBar() {
         <div className="hidden lg:block">
           <StatusPills />
         </div>
+        {/* v2 redesign — first-class paper/live toggle per v2-plan §0.13.
+         * Reads existing useUIStore.tradingMode (cross-tab synced —
+         * preservation invariant #1). Paper→live still routes through
+         * the existing admin-gated toast (Round-10 / W-2 fix preserved).
+         * The ProfileMenu radio stays for one release as a redundant
+         * secondary control until v2.1 cleanup. */}
+        <PaperLiveToggle className="hidden md:inline-flex" />
         {/* Audit Persona F4.2 (2026-05-05): system-wide halt-trading
          * button. Admin-only — backend returns 403 for non-admin and
          * the component hides itself. Hidden on the smallest mobile

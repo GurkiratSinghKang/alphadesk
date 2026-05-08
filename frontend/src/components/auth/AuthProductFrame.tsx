@@ -363,7 +363,7 @@ export default function AuthProductFrame({
             <span>Paper-first execution</span>
             <span aria-hidden>·</span>
             <Link
-              href="/risk"
+              href="/legal/risk"
               className="text-[var(--auth-fg)] underline underline-offset-4 decoration-[var(--auth-border-soft)] hover:decoration-[var(--auth-fg)]"
             >
               Risk disclosure

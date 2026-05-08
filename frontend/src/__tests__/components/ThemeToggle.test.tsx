@@ -12,6 +12,7 @@ describe('ThemeToggle', () => {
         tickerTapeOn: false,
         compactStrategyView: false,
         theme: 'dark',
+        density: 'quiet',
       },
     });
   });
