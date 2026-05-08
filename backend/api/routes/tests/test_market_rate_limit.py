@@ -9,7 +9,7 @@ actually want to assert here is the cap itself.
 Contract:
   * Within a minute bucket: up to ``cap`` requests succeed; the next one
     raises HTTPException(429, Retry-After header set).
-  * Separate IPs do not share a bucket.
+  * Separate trusted client IPs do not share a bucket.
   * Authed vs unauth traffic uses different caps
     (``MARKET_RL_AUTH_PER_MIN`` vs ``MARKET_RL_UNAUTH_PER_MIN``).
   * On Redis failure the helper fails OPEN (no exception raised).
@@ -207,33 +207,41 @@ async def test_redis_failure_fails_open(
 
 
 @pytest.mark.asyncio
-async def test_xff_header_is_honoured(
+async def test_raw_xff_header_is_not_trusted_directly(
     fake_redis: Any, low_caps: tuple[int, int]
 ) -> None:
-    """The X-Forwarded-For first-hop IP is used for keying.
+    """Raw X-Forwarded-For does not bypass trusted-proxy handling.
 
-    Caddy rewrites this header at the edge; ignoring it would cause
-    every request to look like it came from the Caddy container IP and
-    share a bucket. Two requests with different XFF but identical peer
-    IP must land in different buckets.
+    ``ProxyHeadersMiddleware`` rewrites ``request.client.host`` only
+    when the TCP peer is trusted. The route helper must use that
+    rewritten peer value instead of parsing raw XFF itself; otherwise a
+    direct caller could rotate spoofed XFF first hops and evade the cap.
     """
     from api.routes.market import _market_rate_limit_or_429
 
     cap_unauth, _ = low_caps
 
-    # Both requests share the peer IP (127.0.0.1) but differ in XFF.
+    # Both requests share the peer IP but differ in raw XFF. They must
+    # still share one bucket because middleware has not rewritten the
+    # fake request.client.host.
     req_a = _FakeRequest(ip="127.0.0.1", xff="203.0.113.10")
     req_b = _FakeRequest(ip="127.0.0.1", xff="203.0.113.20")
     resp = _FakeResponse()
 
-    # Burn A's budget — should not affect B.
+    # Burn the peer-IP budget via A.
     for _ in range(cap_unauth):
         await _market_rate_limit_or_429(req_a, resp)
     with pytest.raises(HTTPException):
         await _market_rate_limit_or_429(req_a, resp)
 
-    # B is still clean.
-    await _market_rate_limit_or_429(req_b, resp)
+    # B presents a different raw XFF, but the same trusted peer bucket is
+    # already exhausted.
+    with pytest.raises(HTTPException):
+        await _market_rate_limit_or_429(req_b, resp)
+
+    # A truly separate middleware-resolved peer still gets its own bucket.
+    req_c = _FakeRequest(ip="203.0.113.20")
+    await _market_rate_limit_or_429(req_c, resp)
 
 
 @pytest.mark.asyncio
