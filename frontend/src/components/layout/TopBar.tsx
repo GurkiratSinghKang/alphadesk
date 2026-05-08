@@ -2,7 +2,19 @@
 
 import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, BarChart3, Bot, Search, Bell, Menu, LineChart, FileText, Target } from "lucide-react";
+import {
+  Bell,
+  Buildings,
+  ChartBar,
+  ChartLineUp,
+  FileText,
+  Gauge,
+  List,
+  MagnifyingGlass,
+  Robot,
+  ShieldCheck,
+  Target,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useUIStore } from "@/stores/ui";
@@ -42,6 +54,8 @@ export function TopBar() {
   const isAnalytics = pathname === "/analytics";
   const isAlerts = pathname === "/alerts";
   const isReports = pathname === "/reports";
+  const isSymbols = pathname?.startsWith("/symbols") ?? false;
+  const isAdmin = pathname?.startsWith("/admin/control-center") ?? false;
   // Wave 29 persona-1: mobile users were losing access to /strategies once
   // they left the desk — the non-desk TopBar had no Strategies entry so
   // there was no route back to the listing (Wave 27 is adding it). Add
@@ -49,13 +63,15 @@ export function TopBar() {
   const isStrategies = pathname?.startsWith("/strategies") ?? false;
 
   const navItems = [
-    { path: "/", label: "Dashboard", icon: LayoutDashboard, active: isHome },
+    { path: "/", label: "Dashboard", icon: Gauge, active: isHome },
+    { path: "/symbols", label: "Symbols", icon: Buildings, active: isSymbols },
     { path: "/strategies", label: "Strategies", icon: Target, active: isStrategies },
-    { path: "/trade", label: "Trade", icon: BarChart3, active: isTrade },
-    { path: "/analytics", label: "Analytics", icon: LineChart, active: isAnalytics },
+    { path: "/trade", label: "Trade", icon: ChartBar, active: isTrade },
+    { path: "/analytics", label: "Analytics", icon: ChartLineUp, active: isAnalytics },
     { path: "/alerts", label: "Alerts", icon: Bell, active: isAlerts },
-    { path: "/pipeline", label: "Pipeline", icon: Bot, active: isPipeline },
+    { path: "/pipeline", label: "Pipeline", icon: Robot, active: isPipeline },
     { path: "/reports", label: "Reports", icon: FileText, active: isReports },
+    { path: "/admin/control-center", label: "Admin", icon: ShieldCheck, active: isAdmin },
   ];
 
   return (
@@ -71,10 +87,10 @@ export function TopBar() {
             <Button
               variant="ghost"
               size="icon"
-              className="min-h-touch min-w-touch lg:hidden"
+              className="min-h-touch min-w-touch xl:hidden"
               aria-label="Open menu"
             >
-              <Menu className="h-4 w-4 text-muted-foreground" />
+              <List className="h-4 w-4 text-muted-foreground" />
             </Button>
           } />
           <SheetContent side="left" className="w-64 bg-[var(--bg-card)] border-border p-0">
@@ -114,7 +130,7 @@ export function TopBar() {
           <span className="truncate">AlphaDesk</span>
         </button>
         {/* Desktop navigation -- hidden on mobile */}
-        <nav aria-label="Main navigation" className="ml-2 hidden items-center gap-1 lg:flex">
+        <nav aria-label="Main navigation" className="ml-2 hidden items-center gap-1 xl:flex">
           {navItems.map(({ path, label, icon: Icon, active }) => (
             <button
               key={path}
@@ -134,7 +150,7 @@ export function TopBar() {
       </div>
 
       <button data-tour="search-bar" onClick={() => setCommandPaletteOpen(true)} aria-label="Open command palette to search symbols and commands" className="hidden h-9 min-w-0 basis-[180px] max-w-[520px] flex-1 items-center gap-2 rounded-sm border border-border-hair bg-bg-elev-1/80 px-3 text-sm text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:border-primary/40 hover:text-foreground xl:flex">
-        <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <MagnifyingGlass className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">Search symbols, commands...</span>
         <kbd className="shrink-0 rounded-sm border border-border-hair bg-bg px-2 py-0.5 text-label font-mono text-muted-foreground">{isMac ? "\u2318K" : "Ctrl+K"}</kbd>
       </button>

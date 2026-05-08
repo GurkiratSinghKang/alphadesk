@@ -1,5 +1,6 @@
 "use client";
 
+import { Buildings } from "@phosphor-icons/react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -72,6 +73,16 @@ export function HeroCTAs({ symbol, className }: HeroCTAsProps) {
         render={<Link href={agentsHref} />}
       >
         Run agents
+      </Button>
+      <Button
+        data-testid="hero-cta-all-symbols"
+        variant="outline"
+        size="default"
+        nativeButton={false}
+        render={<Link href="/symbols" />}
+      >
+        <Buildings className="size-4" aria-hidden="true" />
+        All symbols
       </Button>
     </div>
   );

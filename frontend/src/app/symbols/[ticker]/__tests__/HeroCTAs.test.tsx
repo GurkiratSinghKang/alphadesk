@@ -29,11 +29,12 @@ afterEach(() => {
 });
 
 describe("HeroCTAs", () => {
-  it("renders the three primary CTAs (Trade, Watch, Run agents)", () => {
+  it("renders the ticker CTAs and the directory link", () => {
     const { getByTestId } = render(<HeroCTAs symbol="NVDA" />);
     expect(getByTestId("hero-cta-trade")).toBeInTheDocument();
     expect(getByTestId("hero-cta-watch")).toBeInTheDocument();
     expect(getByTestId("hero-cta-run-agents")).toBeInTheDocument();
+    expect(getByTestId("hero-cta-all-symbols")).toBeInTheDocument();
   });
 
   it("Watch button starts as 'Watch' when the symbol is not in the watchlist", () => {
@@ -104,5 +105,12 @@ describe("HeroCTAs", () => {
     expect(runAgents.getAttribute("href")).toBe(
       "/strategies/trading-agents-research?symbol=NVDA",
     );
+  });
+
+  it("All symbols links back to the symbols directory", () => {
+    const { getByTestId } = render(<HeroCTAs symbol="NVDA" />);
+    const allSymbols = getByTestId("hero-cta-all-symbols");
+    expect(allSymbols.tagName.toLowerCase()).toBe("a");
+    expect(allSymbols.getAttribute("href")).toBe("/symbols");
   });
 });

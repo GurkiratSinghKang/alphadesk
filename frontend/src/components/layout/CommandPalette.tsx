@@ -4,20 +4,22 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Command } from "cmdk";
 import {
-  BarChart3,
-  LineChart,
-  Search,
-  TrendingUp,
-  Wallet,
-  ArrowRightLeft,
-  Loader2,
-  Target,
-  LayoutDashboard,
+  ArrowsLeftRight,
   Bell,
-  Bot,
-  FileText,
+  Buildings,
+  ChartBar,
+  ChartLineUp,
   Clock,
-} from "lucide-react";
+  FileText,
+  Gauge,
+  MagnifyingGlass,
+  Robot,
+  ShieldCheck,
+  SpinnerGap,
+  Target,
+  TrendUp,
+  Wallet,
+} from "@phosphor-icons/react";
 import { useUIStore } from "@/stores/ui";
 import { useMarketStore } from "@/stores/market";
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogHeader, DialogFooter } from "@/components/ui/dialog";
@@ -32,12 +34,14 @@ const POPULAR_SYMBOLS = [
 ];
 
 const PAGES = [
-  { path: "/", label: "Dashboard", icon: LayoutDashboard },
-  { path: "/trade", label: "Trade", icon: BarChart3 },
-  { path: "/analytics", label: "Analytics", icon: LineChart },
+  { path: "/", label: "Dashboard", icon: Gauge },
+  { path: "/symbols", label: "Symbols", icon: Buildings },
+  { path: "/trade", label: "Trade", icon: ChartBar },
+  { path: "/analytics", label: "Analytics", icon: ChartLineUp },
   { path: "/alerts", label: "Alerts", icon: Bell },
-  { path: "/pipeline", label: "Pipeline", icon: Bot },
+  { path: "/pipeline", label: "Pipeline", icon: Robot },
   { path: "/reports", label: "Reports", icon: FileText },
+  { path: "/admin/control-center", label: "Admin control center", icon: ShieldCheck },
   { path: "/docs", label: "Documentation", icon: FileText },
 ];
 
@@ -432,9 +436,9 @@ export function CommandPalette() {
         >
           <div className="flex items-center border-b border-border px-3">
             {isSearching ? (
-              <Loader2 className="mr-2 h-4 w-4 shrink-0 text-muted-foreground animate-spin" />
+              <SpinnerGap className="mr-2 h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
             ) : (
-              <Search className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+              <MagnifyingGlass className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
             )}
             <Command.Input
               placeholder="Search symbols, commands..."
@@ -466,7 +470,7 @@ export function CommandPalette() {
               {symbolsToShow.map((sym) => (
                 <CommandItem
                   key={sym.symbol}
-                  icon={<TrendingUp className="h-4 w-4" />}
+                  icon={<TrendUp className="h-4 w-4" />}
                   label={
                     sym.name && sym.name !== sym.symbol
                       ? `${sym.symbol} — ${sym.name}${sym.exchange ? ` (${sym.exchange})` : ""}`
@@ -506,7 +510,7 @@ export function CommandPalette() {
                   expecting an "A" binding that didn't exist. Re-add when the
                   analysis page ships. */}
               <CommandItem
-                icon={<BarChart3 className="h-4 w-4" />}
+                icon={<ChartBar className="h-4 w-4" />}
                 label="Screen momentum stocks"
                 onSelect={handleScreenMomentum}
               />
@@ -516,7 +520,7 @@ export function CommandPalette() {
                 onSelect={handleShowPortfolio}
               />
               <CommandItem
-                icon={<ArrowRightLeft className="h-4 w-4" />}
+                icon={<ArrowsLeftRight className="h-4 w-4" />}
                 label={tradingMode === "live" ? "Switch to paper trading" : "Live trading access"}
                 onSelect={handleSwitchLive}
               />
@@ -529,7 +533,7 @@ export function CommandPalette() {
                 onSelect={handleCancelAllOrders}
               />
               <CommandItem
-                icon={<TrendingUp className="h-4 w-4" />}
+                icon={<TrendUp className="h-4 w-4" />}
                 label={
                   selectedSymbol
                     ? `Flatten ${selectedSymbol} — close at market`
@@ -538,7 +542,7 @@ export function CommandPalette() {
                 onSelect={handleFlattenCurrentSymbol}
               />
               <CommandItem
-                icon={<Bot className="h-4 w-4" />}
+                icon={<Robot className="h-4 w-4" />}
                 label="Pause all strategies"
                 onSelect={handlePauseAllStrategies}
               />
@@ -557,12 +561,12 @@ export function CommandPalette() {
               className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-label [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground"
             >
               <CommandItem
-                icon={<LineChart className="h-4 w-4" />}
+                icon={<ChartLineUp className="h-4 w-4" />}
                 label={pathname === "/trade" ? "Focus chart panel" : "Open trade chart"}
                 onSelect={handleFocusChart}
               />
               <CommandItem
-                icon={<BarChart3 className="h-4 w-4" />}
+                icon={<ChartBar className="h-4 w-4" />}
                 label={pathname === "/trade" ? "Focus options chain" : "Open options chain"}
                 onSelect={handleFocusOptions}
               />

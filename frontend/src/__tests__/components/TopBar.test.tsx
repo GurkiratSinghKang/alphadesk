@@ -35,8 +35,10 @@ describe('TopBar', () => {
   it('renders navigation tabs', () => {
     render(<TopBar />);
     expect(screen.getByText('Dashboard')).toBeDefined();
+    expect(screen.getByText('Symbols')).toBeDefined();
     expect(screen.getByText('Trade')).toBeDefined();
     expect(screen.getByText('Pipeline')).toBeDefined();
+    expect(screen.getByText('Admin')).toBeDefined();
   });
 
   it('renders search bar', () => {

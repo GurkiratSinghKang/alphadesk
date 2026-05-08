@@ -7,6 +7,8 @@
 // makes the route render only at request time, sidestepping prerender.
 export const dynamic = "force-dynamic";
 
+import { Buildings, House, ShieldCheck } from "@phosphor-icons/react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppMindMap } from "./_components/AppMindMap";
 import {
@@ -48,15 +50,37 @@ import { cn } from "@/lib/utils";
 export default function AdminControlCenterPage() {
   return (
     <div className="mx-auto max-w-[1600px] space-y-8 px-4 py-8 md:px-6">
-      <header className="space-y-1.5">
-        <p className="t-label u-brand">ADMIN / CONTROL CENTER</p>
-        <h1 className="font-display text-h1 text-fg">Application control center</h1>
-        <p className="t-mono text-body-sm u-muted">
-          Inspect architecture, live health, state ownership, backend keys, dashboard layout,
-          and deploy controls. Every write is admin-gated server-side and persists to the{" "}
-          <code className="font-mono text-label">app_config</code> table or the matching
-          runtime control surface.
-        </p>
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="space-y-1.5">
+          <p className="t-label u-brand">ADMIN / CONTROL CENTER</p>
+          <h1 className="font-display text-h1 text-fg">Application control center</h1>
+          <p className="t-mono text-body-sm u-muted">
+            Inspect architecture, live health, state ownership, backend keys, dashboard layout,
+            and deploy controls. Every write is admin-gated server-side and persists to the{" "}
+            <code className="font-mono text-label">app_config</code> table or the matching
+            runtime control surface.
+          </p>
+        </div>
+        <nav className="flex flex-wrap items-center gap-2" aria-label="Admin navigation">
+          <Link
+            href="/"
+            className="inline-flex min-h-10 items-center gap-2 rounded-sm border border-[color:var(--border)] bg-bg-elev-1 px-3 t-mono text-label text-fg-muted transition-colors hover:border-primary/50 hover:text-fg active:scale-[0.98]"
+          >
+            <House className="size-4" aria-hidden="true" />
+            Dashboard
+          </Link>
+          <Link
+            href="/symbols"
+            className="inline-flex min-h-10 items-center gap-2 rounded-sm border border-[color:var(--border)] bg-bg-elev-1 px-3 t-mono text-label text-fg-muted transition-colors hover:border-primary/50 hover:text-fg active:scale-[0.98]"
+          >
+            <Buildings className="size-4" aria-hidden="true" />
+            Symbols
+          </Link>
+          <span className="inline-flex min-h-10 items-center gap-2 rounded-sm border border-[color:var(--brand)]/40 bg-[color:var(--brand-tint)] px-3 t-mono text-label u-brand">
+            <ShieldCheck className="size-4" aria-hidden="true" />
+            Admin
+          </span>
+        </nav>
       </header>
 
       <AppMindMap />

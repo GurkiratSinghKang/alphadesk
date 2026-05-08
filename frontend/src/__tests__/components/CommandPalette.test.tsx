@@ -1,4 +1,5 @@
 import '../setup-mocks';
+import type { HTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { useUIStore } from '@/stores/ui';
@@ -6,13 +7,62 @@ import { useMarketStore } from '@/stores/market';
 
 // Mock cmdk
 vi.mock('cmdk', () => {
-  const Command = ({ children, ...props }: any) => <div data-testid="cmdk-root" {...props}>{children}</div>;
-  Command.Input = ({ placeholder, ...props }: any) => <input placeholder={placeholder} data-testid="cmdk-input" {...props} />;
-  Command.List = ({ children }: any) => <div data-testid="cmdk-list">{children}</div>;
-  Command.Empty = ({ children }: any) => <div>{children}</div>;
-  Command.Group = ({ heading, children }: any) => <div data-testid={`cmdk-group-${heading}`}><span>{heading}</span>{children}</div>;
-  Command.Item = ({ children, onSelect, ...props }: any) => <div role="option" onClick={onSelect} {...props}>{children}</div>;
-  Command.Separator = () => <hr />;
+  type WithChildren = { children?: ReactNode };
+  type CommandInputProps = InputHTMLAttributes<HTMLInputElement> & {
+    onValueChange?: (value: string) => void;
+  };
+  type CommandGroupProps = HTMLAttributes<HTMLDivElement> &
+    WithChildren & {
+      heading?: string;
+    };
+  type CommandItemProps = HTMLAttributes<HTMLDivElement> &
+    WithChildren & {
+      onSelect?: () => void;
+    };
+
+  function CommandRoot({ children, ...props }: HTMLAttributes<HTMLDivElement> & WithChildren) {
+    return <div data-testid="cmdk-root" {...props}>{children}</div>;
+  }
+
+  function CommandInput({ placeholder, onValueChange, ...props }: CommandInputProps) {
+    return (
+      <input
+        placeholder={placeholder}
+        data-testid="cmdk-input"
+        onChange={(event) => onValueChange?.(event.currentTarget.value)}
+        {...props}
+      />
+    );
+  }
+
+  function CommandList({ children }: WithChildren) {
+    return <div data-testid="cmdk-list">{children}</div>;
+  }
+
+  function CommandEmpty({ children }: WithChildren) {
+    return <div>{children}</div>;
+  }
+
+  function CommandGroup({ heading, children }: CommandGroupProps) {
+    return <div data-testid={`cmdk-group-${heading}`}><span>{heading}</span>{children}</div>;
+  }
+
+  function CommandItem({ children, onSelect, ...props }: CommandItemProps) {
+    return <div role="option" aria-selected={false} onClick={onSelect} {...props}>{children}</div>;
+  }
+
+  function CommandSeparator() {
+    return <hr />;
+  }
+
+  const Command = Object.assign(CommandRoot, {
+    Empty: CommandEmpty,
+    Group: CommandGroup,
+    Input: CommandInput,
+    Item: CommandItem,
+    List: CommandList,
+    Separator: CommandSeparator,
+  });
   return { Command };
 });
 
@@ -96,6 +146,14 @@ describe('CommandPalette', () => {
     const { CommandPalette } = await import('@/components/layout/CommandPalette');
     render(<CommandPalette />);
     expect(screen.getByText('Navigation')).toBeDefined();
+  });
+
+  it('offers symbols and admin pages from page navigation', async () => {
+    useUIStore.setState({ commandPaletteOpen: true });
+    const { CommandPalette } = await import('@/components/layout/CommandPalette');
+    render(<CommandPalette />);
+    expect(screen.getByText('Go to Symbols')).toBeDefined();
+    expect(screen.getByText('Go to Admin control center')).toBeDefined();
   });
 
   it('routes chart/options commands to the trade workspace from the dashboard', async () => {
