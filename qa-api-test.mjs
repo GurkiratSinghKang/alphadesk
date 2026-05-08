@@ -3,9 +3,18 @@
  * Tests all backend endpoints for correctness, data integrity, and performance.
  */
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 const BASE = "https://tradingalpha.net";
 const API = `${BASE}/api/v1`;
-const CREDS = { username: "admin", password: "GK1355$$gk" };
+const CREDS = { username: QA_USERNAME, password: getQaPassword() };
 const SLOW_THRESHOLD_MS = 2000;
 
 let accessToken = null;

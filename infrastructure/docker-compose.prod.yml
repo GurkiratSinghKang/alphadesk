@@ -107,6 +107,9 @@ services:
       # (ALPACA_BASE_URL must point at api.alpaca.markets and
       # halt_state.is_halted must be FALSE as well).
       LIVE_TRADING_ENABLED: ${LIVE_TRADING_ENABLED:-false}
+      # Caddy and backend share the pinned alphadesk bridge subnet below.
+      # Trust only loopback plus that subnet for X-Forwarded-For rewriting.
+      TRUSTED_PROXY_HOSTS: ${TRUSTED_PROXY_HOSTS:-127.0.0.1,::1,172.28.0.0/16}
     volumes:
       - /var/lib/alphadesk/pipeline_logs:/app/data/pipeline_logs
       # Optional raw Claude request/response audit trail. Enable with
@@ -224,6 +227,9 @@ services:
 networks:
   alphadesk:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
 
 volumes:
   caddy_data:

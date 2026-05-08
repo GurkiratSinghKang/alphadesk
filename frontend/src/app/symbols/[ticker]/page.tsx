@@ -14,6 +14,9 @@ import { notFound, useParams } from "next/navigation";
 
 import { SymbolPageClient } from "./_components/SymbolPageClient";
 import { normalizeSymbol } from "./_lib/normalizeSymbol";
+import { NotFound } from "./_sections/NotFound";
+
+const LISTED_TICKER_PATTERN = /^[A-Z][A-Z0-9]{0,4}(?:[.-][A-Z0-9]{1,2})?$/;
 
 /**
  * /symbols/[ticker] — ticker research page (T1 shell).
@@ -30,6 +33,10 @@ export default function SymbolPage() {
 
   if (!sym) {
     notFound();
+  }
+
+  if (!LISTED_TICKER_PATTERN.test(sym)) {
+    return <NotFound symbol={sym} />;
   }
 
   return <SymbolPageClient symbol={sym} />;

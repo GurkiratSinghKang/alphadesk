@@ -41,8 +41,10 @@ function makeBaseResult(overrides: Partial<UseSymbolPageDataResult>): UseSymbolP
     symbolMeta: null,
     isLoading: false,
     isError: false,
+    dataUnavailable: false,
     isETF: false,
     isCryptoForex: false,
+    authBlocked: false,
     timeframe: "D",
     setTimeframe: vi.fn(),
     ...overrides,
@@ -166,6 +168,67 @@ describe("SymbolPageClient gates", () => {
 
     expect(screen.queryByTestId("symbol-not-found")).toBeNull();
     expect(screen.getByTestId("symbol-page")).toBeInTheDocument();
+  });
+
+  it("keeps the ticker page open with a sign-in note when unauthenticated API calls are blocked", () => {
+    mockUseSymbolPageData.mockReturnValue(
+      makeBaseResult({
+        authBlocked: true,
+        isLoading: false,
+        symbolMeta: null,
+      }),
+    );
+
+    const Wrapper = makeWrapper();
+    render(
+      createElement(Wrapper, null, <SymbolPageClient symbol="AAPL" />),
+    );
+
+    expect(screen.queryByTestId("symbol-not-found")).toBeNull();
+    expect(screen.getByTestId("symbol-page")).toBeInTheDocument();
+    expect(screen.getByTestId("symbol-auth-note")).toHaveTextContent(/Sign in to load live quotes/i);
+    expect(screen.getByRole("link", { name: /Open workspace/i })).toHaveAttribute("href", "/login");
+  });
+
+  it("keeps the ticker page open with a data-unavailable note when market APIs fail", () => {
+    mockUseSymbolPageData.mockReturnValue(
+      makeBaseResult({
+        dataUnavailable: true,
+        isError: true,
+        isLoading: false,
+        symbolMeta: null,
+      }),
+    );
+
+    const Wrapper = makeWrapper();
+    render(
+      createElement(Wrapper, null, <SymbolPageClient symbol="AAPL" />),
+    );
+
+    expect(screen.queryByTestId("symbol-not-found")).toBeNull();
+    expect(screen.getByTestId("symbol-page")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "AAPL" })).toBeInTheDocument();
+    expect(screen.getByTestId("symbol-data-note")).toHaveTextContent(/Market data is temporarily unavailable/i);
+  });
+
+  it("does not expose an actionable workspace for obviously invalid ticker shapes", () => {
+    mockUseSymbolPageData.mockReturnValue(
+      makeBaseResult({
+        dataUnavailable: true,
+        isError: true,
+        isLoading: false,
+        symbolMeta: null,
+      }),
+    );
+
+    const Wrapper = makeWrapper();
+    render(
+      createElement(Wrapper, null, <SymbolPageClient symbol="ZZZZZZ" />),
+    );
+
+    expect(screen.getByTestId("symbol-not-found")).toBeInTheDocument();
+    expect(screen.queryByTestId("hero-cta-trade")).toBeNull();
+    expect(screen.queryByTestId("hero-cta-run-agents")).toBeNull();
   });
 
   it("renders OptionsThesisBand with ETF empty-state thesis copy when isETF=true and no claude data", () => {

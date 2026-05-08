@@ -2,10 +2,19 @@ import { chromium } from "playwright";
 import { mkdirSync } from "fs";
 import path from "path";
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 const BASE = "https://tradingalpha.net";
 const DIR = "/Users/GK/Downloads/alphadesk/qa-screenshots/round6";
-const USERNAME = "admin";
-const PASSWORD = "alphaDesk2025!";
+const USERNAME = QA_USERNAME;
+const PASSWORD = getQaPassword();
 
 mkdirSync(DIR, { recursive: true });
 

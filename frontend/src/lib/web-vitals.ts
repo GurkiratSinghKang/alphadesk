@@ -35,7 +35,10 @@ import { env } from "@/env";
 
 const ENDPOINT_PATH = "/api/v1/metrics/vitals";
 
-function getEndpoint(): string {
+function getEndpoint(): string | null {
+  if (!env.API_URL && process.env.NODE_ENV === "development") {
+    return null;
+  }
   return `${env.API_URL || ""}${ENDPOINT_PATH}`;
 }
 
@@ -69,6 +72,7 @@ function reportMetric(metric: Metric): void {
   // the rest of the listeners down with it.
   try {
     const endpoint = getEndpoint();
+    if (!endpoint) return;
     if (typeof navigator.sendBeacon === "function") {
       const blob = new Blob([body], { type: "application/json" });
       const ok = navigator.sendBeacon(endpoint, blob);

@@ -75,6 +75,11 @@ export interface ApiFetchOptions extends RequestInit {
   suppressAuthRedirect?: boolean;
 }
 
+type DataFetchOptions = Pick<
+  ApiFetchOptions,
+  "signal" | "suppressAuthRedirect" | "suppressGlobalError" | "timeoutMs"
+>;
+
 /**
  * Error thrown from `apiFetch` on HTTP 429 Too Many Requests. Carries the
  * parsed `Retry-After` header as a number of seconds (integer) when the
@@ -570,9 +575,11 @@ interface RawStrategyMatchesResponse {
 
 export async function getStrategiesBySymbol(
   symbol: string,
+  options: DataFetchOptions = {},
 ): Promise<import("@/types").StrategyMatchesResponse> {
   const raw = await apiFetch<RawStrategyMatchesResponse>(
     `/api/v1/strategies/by-symbol/${encodeURIComponent(symbol)}`,
+    options,
   );
   return {
     symbol: raw.symbol,
@@ -753,15 +760,17 @@ export function startTradingAgentsRun(input: TradingAgentsRunRequest) {
   });
 }
 
-export function getTradingAgentsRuns(limit = 20) {
+export function getTradingAgentsRuns(limit = 20, options: DataFetchOptions = {}) {
   return apiFetch<TradingAgentsRun[]>(
     `/api/v1/tradingagents/runs?limit=${encodeURIComponent(String(limit))}`,
+    options,
   );
 }
 
-export function getTradingAgentsRun(runId: string) {
+export function getTradingAgentsRun(runId: string, options: DataFetchOptions = {}) {
   return apiFetch<TradingAgentsRun>(
     `/api/v1/tradingagents/runs/${encodeURIComponent(runId)}`,
+    options,
   );
 }
 
@@ -790,9 +799,14 @@ export function getMarketIndices() {
 
 // ─── Symbol Search ──────────────────────────────────────────
 
-export async function searchSymbols(query: string, limit = 10) {
+export async function searchSymbols(
+  query: string,
+  limit = 10,
+  options: DataFetchOptions = {},
+) {
   const resp = await apiFetch<{ count: number; results: { symbol: string; name: string; type: string; exchange: string; sector: string }[] }>(
-    `/api/v1/symbols/search?q=${encodeURIComponent(query)}&limit=${limit}`
+    `/api/v1/symbols/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+    options,
   );
   return resp.results;
 }
@@ -890,6 +904,9 @@ export interface TickerContextOptions {
   maxAgeSeconds?: number;
   onStale?: "allow" | "refresh" | "reject" | "allow_with_warning";
   signal?: AbortSignal;
+  suppressAuthRedirect?: boolean;
+  suppressGlobalError?: boolean;
+  timeoutMs?: number;
 }
 
 export async function getTickerContext(
@@ -907,7 +924,12 @@ export async function getTickerContext(
 
   const raw = await apiFetch<RawTickerContextResponse>(
     `/api/v1/tickers/context?${params.toString()}`,
-    options.signal ? { signal: options.signal } : undefined,
+    {
+      signal: options.signal,
+      suppressAuthRedirect: options.suppressAuthRedirect,
+      suppressGlobalError: options.suppressGlobalError,
+      timeoutMs: options.timeoutMs,
+    },
   );
   return {
     symbols: Object.fromEntries(
@@ -957,16 +979,21 @@ function mapTickerFundamentals(raw: RawTickerFundamentals): TickerFundamentals {
   };
 }
 
-export async function getTickerFundamentals(symbol: string): Promise<TickerFundamentals> {
+export async function getTickerFundamentals(
+  symbol: string,
+  options: DataFetchOptions = {},
+): Promise<TickerFundamentals> {
   const raw = await apiFetch<RawTickerFundamentals>(
     `/api/v1/tickers/${encodeURIComponent(symbol)}/fundamentals`,
+    options,
   );
   return mapTickerFundamentals(raw);
 }
 
-export async function getQuote(symbol: string): Promise<Quote> {
+export async function getQuote(symbol: string, options: DataFetchOptions = {}): Promise<Quote> {
   const resp = await apiFetch<Quote & { is_demo?: boolean; source?: string }>(
     `/api/v1/market/quotes/${symbol}`,
+    options,
   );
   maybeDispatchBrokerDegraded(
     `/api/v1/market/quotes/${symbol}`,
@@ -989,6 +1016,14 @@ export interface GetBarsOptions {
    *  Used to page older bars: pass the timestamp of the earliest
    *  currently-loaded bar to fetch the bars immediately before it. */
   end?: string;
+  /** Caller handles auth/data failures locally without a global redirect. */
+  suppressAuthRedirect?: boolean;
+  /** Caller renders its own failure state; avoid global toasts. */
+  suppressGlobalError?: boolean;
+  /** Abort in-flight range fetches when React Query cancels them. */
+  signal?: AbortSignal;
+  /** Override the default request timeout for history pages. */
+  timeoutMs?: number;
 }
 
 export async function getBars(
@@ -1017,7 +1052,13 @@ export async function getBars(
   if (options.start) params.set("start", options.start);
   if (options.end) params.set("end", options.end);
   const raw = await apiFetch<BackendBar[]>(
-    `/api/v1/market/bars/${symbol}?${params.toString()}`
+    `/api/v1/market/bars/${symbol}?${params.toString()}`,
+    {
+      signal: options.signal,
+      suppressAuthRedirect: options.suppressAuthRedirect,
+      suppressGlobalError: options.suppressGlobalError,
+      timeoutMs: options.timeoutMs,
+    },
   );
   return raw.map((b) => ({
     time: Math.floor(new Date(b.timestamp).getTime() / 1000),
@@ -1041,13 +1082,17 @@ export async function getBars(
  * closest existing implementation), migrate callers to `getSnapshots` below
  * and delete this per-symbol fan-out.
  */
-export async function getSnapshot(symbols: string[]): Promise<Record<string, Quote>> {
+export async function getSnapshot(
+  symbols: string[],
+  options: DataFetchOptions = {},
+): Promise<Record<string, Quote>> {
   const results: Record<string, Quote> = {};
   let sawDemo = false;
   const fetches = symbols.map(async (s) => {
     try {
       const quote = await apiFetch<Quote & { is_demo?: boolean; source?: string }>(
         `/api/v1/market/quotes/${s}`,
+        options,
       );
       if (quote?.is_demo === true || quote?.source === "demo") sawDemo = true;
       results[s] = normalizeQuotePayloadTimestamp(quote);
@@ -1077,16 +1122,20 @@ export async function getSnapshot(symbols: string[]): Promise<Record<string, Quo
  * so the watchlist stays populated during partial outages; the caller sees
  * the same shape either way.
  */
-export async function getSnapshots(symbols: string[]): Promise<Record<string, Quote>> {
+export async function getSnapshots(
+  symbols: string[],
+  options: DataFetchOptions = {},
+): Promise<Record<string, Quote>> {
   if (!symbols.length) return {};
   if (symbols.some(isOccSymbol)) {
-    return getSnapshot(symbols);
+    return getSnapshot(symbols, options);
   }
   const qs = new URLSearchParams({ symbols: symbols.join(",") }).toString();
   try {
     type BackendSnapshot = { quote?: Quote; is_demo?: boolean; source?: string } & Partial<Quote>;
     const raw = await apiFetch<Record<string, BackendSnapshot>>(
       `/api/v1/market/snapshots?${qs}`,
+      options,
     );
     const out: Record<string, Quote> = {};
     let sawDemo = false;
@@ -1104,11 +1153,14 @@ export async function getSnapshots(symbols: string[]): Promise<Record<string, Qu
       maybeDispatchBrokerDegraded(`/api/v1/market/snapshots`, true);
     }
     return out;
-  } catch {
+  } catch (err) {
+    if (err instanceof ApiError && [401, 403, 404].includes(err.status)) {
+      return {};
+    }
     // Any network/5xx error: degrade to per-symbol fan-out rather than
     // handing callers an empty map (the UI would otherwise show a mostly-empty
     // watchlist during a Caddy hiccup).
-    return getSnapshot(symbols);
+    return getSnapshot(symbols, options);
   }
 }
 
@@ -1772,8 +1824,8 @@ export async function analyzeSymbol(symbol: string): Promise<Analysis> {
   };
 }
 
-export function getAnalysis(symbol: string) {
-  return apiFetch<Analysis>(`/api/v1/analysis/analysis/${symbol}`);
+export function getAnalysis(symbol: string, options: DataFetchOptions = {}) {
+  return apiFetch<Analysis>(`/api/v1/analysis/analysis/${symbol}`, options);
 }
 
 // ─── Options ─────────────────────────────────────────────────
@@ -1914,9 +1966,9 @@ export async function getContractSnapshot(occSymbol: string): Promise<ContractSn
   return mapContractSnapshot(raw);
 }
 
-export async function getIVData(symbol: string) {
+export async function getIVData(symbol: string, options: DataFetchOptions = {}) {
   // Backend returns snake_case: iv_rank, iv_percentile, current_iv
-  const raw = await apiFetch<Record<string, unknown>>(`/api/v1/options/iv/${symbol}`);
+  const raw = await apiFetch<Record<string, unknown>>(`/api/v1/options/iv/${symbol}`, options);
   const numOrNull = (v: unknown): number | null =>
     typeof v === "number" && Number.isFinite(v) ? v : null;
   const currentIV = numOrNull(raw.current_iv);
@@ -3883,11 +3935,11 @@ function normalizeWatchlistQuery(symbols: readonly string[]): string[] {
  */
 export async function getEarningsDetail(
   symbol: string,
-  opts?: { signal?: AbortSignal },
+  opts?: DataFetchOptions,
 ): Promise<EarningsDetail> {
   const raw = await apiFetch<RawEarningsDetail>(
     `/api/v1/earnings/${encodeURIComponent(symbol)}/detail`,
-    opts?.signal ? { signal: opts.signal } : undefined,
+    opts,
   );
   return mapEarningsDetail(raw);
 }
@@ -3904,12 +3956,17 @@ export async function getEarningsDetail(
  */
 export async function getRecommendedSetups(
   symbol: string,
-  opts?: { signal?: AbortSignal; setups?: number },
+  opts?: DataFetchOptions & { setups?: number },
 ): Promise<EarningsSetup[]> {
   const setups = opts?.setups ?? 3;
   const raw = await apiFetch<{ top_setups?: unknown }>(
     `/api/v1/earnings/${encodeURIComponent(symbol)}/analysis?setups=${setups}&news_limit=0`,
-    opts?.signal ? { signal: opts.signal } : undefined,
+    {
+      signal: opts?.signal,
+      suppressAuthRedirect: opts?.suppressAuthRedirect,
+      suppressGlobalError: opts?.suppressGlobalError,
+      timeoutMs: opts?.timeoutMs,
+    },
   );
   if (!Array.isArray(raw.top_setups)) return [];
   return (raw.top_setups as unknown[])

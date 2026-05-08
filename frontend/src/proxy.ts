@@ -17,6 +17,7 @@ const KNOWN_DASHBOARD_ROUTES: readonly string[] = [
   "/",
   "/analytics",
   "/alerts",
+  "/admin/control-center",
   "/pipeline",
   "/reports",
   "/settings",

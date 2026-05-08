@@ -2,11 +2,20 @@ import { chromium } from "playwright";
 import { writeFileSync, mkdirSync } from "fs";
 import path from "path";
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 const BASE = "https://tradingalpha.net";
 const DIR = "./qa-screenshots/round4/workflows";
 const RESULTS_FILE = "./qa-screenshots/round4/workflows/results.json";
-const USERNAME = "admin";
-const PASSWORD = "alphaDesk2025!";
+const USERNAME = QA_USERNAME;
+const PASSWORD = getQaPassword();
 
 mkdirSync(DIR, { recursive: true });
 
@@ -94,11 +103,11 @@ async function main() {
 
       const loggedIn = await waitForNavigation(page, (url) => !url.pathname.includes("/login"), 15000);
       if (loggedIn) {
-        log("PASS", "Login", "Login with admin/alphaDesk2025!", `Redirected to ${page.url()}`);
+        log("PASS", "Login", "Login with configured QA credentials", `Redirected to ${page.url()}`);
       } else {
         // Check if there's an error message
         const errorMsg = await safeText(page, '.text-destructive, .error, [role="alert"]', 2000);
-        log("FAIL", "Login", "Login with admin/alphaDesk2025!", `Failed to redirect. Error: ${errorMsg || 'unknown'}`);
+        log("FAIL", "Login", "Login with configured QA credentials", `Failed to redirect. Error: ${errorMsg || 'unknown'}`);
         await screenshot(page, "02-login-FAIL");
       }
     } else {

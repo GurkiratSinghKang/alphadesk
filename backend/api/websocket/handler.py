@@ -637,10 +637,10 @@ def _allowed_ws_origins() -> set[str]:
     browser, ride their auth cookies into the auth handshake, and
     stream portfolio / trade data back to the attacker.
 
-    Allowlist mirrors ``main.py``'s CORS allowlist. Returning an EMPTY
-    set means the policy isn't configured — fall back to allowing
-    everything in that case so a misconfigured .env doesn't take WS
-    down. Operators who want strict enforcement set PRODUCTION_ORIGIN.
+    Allowlist mirrors ``main.py``'s CORS allowlist. In production, an
+    EMPTY set is a fail-closed configuration for browser handshakes:
+    without an explicit ``PRODUCTION_ORIGIN`` there is no safe origin to
+    trust for ambient-cookie WebSockets.
     """
     from core.config import settings
 
@@ -680,7 +680,16 @@ async def websocket_endpoint(ws: WebSocket) -> None:
     # CSWSH attack hinges on.
     allowed_origins = _allowed_ws_origins()
     origin = ws.headers.get("origin")
-    if allowed_origins and origin is not None and origin not in allowed_origins:
+    origin_denied = False
+    if origin is not None:
+        if allowed_origins:
+            origin_denied = origin not in allowed_origins
+        else:
+            from core.config import settings
+
+            origin_denied = settings.is_production
+
+    if origin_denied:
         try:
             await ws.close(code=1008, reason="Origin not allowed")
         except Exception:

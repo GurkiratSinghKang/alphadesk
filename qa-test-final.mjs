@@ -2,6 +2,15 @@ import { chromium } from 'playwright';
 import { mkdirSync } from 'fs';
 import path from 'path';
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 const BASE = 'https://tradingalpha.net';
 const SSDIR = '/Users/GK/Downloads/alphadesk/qa-screenshots/round7/workflows';
 mkdirSync(SSDIR, { recursive: true });
@@ -34,8 +43,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const inps = await page.$$('input');
   for (const i of inps) {
     const t = await i.getAttribute('type');
-    if (t === 'password') await i.fill('alphaDesk2025!');
-    else await i.fill('admin');
+    if (t === 'password') await i.fill(getQaPassword());
+    else await i.fill(QA_USERNAME);
   }
   await page.click('button[type="submit"]');
   await page.waitForURL(u => !u.toString().includes('/login'), { timeout: 10000 }).catch(()=>{});
@@ -594,8 +603,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       const inps2 = await page.$$('input');
       for (const i of inps2) {
         const t = await i.getAttribute('type');
-        if (t === 'password') await i.fill('alphaDesk2025!');
-        else await i.fill('admin');
+        if (t === 'password') await i.fill(getQaPassword());
+        else await i.fill(QA_USERNAME);
       }
       await page.click('button[type="submit"]');
       await sleep(3000);

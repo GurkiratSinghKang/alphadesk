@@ -2,6 +2,15 @@ import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 const SCREENSHOT_DIR = '/Users/GK/Downloads/alphadesk/qa-screenshots/round12';
 const BASE_URL = 'https://tradingalpha.net';
 const bugs = [];
@@ -74,8 +83,8 @@ async function ss(page, name) {
 
   if (allInputs.length >= 2) {
     // First input = username, second = password
-    await allInputs[0].fill('admin');
-    await allInputs[1].fill('alphaDesk2025!');
+    await allInputs[0].fill(QA_USERNAME);
+    await allInputs[1].fill(getQaPassword());
 
     // Find submit button
     const buttons = await page.$$('button');
@@ -96,7 +105,7 @@ async function ss(page, name) {
     log(`After login URL: ${currentUrl}`);
 
     if (currentUrl.includes('login')) {
-      reportBug('Login does not redirect after valid credentials', 'P0', 'login-stuck', 'Enter admin/alphaDesk2025!, click Sign In, stays on login page');
+      reportBug('Login does not redirect after valid credentials', 'P0', 'login-stuck', 'Enter configured QA credentials, click Sign In, stays on login page');
       await ss(page, 'login-stuck');
     } else {
       log('Login successful!');
@@ -117,19 +126,20 @@ async function ss(page, name) {
   } else {
     // Try API-based login
     log('Trying API-based login...');
-    const loginResp = await page.evaluate(async () => {
+    const authCreds = { username: QA_USERNAME, password: getQaPassword() };
+    const loginResp = await page.evaluate(async ({ username, password }) => {
       try {
         const resp = await fetch('/api/v1/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'username=admin&password=alphaDesk2025!'
+          body: new URLSearchParams({ username, password }).toString()
         });
         const data = await resp.json();
         return { status: resp.status, data };
       } catch (e) {
         return { error: e.message };
       }
-    });
+    }, authCreds);
     log(`API login response: ${JSON.stringify(loginResp)}`);
 
     if (loginResp.data?.access_token) {
@@ -162,26 +172,27 @@ async function ss(page, name) {
     log('Still on login page. Trying form submission via JS...');
 
     // Try fetching the auth endpoint differently (JSON body)
-    const loginResp2 = await page.evaluate(async () => {
+    const authCreds = { username: QA_USERNAME, password: getQaPassword() };
+    const loginResp2 = await page.evaluate(async ({ username, password }) => {
       try {
         const resp = await fetch('/api/v1/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: 'admin', password: 'alphaDesk2025!' })
+          body: JSON.stringify({ username, password })
         });
         return { status: resp.status, text: await resp.text() };
       } catch (e) {
         return { error: e.message };
       }
-    });
+    }, authCreds);
     log(`API login v2: ${JSON.stringify(loginResp2)}`);
 
     // Also try OAuth2 form style
-    const loginResp3 = await page.evaluate(async () => {
+    const loginResp3 = await page.evaluate(async ({ username, password }) => {
       try {
         const formData = new FormData();
-        formData.append('username', 'admin');
-        formData.append('password', 'alphaDesk2025!');
+        formData.append('username', username);
+        formData.append('password', password);
         const resp = await fetch('/api/v1/auth/login', {
           method: 'POST',
           body: formData
@@ -190,22 +201,22 @@ async function ss(page, name) {
       } catch (e) {
         return { error: e.message };
       }
-    });
+    }, authCreds);
     log(`API login v3 (FormData): ${JSON.stringify(loginResp3)}`);
 
     // Try /auth/token endpoint (FastAPI default)
-    const loginResp4 = await page.evaluate(async () => {
+    const loginResp4 = await page.evaluate(async ({ username, password }) => {
       try {
         const resp = await fetch('/api/v1/auth/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'username=admin&password=alphaDesk2025!'
+          body: new URLSearchParams({ username, password }).toString()
         });
         return { status: resp.status, text: await resp.text() };
       } catch (e) {
         return { error: e.message };
       }
-    });
+    }, authCreds);
     log(`API login v4 (/auth/token): ${JSON.stringify(loginResp4)}`);
   }
 

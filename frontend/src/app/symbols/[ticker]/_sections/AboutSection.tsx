@@ -12,6 +12,10 @@ const DASH = "—";
 // trading day. Use the *exact* same query key as KeyStats so React Query
 // coalesces both consumers into a single network call.
 const STALE_TIME_MS = 24 * 60 * 60 * 1000;
+const PUBLIC_SYMBOL_DATA_OPTIONS = {
+  suppressAuthRedirect: true,
+  suppressGlobalError: true,
+} as const;
 
 // Anything longer than this gets the line-clamp + "Show more" treatment.
 // Threshold is approximate — line-clamp-6 will start to truncate well
@@ -116,7 +120,7 @@ function Shell({ variant, sector, industry, description }: ShellProps) {
 export function AboutSection({ symbol }: AboutSectionProps) {
   const query = useQuery<TickerFundamentals>({
     queryKey: ["fundamentals", symbol],
-    queryFn: () => getTickerFundamentals(symbol),
+    queryFn: () => getTickerFundamentals(symbol, PUBLIC_SYMBOL_DATA_OPTIONS),
     staleTime: STALE_TIME_MS,
     enabled: Boolean(symbol),
   });

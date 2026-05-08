@@ -22,6 +22,10 @@ const DEFAULT_RANGE: ChartRange = "1M";
 
 /** Bars to fetch per "load more older history" page. */
 const HISTORY_PAGE_SIZE = 500;
+const PUBLIC_SYMBOL_DATA_OPTIONS = {
+  suppressAuthRedirect: true,
+  suppressGlobalError: true,
+} as const;
 
 export interface ChartBandProps {
   symbol: string;
@@ -32,6 +36,8 @@ export interface ChartBandProps {
   name?: string | null;
   /** Optional quote — drives the chart hero price + meta range cell. */
   quote?: StickyBandQuote | null;
+  /** Preview mode uses locally generated public bars when protected data is unavailable. */
+  dataMode?: "live" | "preview";
 }
 
 function toMarketSymbol(symbol: string, name?: string | null): MarketSymbol {
@@ -87,8 +93,9 @@ function compact(n: number): string {
   return n.toFixed(0);
 }
 
-export function ChartBand({ symbol, bars, name, quote }: ChartBandProps) {
+export function ChartBand({ symbol, bars, name, quote, dataMode = "live" }: ChartBandProps) {
   const [range, setRange] = useState<ChartRange>(DEFAULT_RANGE);
+  const isPreview = dataMode === "preview";
 
   // Range chips drive a fresh fetch (timeframe + limit derived from range).
   // The page hook's `bars` prop seeds the panel for first paint while the
@@ -100,8 +107,8 @@ export function ChartBand({ symbol, bars, name, quote }: ChartBandProps) {
   const { timeframe, limit } = barsRequestForRange(range);
   const rangeQuery = useQuery<OHLCVBar[]>({
     queryKey: ["bars", symbol, range, timeframe, limit],
-    queryFn: () => getBars(symbol, timeframe, limit),
-    enabled: !!symbol,
+    queryFn: () => getBars(symbol, timeframe, limit, PUBLIC_SYMBOL_DATA_OPTIONS),
+    enabled: !!symbol && !isPreview,
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
@@ -158,7 +165,10 @@ export function ChartBand({ symbol, bars, name, quote }: ChartBandProps) {
 
     setLoadingMore(true);
     try {
-      const olderPage = await getBars(symbol, timeframe, HISTORY_PAGE_SIZE, { end: isoEnd });
+      const olderPage = await getBars(symbol, timeframe, HISTORY_PAGE_SIZE, {
+        ...PUBLIC_SYMBOL_DATA_OPTIONS,
+        end: isoEnd,
+      });
       // Filter any bars that overlap the already-loaded range — defensive
       // since some providers return inclusive `end` despite our offset.
       const fresh = olderPage.filter((b) => b.time < earliest.time);
@@ -196,11 +206,11 @@ export function ChartBand({ symbol, bars, name, quote }: ChartBandProps) {
           series={mergedBars}
           activeRange={range}
           onRangeChange={setRange}
-          isLoading={rangeQuery.isLoading}
-          error={rangeQuery.isError}
+          isLoading={!isPreview && rangeQuery.isLoading}
+          error={!isPreview && rangeQuery.isError}
           onRetry={() => rangeQuery.refetch()}
-          onLoadMoreHistory={handleLoadMoreHistory}
-          loadingMoreHistory={loadingMore}
+          onLoadMoreHistory={isPreview ? undefined : handleLoadMoreHistory}
+          loadingMoreHistory={isPreview ? false : loadingMore}
         />
       </div>
       <KeyStats symbol={symbol} />

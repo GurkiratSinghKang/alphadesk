@@ -1,5 +1,14 @@
 import { chromium } from 'playwright';
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 (async () => {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, ignoreHTTPSErrors: true });
@@ -18,8 +27,8 @@ import { chromium } from 'playwright';
   // Also check all nav links after login
   const userInput = page.locator('#login-username');
   const passInput = page.locator('#login-password');
-  await userInput.fill('admin');
-  await passInput.fill('alphaDesk2025!');
+  await userInput.fill(QA_USERNAME);
+  await passInput.fill(getQaPassword());
   await page.locator('button[type="submit"]').click({ force: true });
   await page.waitForTimeout(5000);
 

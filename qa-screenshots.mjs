@@ -1,9 +1,18 @@
 import { chromium } from "playwright";
 import { writeFileSync, mkdirSync } from "fs";
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 const BASE = "https://tradingalpha.net";
 const SCREENSHOT_DIR = "./qa-screenshots";
-const PASSWORD = "GK1355$$gk";
+const PASSWORD = getQaPassword();
 
 async function main() {
   mkdirSync(SCREENSHOT_DIR, { recursive: true });
@@ -23,7 +32,7 @@ async function main() {
   console.log("Captured: login page");
 
   // 2. Log in via the UI
-  await loginPage.fill('input[placeholder="admin"]', "admin");
+  await loginPage.fill('input[placeholder="admin"]', QA_USERNAME);
   await loginPage.fill('input[type="password"]', PASSWORD);
   await loginPage.waitForTimeout(500);
   await loginPage.screenshot({ path: `${SCREENSHOT_DIR}/01b-login-filled.png`, fullPage: true });

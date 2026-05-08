@@ -2,6 +2,15 @@ import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 const BASE = 'https://tradingalpha.net';
 const SSDIR = '/Users/GK/Downloads/alphadesk/qa-screenshots/round7/workflows';
 
@@ -17,8 +26,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const inputs = await page.$$('input');
   for (const inp of inputs) {
     const type = await inp.getAttribute('type');
-    if (type === 'password') await inp.fill('alphaDesk2025!');
-    else if (type === 'text' || type === 'email' || !type) await inp.fill('admin');
+    if (type === 'password') await inp.fill(getQaPassword());
+    else if (type === 'text' || type === 'email' || !type) await inp.fill(QA_USERNAME);
   }
   await page.click('button[type="submit"]');
   await page.waitForURL(url => !url.toString().includes('/login'), { timeout: 10000 }).catch(() => {});

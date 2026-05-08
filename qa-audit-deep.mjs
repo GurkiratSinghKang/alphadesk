@@ -9,9 +9,18 @@ import { chromium } from "playwright";
 import fs from "fs";
 import path from "path";
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 const BASE_URL = "https://tradingalpha.net";
 const OUTPUT_DIR = "/Users/GK/Downloads/alphadesk/qa-screenshots/deep-audit";
-const CREDS = { username: "admin", password: "GK1355$$gk" };
+const CREDS = { username: QA_USERNAME, password: getQaPassword() };
 const VIEWPORT = { width: 1920, height: 1080 };
 
 fs.mkdirSync(OUTPUT_DIR, { recursive: true });

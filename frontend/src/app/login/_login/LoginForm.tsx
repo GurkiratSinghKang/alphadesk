@@ -178,6 +178,10 @@ export default function LoginForm() {
         });
 
         if (!res.ok) {
+          if (res.status === 404) {
+            setError("The AlphaDesk API is not reachable from this frontend. Start the backend or set NEXT_PUBLIC_API_URL, then retry sign-in.");
+            return;
+          }
           const body = await res.json().catch(() => ({}));
           if (body.detail === "totp_required") {
             setTotpRequired(true);
@@ -314,7 +318,6 @@ export default function LoginForm() {
           }}
           placeholder="email or desk handle"
           autoComplete="username"
-          autoFocus
           required
           aria-required="true"
           className={authInputClass}
@@ -322,17 +325,9 @@ export default function LoginForm() {
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="flex items-baseline justify-between">
-          <label htmlFor="login-password" className={authLabelClass}>
-            Password
-          </label>
-          <Link
-            href="/login/reset"
-            className="inline-flex min-h-8 items-center rounded-[6px] px-1 font-sans text-label text-[var(--auth-fg-muted)] transition-colors hover:text-[var(--auth-primary)]"
-          >
-            Forgot password?
-          </Link>
-        </div>
+        <label htmlFor="login-password" className={authLabelClass}>
+          Password
+        </label>
         <div className="relative">
           <Input
             id="login-password"
@@ -376,6 +371,12 @@ export default function LoginForm() {
             Caps lock is on.
           </p>
         )}
+        <Link
+          href="/login/reset"
+          className="self-end inline-flex min-h-8 items-center rounded-[6px] px-1 font-sans text-label text-[var(--auth-fg-muted)] transition-colors hover:text-[var(--auth-primary)]"
+        >
+          Forgot password?
+        </Link>
       </div>
 
       {totpRequired && (

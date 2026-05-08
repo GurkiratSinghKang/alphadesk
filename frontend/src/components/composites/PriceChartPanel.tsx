@@ -135,7 +135,8 @@ export default function PriceChartPanel({
   const debouncedLast = React.useDeferredValue(last);
   const debouncedChange = React.useDeferredValue(change);
   const debouncedChangePct = React.useDeferredValue(changePct);
-  const marketDepth = useMarketDepth(symbol.ticker, quote);
+  const hasChartSeries = series.length > 0;
+  const marketDepth = useMarketDepth(symbol.ticker, quote, hasChartSeries);
   const handleRangeShortcut = React.useCallback((action: string) => {
     const range = action.slice("chart:set-range:".length) as ChartRange;
     if (RANGES.includes(range)) {

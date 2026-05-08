@@ -7,6 +7,10 @@ import { fmtCurrency } from "@/lib/intl";
 import type { StrategyMatch, StrategyMatchesResponse } from "@/types";
 
 const SKELETON_CARDS = Array.from({ length: 6 }, (_, i) => i);
+const PUBLIC_SYMBOL_DATA_OPTIONS = {
+  suppressAuthRedirect: true,
+  suppressGlobalError: true,
+} as const;
 
 // T11: render the "live signals on this symbol across our strategies"
 // section on /symbols/[ticker]. Replaces the StrategyReverseLookupStub.
@@ -105,7 +109,7 @@ function StrategyCard({ card }: { card: StrategyCardModel }) {
 export function StrategyReverseLookup({ symbol }: StrategyReverseLookupProps) {
   const query = useQuery<StrategyMatchesResponse>({
     queryKey: ["strategies-by-symbol", symbol],
-    queryFn: () => getStrategiesBySymbol(symbol),
+    queryFn: () => getStrategiesBySymbol(symbol, PUBLIC_SYMBOL_DATA_OPTIONS),
     staleTime: 60_000, // backend caches this in Redis for 60s; mirror on the client.
     enabled: Boolean(symbol),
   });

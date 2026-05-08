@@ -11,6 +11,11 @@ import { searchSymbols } from "@/lib/api";
 
 import { normalizeSymbol } from "../_lib/normalizeSymbol";
 
+const PUBLIC_SYMBOL_DATA_OPTIONS = {
+  suppressAuthRedirect: true,
+  suppressGlobalError: true,
+} as const;
+
 export interface NotFoundProps {
   symbol: string;
   nearestMatch?: string | null;
@@ -22,7 +27,7 @@ export function NotFound({ symbol, nearestMatch: nearestMatchProp = null }: NotF
 
   const search = useQuery({
     queryKey: ["nearestMatch", symbol],
-    queryFn: () => searchSymbols(symbol, 5),
+    queryFn: () => searchSymbols(symbol, 5, PUBLIC_SYMBOL_DATA_OPTIONS),
     staleTime: 60 * 60 * 1000,
     enabled: !!symbol && nearestMatchProp == null,
     retry: 1,
@@ -81,6 +86,23 @@ export function NotFound({ symbol, nearestMatch: nearestMatchProp = null }: NotF
           Search
         </Button>
       </form>
+      <nav
+        aria-label="Ticker recovery navigation"
+        className="mt-6 flex flex-wrap items-center justify-center gap-3"
+      >
+        <Link
+          href="/symbols"
+          className="t-mono text-label text-primary underline underline-offset-4 hover:text-fg"
+        >
+          Browse symbols
+        </Link>
+        <Link
+          href="/login"
+          className="t-mono text-label text-fg-muted underline underline-offset-4 hover:text-fg"
+        >
+          Sign in
+        </Link>
+      </nav>
     </main>
   );
 }

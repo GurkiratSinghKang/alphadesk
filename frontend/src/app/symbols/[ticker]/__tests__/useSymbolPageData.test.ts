@@ -32,11 +32,12 @@ vi.mock("@/lib/api", async () => {
   };
 });
 
-import { ApiError, getEarningsDetail, searchSymbols } from "@/lib/api";
+import { ApiError, getEarningsDetail, getTickerContext, searchSymbols } from "@/lib/api";
 import { useSymbolPageData } from "../_hooks/useSymbolPageData";
 
 const mockSearchSymbols = vi.mocked(searchSymbols);
 const mockGetEarningsDetail = vi.mocked(getEarningsDetail);
+const mockGetTickerContext = vi.mocked(getTickerContext);
 
 function makeWrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -48,6 +49,8 @@ describe("useSymbolPageData", () => {
   beforeEach(() => {
     mockSearchSymbols.mockReset();
     mockGetEarningsDetail.mockReset();
+    mockGetTickerContext.mockReset();
+    mockGetTickerContext.mockResolvedValue({ symbols: {}, generatedAt: "2026-05-05T00:00:00Z" });
     // The hook explicitly tolerates null/undefined here — its catch
     // narrows to ApiError 404 → null. We cast through unknown because
     // the public type is non-nullable; tests need both the null and
@@ -115,7 +118,10 @@ describe("useSymbolPageData", () => {
 
     // ETF/crypto-forex flags both default to false → earningsEnabled
     // is true → the query MUST have fired.
-    expect(mockGetEarningsDetail).toHaveBeenCalledWith("BRK.B");
+    expect(mockGetEarningsDetail).toHaveBeenCalledWith(
+      "BRK.B",
+      expect.objectContaining({ suppressAuthRedirect: true, suppressGlobalError: true }),
+    );
     expect(result.current.symbolMeta).toBeNull();
     expect(result.current.isETF).toBe(false);
     expect(result.current.isCryptoForex).toBe(false);
@@ -142,6 +148,38 @@ describe("useSymbolPageData", () => {
     // hook isError aggregates ctx/analysis/iv/bars/search — earnings-detail
     // is intentionally excluded, so a swallowed 404 should not flip it.
     expect(result.current.isError).toBe(false);
+  });
+
+  it("reports authBlocked when public ticker data receives a 401 without redirecting", async () => {
+    mockSearchSymbols.mockResolvedValue([]);
+    mockGetTickerContext.mockRejectedValue(
+      new ApiError("/api/v1/tickers/context", 401, "{}", "unauthorized"),
+    );
+
+    const { result } = renderHook(() => useSymbolPageData("AAPL"), { wrapper: makeWrapper() });
+
+    await waitFor(() => {
+      expect(result.current.authBlocked).toBe(true);
+    }, { timeout: 3000 });
+
+    expect(result.current.authBlocked).toBe(true);
+    expect(result.current.dataUnavailable).toBe(false);
+  });
+
+  it("reports dataUnavailable for backend/API failures that are not auth blocks", async () => {
+    mockSearchSymbols.mockResolvedValue([]);
+    mockGetTickerContext.mockRejectedValue(
+      new ApiError("/api/v1/tickers/context", 404, "{}", "not found"),
+    );
+
+    const { result } = renderHook(() => useSymbolPageData("AAPL"), { wrapper: makeWrapper() });
+
+    await waitFor(() => {
+      expect(result.current.dataUnavailable).toBe(true);
+    }, { timeout: 3000 });
+
+    expect(result.current.authBlocked).toBe(false);
+    expect(result.current.dataUnavailable).toBe(true);
   });
 
   // T7 P1 #2: anything other than a 404 — 5xx, network failures, etc. —

@@ -2,6 +2,15 @@ import { chromium } from 'playwright';
 import { mkdirSync } from 'fs';
 import { join } from 'path';
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 const BASE_URL = 'https://tradingalpha.net';
 const SCREENSHOTS_DIR = join(import.meta.dirname, 'qa-screenshots');
 mkdirSync(SCREENSHOTS_DIR, { recursive: true });
@@ -31,8 +40,8 @@ function record(name, pass, detail) {
     await page.screenshot({ path: join(SCREENSHOTS_DIR, '00-login-page.png'), fullPage: true });
 
     // Fill login form using exact IDs from source
-    await page.fill('#login-username', 'admin');
-    await page.fill('#login-password', 'alphaDesk2025!');
+    await page.fill('#login-username', QA_USERNAME);
+    await page.fill('#login-password', getQaPassword());
     await page.screenshot({ path: join(SCREENSHOTS_DIR, '00-login-filled.png'), fullPage: true });
     await page.click('button[type="submit"]');
 

@@ -105,20 +105,25 @@ async def test_websocket_rejects_disallowed_origin(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_websocket_allows_origin_missing_when_allowlist_empty(monkeypatch):
-    """Empty allowlist (PRODUCTION_ORIGIN unset) passes everything."""
+async def test_websocket_rejects_browser_origin_when_prod_allowlist_empty(monkeypatch):
+    """Production with no configured allowlist rejects browser origins."""
     from api.websocket import handler as ws_mod
+    import core.config as cfg_mod
 
     monkeypatch.setattr(ws_mod, "_allowed_ws_origins", lambda: set())
+    monkeypatch.setattr(
+        cfg_mod,
+        "settings",
+        cfg_mod.settings.model_copy(update={"ENVIRONMENT": "prod", "PRODUCTION_ORIGIN": ""}),
+    )
 
     ws = _make_ws("https://anything.example")
-    ws.receive_text = AsyncMock(side_effect=Exception("stop after accept"))
-    try:
-        await ws_mod.websocket_endpoint(ws)
-    except Exception:
-        pass
+    await ws_mod.websocket_endpoint(ws)
 
-    ws.accept.assert_called_once()
+    ws.accept.assert_not_called()
+    assert ws.close.called
+    close_call = ws.close.call_args_list[0]
+    assert close_call.kwargs.get("code") == 1008
 
 
 @pytest.mark.asyncio

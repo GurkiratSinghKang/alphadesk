@@ -2,6 +2,15 @@ import puppeteer from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 const DIR = '/Users/GK/Downloads/alphadesk/qa-screenshots/round14';
 const BASE = 'https://tradingalpha.net';
 const results = [];
@@ -109,9 +118,9 @@ async function getText(page, selector, timeout = 3000) {
     const passwordInput = await page.$('input[type="password"], input[name="password"]');
     if (usernameInput && passwordInput) {
       await usernameInput.click({ clickCount: 3 });
-      await usernameInput.type('admin');
+      await usernameInput.type(QA_USERNAME);
       await passwordInput.click({ clickCount: 3 });
-      await passwordInput.type('alphaDesk2025!');
+      await passwordInput.type(getQaPassword());
       await screenshot(page, '29-login-filled');
 
       // Submit

@@ -2,6 +2,15 @@ import { chromium } from 'playwright';
 import { mkdirSync } from 'fs';
 import path from 'path';
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 const BASE = 'https://tradingalpha.net';
 const SSDIR = '/Users/GK/Downloads/alphadesk/qa-screenshots/round7/workflows';
 mkdirSync(SSDIR, { recursive: true });
@@ -57,8 +66,8 @@ async function safeClick(page, selector, opts = {}) {
 
   // Fill credentials
   try {
-    await page.fill('input[name="username"], input[type="text"], input[placeholder*="user" i], input[placeholder*="email" i]', 'admin', { timeout: 5000 });
-    await page.fill('input[name="password"], input[type="password"]', 'alphaDesk2025!', { timeout: 5000 });
+    await page.fill('input[name="username"], input[type="text"], input[placeholder*="user" i], input[placeholder*="email" i]', QA_USERNAME, { timeout: 5000 });
+    await page.fill('input[name="password"], input[type="password"]', getQaPassword(), { timeout: 5000 });
     await ss(page, '02-login-filled');
     await page.click('button[type="submit"], button:has-text("Sign in"), button:has-text("Log in"), button:has-text("Login")', { timeout: 5000 });
     await page.waitForURL('**/dashboard**', { timeout: 15000 }).catch(() => {});
@@ -67,7 +76,7 @@ async function safeClick(page, selector, opts = {}) {
 
     const url = page.url();
     if (url.includes('login')) {
-      logIssue('LOGIN', 'Login did not redirect away from login page', 'Enter admin/alphaDesk2025! and submit');
+      logIssue('LOGIN', 'Login did not redirect away from login page', 'Enter configured QA credentials and submit');
     } else {
       logOK(`Login successful, redirected to ${url}`);
     }
@@ -563,8 +572,8 @@ async function safeClick(page, selector, opts = {}) {
 
       // Log back in
       try {
-        await page.fill('input[name="username"], input[type="text"], input[placeholder*="user" i]', 'admin', { timeout: 3000 });
-        await page.fill('input[name="password"], input[type="password"]', 'alphaDesk2025!', { timeout: 3000 });
+        await page.fill('input[name="username"], input[type="text"], input[placeholder*="user" i]', QA_USERNAME, { timeout: 3000 });
+        await page.fill('input[name="password"], input[type="password"]', getQaPassword(), { timeout: 3000 });
         await page.click('button[type="submit"], button:has-text("Sign in"), button:has-text("Log in")', { timeout: 3000 });
         await sleep(3000);
         await ss(page, '36-re-login');

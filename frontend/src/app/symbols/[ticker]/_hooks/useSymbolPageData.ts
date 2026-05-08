@@ -21,6 +21,10 @@ export type IVDataResult = Awaited<ReturnType<typeof getIVData>>;
 
 const ETF_TYPES = ["ETF", "ETN", "ETV"] as const;
 const CRYPTO_FOREX_TYPES = ["CRYPTO", "FX"] as const;
+const PUBLIC_SYMBOL_DATA_OPTIONS = {
+  suppressAuthRedirect: true,
+  suppressGlobalError: true,
+} as const;
 
 export interface UseSymbolPageDataResult {
   ctx: ReturnType<typeof useTickerContext>;
@@ -32,10 +36,16 @@ export interface UseSymbolPageDataResult {
   symbolMeta: SymbolMeta | null;
   isLoading: boolean;
   isError: boolean;
+  dataUnavailable: boolean;
   isETF: boolean;
   isCryptoForex: boolean;
+  authBlocked: boolean;
   timeframe: TimeFrame;
   setTimeframe: (tf: TimeFrame) => void;
+}
+
+function isAuthBlocked(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
 }
 
 export function useSymbolPageData(sym: string): UseSymbolPageDataResult {
@@ -44,11 +54,12 @@ export function useSymbolPageData(sym: string): UseSymbolPageDataResult {
   const ctx = useTickerContext(
     [sym],
     ["quote", "options_summary", "earnings", "research", "news", "market_regime"],
+    PUBLIC_SYMBOL_DATA_OPTIONS,
   );
 
   const analysisQuery = useQuery<Analysis>({
     queryKey: ["analysis", sym],
-    queryFn: () => getAnalysis(sym),
+    queryFn: () => getAnalysis(sym, PUBLIC_SYMBOL_DATA_OPTIONS),
     staleTime: 5 * 60 * 1000,
     enabled: !!sym,
     retry: 1,
@@ -56,7 +67,7 @@ export function useSymbolPageData(sym: string): UseSymbolPageDataResult {
 
   const ivQuery = useQuery<IVDataResult>({
     queryKey: ["iv", sym],
-    queryFn: () => getIVData(sym),
+    queryFn: () => getIVData(sym, PUBLIC_SYMBOL_DATA_OPTIONS),
     staleTime: 5 * 60 * 1000,
     enabled: !!sym,
     retry: 1,
@@ -64,7 +75,7 @@ export function useSymbolPageData(sym: string): UseSymbolPageDataResult {
 
   const barsQuery = useQuery<OHLCVBar[]>({
     queryKey: ["bars", sym, timeframe],
-    queryFn: () => getBars(sym, timeframe, 250),
+    queryFn: () => getBars(sym, timeframe, 250, PUBLIC_SYMBOL_DATA_OPTIONS),
     staleTime: 5 * 60 * 1000,
     enabled: !!sym,
     retry: 1,
@@ -72,7 +83,7 @@ export function useSymbolPageData(sym: string): UseSymbolPageDataResult {
 
   const searchQuery = useQuery<SymbolMeta[]>({
     queryKey: ["symbolSearch", sym],
-    queryFn: () => searchSymbols(sym, 1),
+    queryFn: () => searchSymbols(sym, 1, PUBLIC_SYMBOL_DATA_OPTIONS),
     staleTime: 60 * 60 * 1000,
     enabled: !!sym,
     retry: 1,
@@ -111,7 +122,7 @@ export function useSymbolPageData(sym: string): UseSymbolPageDataResult {
   const earningsQuery = useQuery<EarningsDetail | null>({
     queryKey: ["earnings-detail", sym],
     queryFn: () =>
-      getEarningsDetail(sym).catch((err: unknown) => {
+      getEarningsDetail(sym, PUBLIC_SYMBOL_DATA_OPTIONS).catch((err: unknown) => {
         if (err instanceof ApiError && err.status === 404) {
           return null;
         }
@@ -131,7 +142,7 @@ export function useSymbolPageData(sym: string): UseSymbolPageDataResult {
   const setupsQuery = useQuery<EarningsSetup[] | null>({
     queryKey: ["earnings-setups", sym],
     queryFn: () =>
-      getRecommendedSetups(sym).catch((err: unknown) => {
+      getRecommendedSetups(sym, PUBLIC_SYMBOL_DATA_OPTIONS).catch((err: unknown) => {
         if (err instanceof ApiError && err.status === 404) {
           return null;
         }
@@ -151,6 +162,15 @@ export function useSymbolPageData(sym: string): UseSymbolPageDataResult {
     (earningsEnabled && (earningsQuery.isLoading || setupsQuery.isLoading));
   const isError =
     ctx.isError || analysisQuery.isError || ivQuery.isError || barsQuery.isError || searchQuery.isError;
+  const authBlocked =
+    isAuthBlocked(ctx.error) ||
+    isAuthBlocked(analysisQuery.error) ||
+    isAuthBlocked(ivQuery.error) ||
+    isAuthBlocked(barsQuery.error) ||
+    isAuthBlocked(searchQuery.error) ||
+    isAuthBlocked(earningsQuery.error) ||
+    isAuthBlocked(setupsQuery.error);
+  const dataUnavailable = isError && !authBlocked;
 
   return {
     ctx,
@@ -162,8 +182,10 @@ export function useSymbolPageData(sym: string): UseSymbolPageDataResult {
     symbolMeta,
     isLoading,
     isError,
+    dataUnavailable,
     isETF,
     isCryptoForex,
+    authBlocked,
     timeframe,
     setTimeframe,
   };

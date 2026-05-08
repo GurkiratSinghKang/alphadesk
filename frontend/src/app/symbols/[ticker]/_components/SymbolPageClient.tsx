@@ -1,6 +1,7 @@
 "use client";
 
-import type { EarningsNewsArticle, Quote } from "@/types";
+import Link from "next/link";
+import type { EarningsNewsArticle, OHLCVBar, Quote } from "@/types";
 
 import { useSymbolPageData } from "../_hooks/useSymbolPageData";
 import { AboutSection } from "../_sections/AboutSection";
@@ -19,6 +20,30 @@ import { UnsupportedAsset } from "../_sections/UnsupportedAsset";
 export interface SymbolPageClientProps {
   symbol: string;
 }
+
+const LISTED_TICKER_PATTERN = /^[A-Z][A-Z0-9]{0,4}(?:[.-][A-Z0-9]{1,2})?$/;
+
+interface PublicSymbolProfile {
+  name: string;
+  sector: string;
+  focus: string;
+  basePrice: number;
+}
+
+const PUBLIC_SYMBOL_PROFILES: Record<string, PublicSymbolProfile> = {
+  AAPL: { name: "Apple Inc.", sector: "Consumer hardware", focus: "Devices, services, cash flow", basePrice: 196 },
+  MSFT: { name: "Microsoft Corp.", sector: "Cloud software", focus: "Azure, AI, enterprise seats", basePrice: 442 },
+  NVDA: { name: "NVIDIA Corp.", sector: "Semiconductors", focus: "AI accelerators, data centers", basePrice: 124 },
+  AMZN: { name: "Amazon.com Inc.", sector: "Consumer internet", focus: "AWS, retail margins, ads", basePrice: 186 },
+  GOOGL: { name: "Alphabet Inc.", sector: "Search and AI", focus: "Search, cloud, AI capex", basePrice: 172 },
+  META: { name: "Meta Platforms", sector: "Social platforms", focus: "Ads, reels, AI infra", basePrice: 518 },
+  AVGO: { name: "Broadcom Inc.", sector: "Semiconductors", focus: "Networking silicon, VMware", basePrice: 139 },
+  TSLA: { name: "Tesla Inc.", sector: "Electric vehicles", focus: "Deliveries, margins, autonomy", basePrice: 182 },
+  LLY: { name: "Eli Lilly", sector: "Pharma", focus: "GLP-1 demand, pipeline", basePrice: 812 },
+  JPM: { name: "JPMorgan Chase", sector: "Banks", focus: "Credit, deposits, NII", basePrice: 218 },
+  V: { name: "Visa Inc.", sector: "Payments", focus: "Cross-border volume", basePrice: 276 },
+  NFLX: { name: "Netflix Inc.", sector: "Streaming", focus: "Ads, subscribers, pricing", basePrice: 642 },
+};
 
 // All four originally-stubbed sections now ship live: Strategy reverse
 // lookup, Agents debate, Key stats, and About (company description +
@@ -125,6 +150,86 @@ function envelopeToMarketRegime(
   return { regime, label, vix_level: vix };
 }
 
+function hasListedTickerShape(symbol: string): boolean {
+  return LISTED_TICKER_PATTERN.test(symbol.toUpperCase());
+}
+
+function profileForSymbol(symbol: string): PublicSymbolProfile {
+  const upper = symbol.toUpperCase();
+  return PUBLIC_SYMBOL_PROFILES[upper] ?? {
+    name: upper,
+    sector: "US listed ticker",
+    focus: "Quote, chart, research, and strategy context",
+    basePrice: 100 + (stableHash(upper) % 240),
+  };
+}
+
+function stableHash(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+function makePreviewQuote(symbol: string): StickyBandQuote {
+  const profile = profileForSymbol(symbol);
+  const hash = stableHash(symbol.toUpperCase());
+  const direction = hash % 2 === 0 ? 1 : -1;
+  const changePct = direction * (0.25 + (hash % 180) / 100);
+  const change = Number((profile.basePrice * (changePct / 100)).toFixed(2));
+  const last = Number((profile.basePrice + change).toFixed(2));
+  const timestamp = Date.now();
+  return {
+    ask: Number((last + 0.03).toFixed(2)),
+    askSize: 10 + (hash % 20),
+    bid: Number((last - 0.03).toFixed(2)),
+    bidSize: 8 + (hash % 18),
+    change,
+    changePct,
+    close: profile.basePrice,
+    high: Number((last * 1.012).toFixed(2)),
+    last,
+    last_trade_time: new Date(timestamp).toISOString(),
+    low: Number((last * 0.988).toFixed(2)),
+    open: profile.basePrice,
+    regular_close_price: profile.basePrice,
+    session: "closed",
+    symbol: symbol.toUpperCase(),
+    timestamp,
+    volume: 1_000_000 + (hash % 12_000_000),
+  };
+}
+
+function makePreviewBars(symbol: string): OHLCVBar[] {
+  const profile = profileForSymbol(symbol);
+  const hash = stableHash(symbol.toUpperCase());
+  const bars: OHLCVBar[] = [];
+  const now = new Date();
+  now.setUTCHours(20, 0, 0, 0);
+  let price = profile.basePrice * (0.94 + (hash % 12) / 100);
+  for (let i = 59; i >= 0; i -= 1) {
+    const day = new Date(now);
+    day.setUTCDate(now.getUTCDate() - i);
+    const wave = Math.sin((60 - i + (hash % 9)) / 5) * 0.009;
+    const drift = 0.0008 + ((hash % 7) - 3) * 0.00008;
+    const open = price;
+    const close = price * (1 + drift + wave);
+    const high = Math.max(open, close) * 1.006;
+    const low = Math.min(open, close) * 0.994;
+    bars.push({
+      close: Number(close.toFixed(2)),
+      high: Number(high.toFixed(2)),
+      low: Number(low.toFixed(2)),
+      open: Number(open.toFixed(2)),
+      time: Math.floor(day.getTime() / 1000),
+      volume: 800_000 + ((hash + i * 97) % 8_500_000),
+    });
+    price = close;
+  }
+  return bars;
+}
+
 export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
   const data = useSymbolPageData(symbol);
 
@@ -149,11 +254,24 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
     (data.recommendedSetups != null && data.recommendedSetups.length > 0) ||
     (newsFromContext != null && newsFromContext.length > 0);
 
-  if (!data.isLoading && !hasAnyData) {
+  if (!data.isLoading && !hasAnyData && !hasListedTickerShape(symbol)) {
+    return <NotFound symbol={symbol} />;
+  }
+
+  if (!data.isLoading && !hasAnyData && !data.authBlocked && !data.dataUnavailable) {
     return <NotFound symbol={symbol} />;
   }
 
   const quote = envelopeToQuote(ctxData?.quote?.value);
+  const canShowPublicPreview =
+    hasListedTickerShape(symbol) &&
+    (data.authBlocked || data.dataUnavailable) &&
+    quote == null &&
+    (!data.bars || data.bars.length === 0);
+  const previewQuote = canShowPublicPreview ? makePreviewQuote(symbol) : null;
+  const previewBars = canShowPublicPreview ? makePreviewBars(symbol) : null;
+  const effectiveQuote = quote ?? previewQuote;
+  const effectiveBars = data.bars && data.bars.length > 0 ? data.bars : previewBars ?? data.bars;
   const marketRegime = envelopeToMarketRegime(ctxData?.marketRegime?.value);
   const newsArticles =
     newsFromContext ?? data.earningsDetail?.news ?? null;
@@ -164,10 +282,80 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
   const skew = data.earningsDetail?.skew ?? null;
   const metrics = data.earningsDetail?.metrics ?? null;
 
-  const limitedMetadata = !data.isLoading && data.symbolMeta === null;
+  const limitedMetadata = !data.authBlocked && !data.isLoading && data.symbolMeta === null;
+  const publicProfile = profileForSymbol(symbol);
+  const title = data.symbolMeta?.name ?? symbol;
+  const chartName = data.symbolMeta?.name ?? publicProfile.name;
 
   return (
-    <main data-testid="symbol-page" data-sym={symbol}>
+    <main id="main" data-testid="symbol-page" data-sym={symbol}>
+      <a
+        className="sr-only focus:not-sr-only fixed left-3 top-3 z-50 rounded-sm bg-primary px-3 py-2 text-label font-semibold text-primary-foreground shadow-lg"
+        href="#chart"
+      >
+        Skip to chart
+      </a>
+      <header className="border-b border-border-hair bg-bg px-4 py-4 sm:px-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <nav aria-label="Ticker breadcrumbs">
+              <Link
+                href="/symbols"
+                className="t-label u-brand transition-colors hover:text-primary"
+              >
+                Symbols
+              </Link>
+            </nav>
+            <h1 className="mt-2 truncate text-h2 font-semibold text-fg">
+              {title}
+            </h1>
+          </div>
+          <p className="max-w-xl text-body-sm text-fg-muted">
+            Ticker workspace for {symbol.toUpperCase()}: chart, market context, options thesis,
+            strategy lookup, and research surfaces.
+          </p>
+        </div>
+      </header>
+      {data.authBlocked ? (
+        <div
+          data-testid="symbol-auth-note"
+          className="mx-4 sm:mx-6 mb-2 mt-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 t-mono text-label text-primary"
+        >
+          Sign in to load live quotes, charts, and AI research for {symbol}.{" "}
+          <Link href="/login" className="underline underline-offset-4 hover:text-fg">
+            Open workspace
+          </Link>
+        </div>
+      ) : null}
+      {data.dataUnavailable ? (
+        <div
+          data-testid="symbol-data-note"
+          className="mx-4 sm:mx-6 mb-2 mt-2 rounded-md border border-amber/35 bg-amber/10 px-3 py-2 t-mono text-label text-fg-muted"
+        >
+          Market data is temporarily unavailable for {symbol}. The ticker workspace remains open.
+        </div>
+      ) : null}
+      {canShowPublicPreview ? (
+        <section
+          data-testid="symbol-preview-note"
+          className="mx-4 sm:mx-6 mb-2 mt-2 rounded-md border border-border-hair bg-bg-elev-1 px-3 py-3"
+        >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="t-label u-muted">Public preview</p>
+              <p className="mt-1 t-mono text-body-sm text-fg">
+                {publicProfile.sector} · {publicProfile.focus}
+              </p>
+            </div>
+            <Link
+              href="/login"
+              className="t-mono text-label text-primary underline underline-offset-4 hover:text-fg"
+            >
+              Load live workspace
+            </Link>
+          </div>
+        </section>
+      ) : null}
       {limitedMetadata ? (
         <div
           data-testid="limited-metadata-note"
@@ -176,7 +364,7 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
           Limited metadata available for {symbol}.
         </div>
       ) : null}
-      <StickyBand symbol={symbol} quote={quote}>
+      <StickyBand symbol={symbol} quote={effectiveQuote}>
         <DecisionStrip
           symbol={symbol}
           claudeStructured={claudeStructured}
@@ -187,9 +375,10 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
 
       <ChartBand
         symbol={symbol}
-        bars={data.bars}
-        name={data.symbolMeta?.name ?? null}
-        quote={quote}
+        bars={effectiveBars}
+        name={chartName}
+        quote={effectiveQuote}
+        dataMode={canShowPublicPreview ? "preview" : "live"}
       />
 
       <OptionsThesisBand
@@ -208,7 +397,7 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
         symbol={symbol}
         setups={data.recommendedSetups}
         isETF={data.isETF}
-        underlying={quote?.last ?? null}
+        underlying={effectiveQuote?.last ?? null}
       />
 
       <StrategyReverseLookup symbol={symbol} />

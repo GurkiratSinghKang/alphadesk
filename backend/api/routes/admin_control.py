@@ -28,6 +28,8 @@ from services import app_config
 logger = logging.getLogger("alphadesk.api.admin_control")
 
 router = APIRouter(prefix="/admin/control-center", tags=["admin-control-center"])
+DEPLOY_UNAVAILABLE_DETAIL = "GitHub deploy service is temporarily unavailable"
+DEPLOY_REJECTED_DETAIL = "GitHub deploy service rejected the request"
 
 
 # --------------------------------------------------------------------- #
@@ -155,7 +157,7 @@ async def trigger_deploy(actor: str = Depends(require_admin)) -> dict[str, Any]:
     except httpx.HTTPError as exc:
         logger.exception("Deploy dispatch failed (network)")
         _LAST_DEPLOY.update({"triggered_at": triggered_at, "actor": actor, "ok": False, "html_url": None})
-        raise HTTPException(status_code=502, detail=f"GitHub API unreachable: {exc}") from exc
+        raise HTTPException(status_code=502, detail=DEPLOY_UNAVAILABLE_DETAIL) from exc
 
     if resp.status_code != 204:
         # GitHub returns 204 No Content on success.
@@ -166,7 +168,7 @@ async def trigger_deploy(actor: str = Depends(require_admin)) -> dict[str, Any]:
         _LAST_DEPLOY.update({"triggered_at": triggered_at, "actor": actor, "ok": False, "html_url": None})
         raise HTTPException(
             status_code=502,
-            detail=f"GitHub returned {resp.status_code}: {resp.text[:256]}",
+            detail=DEPLOY_REJECTED_DETAIL,
         )
 
     # Best-effort: fetch the most recent run for this workflow so we can

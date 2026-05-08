@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { getMarketRegime, getMarketIndices, getMarketStatus, getStrategies, getPortfolioSummary, getPipelineStatus, getOptionsChain, getIVData, getPnlCalendar, getIndexSparklines, getMorningBrief, getTickerContext, getCurrentUser, getBrokerConnections } from "@/lib/api";
-import type { MarketStatusResponse } from "@/lib/api";
+import type { ApiFetchOptions, MarketStatusResponse } from "@/lib/api";
 
 export function useRegime() {
   return useQuery({
@@ -173,6 +173,7 @@ export function useBrokerConnections() {
 export function useTickerContext(
   symbols: readonly string[],
   needs: readonly string[] = ["quote", "options_summary", "earnings", "research"],
+  options: Pick<ApiFetchOptions, "suppressAuthRedirect" | "suppressGlobalError" | "timeoutMs"> = {},
 ) {
   const normalizedSymbols = Array.from(
     new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean)),
@@ -184,6 +185,9 @@ export function useTickerContext(
       needs: normalizedNeeds,
       onStale: "allow_with_warning",
       signal,
+      suppressAuthRedirect: options.suppressAuthRedirect,
+      suppressGlobalError: options.suppressGlobalError,
+      timeoutMs: options.timeoutMs,
     }),
     staleTime: 30 * 1000,
     enabled: normalizedSymbols.length > 0,

@@ -2,11 +2,20 @@ import { chromium } from "playwright";
 import { writeFileSync, mkdirSync } from "fs";
 import path from "path";
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 const BASE = "https://tradingalpha.net";
 const DIR = "./qa-screenshots/interactive";
 const RESULTS_FILE = "./qa-screenshots/interactive-results.json";
-const USERNAME = "admin";
-const PASSWORD = "GK1355$$gk";
+const USERNAME = QA_USERNAME;
+const PASSWORD = getQaPassword();
 
 mkdirSync(DIR, { recursive: true });
 
@@ -62,9 +71,9 @@ async function main() {
     await page.fill('input[type="password"]', PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForURL((url) => !url.pathname.includes("/login"), { timeout: 15000 });
-    log("PASS", "Login", "Login with admin credentials", `Redirected to ${page.url()}`);
+    log("PASS", "Login", "Login with configured QA credentials", `Redirected to ${page.url()}`);
   } catch (e) {
-    log("FAIL", "Login", "Login with admin credentials", e.message);
+    log("FAIL", "Login", "Login with configured QA credentials", e.message);
     await screenshotOnFail(page, "login");
     await browser.close();
     writeFileSync(RESULTS_FILE, JSON.stringify({ results, summary: { total: results.length, pass: 0, fail: results.length } }, null, 2));

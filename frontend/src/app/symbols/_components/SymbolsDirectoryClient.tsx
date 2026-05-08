@@ -6,7 +6,6 @@ import {
   ChartLineUp,
   House,
   MagnifyingGlass,
-  ShieldCheck,
   TrendUp,
   WarningCircle,
   X,
@@ -138,6 +137,11 @@ const TOP_COMPANIES: TopCompany[] = [
 ];
 
 const TOP_SYMBOLS = TOP_COMPANIES.map((company) => company.symbol);
+const PUBLIC_SYMBOL_DATA_OPTIONS = {
+  suppressAuthRedirect: true,
+  suppressGlobalError: true,
+} as const;
+const DIRECT_TICKER_PATTERN = /^[A-Z][A-Z0-9]{0,4}(?:[.-][A-Z0-9]{1,2})?$/;
 
 function normalizeSymbol(value: string): string {
   return value.trim().toUpperCase().replace(/[^A-Z0-9.-]/g, "");
@@ -189,6 +193,50 @@ function toCompanyResult(result: SymbolResult): TopCompany {
   };
 }
 
+function topCompanyToResult(company: TopCompany): SymbolResult {
+  return {
+    exchange: company.venue,
+    name: company.name,
+    sector: company.sector,
+    symbol: company.symbol,
+    type: "stock",
+  };
+}
+
+function fallbackResultsForQuery(value: string, apiResults: SymbolResult[] = []): SymbolResult[] {
+  const trimmed = value.trim();
+  const q = trimmed.toLowerCase();
+  const direct = normalizeSymbol(trimmed);
+  const merged = new Map<string, SymbolResult>();
+
+  for (const result of apiResults) {
+    const symbol = normalizeSymbol(result.symbol);
+    if (symbol) merged.set(symbol, { ...result, symbol });
+  }
+
+  for (const company of TOP_COMPANIES) {
+    if (
+      company.symbol.toLowerCase().includes(q) ||
+      company.name.toLowerCase().includes(q) ||
+      company.sector.toLowerCase().includes(q)
+    ) {
+      merged.set(company.symbol, topCompanyToResult(company));
+    }
+  }
+
+  if (DIRECT_TICKER_PATTERN.test(direct) && !merged.has(direct)) {
+    merged.set(direct, {
+      exchange: "US",
+      name: `${direct} ticker`,
+      sector: "Equity",
+      symbol: direct,
+      type: "stock",
+    });
+  }
+
+  return Array.from(merged.values());
+}
+
 export function SymbolsDirectoryClient() {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -208,7 +256,7 @@ export function SymbolsDirectoryClient() {
       }
     }, 3200);
 
-    getSnapshots(TOP_SYMBOLS)
+    getSnapshots(TOP_SYMBOLS, PUBLIC_SYMBOL_DATA_OPTIONS)
       .then((data) => {
         if (!cancelled) {
           const hasQuotes = TOP_SYMBOLS.some((symbol) => quoteFor(data, symbol));
@@ -238,30 +286,16 @@ export function SymbolsDirectoryClient() {
 
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      searchSymbols(trimmed, 8)
+      searchSymbols(trimmed, 8, PUBLIC_SYMBOL_DATA_OPTIONS)
         .then((results) => {
           if (!cancelled) {
-            setSearchResults(results);
+            setSearchResults(fallbackResultsForQuery(trimmed, results));
             setSearchState("ready");
           }
         })
         .catch((err: Error) => {
           if (!cancelled) {
-            const fallback = TOP_COMPANIES.filter((company) => {
-              const q = trimmed.toLowerCase();
-              return (
-                company.symbol.toLowerCase().includes(q) ||
-                company.name.toLowerCase().includes(q) ||
-                company.sector.toLowerCase().includes(q)
-              );
-            }).map((company) => ({
-              exchange: company.venue,
-              name: company.name,
-              sector: company.sector,
-              symbol: company.symbol,
-              type: "stock",
-            }));
-            setSearchResults(fallback);
+            setSearchResults(fallbackResultsForQuery(trimmed));
             setSearchError(err.message || "Search unavailable");
             setSearchState("error");
           }
@@ -321,9 +355,16 @@ export function SymbolsDirectoryClient() {
 
   return (
     <main
+      id="main"
       className="min-h-[100dvh] bg-bg text-fg"
       data-testid="symbols-directory"
     >
+      <a
+        className="sr-only focus:not-sr-only fixed left-3 top-3 z-50 rounded-sm bg-primary px-3 py-2 text-label font-semibold text-primary-foreground shadow-lg"
+        href="#symbol-search"
+      >
+        Skip to symbol search
+      </a>
       <header className="border-b border-border/70 bg-bg/95 px-4 py-4 backdrop-blur md:px-6">
         <div className="mx-auto flex max-w-[1480px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Link
@@ -342,12 +383,12 @@ export function SymbolsDirectoryClient() {
               Dashboard
             </Link>
             <Link
-              href="/admin/control-center"
+              href="/login"
               className="inline-flex min-h-10 items-center gap-2 rounded-sm border border-primary/40 bg-primary/10 px-3 text-label font-semibold text-primary transition-colors hover:bg-primary/15 active:scale-[0.98]"
-              data-testid="symbols-admin-link"
+              data-testid="symbols-sign-in-link"
             >
-              <ShieldCheck className="size-4" aria-hidden="true" />
-              Control center
+              Sign in
+              <ArrowRight className="size-4" aria-hidden="true" />
             </Link>
           </nav>
         </div>
@@ -367,7 +408,7 @@ export function SymbolsDirectoryClient() {
               <div className="flex min-w-[220px] items-center gap-2 rounded-sm border border-border-hair bg-bg-elev-1 px-3 py-2">
                 <span className="flex size-2 rounded-full bg-profit shadow-[0_0_0_4px_rgba(110,155,45,0.12)]" aria-hidden="true" />
                 <span className="t-mono text-label text-fg-muted">
-                  {quotesLoading ? "Loading quotes" : quoteError ? "Static list ready" : "Live quotes loaded"}
+                  {quotesLoading ? "Loading quotes" : quoteError ? "Ticker list ready" : "Live quotes loaded"}
                 </span>
               </div>
             </div>
@@ -400,7 +441,7 @@ export function SymbolsDirectoryClient() {
                 ) : null}
                 <button
                   type="submit"
-                  className="hidden min-h-9 items-center gap-1.5 rounded-sm bg-primary px-3 text-label font-semibold text-primary-foreground transition-colors hover:bg-gold-300 active:scale-[0.98] sm:inline-flex"
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-sm bg-primary px-2 text-label font-semibold text-primary-foreground transition-colors hover:bg-gold-300 active:scale-[0.98] sm:px-3"
                 >
                   Open
                   <ArrowRight className="size-4" aria-hidden="true" />
@@ -408,16 +449,12 @@ export function SymbolsDirectoryClient() {
               </div>
             </form>
 
-            {(quoteError || searchError) && (
+            {searchError ? (
               <div className="mt-3 flex items-start gap-2 rounded-sm border border-amber/35 bg-amber/10 px-3 py-2 text-label text-fg-muted">
                 <WarningCircle className="mt-0.5 size-4 shrink-0 text-amber" aria-hidden="true" />
-                <span>
-                  {searchError
-                    ? "Search fell back to the default company list."
-                    : "Live quote feed is unavailable, but the symbols remain navigable."}
-                </span>
+                <span>Search fell back to the default company list.</span>
               </div>
-            )}
+            ) : null}
           </div>
 
           <div className="px-4 py-3 sm:px-5">
@@ -438,7 +475,7 @@ export function SymbolsDirectoryClient() {
             </div>
 
             <div className="overflow-hidden rounded-sm border border-border-hair" data-testid="symbols-top-list">
-              <div className="hidden grid-cols-[1.1fr_0.9fr_0.7fr_0.7fr_0.7fr_44px] gap-3 border-b border-border-hair bg-bg-elev-1 px-3 py-2 t-label text-fg-muted md:grid">
+              <div className="hidden grid-cols-[minmax(180px,1fr)_minmax(220px,1.1fr)_minmax(86px,0.55fr)_minmax(86px,0.55fr)_minmax(96px,0.55fr)_44px] gap-3 border-b border-border-hair bg-bg-elev-1 px-3 py-2 t-label text-fg-muted md:grid">
                 <span>Symbol</span>
                 <span>Focus</span>
                 <span>Last</span>
@@ -465,7 +502,7 @@ export function SymbolsDirectoryClient() {
                       <li key={company.symbol}>
                         <Link
                           href={`/symbols/${encodeURIComponent(company.symbol)}`}
-                          className="group grid min-h-[74px] gap-2 px-3 py-3 transition-colors hover:bg-bg-elev-1 active:bg-bg-elev-2 md:grid-cols-[1.1fr_0.9fr_0.7fr_0.7fr_0.7fr_44px] md:items-center md:gap-3"
+                          className="group grid min-h-[74px] gap-2 px-3 py-3 transition-colors hover:bg-bg-elev-1 active:bg-bg-elev-2 md:grid-cols-[minmax(180px,1fr)_minmax(220px,1.1fr)_minmax(86px,0.55fr)_minmax(86px,0.55fr)_minmax(96px,0.55fr)_44px] md:items-center md:gap-3"
                           data-testid={`symbols-row-${company.symbol}`}
                         >
                           <div className="min-w-0">
@@ -480,7 +517,7 @@ export function SymbolsDirectoryClient() {
                             <p className="mt-1 truncate text-body-sm text-fg-muted">{company.name}</p>
                           </div>
                           <div className="min-w-0">
-                            <p className="truncate text-body-sm text-fg">{company.focus}</p>
+                            <p className="text-body-sm leading-snug text-fg">{company.focus}</p>
                             <p className="mt-1 t-meta">{company.sector}</p>
                           </div>
                           <Metric label="Last" value={quotesLoading ? null : formatPrice(quote?.last)} />

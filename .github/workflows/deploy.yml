@@ -338,16 +338,20 @@ jobs:
             ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
           fi
 
-          # Pass the deploy-time env into the remote shell via `SendEnv`
-          # would require remote sshd to `AcceptEnv` — not guaranteed.
-          # Instead, prefix the heredoc with explicit exports so the remote
-          # `bash -s` sees them. Values are single-quoted locally then
-          # assigned with escaped double-quotes remotely.
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-              -o LogLevel=ERROR \
-              "deploy@${VPS_HOST}" \
-              "GHCR_TOKEN='${GHCR_TOKEN}' GHCR_USER='${GHCR_USER}' FRONTEND_IMAGE='${FRONTEND_IMAGE}' BACKEND_IMAGE='${BACKEND_IMAGE}' GHCR_REPO_FRONTEND='${GHCR_REPO_FRONTEND}' GHCR_REPO_BACKEND='${GHCR_REPO_BACKEND}' SMOKE_TOKEN='${SMOKE_TOKEN:-}' bash -s" <<'REMOTE_SCRIPT'
-            set -euo pipefail
+          # Stream deploy-time env over stdin before the traced script body.
+          # This avoids putting GHCR/SMOKE tokens in the remote process argv
+          # while still avoiding sshd AcceptEnv requirements. known_hosts is
+          # populated above, so keep host-key verification enabled.
+          {
+            printf 'set -euo pipefail\n'
+            printf 'export GHCR_TOKEN=%q\n' "$GHCR_TOKEN"
+            printf 'export GHCR_USER=%q\n' "$GHCR_USER"
+            printf 'export FRONTEND_IMAGE=%q\n' "$FRONTEND_IMAGE"
+            printf 'export BACKEND_IMAGE=%q\n' "$BACKEND_IMAGE"
+            printf 'export GHCR_REPO_FRONTEND=%q\n' "$GHCR_REPO_FRONTEND"
+            printf 'export GHCR_REPO_BACKEND=%q\n' "$GHCR_REPO_BACKEND"
+            printf 'export SMOKE_TOKEN=%q\n' "${SMOKE_TOKEN:-}"
+            cat <<'REMOTE_SCRIPT'
             set -x
 
             echo "─── Preflight diagnostics ──────────────────────────────"
@@ -596,6 +600,10 @@ jobs:
             docker ps --format '{{.Names}}\t{{.Image}}\t{{.Status}}'
             echo "Deploy successful: FRONTEND=${FRONTEND_IMAGE} BACKEND=${BACKEND_IMAGE}"
           REMOTE_SCRIPT
+          } | ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+              -o LogLevel=ERROR \
+              "deploy@${VPS_HOST}" \
+              "bash -s"
 
   # R3-4: non-blocking visual-regression check. Runs after a successful
   # build-and-deploy so we always compare against the freshly-deployed

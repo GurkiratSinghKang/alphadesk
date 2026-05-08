@@ -2,6 +2,15 @@ import { chromium } from 'playwright';
 import { mkdirSync } from 'fs';
 import path from 'path';
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 const BASE = 'https://tradingalpha.net';
 const SSDIR = '/Users/GK/Downloads/alphadesk/qa-screenshots/round7/workflows';
 mkdirSync(SSDIR, { recursive: true });
@@ -76,8 +85,8 @@ async function sleep(ms) {
     if (type === 'password') pwInput = inp;
     else if (type === 'text' || type === 'email' || !type) textInput = inp;
   }
-  if (textInput) await textInput.fill('admin');
-  if (pwInput) await pwInput.fill('alphaDesk2025!');
+  if (textInput) await textInput.fill(QA_USERNAME);
+  if (pwInput) await pwInput.fill(getQaPassword());
   await ss(page, '02-login-filled');
 
   // Click submit
@@ -95,7 +104,7 @@ async function sleep(ms) {
   if (!afterLoginUrl.includes('/login')) {
     logOK(`Login successful - redirected to ${afterLoginUrl}`);
   } else {
-    logIssue('LOGIN', 'CRITICAL', 'Login failed - stayed on login page', 'Enter admin/alphaDesk2025! and click Sign In');
+    logIssue('LOGIN', 'CRITICAL', 'Login failed - stayed on login page', 'Enter configured QA credentials and click Sign In');
   }
 
   // ============================================================
@@ -867,8 +876,8 @@ async function sleep(ms) {
       const inputs2 = await page.$$('input');
       for (const inp of inputs2) {
         const type = await inp.getAttribute('type');
-        if (type === 'password') await inp.fill('alphaDesk2025!');
-        else if (type === 'text' || type === 'email' || !type) await inp.fill('admin');
+        if (type === 'password') await inp.fill(getQaPassword());
+        else if (type === 'text' || type === 'email' || !type) await inp.fill(QA_USERNAME);
       }
       const submitBtn2 = await page.$('button[type="submit"]');
       if (submitBtn2) await submitBtn2.click();

@@ -2,6 +2,15 @@ import puppeteer from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 const DIR = '/Users/GK/Downloads/alphadesk/qa-screenshots/round14';
 const BASE = 'https://tradingalpha.net';
 
@@ -39,14 +48,14 @@ async function screenshot(page, name, opts = {}) {
   const uInput = await page.$('input[placeholder*="username" i], input[placeholder*="user" i], input[type="text"], input[name="username"]');
   if (uInput) {
     await uInput.click({ clickCount: 3 });
-    await page.keyboard.type('admin');
+    await page.keyboard.type(QA_USERNAME);
   }
 
   // Fill password
   const pInput = await page.$('input[type="password"], input[name="password"], input[placeholder*="password" i]');
   if (pInput) {
     await pInput.click({ clickCount: 3 });
-    await page.keyboard.type('alphaDesk2025!');
+    await page.keyboard.type(getQaPassword());
   }
 
   // Debug: what buttons exist

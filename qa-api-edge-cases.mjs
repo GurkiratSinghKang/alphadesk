@@ -7,8 +7,17 @@
 import fs from "fs";
 import path from "path";
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 const BASE = "https://tradingalpha.net/api/v1";
-const CREDS = { username: "admin", password: "GK1355$$gk" };
+const CREDS = { username: QA_USERNAME, password: getQaPassword() };
 
 const results = [];
 
@@ -73,7 +82,7 @@ async function testAuth() {
     const resp = await safeFetch(`${BASE}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "admin", password: "wrongpass" }),
+      body: JSON.stringify({ username: QA_USERNAME, password: "wrongpass" }),
     });
     const body = await safeBody(resp);
     record(1, "/auth/login", "POST", resp.status, resp.status === 401, body, "Wrong password");
@@ -101,7 +110,7 @@ async function testAuth() {
       const resp = await safeFetch(`${BASE}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "admin", password: "wrong" + i }),
+        body: JSON.stringify({ username: QA_USERNAME, password: "wrong" + i }),
       });
       lastBody = await safeBody(resp);
       lastStatus = resp.status;
@@ -506,7 +515,7 @@ async function testResponseShape() {
   // 30. Verify no raw Python tracebacks
   {
     const tracebackEndpoints = [
-      { url: `${BASE}/auth/login`, method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "admin", password: "wrong" }) },
+      { url: `${BASE}/auth/login`, method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: QA_USERNAME, password: "wrong" }) },
       { url: `${BASE}/strategies/nope/performance`, method: "GET", headers: authHeaders(token) },
       { url: `${BASE}/pipeline/history/bad`, method: "GET", headers: authHeaders(token) },
       { url: `${BASE}/market/quotes/ZZZZZ`, method: "GET", headers: authHeaders(token) },

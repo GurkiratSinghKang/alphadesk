@@ -15,6 +15,7 @@ except ImportError:
 
 import asyncio
 import logging
+import os
 import uuid
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
@@ -369,20 +370,15 @@ app.add_middleware(
 # from inside the container's effective routing scope (k8s NodePort
 # IPs land on those ranges too).
 #
-# Audit P2-01 (2026-05-05): tightened to loopback-only on the assumption
-# that the backend sits behind a single Caddy proxy on the SAME host. In
-# the docker-compose deployment (infrastructure/docker-compose.prod.yml)
-# Caddy and the backend share a user bridge network — operators using
-# that topology MUST either (a) switch to ``network_mode: host`` for both
-# services, or (b) re-add the bridge subnet here and pin trust to the
-# narrowest range Docker actually assigns (typically a single 172.x.0.0/16).
-# Single-proxy assumption matters: every additional trusted host in the
-# list expands the IPs that may legitimately set X-Forwarded-For, which
-# is the bucket key per-IP rate limits hash on. ``["*"]`` was a free
-# spoof of any rate-limit bucket; loopback-only closes that.
+# TRUSTED_PROXY_HOSTS lets production pin the exact Docker bridge subnet
+# while local dev keeps a loopback-only default. Single-proxy assumption
+# matters: every additional trusted host in the list expands the IPs that
+# may legitimately set X-Forwarded-For, which is the bucket key per-IP
+# rate limits hash on. ``["*"]`` was a free spoof of any rate-limit bucket.
 _TRUSTED_PROXY_HOSTS = [
-    "127.0.0.1",
-    "::1",
+    host.strip()
+    for host in os.getenv("TRUSTED_PROXY_HOSTS", "127.0.0.1,::1").split(",")
+    if host.strip()
 ]
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=_TRUSTED_PROXY_HOSTS)
 

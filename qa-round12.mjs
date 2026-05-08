@@ -2,6 +2,15 @@ import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 const SCREENSHOT_DIR = '/Users/GK/Downloads/alphadesk/qa-screenshots/round12';
 const BASE_URL = 'https://tradingalpha.net';
 const bugs = [];
@@ -66,8 +75,8 @@ async function collectConsoleErrors(page) {
   log('=== Phase 0: Login ===');
   try {
     await page.goto(`${BASE_URL}/login`, { waitUntil: 'networkidle', timeout: 30000 });
-    await page.fill('input[name="username"], input[type="text"]', 'admin');
-    await page.fill('input[name="password"], input[type="password"]', 'alphaDesk2025!');
+    await page.fill('input[name="username"], input[type="text"]', QA_USERNAME);
+    await page.fill('input[name="password"], input[type="password"]', getQaPassword());
     await page.click('button[type="submit"]');
     await page.waitForURL('**/', { timeout: 15000 });
     await page.waitForTimeout(3000);
@@ -605,8 +614,8 @@ async function collectConsoleErrors(page) {
 
         // Login again
         try {
-          await page.fill('input[name="username"], input[type="text"]', 'admin');
-          await page.fill('input[name="password"], input[type="password"]', 'alphaDesk2025!');
+          await page.fill('input[name="username"], input[type="text"]', QA_USERNAME);
+          await page.fill('input[name="password"], input[type="password"]', getQaPassword());
           await page.click('button[type="submit"]');
           await page.waitForURL('**/', { timeout: 15000 });
           await page.waitForTimeout(2000);

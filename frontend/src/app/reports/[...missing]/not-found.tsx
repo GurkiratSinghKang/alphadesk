@@ -21,7 +21,10 @@ export default function MissingReportsNotFound() {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 pt-2">
+      <nav
+        aria-label="Reports recovery navigation"
+        className="flex flex-wrap items-center gap-3 pt-2"
+      >
         <Link
           href="/"
           className="inline-flex min-h-11 items-center gap-2 rounded-sm bg-primary px-4 py-2 font-sans text-body-sm font-semibold text-ink-1000 transition-colors hover:bg-gold-300"
@@ -35,7 +38,7 @@ export default function MissingReportsNotFound() {
         >
           Open reports
         </Link>
-      </div>
+      </nav>
     </main>
   );
 }

@@ -12,6 +12,10 @@ const DASH = "—";
 // trading day, and we don't want React Query to re-fetch on every page
 // remount when the data is already warm in the BE cache.
 const STALE_TIME_MS = 24 * 60 * 60 * 1000;
+const PUBLIC_SYMBOL_DATA_OPTIONS = {
+  suppressAuthRedirect: true,
+  suppressGlobalError: true,
+} as const;
 
 export interface KeyStatsProps {
   symbol: string;
@@ -102,7 +106,7 @@ function Shell({
 export function KeyStats({ symbol }: KeyStatsProps) {
   const query = useQuery<TickerFundamentals>({
     queryKey: ["fundamentals", symbol],
-    queryFn: () => getTickerFundamentals(symbol),
+    queryFn: () => getTickerFundamentals(symbol, PUBLIC_SYMBOL_DATA_OPTIONS),
     staleTime: STALE_TIME_MS,
     enabled: Boolean(symbol),
   });

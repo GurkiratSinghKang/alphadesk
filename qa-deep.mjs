@@ -1,9 +1,18 @@
 import { chromium } from "playwright";
 import { writeFileSync, mkdirSync } from "fs";
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 const BASE = "https://tradingalpha.net";
 const DIR = "./qa-screenshots/deep";
-const PASSWORD = "GK1355$$gk";
+const PASSWORD = getQaPassword();
 
 async function main() {
   mkdirSync(DIR, { recursive: true });
@@ -31,7 +40,7 @@ async function main() {
   page.on("pageerror", (err) => allErrors.push(`[LOGIN PAGE_ERROR] ${err.message}`));
 
   await page.goto(`${BASE}/login`, { waitUntil: "networkidle", timeout: 30000 });
-  await page.fill('input[placeholder="admin"]', "admin");
+  await page.fill('input[placeholder="admin"]', QA_USERNAME);
   await page.fill('input[type="password"]', PASSWORD);
   await page.click('button[type="submit"]');
   await page.waitForTimeout(3000);

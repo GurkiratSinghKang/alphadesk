@@ -8,9 +8,18 @@
 import { writeFileSync } from "node:fs";
 import { Buffer } from "node:buffer";
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 const BASE = "https://tradingalpha.net";
 const API  = `${BASE}/api/v1`;
-const CREDS = { username: "admin", password: "GK1355$$gk" };
+const CREDS = { username: QA_USERNAME, password: getQaPassword() };
 const RESULTS_PATH = "/Users/GK/Downloads/alphadesk/qa-screenshots/security/results.json";
 
 let accessToken  = null;
@@ -226,7 +235,7 @@ async function rateLimitTests() {
     let firstRateLimit = -1;
     for (let i = 1; i <= 10; i++) {
       const r = await req("POST", "/auth/login", {
-        body: { username: "admin", password: "wrong_password" },
+        body: { username: QA_USERNAME, password: "wrong_password" },
       });
       statuses.push(r.status);
       if (r.status === 429 && !got429) {

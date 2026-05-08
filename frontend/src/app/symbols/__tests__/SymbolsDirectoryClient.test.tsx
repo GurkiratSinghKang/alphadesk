@@ -1,13 +1,17 @@
 import "../../../__tests__/setup-mocks";
-import { describe, expect, it, beforeEach } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, beforeEach, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { mockPush } from "../../../__tests__/setup-mocks";
+import { searchSymbols } from "@/lib/api";
 import { SymbolsDirectoryClient } from "../_components/SymbolsDirectoryClient";
+
+const mockSearchSymbols = vi.mocked(searchSymbols);
 
 describe("SymbolsDirectoryClient", () => {
   beforeEach(() => {
     mockPush.mockReset();
+    mockSearchSymbols.mockResolvedValue([]);
   });
 
   it("shows top companies by default and links each ticker to its page", () => {
@@ -28,12 +32,24 @@ describe("SymbolsDirectoryClient", () => {
     expect(mockPush).toHaveBeenCalledWith("/symbols/NVDA");
   });
 
-  it("exposes a direct admin control center path", () => {
+  it("offers sign in from the public symbols header", () => {
     render(<SymbolsDirectoryClient />);
 
-    expect(screen.getByTestId("symbols-admin-link")).toHaveAttribute(
+    expect(screen.getByTestId("symbols-sign-in-link")).toHaveAttribute(
       "href",
-      "/admin/control-center",
+      "/login",
     );
+  });
+
+  it("offers a direct ticker fallback when symbol search is unavailable", async () => {
+    mockSearchSymbols.mockRejectedValueOnce(new Error("search unavailable"));
+    render(<SymbolsDirectoryClient />);
+
+    const input = screen.getByTestId("symbols-search-input");
+    fireEvent.change(input, { target: { value: "ibm" } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("symbols-row-IBM")).toHaveAttribute("href", "/symbols/IBM");
+    });
   });
 });

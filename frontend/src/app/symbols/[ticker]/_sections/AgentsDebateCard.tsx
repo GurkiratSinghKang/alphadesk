@@ -21,6 +21,10 @@ import {
 const RUNS_QUERY_KEY = "tradingagents-runs-by-symbol";
 const POLL_INTERVAL_MS = 5_000;
 const POLL_TIMEOUT_MS = 60_000;
+const PUBLIC_SYMBOL_DATA_OPTIONS = {
+  suppressAuthRedirect: true,
+  suppressGlobalError: true,
+} as const;
 
 export interface AgentsDebateCardProps {
   symbol: string;
@@ -230,7 +234,7 @@ export function AgentsDebateCard({ symbol, isETF }: AgentsDebateCardProps) {
     queryKey: [RUNS_QUERY_KEY, symbol],
     // Backend list endpoint doesn't take a symbol param; filter client-side.
     queryFn: async () => {
-      const all = await getTradingAgentsRuns(20);
+      const all = await getTradingAgentsRuns(20, PUBLIC_SYMBOL_DATA_OPTIONS);
       const norm = symbol.toUpperCase();
       return all.filter((r) => (r.symbol ?? "").toUpperCase() === norm);
     },
@@ -245,7 +249,7 @@ export function AgentsDebateCard({ symbol, isETF }: AgentsDebateCardProps) {
   // every 5s while a single run is cooking.
   const pollQuery = useQuery({
     queryKey: ["tradingagents-run-poll", runningId],
-    queryFn: () => getTradingAgentsRun(runningId as string),
+    queryFn: () => getTradingAgentsRun(runningId as string, PUBLIC_SYMBOL_DATA_OPTIONS),
     enabled: Boolean(runningId) && !pollExpired,
     refetchInterval: POLL_INTERVAL_MS,
     staleTime: 0,

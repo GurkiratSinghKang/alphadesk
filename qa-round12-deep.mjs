@@ -2,6 +2,15 @@ import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 
+const QA_USERNAME = process.env.ALPHADESK_QA_USERNAME || "admin";
+function getQaPassword() {
+  const password = process.env.ALPHADESK_QA_PASSWORD;
+  if (!password) {
+    throw new Error("ALPHADESK_QA_PASSWORD is required for authenticated QA login");
+  }
+  return password;
+}
+
 const SCREENSHOT_DIR = '/Users/GK/Downloads/alphadesk/qa-screenshots/round12';
 const BASE_URL = 'https://tradingalpha.net';
 const bugs = [];
@@ -36,8 +45,8 @@ async function ss(page, name) {
   await page.goto(`${BASE_URL}/login`, { waitUntil: 'networkidle', timeout: 30000 });
   await page.waitForTimeout(1500);
   const inputs = await page.$$('input');
-  await inputs[0].fill('admin');
-  await inputs[1].fill('alphaDesk2025!');
+  await inputs[0].fill(QA_USERNAME);
+  await inputs[1].fill(getQaPassword());
   await page.click('button:has-text("Sign In")');
   await page.waitForTimeout(5000);
   log(`Logged in. URL: ${page.url()}`);

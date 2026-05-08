@@ -106,7 +106,12 @@ export default function RequestAccessForm() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!canSubmit || state === "loading") return;
+    if (state === "loading") return;
+    if (!canSubmit) {
+      setError("Complete the required fields, select at least one instrument, and add 20+ characters of book context.");
+      setState("error");
+      return;
+    }
     setState("loading");
     setError("");
 
@@ -309,7 +314,7 @@ export default function RequestAccessForm() {
             <label
               key={value}
             className={
-                "flex min-h-11 cursor-pointer items-center justify-center rounded-[8px] border px-3 font-sans text-body-sm transition-all active:scale-[0.98] " +
+                "flex min-h-11 cursor-pointer items-center justify-center rounded-[8px] border px-3 font-sans text-body-sm transition-all focus-within:border-[var(--auth-primary)] focus-within:shadow-[0_0_0_4px_rgba(15,122,93,0.15)] active:scale-[0.98] " +
                 (form.trading_mode === value
                   ? "border-[var(--auth-primary)]/[0.55] bg-[var(--auth-bg-tint)] text-[var(--auth-primary-deep)]"
                   : "border-[var(--auth-border)] bg-white/70 text-[var(--auth-fg-muted)] hover:border-[var(--auth-primary)]/[0.35] hover:text-[var(--auth-fg)]")
@@ -338,7 +343,7 @@ export default function RequestAccessForm() {
               <label
                 key={option.value}
                 className={
-                  "flex min-h-10 cursor-pointer items-center rounded-[8px] border px-3 font-sans text-body-sm transition-all active:scale-[0.98] " +
+                  "flex min-h-10 cursor-pointer items-center rounded-[8px] border px-3 font-sans text-body-sm transition-all focus-within:border-[var(--auth-primary)] focus-within:shadow-[0_0_0_4px_rgba(15,122,93,0.15)] active:scale-[0.98] " +
                   (active
                     ? "border-[var(--auth-primary)]/[0.55] bg-[var(--auth-bg-tint)] text-[var(--auth-primary-deep)]"
                     : "border-[var(--auth-border)] bg-white/70 text-[var(--auth-fg-muted)] hover:border-[var(--auth-primary)]/[0.35] hover:text-[var(--auth-fg)]")
@@ -367,6 +372,7 @@ export default function RequestAccessForm() {
           className="min-h-24 w-full resize-y rounded-[8px] border border-[var(--auth-border)] bg-white/80 px-4 py-3 font-sans text-body leading-normal text-[var(--auth-fg)] outline-none transition-colors placeholder:text-[var(--auth-fg-soft)] focus-visible:border-[var(--auth-primary)] focus-visible:shadow-[0_0_0_4px_rgba(15,122,93,0.15)]"
           placeholder="Describe the strategy work, execution needs, and what would make AlphaDesk useful."
           required
+          minLength={20}
         />
         <p className={helperClass}>Minimum 20 characters. Do not include passwords, API keys, or account numbers.</p>
       </div>
@@ -397,7 +403,7 @@ export default function RequestAccessForm() {
         type="submit"
         size="lg"
         variant="primary"
-        disabled={!canSubmit || state === "loading"}
+        disabled={state === "loading"}
         className="h-12 rounded-[8px] disabled:bg-[var(--auth-border-soft)] disabled:text-[var(--auth-fg)] disabled:opacity-100"
       >
         {state === "loading" ? (
