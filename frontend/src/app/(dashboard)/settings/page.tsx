@@ -21,6 +21,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { DashboardPageLayout } from "@/components/layouts";
 import ExitRulesPanel from "@/components/settings/ExitRulesPanel";
+// v2 phase 1.5 — additive Appearance section using ControlModule.
+// Lives at the top of the page; existing settings panels render
+// below unchanged.
+import AppearanceSection from "./_v2/AppearanceSection";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
 import { useDestructiveAction } from "@/components/destructive/useDestructiveAction";
@@ -584,6 +588,13 @@ export default function SettingsPage() {
     <>
     <DashboardPageLayout eyebrow="§ SETTINGS" title="Settings">
       <div className="space-y-4">
+        {/* v2 phase 1.5 — Appearance section using ControlModule
+         * primitive scoped to the user. Density (quiet/dense) +
+         * theme. Phase 1.5 follow-up will tab the full settings
+         * page (Account · Trading · Risk · Alerts · Data ·
+         * Appearance · Shortcuts · Privacy · Danger). */}
+        <AppearanceSection />
+
         {/* PM-5 (audit/2026-05-05-position-management): minimal admin
             CRUD for the configurable exit-rules engine. Backed by
             /api/v1/exit-rules. Sits above Trading Mode because rule

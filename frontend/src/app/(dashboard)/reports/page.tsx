@@ -18,6 +18,10 @@ import { Button } from "@/components/ui/button";
 import { DashboardPageLayout } from "@/components/layouts";
 import SavedViewsBar from "@/components/primitives/SavedViewsBar";
 import { SlippagePanel } from "@/components/dashboard/SlippagePanel";
+// v2 phase 1.9 — additive Tax/Lots section. Sits above existing
+// SlippagePanel + Tax Report so the v2 lot-level surface is the
+// first thing operators see when they expand tax content.
+import TaxLotsSection from "./_v2/TaxLotsSection";
 import {
   getPortfolioSummary,
   getPositions,
@@ -1549,6 +1553,13 @@ export default function ReportsPage() {
         {/* M-O S — Execution-quality / slippage telemetry. Panel renders
             its own header + empty state, so no SectionCard wrapper. */}
         <SlippagePanel />
+
+        {/* v2 phase 1.9 — Tax/Lots section using ControlModule + Stat
+         * + StatusBanner primitives. Demo data; backend B.13 wires
+         * live lot tracking + IRS Pub 550 wash-sale engine + 8949
+         * export. Renders above the legacy "Tax report (simplified)"
+         * card so operators see the v2 lot-level surface first. */}
+        <TaxLotsSection />
 
 
         {/* Tax Report */}
