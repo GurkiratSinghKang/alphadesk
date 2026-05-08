@@ -4,6 +4,12 @@ import { cn } from "@/lib/utils";
 export interface EmptyStateProps {
   /** Optional icon — typically a Phosphor or Lucide icon. */
   icon?: React.ReactNode;
+  /**
+   * v2 redesign — short tracked-caps eyebrow above the title.
+   * Defaults to "EMPTY". Examples: "NO RESULTS", "INBOX QUIET",
+   * "NOTHING YET". Empty string suppresses the eyebrow entirely.
+   */
+  eyebrow?: string;
   /** Headline — short noun phrase, declarative voice. */
   title: string;
   /** Optional 1-line context. */
@@ -27,6 +33,7 @@ export interface EmptyStateProps {
  */
 export default function EmptyState({
   icon,
+  eyebrow = "EMPTY",
   title,
   description,
   action,
@@ -43,6 +50,14 @@ export default function EmptyState({
       )}
     >
       {icon && <div className="text-fg-muted [&>svg]:size-6">{icon}</div>}
+      {eyebrow && (
+        <span
+          className="text-eyebrow font-semibold uppercase tracking-[0.12em] text-brand"
+          data-slot="empty-state-eyebrow"
+        >
+          {eyebrow}
+        </span>
+      )}
       <h3 className="font-display italic text-h3 text-fg">{title}</h3>
       {description && (
         <p className="max-w-[42ch] text-body-sm leading-relaxed text-fg-muted">

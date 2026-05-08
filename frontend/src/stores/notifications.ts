@@ -3,7 +3,31 @@ import { persist } from "zustand/middleware";
 
 // ─── Types ──────────────────────────────────────────────────
 
-export type NotificationCategory = "trades" | "alerts" | "pipeline" | "system";
+/**
+ * Notification category — drives icon selection, drawer filter
+ * chips, and per-type routing preferences (channels, quiet hours)
+ * via the Settings → Alerts page (B.4 backend).
+ *
+ * v2 redesign: extended the v1 union (`trades` | `alerts` | `pipeline`
+ * | `system`) with the four v2 categories spec'd in v2-plan §1.7
+ * (`fill`, `agent`, `risk`, `billing`, `support`). v1 categories are
+ * retained for backward compatibility with persisted state from
+ * existing tenants — the migration is purely additive.
+ *
+ * Producers in `useNotifications.ts` may emit any union member;
+ * consumers should never assume a closed set without exhaustive
+ * matching against this type.
+ */
+export type NotificationCategory =
+  | "trades"      // v1 — kept for persisted-state compat
+  | "alerts"      // v1 — kept
+  | "pipeline"    // v1 — kept
+  | "system"      // v1 — kept
+  | "fill"        // v2 — broker fill events
+  | "agent"       // v2 — agent run output / failure / spend cap
+  | "risk"        // v2 — risk gate breach / limit hit
+  | "billing"     // v2 — invoice paid / failed / subscription change
+  | "support";    // v2 — operator message / ticket update
 
 export interface AppNotification {
   id: string;
