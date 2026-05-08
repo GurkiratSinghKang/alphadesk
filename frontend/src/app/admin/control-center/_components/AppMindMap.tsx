@@ -152,6 +152,17 @@ interface ViewTransform {
   scale: number;
 }
 
+interface ViewportSize {
+  width: number;
+  height: number;
+}
+
+type MapDisplayMode = "detail" | "compact" | "context";
+
+interface RenderedMindNode extends MindNode {
+  displayMode: MapDisplayMode;
+}
+
 const WORLD = { width: 2200, height: 1500 };
 const SCALE = { min: 0.32, max: 2.2 };
 const SOURCE_ROOT =
@@ -1703,6 +1714,196 @@ function connectionPath(from: MindNode, to: MindNode) {
   return `M ${startX} ${startY} V ${elbowY} H ${endX} V ${endY}`;
 }
 
+function architectureDepth(scale: number) {
+  if (scale >= 1.44) return ARCHITECTURE_DEPTHS[3];
+  if (scale >= 1.04) return ARCHITECTURE_DEPTHS[2];
+  if (scale >= 0.64) return ARCHITECTURE_DEPTHS[1];
+  return ARCHITECTURE_DEPTHS[0];
+}
+
+function displayModeForNode(
+  node: MindNode,
+  scale: number,
+  selectedId: string,
+  hasQuery: boolean,
+): MapDisplayMode {
+  if (hasQuery) return "detail";
+  const selected = node.id === selectedId;
+  const depth = architectureDepth(scale);
+  const depthIndex = ARCHITECTURE_DEPTHS.findIndex((item) => item.id === depth.id);
+
+  if (depthIndex >= 3 && node.level <= 1) return selected ? "compact" : "context";
+  if (depthIndex >= 2 && node.level === 0) return selected ? "compact" : "context";
+  if (depthIndex <= 0 && node.level >= 1) return "compact";
+  return "detail";
+}
+
+function renderNodeForScale(
+  node: MindNode,
+  scale: number,
+  selectedId: string,
+  hasQuery: boolean,
+): RenderedMindNode {
+  const displayMode = displayModeForNode(node, scale, selectedId, hasQuery);
+  if (displayMode === "detail") {
+    return { ...node, displayMode };
+  }
+
+  const width = displayMode === "context" ? Math.min(node.width, 238) : Math.min(node.width, 292);
+  const height = displayMode === "context" ? 58 : 76;
+  return {
+    ...node,
+    x: node.x + (node.width - width) / 2,
+    y: node.y + (node.height - height) / 2,
+    width,
+    height,
+    displayMode,
+  };
+}
+
+const DRILL_CENTER = { x: WORLD.width / 2, y: 720 };
+const DRILL_COMPACT_HEIGHT = 76;
+
+function drillColumns(total: number) {
+  return total <= 6 ? Math.min(2, Math.max(1, total)) : Math.min(3, total);
+}
+
+function drillLayoutMetrics(total: number) {
+  const columns = drillColumns(total);
+  const rowCount = Math.max(1, Math.ceil(total / columns));
+  const selectedY = DRILL_CENTER.y - (total <= 6 ? 205 : 292);
+  const childStartY = DRILL_CENTER.y + (total <= 6 ? -82 : -115);
+  const childGapY = total <= 6 ? 118 : 148;
+  return {
+    columns,
+    selectedY,
+    childStartY,
+    childGapY,
+    focusY:
+      total > 0
+        ? (selectedY - DRILL_COMPACT_HEIGHT / 2 +
+            childStartY +
+            (rowCount - 1) * childGapY +
+            DRILL_COMPACT_HEIGHT / 2) /
+          2
+        : DRILL_CENTER.y,
+  };
+}
+
+function drillFocusCenter(total: number) {
+  if (total <= 0) return DRILL_CENTER;
+  const metrics = drillLayoutMetrics(total);
+  return { x: DRILL_CENTER.x, y: metrics.focusY };
+}
+
+function drillChildCenter(index: number, total: number) {
+  const metrics = drillLayoutMetrics(total);
+  const columns = metrics.columns;
+  const column = index % columns;
+  const row = Math.floor(index / columns);
+  const gapX = 310;
+  return {
+    x: DRILL_CENTER.x + (column - (columns - 1) / 2) * gapX,
+    y: metrics.childStartY + row * metrics.childGapY,
+  };
+}
+
+function centerRenderedNode(node: RenderedMindNode, centerX: number, centerY: number) {
+  return {
+    ...node,
+    x: centerX - node.width / 2,
+    y: centerY - node.height / 2,
+  };
+}
+
+function contextRenderedNode(node: RenderedMindNode) {
+  const width = Math.min(node.width, 238);
+  const height = 58;
+  return {
+    ...node,
+    displayMode: "context" as const,
+    width,
+    height,
+  };
+}
+
+function compactRenderedNode(node: RenderedMindNode) {
+  return {
+    ...node,
+    displayMode: "compact" as const,
+    width: Math.min(node.width, 284),
+    height: DRILL_COMPACT_HEIGHT,
+  };
+}
+
+function isDirectDrillChild(node: MindNode, parent: MindNode) {
+  if (node.parentId === parent.id) return true;
+  return parent.level === 0 && node.level === 1 && parent.connectedTo?.includes(node.id);
+}
+
+function renderSemanticNodesForScale(
+  nodes: MindNode[],
+  selectedNode: MindNode | undefined,
+  scale: number,
+  selectedId: string,
+  hasQuery: boolean,
+): RenderedMindNode[] {
+  const rendered = nodes.map((node) => renderNodeForScale(node, scale, selectedId, hasQuery));
+  if (hasQuery || scale < 1.04 || !selectedNode) return rendered;
+
+  const selectedIndex = rendered.findIndex((node) => node.id === selectedNode.id);
+  if (selectedIndex === -1) return rendered;
+
+  const next = rendered.map((node) => ({ ...node }));
+
+  const directChildren = next
+    .filter((node) => isDirectDrillChild(node, selectedNode))
+    .sort((a, b) => toneRank(b.tone) - toneRank(a.tone) || a.label.localeCompare(b.label));
+  const selectedY = directChildren.length ? drillLayoutMetrics(directChildren.length).selectedY : DRILL_CENTER.y;
+  next[selectedIndex] = centerRenderedNode(next[selectedIndex], DRILL_CENTER.x, selectedY);
+
+  directChildren.forEach((child, index) => {
+    const position = drillChildCenter(index, directChildren.length);
+    const childIndex = next.findIndex((node) => node.id === child.id);
+    if (childIndex === -1) return;
+    next[childIndex] = centerRenderedNode(compactRenderedNode(child), position.x, position.y);
+  });
+
+  const contextNodes = next
+    .filter((node) => node.id !== selectedNode.id && !isDirectDrillChild(node, selectedNode))
+    .filter((node) => node.level <= selectedNode.level)
+    .sort((a, b) => a.level - b.level || a.label.localeCompare(b.label));
+  contextNodes.forEach((node, index) => {
+    const contextNode = contextRenderedNode(node);
+    const contextIndex = next.findIndex((item) => item.id === node.id);
+    if (contextIndex === -1) return;
+    next[contextIndex] = {
+      ...contextNode,
+      x: DRILL_CENTER.x - 650,
+      y: DRILL_CENTER.y - 245 + index * 70,
+    };
+  });
+
+  return next;
+}
+
+function clampViewTransform(next: ViewTransform, viewport: ViewportSize): ViewTransform {
+  if (viewport.width <= 0 || viewport.height <= 0) return next;
+  const gutter = 96;
+  const scaledWidth = WORLD.width * next.scale;
+  const scaledHeight = WORLD.height * next.scale;
+  const x =
+    scaledWidth <= viewport.width - gutter * 2
+      ? (viewport.width - scaledWidth) / 2
+      : clamp(next.x, viewport.width - scaledWidth - gutter, gutter);
+  const y =
+    scaledHeight <= viewport.height - gutter * 2
+      ? (viewport.height - scaledHeight) / 2
+      : clamp(next.y, viewport.height - scaledHeight - gutter, gutter);
+
+  return { ...next, x, y };
+}
+
 function timeLabel(value: string | null | undefined) {
   if (!value) return "No timestamp";
   const date = new Date(value);
@@ -2168,9 +2369,9 @@ export function AppMindMap() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const panRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const [transform, setTransform] = useState<ViewTransform>({ x: 0, y: 0, scale: 0.52 });
+  const [viewportSize, setViewportSize] = useState<ViewportSize>({ width: 0, height: 0 });
   const [selectedId, setSelectedId] = useState("platform");
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [tooltip, setTooltip] = useState<{ id: string; x: number; y: number } | null>(null);
   const [search, setSearch] = useState("");
   const [domain, setDomain] = useState<Domain | "all">("all");
   const snapshot = useRuntimeSnapshot();
@@ -2186,6 +2387,11 @@ export function AppMindMap() {
   );
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const query = search.trim().toLowerCase();
+  const selectedBaseNode = nodeById.get(selectedId) ?? nodeById.get("platform") ?? nodes[0];
+  const selectedPathIds = useMemo(() => {
+    if (!selectedBaseNode) return new Set<string>();
+    return new Set(buildNodePath(selectedBaseNode, nodeById).map((node) => node.id));
+  }, [nodeById, selectedBaseNode]);
   const triageItems = useMemo(() => buildTriageItems(snapshot), [snapshot]);
   const topTone = highestTone(triageItems);
   const riskCount = triageItems.filter((item) => item.tone === "risk").length;
@@ -2219,45 +2425,90 @@ export function AppMindMap() {
       }
     }
 
+    const depthIndex = ARCHITECTURE_DEPTHS.findIndex(
+      (item) => item.id === architectureDepth(transform.scale).id,
+    );
+    const selected = selectedBaseNode ?? nodes[0];
+
     return nodes.filter((node) => {
       const zoomVisible =
         transform.scale >= node.minZoom &&
         (node.maxZoom === undefined || transform.scale <= node.maxZoom);
       const domainVisible = nodeMatchesDomain(node, domain, nodeById);
       const searchVisible = !query || matchingIds.has(node.id);
-      return domainVisible && searchVisible && (query ? true : zoomVisible);
-    });
-  }, [domain, nodeById, nodes, query, transform.scale]);
+      if (!domainVisible || !searchVisible) return false;
+      if (query) return true;
+      if (!zoomVisible) return false;
+      if (!selected) return true;
+      if (depthIndex <= 1) return node.level <= 1;
+      if (selected.level === 0) return node.level <= 1;
+      if (selectedPathIds.has(node.id)) return true;
 
-  const visibleIds = useMemo(() => new Set(visibleNodes.map((node) => node.id)), [visibleNodes]);
+      if (selected.level === 1) {
+        if (node.level === 1) return depthIndex <= 2;
+        if (node.parentId === selected.id) return true;
+        return false;
+      }
+
+      if (selected.level >= 2) {
+        if (node.parentId === selected.id) return true;
+        if (node.parentId && node.parentId === selected.parentId && node.level === selected.level) {
+          return depthIndex <= 2;
+        }
+        return false;
+      }
+
+      return true;
+    });
+  }, [domain, nodeById, nodes, query, selectedBaseNode, selectedPathIds, transform.scale]);
+
+  const renderNodes = useMemo(
+    () =>
+      renderSemanticNodesForScale(
+        visibleNodes,
+        selectedBaseNode,
+        transform.scale,
+        selectedId,
+        Boolean(query),
+      ),
+    [query, selectedBaseNode, selectedId, transform.scale, visibleNodes],
+  );
+  const renderNodeById = useMemo(
+    () => new Map(renderNodes.map((node) => [node.id, node])),
+    [renderNodes],
+  );
+  const visibleIds = useMemo(() => new Set(renderNodes.map((node) => node.id)), [renderNodes]);
   const edges = useMemo(() => buildEdges(nodes), [nodes]);
   const visibleEdges = useMemo(
     () => edges.filter((edge) => visibleIds.has(edge.from) && visibleIds.has(edge.to)),
     [edges, visibleIds],
   );
 
-  const selectedNode =
-    nodeById.get(selectedId) ??
-    (hoveredId ? nodeById.get(hoveredId) : undefined) ??
-    nodeById.get("platform") ??
-    nodes[0];
-  const hoveredNode = tooltip ? nodeById.get(tooltip.id) : null;
+  const selectedNode = selectedBaseNode;
+  const hoveredNode = hoveredId ? nodeById.get(hoveredId) : undefined;
   const selectedPath = selectedNode ? buildNodePath(selectedNode, nodeById) : [];
+  const depth = architectureDepth(transform.scale);
 
   const fitWorld = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
+    setViewportSize({ width: rect.width, height: rect.height });
     const scale = clamp(
       Math.min((rect.width - 64) / WORLD.width, (rect.height - 64) / WORLD.height, 0.68),
       SCALE.min,
       SCALE.max,
     );
-    setTransform({
-      scale,
-      x: (rect.width - WORLD.width * scale) / 2,
-      y: (rect.height - WORLD.height * scale) / 2,
-    });
+    setTransform(
+      clampViewTransform(
+        {
+          scale,
+          x: (rect.width - WORLD.width * scale) / 2,
+          y: (rect.height - WORLD.height * scale) / 2,
+        },
+        { width: rect.width, height: rect.height },
+      ),
+    );
   }, []);
 
   useEffect(() => {
@@ -2274,19 +2525,25 @@ export function AppMindMap() {
       const el = containerRef.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
-      const center = nodeCenter(node);
       const nextScale = clamp(
         scaleHint ?? (node.level >= 3 ? 1.62 : node.level >= 2 ? 1.18 : 0.82),
         SCALE.min,
         SCALE.max,
       );
-      setTransform({
-        scale: nextScale,
-        x: rect.width / 2 - center.x * nextScale,
-        y: rect.height / 2 - center.y * nextScale,
-      });
+      const directChildCount = nodes.filter((item) => isDirectDrillChild(item, node)).length;
+      const center = nextScale >= 1.04 ? drillFocusCenter(directChildCount) : nodeCenter(node);
+      setTransform(
+        clampViewTransform(
+          {
+            scale: nextScale,
+            x: rect.width / 2 - center.x * nextScale,
+            y: rect.height / 2 - center.y * nextScale,
+          },
+          { width: rect.width, height: rect.height },
+        ),
+      );
     },
-    [],
+    [nodes],
   );
 
   const zoomAt = useCallback(
@@ -2300,11 +2557,14 @@ export function AppMindMap() {
         const pointerY = clientY - rect.top;
         const worldX = (pointerX - current.x) / current.scale;
         const worldY = (pointerY - current.y) / current.scale;
-        return {
-          scale: nextScale,
-          x: pointerX - worldX * nextScale,
-          y: pointerY - worldY * nextScale,
-        };
+        return clampViewTransform(
+          {
+            scale: nextScale,
+            x: pointerX - worldX * nextScale,
+            y: pointerY - worldY * nextScale,
+          },
+          { width: rect.width, height: rect.height },
+        );
       });
     },
     [],
@@ -2326,9 +2586,14 @@ export function AppMindMap() {
         focusNode(selectedNode, scale);
         return;
       }
-      setTransform((current) => ({ ...current, scale: clamp(scale, SCALE.min, SCALE.max) }));
+      setTransform((current) =>
+        clampViewTransform(
+          { ...current, scale: clamp(scale, SCALE.min, SCALE.max) },
+          viewportSize,
+        ),
+      );
     },
-    [focusNode, selectedNode],
+    [focusNode, selectedNode, viewportSize],
   );
 
   const selectNode = useCallback(
@@ -2356,7 +2621,9 @@ export function AppMindMap() {
     const dx = event.clientX - pan.x;
     const dy = event.clientY - pan.y;
     panRef.current = { ...pan, x: event.clientX, y: event.clientY };
-    setTransform((current) => ({ ...current, x: current.x + dx, y: current.y + dy }));
+    setTransform((current) =>
+      clampViewTransform({ ...current, x: current.x + dx, y: current.y + dy }, viewportSize),
+    );
   };
 
   const handlePointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -2364,17 +2631,6 @@ export function AppMindMap() {
     if (!pan || pan.pointerId !== event.pointerId) return;
     panRef.current = null;
     event.currentTarget.releasePointerCapture(event.pointerId);
-  };
-
-  const moveTooltip = (id: string, event: ReactPointerEvent<HTMLElement>) => {
-    const el = containerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    setTooltip({
-      id,
-      x: clamp(event.clientX - rect.left + 16, 12, rect.width - 340),
-      y: clamp(event.clientY - rect.top + 16, 12, rect.height - 180),
-    });
   };
 
   const visibleDeepCount = visibleNodes.filter((node) => node.level >= 2).length;
@@ -2515,7 +2771,6 @@ export function AppMindMap() {
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
             onMouseLeave={() => {
-              setTooltip(null);
               setHoveredId(null);
             }}
           >
@@ -2535,20 +2790,22 @@ export function AppMindMap() {
                 width={WORLD.width}
               >
                 {visibleEdges.map((edge) => {
-                  const from = nodeById.get(edge.from);
-                  const to = nodeById.get(edge.to);
+                  const from = renderNodeById.get(edge.from);
+                  const to = renderNodeById.get(edge.to);
                   if (!from || !to) return null;
+                  const connected = selectedId === edge.from || selectedId === edge.to;
                   return (
                     <path
                       key={`${edge.from}-${edge.to}`}
+                      data-mind-edge={`${edge.from}-${edge.to}`}
                       d={connectionPath(from, to)}
                       fill="none"
                       shapeRendering="crispEdges"
                       stroke={edgeStroke(from, to)}
                       strokeLinecap="square"
                       strokeLinejoin="miter"
-                      strokeOpacity={selectedId === edge.from || selectedId === edge.to ? 0.86 : 0.34}
-                      strokeWidth={selectedId === edge.from || selectedId === edge.to ? 2.5 : 1.4}
+                      strokeOpacity={connected ? 0.88 : transform.scale >= 1.04 ? 0.18 : 0.34}
+                      strokeWidth={connected ? 2.5 : 1.25}
                       vectorEffect="non-scaling-stroke"
                     />
                   );
@@ -2565,28 +2822,22 @@ export function AppMindMap() {
                 </div>
               ) : null}
 
-              {visibleNodes.map((node) => (
+              {renderNodes.map((node) => (
                 <MapNode
                   key={node.id}
                   node={node}
                   selected={node.id === selectedId}
                   onClick={() => selectNode(node)}
                   onDoubleClick={() => focusNode(node)}
-                  onHover={(event) => {
-                    setHoveredId(node.id);
-                    moveTooltip(node.id, event);
-                  }}
-                  onLeave={() => {
-                    setHoveredId(null);
-                    setTooltip(null);
-                  }}
+                  onHover={() => setHoveredId(node.id)}
+                  onLeave={() => setHoveredId(null)}
                 />
               ))}
             </div>
 
             <div className="pointer-events-none absolute inset-x-4 bottom-4 flex flex-wrap items-center justify-between gap-2">
               <div className="rounded-full border border-white/10 bg-[rgba(17,17,16,0.78)] px-3 py-2 t-mono text-label text-fg-muted shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur">
-                Zoom {Math.round(transform.scale * 100)}%
+                Zoom {Math.round(transform.scale * 100)}% · {depth.label}
               </div>
               {snapshot.errors.length ? (
                 <div className="max-w-[520px] rounded-full border border-[color:var(--state-warning-border)] bg-[color:var(--state-warning-bg)] px-3 py-2 t-mono text-label text-[color:var(--state-warning-fg)]">
@@ -2595,19 +2846,12 @@ export function AppMindMap() {
               ) : null}
             </div>
 
-            {hoveredNode && tooltip ? (
-              <div
-                className="pointer-events-none absolute max-w-[320px] rounded-[18px] border border-white/10 bg-[rgba(17,17,16,0.88)] p-4 shadow-[0_20px_52px_-24px_rgba(5,5,3,0.9),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur"
-                style={{
-                  left: tooltip.x,
-                  top: tooltip.y,
-                }}
-              >
-                <p className="t-mono text-label text-brand">{hoveredNode.label}</p>
-                <p className="mt-2 text-body-sm text-fg">{hoveredNode.statusLabel}</p>
-                <p className="mt-1 t-mono text-label text-fg-muted">{hoveredNode.health}</p>
-              </div>
-            ) : null}
+            <MapOverview
+              nodes={nodes}
+              transform={transform}
+              viewportSize={viewportSize}
+            />
+            <HoverLens node={hoveredNode} />
           </div>
         </div>
 
@@ -2833,19 +3077,22 @@ function MapNode({
   onHover,
   onLeave,
 }: {
-  node: MindNode;
+  node: RenderedMindNode;
   selected: boolean;
   onClick: () => void;
   onDoubleClick: () => void;
-  onHover: (event: ReactPointerEvent<HTMLElement>) => void;
+  onHover: () => void;
   onLeave: () => void;
 }) {
   const Icon = KIND_ICONS[node.kind];
-  const compact = node.level >= 3;
+  const compact = node.level >= 3 || node.displayMode !== "detail";
+  const context = node.displayMode === "context";
 
   return (
     <button
       type="button"
+      data-display-mode={node.displayMode}
+      data-mind-node={node.id}
       onClick={(event) => {
         event.stopPropagation();
         onClick();
@@ -2864,20 +3111,21 @@ function MapNode({
         toneNodeClass(node.tone),
         selected && "ring-2 ring-[color:var(--brand)]",
         compact ? "rounded-[18px] p-3" : "",
+        context ? "rounded-[999px] border-dashed bg-[color:var(--bg-card)]/80 shadow-none" : "",
       )}
       style={{ left: node.x, top: node.y, width: node.width, height: node.height }}
     >
-      <div className="flex items-start gap-3">
-        <span className={cn("mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded border", toneIconClass(node.tone))}>
-          <Icon size={17} weight="bold" />
+      <div className={cn("flex items-start gap-3", context && "items-center")}>
+        <span className={cn("grid shrink-0 place-items-center rounded border", compact ? "h-7 w-7" : "mt-0.5 h-8 w-8", toneIconClass(node.tone))}>
+          <Icon size={compact ? 15 : 17} weight="bold" />
         </span>
-        <span className="min-w-0">
-          <span className={cn("block font-display text-lg leading-tight text-fg", compact && "text-base")}>
+        <span className="min-w-0 flex-1">
+          <span className={cn("block truncate font-display text-lg leading-tight text-fg", compact && "text-base")}>
             {node.label}
           </span>
-          <span className="mt-1 flex items-center gap-2 t-mono text-label text-fg-muted">
+          <span className={cn("mt-1 flex min-w-0 items-center gap-2 t-mono text-label text-fg-muted", context && "hidden")}>
             <StatusDot tone={node.tone} />
-            {node.statusLabel}
+            <span className="truncate">{node.statusLabel}</span>
           </span>
         </span>
       </div>
@@ -2886,10 +3134,85 @@ function MapNode({
           {node.health}
         </p>
       ) : null}
-      {node.metric ? (
+      {node.metric && !compact ? (
         <p className="mt-3 truncate t-mono text-label text-brand">{node.metric}</p>
       ) : null}
     </button>
+  );
+}
+
+function HoverLens({ node }: { node: MindNode | undefined }) {
+  if (!node) return null;
+  return (
+    <div className="pointer-events-none absolute right-4 top-4 w-[320px] max-w-[calc(100%-2rem)] rounded-[18px] border border-white/10 bg-[rgba(17,17,16,0.9)] p-4 shadow-[0_20px_52px_-24px_rgba(5,5,3,0.9),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur">
+      <p className="t-label u-brand">INSPECTING</p>
+      <p className="mt-2 truncate font-display text-xl leading-tight text-fg">{node.label}</p>
+      <div className="mt-3 flex min-w-0 items-center gap-2 t-mono text-label text-fg-muted">
+        <StatusDot tone={node.tone} />
+        <span className="truncate">{node.statusLabel}</span>
+      </div>
+      <p className="mt-2 line-clamp-2 text-body-sm leading-relaxed text-fg-muted">{node.health}</p>
+      {node.metric ? (
+        <p className="mt-3 truncate t-mono text-label text-brand">{node.metric}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function MapOverview({
+  nodes,
+  transform,
+  viewportSize,
+}: {
+  nodes: MindNode[];
+  transform: ViewTransform;
+  viewportSize: ViewportSize;
+}) {
+  const width = 154;
+  const height = 108;
+  const padding = 9;
+  const scale = Math.min((width - padding * 2) / WORLD.width, (height - padding * 2) / WORLD.height);
+  const viewX = padding + (-transform.x / transform.scale) * scale;
+  const viewY = padding + (-transform.y / transform.scale) * scale;
+  const viewWidth = (viewportSize.width / transform.scale) * scale;
+  const viewHeight = (viewportSize.height / transform.scale) * scale;
+
+  return (
+    <div className="pointer-events-none absolute bottom-4 right-4 hidden rounded-[16px] border border-white/10 bg-[rgba(17,17,16,0.78)] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur lg:block">
+      <svg aria-hidden="true" height={height} width={width}>
+        <rect
+          x={0.5}
+          y={0.5}
+          width={width - 1}
+          height={height - 1}
+          rx={12}
+          fill="rgba(236,230,210,0.035)"
+          stroke="rgba(236,230,210,0.12)"
+        />
+        {nodes.map((node) => (
+          <rect
+            key={node.id}
+            x={padding + node.x * scale}
+            y={padding + node.y * scale}
+            width={Math.max(2, node.width * scale)}
+            height={Math.max(2, node.height * scale)}
+            rx={2}
+            fill={miniToneFill(node.tone)}
+            opacity={node.level <= 1 ? 0.7 : 0.42}
+          />
+        ))}
+        <rect
+          x={clamp(viewX, padding, width - padding)}
+          y={clamp(viewY, padding, height - padding)}
+          width={clamp(viewWidth, 8, width - padding * 2)}
+          height={clamp(viewHeight, 8, height - padding * 2)}
+          rx={4}
+          fill="rgba(155,190,206,0.08)"
+          stroke="rgba(155,190,206,0.86)"
+          strokeWidth={1.5}
+        />
+      </svg>
+    </div>
   );
 }
 
@@ -3306,6 +3629,22 @@ function toneDotClass(tone: Tone) {
     case "muted":
     default:
       return "bg-[color:var(--fg-muted)]";
+  }
+}
+
+function miniToneFill(tone: Tone) {
+  switch (tone) {
+    case "healthy":
+      return "rgba(169,217,74,0.72)";
+    case "active":
+      return "rgba(155,190,206,0.74)";
+    case "watch":
+      return "rgba(218,174,69,0.68)";
+    case "risk":
+      return "rgba(231,111,76,0.72)";
+    case "muted":
+    default:
+      return "rgba(236,230,210,0.34)";
   }
 }
 
