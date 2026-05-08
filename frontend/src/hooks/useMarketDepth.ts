@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { getMarketDepth } from "@/lib/api";
+import type { ApiFetchOptions } from "@/lib/api";
 import type { MarketDepthSnapshot } from "@/types";
 
 interface QuoteLike {
@@ -14,6 +15,11 @@ interface QuoteLike {
   askExchange?: string | null;
   timestamp?: number | null;
 }
+
+type MarketDepthFetchOptions = Pick<
+  ApiFetchOptions,
+  "signal" | "suppressAuthRedirect" | "suppressGlobalError" | "timeoutMs"
+>;
 
 function quoteToDepth(symbol: string, quote: QuoteLike | null | undefined): MarketDepthSnapshot | null {
   const bid = typeof quote?.bid === "number" && Number.isFinite(quote.bid) ? quote.bid : null;
@@ -44,11 +50,12 @@ export function useMarketDepth(
   // Default true preserves the legacy behaviour for any caller that
   // hasn't migrated yet.
   enabled: boolean = true,
+  options: MarketDepthFetchOptions = {},
 ): MarketDepthSnapshot | null {
   const fallback = quoteToDepth(symbol, quoteFallback);
   const query = useQuery({
     queryKey: ["market-depth", symbol.toUpperCase()],
-    queryFn: () => getMarketDepth(symbol, 10),
+    queryFn: () => getMarketDepth(symbol, 10, options),
     enabled: enabled && Boolean(symbol),
     staleTime: 2_000,
     gcTime: 30_000,

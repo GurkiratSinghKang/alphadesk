@@ -7,11 +7,23 @@ import type { OHLCVBar, TickerFundamentals } from "@/types";
 
 vi.mock("@/components/composites/PriceChartPanel", () => ({
   __esModule: true,
-  default: ({ symbol, series }: { symbol: { ticker: string }; series: unknown[] }) =>
+  default: ({
+    symbol,
+    series,
+    enableMarketDepth,
+    marketDepthOptions,
+  }: {
+    symbol: { ticker: string };
+    series: unknown[];
+    enableMarketDepth?: boolean;
+    marketDepthOptions?: { suppressAuthRedirect?: boolean; suppressGlobalError?: boolean };
+  }) =>
     createElement("div", {
       "data-testid": "mock-chart",
       "data-bars-count": series?.length ?? 0,
       "data-symbol": symbol?.ticker ?? "",
+      "data-depth-enabled": String(enableMarketDepth),
+      "data-depth-suppress-auth": String(marketDepthOptions?.suppressAuthRedirect),
     }),
 }));
 
@@ -77,5 +89,18 @@ describe("ChartBand", () => {
     const band = getByTestId("chart-band");
     expect(band.getAttribute("id")).toBe("chart");
     expect(band.className).toContain("scroll-mt-24");
+  });
+
+  it("does not poll protected depth when rendering public preview data", () => {
+    const bars: OHLCVBar[] = [
+      { time: 1_700_000_000, open: 1, high: 2, low: 0.5, close: 1.5, volume: 100 },
+    ];
+    const Wrapper = makeWrapper();
+    const { getByTestId } = render(
+      createElement(Wrapper, null, <ChartBand symbol="NVDA" bars={bars} dataMode="preview" />),
+    );
+    const chart = getByTestId("mock-chart");
+    expect(chart.getAttribute("data-depth-enabled")).toBe("false");
+    expect(chart.getAttribute("data-depth-suppress-auth")).toBe("true");
   });
 });

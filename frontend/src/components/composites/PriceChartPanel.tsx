@@ -10,6 +10,7 @@ import ChartPane, {
 } from "@/components/charts/ChartPane";
 import { useMarketDepth } from "@/hooks/useMarketDepth";
 import { useShortcutHandler } from "@/hooks/useKeyboardShortcuts";
+import type { ApiFetchOptions } from "@/lib/api";
 import type {
   ChartBar,
   ChartPoint,
@@ -20,6 +21,11 @@ import type {
   RegimeBand,
 } from "./types";
 import type { OHLCVBar } from "@/types";
+
+type MarketDepthFetchOptions = Pick<
+  ApiFetchOptions,
+  "signal" | "suppressAuthRedirect" | "suppressGlobalError" | "timeoutMs"
+>;
 
 /**
  * PriceChartPanel (composite)
@@ -68,6 +74,10 @@ export interface PriceChartPanelProps {
   onLoadMoreHistory?: () => void;
   /** True while a load-more fetch is in flight. */
   loadingMoreHistory?: boolean;
+  /** Disable protected market-depth polling when the parent renders local preview data. */
+  enableMarketDepth?: boolean;
+  /** Forwarded to the market-depth fetcher for public routes that own 401 handling. */
+  marketDepthOptions?: MarketDepthFetchOptions;
   className?: string;
 }
 
@@ -123,7 +133,7 @@ function DashSpan({ size = 13 }: { size?: number }) {
 
 export default function PriceChartPanel({
   symbol, quote, meta, series,
-  activeRange, onRangeChange, isLoading, error, onRetry, density = "standard", tradeOverlays, chartOrderPlacement, onLoadMoreHistory, loadingMoreHistory, className,
+  activeRange, onRangeChange, isLoading, error, onRetry, density = "standard", tradeOverlays, chartOrderPlacement, onLoadMoreHistory, loadingMoreHistory, enableMarketDepth = true, marketDepthOptions, className,
 }: PriceChartPanelProps) {
   const last = numberOrNull(quote.last);
   const change = numberOrNull(quote.change);
@@ -136,7 +146,12 @@ export default function PriceChartPanel({
   const debouncedChange = React.useDeferredValue(change);
   const debouncedChangePct = React.useDeferredValue(changePct);
   const hasChartSeries = series.length > 0;
-  const marketDepth = useMarketDepth(symbol.ticker, quote, hasChartSeries);
+  const marketDepth = useMarketDepth(
+    symbol.ticker,
+    quote,
+    hasChartSeries && enableMarketDepth,
+    marketDepthOptions,
+  );
   const handleRangeShortcut = React.useCallback((action: string) => {
     const range = action.slice("chart:set-range:".length) as ChartRange;
     if (RANGES.includes(range)) {

@@ -211,6 +211,8 @@ export function ChartBand({ symbol, bars, name, quote, dataMode = "live" }: Char
           onRetry={() => rangeQuery.refetch()}
           onLoadMoreHistory={isPreview ? undefined : handleLoadMoreHistory}
           loadingMoreHistory={isPreview ? false : loadingMore}
+          enableMarketDepth={!isPreview}
+          marketDepthOptions={PUBLIC_SYMBOL_DATA_OPTIONS}
         />
       </div>
       <KeyStats symbol={symbol} />

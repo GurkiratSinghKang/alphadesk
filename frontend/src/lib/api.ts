@@ -1206,10 +1206,15 @@ function normalizeMarketDepth(raw: BackendDepthSnapshot): MarketDepthSnapshot {
   };
 }
 
-export async function getMarketDepth(symbol: string, levels = 10): Promise<MarketDepthSnapshot> {
+export async function getMarketDepth(
+  symbol: string,
+  levels = 10,
+  options: DataFetchOptions = {},
+): Promise<MarketDepthSnapshot> {
   const qs = new URLSearchParams({ levels: String(levels) }).toString();
   const raw = await apiFetch<BackendDepthSnapshot>(
     `/api/v1/market/depth/${encodeURIComponent(symbol.toUpperCase())}?${qs}`,
+    options,
   );
   maybeDispatchBrokerDegraded(
     `/api/v1/market/depth/${symbol}`,
