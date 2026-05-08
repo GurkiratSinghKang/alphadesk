@@ -21,7 +21,11 @@ import { useUIStore } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 import { ProfileMenu } from "./ProfileMenu";
 import HaltTradingButton from "./HaltTradingButton";
-import { NotificationCenter } from "./NotificationCenter";
+// v2 phase 1.7 — NotificationBell mounts the Sheet-based
+// NotificationDrawer (Phase 0b). The popover-based
+// NotificationCenter is retained in the tree for one release
+// per locked decision D5.
+import NotificationBell from "./NotificationBell";
 import { ThemeToggle } from "./ThemeToggle";
 import StatusPills from "./StatusPills";
 import PaperLiveToggle from "@/components/composites/PaperLiveToggle";
@@ -174,7 +178,7 @@ export function TopBar() {
          * route through /strategies/{id} per-strategy switches. */}
         <HaltTradingButton className="hidden sm:inline-flex" />
         <ThemeToggle className="hidden h-11 w-11 sm:inline-flex sm:h-8 sm:w-8" />
-        <NotificationCenter />
+        <NotificationBell />
         <ProfileMenu />
       </div>
     </header>
