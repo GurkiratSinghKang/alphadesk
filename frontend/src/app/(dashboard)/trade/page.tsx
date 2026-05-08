@@ -85,6 +85,11 @@ import {
 } from "@/lib/legQuoteReadiness";
 import type { OptionStrategyDraft, OptionStrategyLeg } from "@/lib/optionsPayoff";
 import { cn, formatCurrency } from "@/lib/utils";
+// v2 phase 1.2 — pre-trade agent stamps card. Renders below the
+// existing cockpit header. Static demo copy in Phase 0; backend
+// B.2 (per-agent control) wires the live archetype-attributed
+// memos.
+import PreTradeAgentStrip from "./_v2/PreTradeAgentStrip";
 import type { Order, Position } from "@/types";
 import { useMarketStore, useQuote } from "@/stores/market";
 import { usePortfolioStore } from "@/stores/portfolio";
@@ -1402,6 +1407,12 @@ export default function TradePage() {
             </label>
           </div>
         </header>
+
+        {/* v2 phase 1.2 — pre-trade agent stamps. Sits between the
+         * cockpit header and the execution-readiness panel so the
+         * archetype voice (Risk + Signal) renders adjacent to the
+         * cockpit's status pills. Static demo copy until backend B.2. */}
+        <PreTradeAgentStrip symbol={tradeContextSymbol} />
 
         <ExecutionReadinessPanel readiness={executionReadiness} />
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import AuthProductFrame from "@/components/auth/AuthProductFrame";
+import AgentChip from "@/components/primitives/AgentChip";
 import LoginForm from "./_login/LoginForm";
 
 export const metadata: Metadata = {
@@ -41,6 +42,20 @@ export default function LoginPage() {
       ]}
     >
       <LoginForm />
+      {/* v2 phase 1.13 — quiet agent strip below the login form to
+       * preview the four archetypes the user will work with after
+       * sign-in. Uses the v2 AgentChip primitive. */}
+      <div className="mt-6 flex flex-col gap-2">
+        <p className="text-eyebrow uppercase tracking-[0.12em] text-fg-muted font-semibold">
+          Inside · four archetypes
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <AgentChip archetype="research" hideStatus size="sm" />
+          <AgentChip archetype="signal" hideStatus size="sm" />
+          <AgentChip archetype="risk" hideStatus size="sm" />
+          <AgentChip archetype="exec" hideStatus size="sm" />
+        </div>
+      </div>
     </AuthProductFrame>
   );
 }
