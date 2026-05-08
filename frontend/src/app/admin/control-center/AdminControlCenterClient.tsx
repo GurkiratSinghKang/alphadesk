@@ -1,9 +1,14 @@
 "use client";
 
-import { Buildings, House, ShieldCheck } from "@phosphor-icons/react";
+import { Buildings, House, ShieldCheck, Users } from "@phosphor-icons/react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppMindMap } from "./_components/AppMindMap";
+import HealthTileRow from "./_components/HealthTileRow";
+import RuntimeControls from "./_components/RuntimeControls";
+import AuditTail from "./_components/AuditTail";
+import Section from "@/components/composites/Section";
+import { useControlCounts } from "@/hooks/useControls";
 import {
   getAdminBackendKeys,
   patchAdminBackendKeys,
@@ -41,45 +46,95 @@ import { cn } from "@/lib/utils";
  * and (b) the surface is harmless to read for an authed user.
  */
 export default function AdminControlCenterClient() {
-  return (
-    <div className="mx-auto max-w-[1600px] space-y-8 px-4 py-8 md:px-6">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="space-y-1.5">
-          <p className="t-label u-brand">ADMIN / CONTROL CENTER</p>
-          <h1 className="font-display text-h1 text-fg">Application control center</h1>
-          <p className="t-mono text-body-sm u-muted">
-            Inspect architecture, live health, state ownership, backend keys, dashboard layout,
-            and deploy controls. Every write is admin-gated server-side and persists to the{" "}
-            <code className="font-mono text-label">app_config</code> table or the matching
-            runtime control surface.
-          </p>
-        </div>
-        <nav className="flex flex-wrap items-center gap-2" aria-label="Admin navigation">
-          <Link
-            href="/"
-            className="inline-flex min-h-10 items-center gap-2 rounded-sm border border-[color:var(--border)] bg-bg-elev-1 px-3 t-mono text-label text-fg-muted transition-colors hover:border-primary/50 hover:text-fg active:scale-[0.98]"
-          >
-            <House className="size-4" aria-hidden="true" />
-            Dashboard
-          </Link>
-          <Link
-            href="/symbols"
-            className="inline-flex min-h-10 items-center gap-2 rounded-sm border border-[color:var(--border)] bg-bg-elev-1 px-3 t-mono text-label text-fg-muted transition-colors hover:border-primary/50 hover:text-fg active:scale-[0.98]"
-          >
-            <Buildings className="size-4" aria-hidden="true" />
-            Symbols
-          </Link>
-          <span className="inline-flex min-h-10 items-center gap-2 rounded-sm border border-[color:var(--brand)]/40 bg-[color:var(--brand-tint)] px-3 t-mono text-label u-brand">
-            <ShieldCheck className="size-4" aria-hidden="true" />
-            Admin
-          </span>
-        </nav>
-      </header>
+  // v2 redesign: control counts feed the master-map header pill. Phase 1.6
+  // adds critical / watch / deep counts; Phase 0 just shows total + critical.
+  const { total, critical } = useControlCounts();
 
+  return (
+    <div className="mx-auto max-w-[1600px] space-y-10 px-4 py-8 md:px-6">
+      {/* v2 redesign — identity band via Section primitive. The legacy
+       * dashboard / symbols / admin chip nav stays as the right slot for
+       * familiarity; full nav refactor lands in Phase 1.6 follow-up. */}
+      <Section
+        eyebrow="ADMIN · CONTROL CENTER"
+        title="Application control center"
+        description="Inspect architecture, live health, state ownership, backend keys, dashboard layout, and deploy controls."
+        level={1}
+        right={
+          <nav className="flex flex-wrap items-center gap-2" aria-label="Admin navigation">
+            <Link
+              href="/"
+              className="inline-flex min-h-10 items-center gap-2 rounded-sm border border-[color:var(--border)] bg-bg-elev-1 px-3 t-mono text-label text-fg-muted transition-colors hover:border-primary/50 hover:text-fg active:scale-[0.98]"
+            >
+              <House className="size-4" aria-hidden="true" />
+              Dashboard
+            </Link>
+            <Link
+              href="/symbols"
+              className="inline-flex min-h-10 items-center gap-2 rounded-sm border border-[color:var(--border)] bg-bg-elev-1 px-3 t-mono text-label text-fg-muted transition-colors hover:border-primary/50 hover:text-fg active:scale-[0.98]"
+            >
+              <Buildings className="size-4" aria-hidden="true" />
+              Symbols
+            </Link>
+            <Link
+              href="/admin/users"
+              className="inline-flex min-h-10 items-center gap-2 rounded-sm border border-[color:var(--border)] bg-bg-elev-1 px-3 t-mono text-label text-fg-muted transition-colors hover:border-primary/50 hover:text-fg active:scale-[0.98]"
+            >
+              <Users className="size-4" aria-hidden="true" />
+              Users
+            </Link>
+            <span className="inline-flex min-h-10 items-center gap-2 rounded-sm border border-[color:var(--brand)]/40 bg-[color:var(--brand-tint)] px-3 t-mono text-label u-brand">
+              <ShieldCheck className="size-4" aria-hidden="true" />
+              Admin
+            </span>
+          </nav>
+        }
+      >
+        {/* Master-map header counts — operator pill summarizing registry. */}
+        <div className="flex flex-wrap items-center gap-3 text-eyebrow uppercase tracking-[0.08em] text-fg-muted">
+          <span
+            className={
+              critical > 0
+                ? "inline-flex items-center gap-1.5 px-2 py-1 rounded-pill bg-tint-down-1 border border-loss/40 text-loss font-semibold"
+                : "inline-flex items-center gap-1.5 px-2 py-1 rounded-pill bg-tint-up-1 border border-profit/40 text-profit font-semibold"
+            }
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+            {critical > 0 ? "Needs attention" : "All clear"}
+          </span>
+          <span>{total} controls mapped</span>
+          {critical > 0 && (
+            <span className="text-loss">{critical} critical</span>
+          )}
+        </div>
+      </Section>
+
+      {/* v2 redesign — health tile row (9 tiles wide) per v2-plan §1.6c. */}
+      <HealthTileRow
+        onTileClick={(anchor) => {
+          if (anchor && typeof window !== "undefined") {
+            const el = document.getElementById(anchor);
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        }}
+      />
+
+      {/* Existing master map (architecture explorer + state ownership). */}
       <AppMindMap />
+
+      {/* Existing operator panels — keep until Phase 1.6 BackendKeys
+       * + Layout + Deploy fully migrate to ControlModule. */}
       <BackendKeysPanel />
       <LayoutConfigPanel />
       <DeployPanel />
+
+      {/* v2 redesign — runtime controls (every category as Section + grid
+       * of ControlModule cards). Read-only render in Phase 0; backend
+       * mutation endpoints (B.1/B.2/B.6/B.8) wire in Phase 1.6 follow-up. */}
+      <RuntimeControls />
+
+      {/* v2 redesign — audit tail (last 10 admin writes). */}
+      <AuditTail />
     </div>
   );
 }
