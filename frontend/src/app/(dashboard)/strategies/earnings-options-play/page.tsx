@@ -476,6 +476,7 @@ export default function EarningsOptionsPlayPage() {
       eyebrow="EARNINGS · OPTIONS PLAY"
       title={title}
       actions={actions}
+      className="max-w-[1840px] 2xl:max-w-[1980px] lg:box-border lg:h-[calc(100dvh-74px)] lg:overflow-hidden"
     >
       {/* Round-8 / AX-05: skip-to-detail link for keyboard users so a
           large calendar (12+ rows after sort/filter) doesn't force a
@@ -501,40 +502,42 @@ export default function EarningsOptionsPlayPage() {
 
       <div
         data-slot="earnings-page-grid"
-        className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]"
+        className="mt-1 grid grid-cols-1 gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(232px,284px)_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[minmax(248px,304px)_minmax(0,1fr)]"
         // Round-5 (NEW-Y7 / G-7): belt-and-braces over the global
         // `contain` rule on html/body — `overscroll-behavior-y: none`
         // here kills any iOS Safari pull-to-refresh hijack inside the
         // earnings layout without affecting other dashboard pages.
         style={{ overscrollBehaviorY: "none" }}
       >
-        <EarningsCalendarSidebar
-          rows={calendar?.earnings ?? []}
-          loading={loadingCalendar}
-          refetching={refetchingCalendar}
-          error={calendarError}
-          selected={selectedSymbol}
-          onSelect={onSelectFromSidebar}
-          firstRowRef={firstRowRef}
-          candidateDecisions={candidateDecisions}
-          windowLabel={calendar?.windowLabel ?? null}
-          metaReason={calendar?.meta?.reason ?? null}
-          filters={filters}
-          // B-107: restore defaults from the empty-state "Loosen a filter"
-          // CTA. Matches the initial state in readFiltersFromURL.
-          onResetFilters={() => setFilters({ window: "both", minIvRank: 0, sort: "date" })}
-          // Pillar-6: surface a Retry CTA when the calendar fetch errors.
-          onRetry={() => calendarQuery.refetch()}
-          // Iteration 9: surface the backend's degraded-data flag and the
-          // per-symbol validation failures so users see a warning band
-          // when FMP/Alpaca disagree on coverage. The full-error empty
-          // state still takes precedence (sidebar suppresses the banner
-          // when ``error`` is set).
-          partial={calendar?.partial ?? false}
-          validationErrors={calendar?.validationErrors}
-        />
+        <div className="min-h-0 lg:overflow-y-auto lg:pr-1 scrollbar-thin">
+          <EarningsCalendarSidebar
+            rows={calendar?.earnings ?? []}
+            loading={loadingCalendar}
+            refetching={refetchingCalendar}
+            error={calendarError}
+            selected={selectedSymbol}
+            onSelect={onSelectFromSidebar}
+            firstRowRef={firstRowRef}
+            candidateDecisions={candidateDecisions}
+            windowLabel={calendar?.windowLabel ?? null}
+            metaReason={calendar?.meta?.reason ?? null}
+            filters={filters}
+            // B-107: restore defaults from the empty-state "Loosen a filter"
+            // CTA. Matches the initial state in readFiltersFromURL.
+            onResetFilters={() => setFilters({ window: "both", minIvRank: 0, sort: "date" })}
+            // Pillar-6: surface a Retry CTA when the calendar fetch errors.
+            onRetry={() => calendarQuery.refetch()}
+            // Iteration 9: surface the backend's degraded-data flag and the
+            // per-symbol validation failures so users see a warning band
+            // when FMP/Alpaca disagree on coverage. The full-error empty
+            // state still takes precedence (sidebar suppresses the banner
+            // when ``error`` is set).
+            partial={calendar?.partial ?? false}
+            validationErrors={calendar?.validationErrors}
+          />
+        </div>
         {/* Round-8 / AX-05: id target for the skip-to-detail link. */}
-        <div id="earnings-detail-panel">
+        <div id="earnings-detail-panel" className="min-h-0 lg:overflow-y-auto lg:pr-1 scrollbar-thin">
           <EarningsDetailPanel
             ref={detailPanelRef}
             detail={detail}
@@ -592,49 +595,48 @@ function StrategyIntroCard() {
   return (
     <aside
       data-slot="earnings-intro"
-      className="relative mb-4 overflow-hidden rounded-md border border-[color:var(--border)] bg-[linear-gradient(135deg,color-mix(in_oklab,var(--bg-card)_88%,var(--brand)_12%),var(--bg-elev-1))] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_24px_60px_-44px_rgba(0,0,0,0.72)]"
+      className="relative overflow-hidden rounded-md border border-[color:var(--border)] bg-[linear-gradient(135deg,color-mix(in_oklab,var(--bg-card)_91%,var(--brand)_9%),var(--bg-elev-1))] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_18px_46px_-38px_rgba(0,0,0,0.72)] md:px-4"
     >
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,var(--brand),transparent)]"
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,var(--brand),transparent)] opacity-70"
       />
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1.5fr)_minmax(260px,0.9fr)] md:items-start">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(420px,0.72fr)_auto] lg:items-center">
         <div>
-          <p className="t-label text-[color:var(--brand)]">Event Volatility Command Deck</p>
-          <h2 className="mt-1 font-sans text-h2 font-semibold leading-tight tracking-tight text-[color:var(--fg)]">
-            Defined-risk earnings trades, ranked by evidence quality.
+          <p className="t-label text-[color:var(--brand)]">Event volatility command deck</p>
+          <h2 className="mt-1 font-sans text-body font-semibold leading-tight tracking-tight text-[color:var(--fg)] md:text-h3">
+            Ranked earnings setups with explicit data confidence.
           </h2>
-          <p className="mt-2 max-w-[72ch] font-sans text-body-sm leading-relaxed text-[color:var(--fg-muted)]">
-            The score is not a price target. It is a 0-100 setup-quality composite from live IV regime,
-            ATM premium yield, implied move versus prior earnings moves, AI confidence, and event timing.
-            Sparse data is labeled directly, so incomplete IV or premium context no longer masquerades
-            as a complete edge.
+          <p className="mt-1 max-w-[82ch] font-sans text-body-sm leading-snug text-[color:var(--fg-muted)]">
+            Score is a 0-100 setup-quality composite across IV regime, ATM premium yield,
+            implied move versus history, AI confidence, and event timing. Sparse inputs are
+            labeled before they affect the ranking.
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-[color:var(--border)] bg-[color:var(--border)]">
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-[color:var(--border)] bg-[color:var(--border)] sm:grid-cols-4 lg:grid-cols-2">
           <IntroStat label="Risk frame" value="Defined loss" />
           <IntroStat label="Vol gate" value="IV vs history" />
           <IntroStat label="Primary sort" value="Score" />
           <IntroStat label="Trade rule" value="Capped only" />
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            safeSetItem(INTRO_DISMISS_KEY, "1");
+            window.dispatchEvent(new Event(INTRO_DISMISS_EVENT));
+          }}
+          className="min-h-9 rounded-sm border border-[color:var(--border)] bg-[color:var(--bg-card)] px-3 font-sans text-label text-fg-muted transition-colors hover:border-primary hover:text-primary active:scale-[0.98] lg:self-start"
+        >
+          Dismiss
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={() => {
-          safeSetItem(INTRO_DISMISS_KEY, "1");
-          window.dispatchEvent(new Event(INTRO_DISMISS_EVENT));
-        }}
-        className="mt-3 min-h-8 rounded-sm border border-transparent px-1 font-sans text-label text-fg-muted underline decoration-[color:var(--border-strong)] underline-offset-4 transition-colors hover:text-primary active:scale-[0.98]"
-      >
-        Don&apos;t show again
-      </button>
     </aside>
   );
 }
 
 function IntroStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-[color:var(--bg-card)] px-3 py-3">
+    <div className="bg-[color:var(--bg-card)] px-3 py-2.5">
       <p className="t-label text-[color:var(--fg-muted)]">{label}</p>
       <p className="mt-1 font-mono text-body-sm font-semibold tabular-nums text-[color:var(--fg)]">
         {value}

@@ -139,15 +139,17 @@ export function TopBar() {
         <kbd className="shrink-0 rounded-sm border border-border-hair bg-bg px-2 py-0.5 text-label font-mono text-muted-foreground">{isMac ? "\u2318K" : "Ctrl+K"}</kbd>
       </button>
 
-      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-        <StatusPills />
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-1 sm:gap-2 lg:flex-none">
+        <div className="hidden lg:block">
+          <StatusPills />
+        </div>
         {/* Audit Persona F4.2 (2026-05-05): system-wide halt-trading
          * button. Admin-only — backend returns 403 for non-admin and
          * the component hides itself. Hidden on the smallest mobile
          * viewport so the chrome doesn't crowd; emergencies on mobile
          * route through /strategies/{id} per-strategy switches. */}
         <HaltTradingButton className="hidden sm:inline-flex" />
-        <ThemeToggle className="h-11 w-11 sm:h-8 sm:w-8" />
+        <ThemeToggle className="hidden h-11 w-11 sm:inline-flex sm:h-8 sm:w-8" />
         <NotificationCenter />
         <ProfileMenu />
       </div>

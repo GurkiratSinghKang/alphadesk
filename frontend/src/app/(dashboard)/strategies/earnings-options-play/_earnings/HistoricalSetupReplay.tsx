@@ -335,7 +335,7 @@ function ReplayResult({
           data-slot="historical-setup-replay-comparison"
           className="mt-3 border-t border-[color:var(--border)] pt-2"
         >
-          <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(3.5rem,3.5rem)_minmax(5rem,5rem)_minmax(4rem,4rem)] gap-2 t-label u-muted">
+          <div className="grid grid-cols-[minmax(0,1fr)_3rem_3.75rem_3rem] gap-2 t-label u-muted sm:grid-cols-[minmax(0,1.4fr)_minmax(3.5rem,3.5rem)_minmax(5rem,5rem)_minmax(4rem,4rem)]">
             <span>Setup comparison</span>
             <span className="text-right">WIN</span>
             <span className="text-right">AVG R</span>
@@ -491,17 +491,17 @@ function SetupComparisonRow({
     // with the PF column. The "best" row had a green emphasis tone that
     // doubled as a positive-EV endorsement; trimmed to brand color so the
     // ranking signal remains without implying real-money confidence.
-    <li className="grid grid-cols-[minmax(0,1.4fr)_minmax(3.5rem,3.5rem)_minmax(5rem,5rem)_minmax(4rem,4rem)] items-center gap-2 py-1.5 t-mono text-label">
-      <span className="min-w-0 truncate">
+    <li className="grid grid-cols-[minmax(0,1fr)_3rem_3.75rem_3rem] items-center gap-2 py-1.5 t-mono text-label sm:grid-cols-[minmax(0,1.4fr)_minmax(3.5rem,3.5rem)_minmax(5rem,5rem)_minmax(4rem,4rem)]">
+      <span className="flex min-w-0 flex-col gap-0.5 sm:block sm:truncate">
         <span
           className={cn(
-            "inline-block max-w-[9rem] truncate align-bottom",
+            "block max-w-full truncate align-bottom sm:inline-block sm:max-w-[9rem]",
             best || suggested ? "u-brand" : "u-muted",
           )}
         >
           {summary.setup}
         </span>
-        <span className="ml-1 u-muted">
+        <span className="text-[10px] uppercase leading-none u-muted sm:ml-1 sm:text-label sm:normal-case">
           {suggested ? "suggested" : best ? "best" : verdict.label.toLowerCase()}
         </span>
       </span>

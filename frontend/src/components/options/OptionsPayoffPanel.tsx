@@ -71,9 +71,15 @@ export default function OptionsPayoffPanel({
         className,
       )}
     >
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border-hair px-4 py-3">
+      <header className={cn(
+        "flex flex-wrap items-center justify-between gap-3 border-b border-border-hair",
+        compact ? "px-3 py-2.5" : "px-4 py-3",
+      )}>
         <div className="flex min-w-0 items-center gap-2">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
+          <span className={cn(
+            "flex shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary",
+            compact ? "size-7" : "size-8",
+          )}>
             <ChartLine className="size-4" aria-hidden />
           </span>
           <div className="min-w-0">
@@ -97,19 +103,19 @@ export default function OptionsPayoffPanel({
       {!hasLegs ? (
         <EmptyPayoff copy="Open the builder or choose an earnings play to see max profit, max loss, and breakevens." />
       ) : summary.status !== "ready" ? (
-        <div className="px-4 py-4">
+        <div className={cn(compact ? "px-3 py-3" : "px-4 py-4")}>
           <MetricGrid summary={summary} compact={compact} />
-          <div className="mt-3 flex gap-2 rounded-md border border-amber/30 bg-amber/10 px-3 py-3 text-body-sm text-fg-muted">
+          <div className="mt-3 flex gap-2 rounded-md border border-amber/30 bg-amber/10 px-3 py-2.5 text-body-sm text-fg-muted">
             <WarningCircle className="mt-0.5 size-4 shrink-0 text-amber" aria-hidden />
             <span>{summary.reason}</span>
           </div>
-          <LegList draft={draft} />
-          <StrategyCaption comboType={draft?.comboType} />
+          {!compact ? <LegList draft={draft} /> : null}
+          {!compact ? <StrategyCaption comboType={draft?.comboType} /> : null}
         </div>
       ) : (
-        <div className="px-4 py-4">
+        <div className={cn(compact ? "px-3 py-3" : "px-4 py-4")}>
           <MetricGrid summary={summary} compact={compact} />
-          <PayoffChart summary={summary} />
+          <PayoffChart summary={summary} compact={compact} />
           {!compact ? <LegList draft={draft} /> : null}
           {!compact ? <StrategyCaption comboType={draft.comboType} /> : null}
         </div>
@@ -118,7 +124,7 @@ export default function OptionsPayoffPanel({
   );
 }
 
-function MetricGrid({ summary, compact: _compact }: { summary: PayoffSummary; compact: boolean }) {
+function MetricGrid({ summary, compact }: { summary: PayoffSummary; compact: boolean }) {
   // PM-A 2026-05-05: slimmed from 4 cells to 2. The breakeven cell
   // moved into the chart (commit 3 callouts), and net premium is
   // already visible in the leg list. Two cells means each can
@@ -131,9 +137,9 @@ function MetricGrid({ summary, compact: _compact }: { summary: PayoffSummary; co
   return (
     <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border-hair bg-border-hair">
       {metrics.map((metric) => (
-        <div key={metric.label} className="min-w-0 bg-bg px-4 py-4">
+        <div key={metric.label} className={cn("min-w-0 bg-bg", compact ? "px-3 py-2.5" : "px-4 py-4")}>
           <p className="t-label text-fg-hint">{metric.label}</p>
-          <p className={cn("mt-2 truncate font-mono text-body font-semibold tabular-nums", metric.tone)}>
+          <p className={cn("truncate font-mono font-semibold tabular-nums", compact ? "mt-1 text-body-sm" : "mt-2 text-body", metric.tone)}>
             {metric.value}
           </p>
         </div>
@@ -142,7 +148,7 @@ function MetricGrid({ summary, compact: _compact }: { summary: PayoffSummary; co
   );
 }
 
-function PayoffChart({ summary }: { summary: PayoffSummary }) {
+function PayoffChart({ summary, compact = false }: { summary: PayoffSummary; compact?: boolean }) {
   const [hovered, setHovered] = useState<PayoffPoint | null>(null);
   // EOP-AUDIT 2026-05-06 PR-3 (a11y): keyboard-driven readout. When
   // the chart container has focus, arrow keys move the selected
@@ -200,7 +206,7 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
   };
 
   return (
-    <div className="mt-4 rounded-md border border-border-hair bg-bg px-3 py-3">
+    <div className={cn("rounded-md border border-border-hair bg-bg px-3 py-3", compact ? "mt-3" : "mt-4")}>
       {/* EOP-AUDIT 2026-05-06 / B1.10: inline hint sits above the chart
           so the chart body stays uncluttered. Fades out once the user
           has interacted, since they no longer need the prompt. */}
@@ -208,14 +214,17 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
         data-slot="payoff-chart-hint"
         aria-hidden={hasHoveredOnce ? "true" : undefined}
         className={cn(
-          "mb-2 font-mono text-eyebrow u-muted transition-opacity",
+          compact ? "sr-only" : "mb-2 font-mono text-eyebrow u-muted transition-opacity",
           hasHoveredOnce ? "opacity-0" : "opacity-100",
         )}
       >
         Hover or focus the chart for per-price P/L.
       </p>
       <div
-        className="relative h-[220px] w-full rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        className={cn(
+          "relative w-full rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary",
+          compact ? "h-[148px]" : "h-[220px]",
+        )}
         role="application"
         aria-label="Options payoff chart. Use left and right arrow keys to step through prices, Home and End to jump to the extremes."
         tabIndex={0}
@@ -410,7 +419,10 @@ function PayoffChart({ summary }: { summary: PayoffSummary }) {
             : ""}
         </div>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-eyebrow text-fg-muted">
+      <div className={cn(
+        "mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-eyebrow text-fg-muted",
+        compact && "gap-x-2 text-[10px]",
+      )}>
         <span>At expiration</span>
         {summary.spotPrice != null ? <span>Spot {formatCurrency(summary.spotPrice)}</span> : null}
         {summary.expiries[0] ? <span>Expiry {summary.expiries[0]}</span> : null}

@@ -1295,17 +1295,17 @@ export default function TradePage() {
         : "Single ticket";
 
   return (
-    <div className="relative min-h-[calc(100dvh-48px-22px)] overflow-hidden bg-bg px-3 py-3 md:px-5 md:py-5">
+    <div className="relative min-h-[calc(100dvh-48px-22px)] overflow-hidden bg-bg px-3 py-3 md:px-4 md:py-4">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(236,230,210,0.035)_1px,transparent_1px),linear-gradient(to_bottom,rgba(236,230,210,0.03)_1px,transparent_1px)] bg-[size:72px_72px]"
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(236,230,210,0.035)_1px,transparent_1px),linear-gradient(to_bottom,rgba(236,230,210,0.03)_1px,transparent_1px)] bg-[size:56px_56px]"
       />
-      <div className="relative mx-auto grid w-full max-w-[1760px] gap-4">
+      <div className="relative mx-auto grid w-full max-w-[1880px] gap-3">
         <header
           id="trade-quote"
-          className="scroll-mt-4 grid overflow-hidden rounded-lg border border-border-hair bg-border-hair shadow-[0_18px_60px_-38px_rgba(16,22,17,0.34)] lg:grid-cols-[minmax(240px,0.58fr)_minmax(0,1fr)_minmax(320px,0.7fr)]"
+          className="scroll-mt-4 grid overflow-hidden rounded-md border border-border-hair bg-border-hair shadow-[0_14px_44px_-34px_rgba(16,22,17,0.34)] lg:grid-cols-[minmax(220px,0.46fr)_minmax(0,1fr)_minmax(300px,0.54fr)]"
         >
-          <div className="min-w-0 bg-bg-elev-1 px-4 py-4 md:px-5">
+          <div className="min-w-0 bg-bg-elev-1 px-3 py-3 md:px-4">
             {/* Batch E P0-mobile-only: at <sm: gate the execution-
                 readiness chip onto its own line above the strategy/
                 combo tags so the cockpit eyebrow + chip can't flex-
@@ -1346,12 +1346,12 @@ export default function TradePage() {
             </div>
             <h1
               data-slot="trade-symbol"
-              className="mt-3 text-h1 font-semibold leading-tight tracking-tight text-ink-1000 md:text-display-md"
+              className="mt-2 text-h2 font-semibold leading-tight tracking-tight text-ink-1000 md:text-h1"
               style={{ letterSpacing: 0 }}
             >
               Trade · {symbol.ticker}
             </h1>
-            <p className="mt-2 truncate text-body-sm text-fg-muted">{symbol.venue} · {intentLabel}</p>
+            <p className="mt-1 truncate text-body-sm text-fg-muted">{symbol.venue} · {intentLabel}</p>
           </div>
 
           {/* Batch E P0-mobile-only: at <sm: keep the four telemetry
@@ -1368,7 +1368,7 @@ export default function TradePage() {
             <TradeTelemetryCard icon={Rows} label="Spread" value={telemetrySpreadLabel} valueClassName={telemetrySpreadTone} />
           </div>
 
-          <div className="bg-bg-elev-1 p-3 md:p-4">
+          <div className="bg-bg-elev-1 p-3">
             <label className="flex flex-col gap-2">
               <span className="t-label text-fg-hint">Chart symbol</span>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
@@ -1407,13 +1407,13 @@ export default function TradePage() {
 
         <MobileTradeNav />
 
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,360px)]">
+        <div className="grid grid-cols-1 gap-3 xl:h-[calc(100dvh-226px)] xl:min-h-[620px] xl:max-h-[980px] xl:grid-cols-[minmax(0,1fr)_minmax(360px,420px)] xl:overflow-hidden 2xl:grid-cols-[minmax(0,1fr)_minmax(380px,440px)]">
           <section
             id="trade-chart"
             aria-label="Primary chart"
-            className="surface-scan relative flex h-[clamp(480px,68dvh,640px)] scroll-mt-20 flex-col overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1 shadow-[0_24px_70px_-42px_rgba(16,22,17,0.58)] md:h-[clamp(720px,calc(100dvh-170px),1040px)]"
+            className="surface-scan relative flex h-[520px] scroll-mt-20 flex-col overflow-hidden rounded-md border border-border-hair bg-bg-elev-1 shadow-[0_20px_58px_-40px_rgba(16,22,17,0.58)] md:h-[640px] xl:h-full"
           >
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-hair px-4 py-3 text-fg">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-hair px-3 py-2.5 text-fg md:px-4">
               <div className="flex min-w-0 items-center gap-2">
                 <ArrowsOut className="size-4 shrink-0 text-primary" aria-hidden />
                 <div className="min-w-0">
@@ -1440,13 +1440,13 @@ export default function TradePage() {
             />
           </section>
 
-          <aside className="flex flex-col gap-4 xl:sticky xl:top-4 xl:self-start">
+          <aside className="flex min-h-0 flex-col gap-3 xl:h-full xl:overflow-y-auto xl:pr-1 scrollbar-thin">
             <section
               id="trade-ticket"
               data-slot="trade-ticket-panel"
-              className="scroll-mt-20 overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/95 shadow-[0_18px_60px_-40px_rgba(16,22,17,0.42)]"
+              className="scroll-mt-20 overflow-hidden rounded-md border border-border-hair bg-bg-elev-1/95 shadow-[0_16px_48px_-38px_rgba(16,22,17,0.42)]"
             >
-              <header className="flex items-center justify-between gap-3 border-b border-border-hair px-4 py-3">
+              <header className="flex items-center justify-between gap-3 border-b border-border-hair px-3 py-2.5">
                 <div className="flex min-w-0 items-center gap-2">
                   <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
                     <ListChecks className="size-4" aria-hidden />
@@ -1499,7 +1499,7 @@ export default function TradePage() {
                 }
                 className="border-t-0 bg-transparent"
               />
-              <div className="border-t border-border-hair p-4">
+              <div className="border-t border-border-hair p-3">
                 <OptionsPayoffPanel
                   draft={payoffDraft}
                   compact
@@ -1516,15 +1516,16 @@ export default function TradePage() {
               activeLegs={activeLegs}
               comboType={comboType}
             />
+
+            <RecentOrdersPanel
+              orders={filteredRecentOrders}
+              totalOrders={recentOrders.length}
+              activeFilter={orderFilter}
+              onFilterChange={setOrderFilter}
+            />
           </aside>
         </div>
 
-        <RecentOrdersPanel
-          orders={filteredRecentOrders}
-          totalOrders={recentOrders.length}
-          activeFilter={orderFilter}
-          onFilterChange={setOrderFilter}
-        />
         <OptionsStrategyBuilder
           key={tradeContextSymbol}
           open={builderOpen}
@@ -1806,7 +1807,7 @@ function ExecutionReadinessPanel({ readiness }: { readiness: ExecutionReadiness 
       aria-label="Execution readiness"
       data-slot="trade-execution-readiness"
       className={cn(
-        "hidden gap-3 rounded-lg border px-4 py-3 md:grid md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center",
+        "hidden gap-3 rounded-md border px-3 py-2.5 md:grid md:grid-cols-[auto_minmax(0,1fr)_minmax(220px,0.34fr)] md:items-center",
         readiness.tone === "profit" && "border-profit/25 bg-profit/10",
         readiness.tone === "loss" && "border-loss/30 bg-loss/10",
         readiness.tone === "amber" && "border-amber/30 bg-amber/10",
@@ -1815,7 +1816,7 @@ function ExecutionReadinessPanel({ readiness }: { readiness: ExecutionReadiness 
     >
       <span
         className={cn(
-          "flex size-10 shrink-0 items-center justify-center rounded-sm border",
+          "flex size-9 shrink-0 items-center justify-center rounded-sm border",
           readiness.tone === "profit" && "border-profit/25 bg-profit/10 text-profit",
           readiness.tone === "loss" && "border-loss/30 bg-loss/10 text-loss",
           readiness.tone === "amber" && "border-amber/30 bg-amber/10 text-amber",
@@ -1829,16 +1830,16 @@ function ExecutionReadinessPanel({ readiness }: { readiness: ExecutionReadiness 
           <p className="t-label text-fg-hint">Execution readiness</p>
           <TradeStatusPill label={readiness.label} tone={readiness.tone} />
         </div>
-        <h2 className="mt-1 text-h3 font-semibold leading-snug text-ink-1000">
+        <h2 className="mt-0.5 text-body font-semibold leading-snug text-ink-1000">
           {readiness.headline}
         </h2>
-        <p className="mt-1 max-w-[78ch] text-body-sm leading-relaxed text-fg-muted">
+        <p className="mt-0.5 line-clamp-2 max-w-[92ch] text-body-sm leading-snug text-fg-muted">
           {readiness.detail}
         </p>
       </div>
-      <div className="min-w-0 rounded-md border border-border-hair bg-bg px-3 py-2 md:min-w-[220px]">
+      <div className="min-w-0 rounded-md border border-border-hair bg-bg px-3 py-2">
         <p className="t-label text-fg-hint">{readiness.canSubmit ? "Submit path" : "Submit blocker"}</p>
-        <p className={cn("mt-1 text-body-sm leading-snug", readiness.canSubmit ? "text-profit" : "text-amber")}>
+        <p className={cn("mt-1 line-clamp-2 text-body-sm leading-snug", readiness.canSubmit ? "text-profit" : "text-amber")}>
           {readiness.blocker ?? "Ticket can submit after final review."}
         </p>
       </div>
@@ -2102,7 +2103,7 @@ function ExecutionQuotePanel({
   ];
 
   return (
-    <div className="border-b border-border-hair bg-bg px-4 py-3">
+    <div className="border-b border-border-hair bg-bg px-3 py-2.5">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Clock className="size-4 shrink-0 text-primary" aria-hidden />
@@ -2128,7 +2129,7 @@ function ExecutionQuotePanel({
           )}
         </span>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {presets.map((preset) => {
           const disabled = !Number.isFinite(preset.price) || preset.price <= 0;
           return (
@@ -2137,7 +2138,7 @@ function ExecutionQuotePanel({
               type="button"
               disabled={disabled}
               onClick={() => onStageLimit(preset.side, preset.price)}
-              className="min-h-10 rounded-sm border border-border-hair bg-bg-elev-1 px-2 text-left transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
+              className="min-h-9 rounded-sm border border-border-hair bg-bg-elev-1 px-2 text-left transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
             >
               <span className="block truncate text-label font-medium text-fg-muted">{preset.label}</span>
               <span className={cn("block truncate font-mono text-body-sm", preset.tone)}>
@@ -2159,7 +2160,7 @@ function PreTradeImpactPanel({ preview }: { preview: PreTradePreview }) {
       ? preview.checks.filter((check) => check.tone === "pass")
       : preview.checks.slice(2);
   return (
-    <div className="border-t border-border-hair bg-bg-elev-1 px-4 py-4">
+    <div className="border-t border-border-hair bg-bg-elev-1 px-3 py-3">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
@@ -2173,7 +2174,7 @@ function PreTradeImpactPanel({ preview }: { preview: PreTradePreview }) {
         <TradeStatusPill label={preview.policyLabel} tone={preview.policyTone} />
       </div>
 
-      <div data-slot="pre-submit-checks" className="mt-4 grid gap-2">
+      <div data-slot="pre-submit-checks" className="mt-3 grid gap-2">
         {visibleChecks.map((check) => (
           <ConfidenceCheckRow key={check.label} check={check} />
         ))}
@@ -2191,11 +2192,11 @@ function PreTradeImpactPanel({ preview }: { preview: PreTradePreview }) {
         ) : null}
       </div>
 
-      <div className="mt-4 grid gap-px overflow-hidden rounded-md border border-border-hair bg-border-hair sm:grid-cols-2">
+      <div className="mt-3 grid gap-px overflow-hidden rounded-md border border-border-hair bg-border-hair sm:grid-cols-2">
         {preview.rows.map((row) => (
-          <div key={row.label} className="bg-bg px-3 py-3">
+          <div key={row.label} className="bg-bg px-3 py-2.5">
             <p className="t-label text-fg-hint">{row.label}</p>
-            <p className={cn("mt-2 truncate font-mono text-body text-ink-1000", row.toneClass)}>{row.value}</p>
+            <p className={cn("mt-1 truncate font-mono text-body-sm text-ink-1000", row.toneClass)}>{row.value}</p>
             <p className="mt-1 line-clamp-2 text-label leading-snug text-fg-muted">{row.detail}</p>
           </div>
         ))}
@@ -2215,14 +2216,14 @@ function ConfidenceCheckRow({
   return (
     <div
       className={cn(
-        "grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-md border px-3 py-3",
-        compact ? "min-h-[58px]" : "min-h-[76px]",
+        "grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2.5 rounded-md border px-3 py-2.5",
+        compact ? "min-h-[48px]" : "min-h-[60px]",
         confidenceSurfaceClass(check.tone),
       )}
     >
       <span
         className={cn(
-          "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-sm",
+          "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-sm",
           confidenceIconClass(check.tone),
         )}
       >
@@ -2235,9 +2236,9 @@ function ConfidenceCheckRow({
             {confidenceStatusLabel(check.tone)}
           </span>
         </div>
-        <p className={cn("mt-1 truncate font-mono text-body-sm", confidenceTextClass(check.tone))}>{check.value}</p>
+        <p className={cn("mt-0.5 truncate font-mono text-body-sm", confidenceTextClass(check.tone))}>{check.value}</p>
         {!compact ? (
-          <p className="mt-1 line-clamp-2 text-label leading-snug text-fg-muted">{check.detail}</p>
+          <p className="mt-0.5 line-clamp-1 text-label leading-snug text-fg-muted">{check.detail}</p>
         ) : null}
       </div>
       <span className={cn("mt-1 size-2 rounded-full", confidenceDotClass(check.tone))} aria-hidden />
@@ -2257,12 +2258,12 @@ function TradeTelemetryCard({
   valueClassName?: string;
 }) {
   return (
-    <div className="bg-bg px-3 py-3">
+    <div className="bg-bg px-3 py-2.5">
       <div className="flex items-center gap-2">
         <Icon className="size-4 shrink-0 text-primary" aria-hidden />
         <p className="t-label text-fg-hint">{label}</p>
       </div>
-      <p className={cn("mt-3 truncate font-mono text-body text-ink-1000", valueClassName)}>
+      <p className={cn("mt-1.5 truncate font-mono text-body text-ink-1000", valueClassName)}>
         {value}
       </p>
     </div>
@@ -3033,17 +3034,17 @@ function TradeIntentPanel({
 }) {
   if (!activeContract && activeLegs.length === 0) {
     return (
-      <section className="rounded-lg border border-border-hair bg-bg-elev-1/95 px-4 py-4 shadow-[0_18px_60px_-42px_rgba(16,22,17,0.36)]">
+      <section className="rounded-md border border-border-hair bg-bg-elev-1/95 px-3 py-3 shadow-[0_16px_48px_-40px_rgba(16,22,17,0.36)]">
         <div className="flex items-center gap-2">
           <span className="flex size-8 items-center justify-center rounded-sm bg-primary/10 text-primary">
             <SlidersHorizontal className="size-4" aria-hidden />
           </span>
           <h2 className="text-body font-semibold text-ink-1000">Intent rail</h2>
         </div>
-        <p className="mt-3 text-body-sm leading-snug text-fg-muted">
+        <p className="mt-2 text-body-sm leading-snug text-fg-muted">
           No pre-staged legs. The ticket owns the executable order and the chart stays dedicated to price.
         </p>
-        <div className="mt-4 flex items-center gap-2 rounded-md border border-border-hair bg-bg px-3 py-2 text-label text-fg-muted">
+        <div className="mt-3 flex items-center gap-2 rounded-md border border-border-hair bg-bg px-3 py-2 text-label text-fg-muted">
           <ShieldWarning className="size-4 shrink-0 text-amber" aria-hidden />
           Broker and risk policy still run on submit.
         </div>
@@ -3054,7 +3055,7 @@ function TradeIntentPanel({
   if (activeContract) {
     return (
       <section
-        className="rounded-lg border border-border-hair bg-bg-elev-1/95 p-4 shadow-[0_18px_60px_-42px_rgba(16,22,17,0.36)]"
+        className="rounded-md border border-border-hair bg-bg-elev-1/95 p-3 shadow-[0_16px_48px_-40px_rgba(16,22,17,0.36)]"
         aria-label="Pre-staged option contract"
       >
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -3088,7 +3089,7 @@ function TradeIntentPanel({
 
   return (
     <section
-      className="rounded-lg border border-border-hair bg-bg-elev-1/95 p-4 shadow-[0_18px_60px_-42px_rgba(16,22,17,0.36)]"
+        className="rounded-md border border-border-hair bg-bg-elev-1/95 p-3 shadow-[0_16px_48px_-40px_rgba(16,22,17,0.36)]"
       aria-label="Pre-staged multi-leg order"
     >
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -3149,10 +3150,10 @@ function RecentOrdersPanel({
   return (
     <section
       id="trade-orders"
-      className="scroll-mt-20 overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/95 shadow-[0_18px_60px_-42px_rgba(16,22,17,0.36)]"
+      className="scroll-mt-20 overflow-hidden rounded-md border border-border-hair bg-bg-elev-1/95 shadow-[0_16px_48px_-40px_rgba(16,22,17,0.36)]"
     >
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex min-w-0 items-center gap-2 px-4 pt-4 md:py-4">
+        <div className="flex min-w-0 items-center gap-2 px-3 pt-3 md:py-3">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
             <Lightning className="size-4" aria-hidden />
           </span>
@@ -3161,7 +3162,7 @@ function RecentOrdersPanel({
             <p className="mt-0.5 text-label text-fg-muted">{totalOrders} recent broker event{totalOrders === 1 ? "" : "s"}</p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-1 px-4 pb-4 md:py-4">
+        <div className="flex flex-wrap gap-1 px-3 pb-3 md:py-3">
           <FunnelSimple className="mr-1 size-4 self-center text-fg-muted" aria-hidden />
           {filters.map((filter) => (
             <button
@@ -3183,7 +3184,7 @@ function RecentOrdersPanel({
       </div>
 
       {orders.length === 0 ? (
-        <div className="border-t border-border-hair bg-bg px-4 py-8 text-center">
+        <div className="border-t border-border-hair bg-bg px-4 py-6 text-center">
           <p className="text-body font-medium text-fg">
             {totalOrders === 0 ? "No orders yet today." : "No orders match this view."}
           </p>

@@ -1861,12 +1861,12 @@ function TradeOverlay({
         <TradeLevelRail top={takeProfitTop} tone="target" label="Target" value={overlay.takeProfit} meta="take profit" />
       ) : null}
       {overlay.status === "draft" ? (
-        <div className="pointer-events-auto absolute bottom-3 left-1/2 flex max-w-[min(560px,calc(100%-6rem))] -translate-x-1/2 items-center gap-2 rounded border border-border-hair bg-bg-card/90 px-3 py-2 shadow-lg backdrop-blur-md">
-          <div className="min-w-0">
+        <div className="pointer-events-auto absolute bottom-2 left-2 right-2 flex flex-wrap items-center gap-2 rounded border border-border-hair bg-bg-card/90 px-3 py-2 shadow-lg backdrop-blur-md sm:bottom-3 sm:left-1/2 sm:right-auto sm:max-w-[min(560px,calc(100%-6rem))] sm:-translate-x-1/2 sm:flex-nowrap">
+          <div className="min-w-[160px] flex-1 sm:min-w-0">
             <p className="truncate font-mono text-label font-semibold text-fg">
               {overlay.label} · {formatBookPrice(entry)}
             </p>
-            <p className="truncate text-eyebrow text-fg-muted">
+            <p className="hidden truncate text-eyebrow text-fg-muted sm:block">
               {overlay.summary ?? "Chart draft updates the ticket; submit remains explicit."}
             </p>
           </div>

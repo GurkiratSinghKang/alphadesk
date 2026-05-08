@@ -289,7 +289,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
       aria-busy={refetching || undefined}
       aria-labelledby="detail-header-title"
       className={cn(
-        "rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] p-4 transition-opacity",
+        "rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] p-3 transition-opacity xl:p-4",
         refetching && "opacity-70",
       )}
     >
@@ -420,7 +420,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
       <HistoricalSetupReplay detail={detail} />
 
       {isWide ? (
-        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+        <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
           {/* Left column: thesis + news */}
           <div className="min-w-0 space-y-3">
             <AIThesisCard
@@ -439,7 +439,7 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
           </div>
         </div>
       ) : (
-        <div className="mt-4 space-y-4">
+        <div className="mt-3 space-y-3">
           <AIThesisCard
             structured={detail.claudeStructured} full={detail.claudeFullResearch}
             running={runningFull} error={fullResearchError}
@@ -467,12 +467,12 @@ const EarningsDetailPanel = forwardRef<HTMLElement, EarningsDetailPanelProps>(
       <OptionsPayoffPanel
         draft={hoveredPayoffDraft ?? lastPayoffDraft ?? defaultPayoffDraft}
         title="Earnings payoff"
-        className="mt-4"
+        className="mt-3"
       />
 
       <p
         data-slot="data-disclaimer"
-        className="mt-3 border-t border-[color:var(--border)] pt-2 font-mono text-label u-muted"
+        className="mt-2 border-t border-[color:var(--border)] pt-2 font-mono text-label u-muted"
       >
         Data from FMP + Alpaca. IV rank may be delayed.{" "}
         <a

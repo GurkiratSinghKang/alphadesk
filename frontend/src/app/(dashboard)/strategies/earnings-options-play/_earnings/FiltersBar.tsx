@@ -98,7 +98,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
   return (
     <div
       data-slot="filters-bar"
-      className="grid grid-cols-1 gap-3 rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] p-3 sm:flex sm:flex-wrap sm:items-center sm:gap-4"
+      className="grid grid-cols-1 gap-2 rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] p-2.5 sm:flex sm:flex-wrap sm:items-center sm:gap-3"
     >
       {/* WINDOW — radiogroup (CLUSTER C/7) */}
       <div
@@ -125,7 +125,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
                 // on phones; ``px-3 py-2`` widens the horizontal hit
                 // area as well. QA r4-4 migrated the arbitrary value
                 // onto the token utility.
-                "min-h-touch rounded border px-3 py-2 font-mono text-label inline-flex items-center",
+                "inline-flex min-h-touch items-center rounded border px-2.5 py-1.5 font-mono text-label md:min-h-9",
                 checked
                   ? "border-[color:var(--fg-accent)] text-[color:var(--fg-accent)]"
                   : "border-[color:var(--fg-border)] text-[color:var(--fg-muted)] hover:text-[color:var(--fg-base)]",
@@ -148,7 +148,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
           unambiguously names the control AND aria-valuetext so screen
           readers announce the percent unit instead of just a bare
           integer. */}
-      <label className="grid min-w-0 grid-cols-[max-content_minmax(120px,1fr)_3ch] items-center gap-2 sm:flex sm:min-w-[260px]">
+      <label className="grid min-w-0 grid-cols-[max-content_minmax(120px,1fr)_3ch] items-center gap-2 sm:flex sm:min-w-[240px]">
         <span className="t-label whitespace-nowrap text-[color:var(--fg-muted)]">IV RANK &ge;</span>
         <input
           type="range"
@@ -210,7 +210,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
                 // on phones; ``px-3 py-2`` widens the horizontal hit
                 // area as well. QA r4-4 migrated the arbitrary value
                 // onto the token utility.
-                "min-h-touch rounded border px-3 py-2 font-mono text-label inline-flex items-center",
+                "inline-flex min-h-touch items-center rounded border px-2.5 py-1.5 font-mono text-label md:min-h-9",
                 checked
                   ? "border-[color:var(--fg-accent)] text-[color:var(--fg-accent)]"
                   : "border-[color:var(--fg-border)] text-[color:var(--fg-muted)] hover:text-[color:var(--fg-base)]",
@@ -230,7 +230,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
           label (not just the 16px native checkbox) is tappable on
           phones. Padding compensates for the negative-margin trick
           to avoid stretching surrounding flex children. */}
-      <label className="flex min-h-touch w-full cursor-pointer items-center gap-2 px-1 sm:w-auto">
+      <label className="flex min-h-touch w-full cursor-pointer items-center gap-2 px-1 sm:w-auto md:min-h-9">
         <input
           type="checkbox"
           className="h-5 w-5"
@@ -257,7 +257,7 @@ export default function FiltersBar({ filters, onChange, onSettleRef }: FiltersBa
           onBlur={() => onSettleRef?.()}
           // Round-8 / MO-06: bump padding so the SORT select hits
           // 44px on phones; the ``py-0.5`` left it ~22px tall.
-          className="min-h-touch min-w-0 flex-1 rounded border border-[color:var(--fg-border)] bg-transparent px-2 py-1.5 font-mono text-label text-[color:var(--fg-base)] sm:flex-none"
+          className="min-h-touch min-w-0 flex-1 rounded border border-[color:var(--fg-border)] bg-transparent px-2 py-1.5 font-mono text-label text-[color:var(--fg-base)] sm:flex-none md:min-h-9"
         >
           {SORT_OPTIONS.map((o) => (
             <option key={o.key} value={o.key}>{o.label}</option>

@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 /**
  * DashboardPageLayout (Layer 3 shell)
  * ───────────────────────────────────
- * Generic editorial shell for every non-desk dashboard route
+ * Generic workstation shell for every non-desk dashboard route
  * (analytics, pipeline, reports, alerts, settings).
  *
  * Provides a consistent command header:
@@ -16,9 +16,9 @@ import { cn } from "@/lib/utils";
  *   · optional right-aligned actions slot
  *   · dark elevated surface matching the trading desk chrome
  *
- * The children slot carries the page's own body — layout stays
- * opinion-free about internal spacing so existing panels keep working.
- * Max width 1280 matches the desk's center column comfort zone.
+ * The children slot carries the page's own body. The wrapper stays compact
+ * by default so trading and research pages can spend pixels on tools instead
+ * of chrome.
  */
 export interface DashboardPageLayoutProps {
   /** Tracked-caps chapter tag rendered above the title, e.g. "§ ANALYTICS". */
@@ -59,35 +59,34 @@ export default function DashboardPageLayout({
       role="region"
       aria-label={pageLabel ?? title}
       className={cn(
-        // Viewport audit r5 #2: the previous 1280px cap wasted 33-50% of the
-        // viewport on 1920+/ultrawide monitors (common for quant research).
-        // Comfortable reading width on 1440 laptop + use more pixels on 4K.
-        "mx-auto flex w-full max-w-[1480px] 2xl:max-w-[1680px] flex-col gap-5 px-4 py-5 md:px-6 md:py-7",
+        "mx-auto flex w-full max-w-[1760px] 2xl:max-w-[1920px] flex-col gap-3 px-3 py-3 md:px-4 md:py-4",
         className
       )}
     >
-      <header className="relative overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/85 px-4 py-4 shadow-[0_18px_60px_-44px_rgba(0,0,0,0.72)] md:px-5">
+      <header className="relative overflow-hidden rounded-md border border-border-hair bg-bg-elev-1/88 px-3 py-3 shadow-[0_14px_42px_-34px_rgba(0,0,0,0.72)] md:px-4">
         <div
           aria-hidden
-          className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,var(--brand),transparent)] opacity-75"
+          className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,var(--brand),transparent)] opacity-65"
         />
-        <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
           <div className="min-w-0">
-            <div className="t-label uppercase tracking-wider text-primary/85">{eyebrow.replace("§ ", "")}</div>
+            <div className="t-label uppercase tracking-wider text-primary/85">
+              {eyebrow.replace("§ ", "")}
+            </div>
             <h1
-              className="mt-2 max-w-[18ch] break-words text-h1 font-semibold leading-tight tracking-tight text-ink-1000 md:max-w-none md:text-display-sm"
+              className="mt-1 max-w-[32ch] break-words text-h2 font-semibold leading-tight tracking-tight text-ink-1000 md:max-w-none md:text-h1"
               style={{ letterSpacing: 0 }}
             >
               {title}
             </h1>
           </div>
           {actions ? (
-            <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div>
+            <div className="flex flex-wrap items-center gap-2 md:justify-end">{actions}</div>
           ) : null}
         </div>
       </header>
 
-      <div className="flex flex-col gap-6">{children}</div>
+      <div className="flex min-h-0 flex-1 flex-col gap-4">{children}</div>
     </div>
   );
 }

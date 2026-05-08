@@ -312,7 +312,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           fake "dev" tag bleeding into the marketing footer of a customer
           deploy. The version stamp is still rendered when a real one is
           provided so prod retains the deploy-tracking string. */}
-      <footer role="contentinfo" className="relative z-0 border-t border-border/50 bg-ink-050/88 px-4 py-3 text-center text-label text-muted-foreground">
+      <footer role="contentinfo" className="relative z-0 border-t border-border/50 bg-ink-050/88 px-3 py-1.5 text-center text-label text-muted-foreground">
         AlphaDesk{process.env.NEXT_PUBLIC_BUILD_VERSION ? ` v${process.env.NEXT_PUBLIC_BUILD_VERSION}` : ""} — Built on AI — &copy; {new Date().getFullYear()}
       </footer>
       <CommandPalette />

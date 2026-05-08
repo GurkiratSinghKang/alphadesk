@@ -1002,12 +1002,12 @@ function DashboardCommandCenter({
     >
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(236,230,210,0.035)_1px,transparent_1px),linear-gradient(to_bottom,rgba(236,230,210,0.03)_1px,transparent_1px)] bg-[size:72px_72px]"
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(236,230,210,0.035)_1px,transparent_1px),linear-gradient(to_bottom,rgba(236,230,210,0.03)_1px,transparent_1px)] bg-[size:56px_56px]"
       />
-      <div className="relative mx-auto flex w-full max-w-[1500px] flex-col gap-5 p-4 pb-8 md:p-6">
+      <div className="relative mx-auto flex w-full max-w-[1820px] flex-col gap-3 p-3 pb-6 md:p-4">
         <section
           aria-labelledby="dashboard-command-title"
-          className="overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/95 shadow-[0_18px_60px_-36px_rgba(16,22,17,0.34)]"
+          className="overflow-hidden rounded-md border border-border-hair bg-bg-elev-1/95 shadow-[0_16px_48px_-38px_rgba(16,22,17,0.34)]"
         >
           <MobilePriorityBrief
             items={actionItems}
@@ -1023,152 +1023,154 @@ function DashboardCommandCenter({
             onOpenOrders={onOpenOrders}
             onPipeline={onPipeline}
           />
-          <header className="hidden gap-px bg-border-hair lg:grid lg:grid-cols-[minmax(260px,0.78fr)_minmax(0,1.22fr)]">
-            <div className="min-w-0">
-              <div className="h-full bg-bg-elev-1 px-4 py-4 md:px-5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="t-label text-fg-hint">AlphaDesk control room</span>
-                  <StatusChip tone={dashboardReadiness.tone} label={dashboardReadiness.label} />
-                  <StatusChip tone={regimeChipTone} label={regimeLabel} />
-                </div>
-                <h2
-                  id="dashboard-command-title"
-                  className="mt-3 text-h1 font-semibold leading-tight tracking-tight text-ink-1000 md:text-display-sm"
-                  style={{ letterSpacing: 0 }}
-                >
-                  Control room
-                </h2>
-                <p className="mt-2 max-w-[44ch] text-body-sm leading-relaxed text-fg-muted">
-                  Exceptions, exposure, and broker state in the first scan.
-                </p>
-                {/* Batch E P1-16: when the system is in the "Off-session
-                    review mode" copy, surface a dismiss × so a returning
-                    operator can stop seeing it after acknowledging. The
-                    dismissal persists in localStorage. Other readiness
-                    states (Ready, Syncing, etc.) are always visible
-                    because they reflect transient runtime state. */}
-                {!(
-                  !marketOpen &&
-                  dashboardReadiness.title === "Off-session review mode" &&
-                  offSessionBannerDismissed
-                ) && (
-                  <div className="mt-4 rounded-md border border-border-hair bg-bg px-3 py-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="t-label text-fg-hint">System readiness</p>
-                      {!marketOpen &&
-                      dashboardReadiness.title === "Off-session review mode" ? (
-                        <button
-                          type="button"
-                          onClick={onDismissOffSessionBanner}
-                          aria-label="Dismiss off-session banner"
-                          className="-mt-1 -mr-1 inline-flex size-6 items-center justify-center rounded-sm text-fg-muted hover:bg-bg-elev-2 hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-                        >
-                          <span aria-hidden className="font-mono text-body">×</span>
-                        </button>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-body-sm font-semibold leading-snug text-ink-1000">
-                      {dashboardReadiness.title}
-                    </p>
-                    <p className="mt-1 text-body-sm leading-relaxed text-fg-muted">
-                      {dashboardReadiness.detail}
-                    </p>
+          <div className="hidden gap-px bg-border-hair lg:grid lg:grid-cols-[minmax(300px,0.72fr)_minmax(0,1.28fr)] xl:grid-cols-[minmax(320px,0.68fr)_minmax(0,1.32fr)]">
+            <div className="grid min-w-0 auto-rows-max gap-px bg-border-hair">
+              <div className="min-w-0">
+                <div className="bg-bg-elev-1 px-3 py-3 md:px-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="t-label text-fg-hint">AlphaDesk control room</span>
+                    <StatusChip tone={dashboardReadiness.tone} label={dashboardReadiness.label} />
+                    <StatusChip tone={regimeChipTone} label={regimeLabel} />
                   </div>
-                )}
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <StatusChip
-                    tone={escalationCount > 0 ? "amber" : "profit"}
-                    label={`${escalationCount} risk gate${escalationCount === 1 ? "" : "s"}`}
-                  />
-                  <StatusChip
-                    tone={pipelineStatus?.running ? "profit" : "muted"}
-                    label={pipelineStatus?.running ? "Pipeline live" : "Pipeline idle"}
-                  />
+                  <h2
+                    id="dashboard-command-title"
+                    className="mt-2 text-h2 font-semibold leading-tight tracking-tight text-ink-1000 md:text-h1"
+                    style={{ letterSpacing: 0 }}
+                  >
+                    Control room
+                  </h2>
+                  <p className="mt-1 max-w-[48ch] text-body-sm leading-snug text-fg-muted">
+                    Exceptions, exposure, and broker state in the first scan.
+                  </p>
+                  {/* Batch E P1-16: when the system is in the "Off-session
+                      review mode" copy, surface a dismiss × so a returning
+                      operator can stop seeing it after acknowledging. The
+                      dismissal persists in localStorage. Other readiness
+                      states (Ready, Syncing, etc.) are always visible
+                      because they reflect transient runtime state. */}
+                  {!(
+                    !marketOpen &&
+                    dashboardReadiness.title === "Off-session review mode" &&
+                    offSessionBannerDismissed
+                  ) && (
+                    <div className="mt-3 rounded-md border border-border-hair bg-bg px-3 py-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="t-label text-fg-hint">System readiness</p>
+                        {!marketOpen &&
+                        dashboardReadiness.title === "Off-session review mode" ? (
+                          <button
+                            type="button"
+                            onClick={onDismissOffSessionBanner}
+                            aria-label="Dismiss off-session banner"
+                            className="-mt-1 -mr-1 inline-flex size-6 items-center justify-center rounded-sm text-fg-muted hover:bg-bg-elev-2 hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                          >
+                            <span aria-hidden className="font-mono text-body">×</span>
+                          </button>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-body-sm font-semibold leading-snug text-ink-1000">
+                        {dashboardReadiness.title}
+                      </p>
+                      <p className="mt-1 line-clamp-2 text-body-sm leading-snug text-fg-muted">
+                        {dashboardReadiness.detail}
+                      </p>
+                    </div>
+                  )}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <StatusChip
+                      tone={escalationCount > 0 ? "amber" : "profit"}
+                      label={`${escalationCount} risk gate${escalationCount === 1 ? "" : "s"}`}
+                    />
+                    <StatusChip
+                      tone={pipelineStatus?.running ? "profit" : "muted"}
+                      label={pipelineStatus?.running ? "Pipeline live" : "Pipeline idle"}
+                    />
+                  </div>
                 </div>
               </div>
+
+              <ConfigurableSection id="decision_queue" applyOrder>
+                <DecisionQueue
+                  items={actionItems}
+                  onTrade={onTrade}
+                  onOpenOrders={onOpenOrders}
+                  onPipeline={onPipeline}
+                  showDemoSeedCta={isDemoSeedAccount && !brokerConnected}
+                  onConnectBroker={onConnectBroker}
+                />
+              </ConfigurableSection>
+              <ConfigurableSection id="session_snapshot" applyOrder>
+                <SessionSnapshot
+                  selectedSymbol={selectedSymbol}
+                  quoteValue={quoteValue}
+                  quoteTone={quoteTone}
+                  selectedStrategyName={selectedStrategyName}
+                  activeStrategyCount={activeStrategyCount}
+                  totalStrategyCount={totalStrategyCount}
+                  pipelineStatus={pipelineStatus}
+                  pipelineValue={pipelineValue}
+                  onPipeline={onPipeline}
+                />
+              </ConfigurableSection>
             </div>
 
-            {/* BUG-11: Book equity removed — Capital Canvas below is the equity hero.
-                Keeping Day P&L, Clock, and Strategies for the Command Room scan. */}
-            <div className="hidden gap-px bg-border-hair sm:grid sm:grid-cols-3">
-              <CommandMetric
-                label="Day P&L"
-                value={account.ready ? `${pnlSign}${formatCurrency(account.dayPnl, true)}` : "Awaiting"}
-                detail={`${account.positionsCount} open line${account.positionsCount === 1 ? "" : "s"}`}
-                valueClassName={pnlTone}
-              />
-              <CommandMetric
-                label="Clock"
-                value={clockTime ?? clockEt}
-                detail={[clockDate, marketOpen ? "US cash session" : "Off-session"].filter(Boolean).join(" · ")}
-              />
-              <CommandMetric
-                label="Strategies"
-                value={`${activeStrategyCount}/${totalStrategyCount || 0}`}
-                // Batch E P1-18: detail line surfaces the full
-                // STRATEGY_META breakdown so the dashboard counter
-                // matches /strategies/list (which already shows
-                // active · paused · coming soon under each section).
-                detail={
-                  pausedStrategyCount > 0 || devStrategyCount > 0
-                    ? `${activeStrategyCount} active · ${pausedStrategyCount} paused · ${devStrategyCount} dev`
-                    : "Enabled systems"
-                }
-                valueClassName="text-primary"
-              />
+            <div className="grid min-w-0 auto-rows-max gap-px bg-border-hair">
+              {/* BUG-11: Book equity removed — Capital Canvas below is the equity hero.
+                  Keeping Day P&L, Clock, and Strategies for the Command Room scan. */}
+              <div className="grid h-fit gap-px bg-border-hair sm:grid-cols-3">
+                <CommandMetric
+                  label="Day P&L"
+                  value={account.ready ? `${pnlSign}${formatCurrency(account.dayPnl, true)}` : "Awaiting"}
+                  detail={`${account.positionsCount} open line${account.positionsCount === 1 ? "" : "s"}`}
+                  valueClassName={pnlTone}
+                />
+                <CommandMetric
+                  label="Clock"
+                  value={clockTime ?? clockEt}
+                  detail={[clockDate, marketOpen ? "US cash session" : "Off-session"].filter(Boolean).join(" · ")}
+                />
+                <CommandMetric
+                  label="Strategies"
+                  value={`${activeStrategyCount}/${totalStrategyCount || 0}`}
+                  // Batch E P1-18: detail line surfaces the full
+                  // STRATEGY_META breakdown so the dashboard counter
+                  // matches /strategies/list (which already shows
+                  // active · paused · coming soon under each section).
+                  detail={
+                    pausedStrategyCount > 0 || devStrategyCount > 0
+                      ? `${activeStrategyCount} active · ${pausedStrategyCount} paused · ${devStrategyCount} dev`
+                      : "Enabled systems"
+                  }
+                  valueClassName="text-primary"
+                />
+              </div>
+              <ConfigurableSection id="portfolio_canvas" applyOrder>
+                <PortfolioCanvas
+                  account={account}
+                  greeks={greeks}
+                  selectedSymbol={selectedSymbol}
+                  quoteValue={quoteValue}
+                  quoteTone={quoteTone}
+                  onTrade={onTrade}
+                />
+              </ConfigurableSection>
+              <ConfigurableSection id="risk_escalation" applyOrder>
+                <RiskEscalationPanel
+                  items={riskEscalations}
+                  account={account}
+                />
+              </ConfigurableSection>
             </div>
-          </header>
-
-          <div className="hidden gap-px bg-border-hair lg:grid xl:grid-cols-[minmax(320px,0.82fr)_minmax(320px,0.72fr)_minmax(0,1.05fr)]">
-            <ConfigurableSection id="decision_queue" applyOrder>
-              <DecisionQueue
-                items={actionItems}
-                onTrade={onTrade}
-                onOpenOrders={onOpenOrders}
-                onPipeline={onPipeline}
-                showDemoSeedCta={isDemoSeedAccount && !brokerConnected}
-                onConnectBroker={onConnectBroker}
-              />
-            </ConfigurableSection>
-            <ConfigurableSection id="risk_escalation" applyOrder>
-              <RiskEscalationPanel
-                items={riskEscalations}
-                account={account}
-              />
-            </ConfigurableSection>
-            <ConfigurableSection id="portfolio_canvas" applyOrder>
-              <PortfolioCanvas
-                account={account}
-                greeks={greeks}
-                selectedSymbol={selectedSymbol}
-                quoteValue={quoteValue}
-                quoteTone={quoteTone}
-                onTrade={onTrade}
-              />
-            </ConfigurableSection>
           </div>
         </section>
 
-        <section className="grid gap-5 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+        <section className="grid gap-3 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
           <ConfigurableSection id="risk_panel" applyOrder>
             <RiskPanel account={account} greeks={greeks} />
           </ConfigurableSection>
-          <section className="grid gap-5 lg:grid-cols-[minmax(0,0.84fr)_minmax(0,1.16fr)] xl:grid-cols-1">
+          <section className="grid gap-3 lg:grid-cols-[minmax(0,0.84fr)_minmax(0,1.16fr)] xl:grid-cols-1">
             <ConfigurableSection id="audit_trail" applyOrder>
               <AuditTrailPanel items={auditItems} />
-            </ConfigurableSection>
-            <ConfigurableSection id="session_snapshot" applyOrder>
-              <SessionSnapshot
-                selectedSymbol={selectedSymbol}
-                quoteValue={quoteValue}
-                quoteTone={quoteTone}
-                selectedStrategyName={selectedStrategyName}
-                activeStrategyCount={activeStrategyCount}
-                totalStrategyCount={totalStrategyCount}
-                pipelineStatus={pipelineStatus}
-                pipelineValue={pipelineValue}
-                onPipeline={onPipeline}
-              />
             </ConfigurableSection>
             <ConfigurableSection id="strategy_panel" applyOrder>
               <StrategyPanel
@@ -1357,12 +1359,12 @@ function CommandMetric({
   valueClassName?: string;
 }) {
   return (
-    <div className="min-w-0 rounded-md border border-border-hair bg-bg px-4 py-3 shadow-[0_14px_34px_-28px_rgba(16,22,17,0.36)]">
+    <div className="min-w-0 rounded-md border border-border-hair bg-bg px-3 py-2.5 shadow-[0_12px_30px_-26px_rgba(16,22,17,0.36)]">
       <p className="t-label text-fg-hint">{label}</p>
-      <p className={cn("mt-2 font-mono text-[clamp(14px,1.2vw,18px)] leading-tight text-ink-1000", valueClassName)}>
+      <p className={cn("mt-1.5 font-mono text-[clamp(14px,1.2vw,18px)] leading-tight text-ink-1000", valueClassName)}>
         {value}
       </p>
-      <p className="mt-2 text-body-sm leading-snug text-fg-muted">{detail}</p>
+      <p className="mt-1 line-clamp-1 text-body-sm leading-snug text-fg-muted">{detail}</p>
     </div>
   );
 }
@@ -1387,22 +1389,22 @@ function PortfolioCanvas({
   const shockTone = account.twoPctShock > account.equity * 0.015 ? "text-loss" : "text-fg-muted";
 
   return (
-    <div className="surface-scan relative min-h-[360px] overflow-hidden bg-bg p-5 md:p-6">
+    <div className="surface-scan relative min-h-[300px] overflow-hidden bg-bg p-4">
       <div
         aria-hidden
         className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,var(--brand),transparent_42%,var(--profit)_64%,transparent)] opacity-70"
       />
-      <div className="flex h-full min-w-0 flex-col justify-between gap-7">
+      <div className="flex h-full min-w-0 flex-col justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <Sparkle className="size-4 text-primary" aria-hidden />
             <p className="t-label text-fg-hint">Capital canvas</p>
           </div>
           {/* design-intentional: leading-[0.92] on hero numeric display — extreme tight leading for capital-canvas wraparound visual cohesion */}
-          <p className="mt-4 break-words font-mono text-[clamp(34px,3.4vw,52px)] font-medium leading-[0.92] tracking-tight text-ink-1000">
+          <p className="mt-3 break-words font-mono text-[clamp(30px,2.9vw,46px)] font-medium leading-[0.92] tracking-tight text-ink-1000">
             {account.ready ? formatCurrency(account.equity) : "Awaiting"}
           </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="mt-3 flex flex-wrap items-center gap-3">
             <span className={cn("font-mono text-body", account.dayPnl > 0 ? "text-profit" : account.dayPnl < 0 ? "text-loss" : "text-fg-muted")}>
               {account.ready ? `${account.dayPnl > 0 ? "+" : ""}${formatCurrency(account.dayPnl)} today` : "Waiting for account state"}
             </span>
@@ -1413,7 +1415,7 @@ function PortfolioCanvas({
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-2 md:grid-cols-3">
           <SmallDatum
             label="Largest line"
             value={account.largestPosition?.symbol ?? "None"}
@@ -1431,7 +1433,7 @@ function PortfolioCanvas({
           />
         </div>
 
-        <div className="rounded-md border border-border-hair bg-bg-elev-1 p-4">
+        <div className="rounded-md border border-border-hair bg-bg-elev-1 p-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="t-label text-fg-hint">Exposure runway</p>
@@ -1448,7 +1450,7 @@ function PortfolioCanvas({
               <ArrowRight className="size-4" aria-hidden />
             </button>
           </div>
-          <div className="mt-4 h-3 overflow-hidden rounded-sm bg-bg-elev-2">
+          <div className="mt-3 h-2.5 overflow-hidden rounded-sm bg-bg-elev-2">
             <div
               className={cn(
                 "h-full rounded-sm transition-[width] duration-500",
@@ -1457,7 +1459,7 @@ function PortfolioCanvas({
               style={{ width: `${Math.min(100, exposurePct)}%` }}
             />
           </div>
-          <div className="mt-4 grid grid-cols-3 gap-3">
+          <div className="mt-3 grid grid-cols-3 gap-2">
             <SmallDatum label="Gross" value={account.ready ? formatPercent(account.grossExposurePct) : "Locked"} />
             <SmallDatum label="Cash buffer" value={account.ready ? formatPercent(cashPct) : "Locked"} />
             <SmallDatum label="2% shock" value={account.ready ? formatCurrency(account.twoPctShock, true) : "Locked"} valueClassName={shockTone} />
@@ -1480,12 +1482,12 @@ function SmallDatum({
   valueClassName?: string;
 }) {
   return (
-    <div className="rounded-md border border-border-hair bg-bg px-3 py-3">
+    <div className="min-w-0 rounded-md border border-border-hair bg-bg px-3 py-2.5">
       <p className="t-label text-fg-hint">{label}</p>
-      <p className={cn("mt-2 whitespace-nowrap font-mono text-[clamp(14px,1.08vw,17px)] leading-tight text-ink-1000", valueClassName)}>
+      <p className={cn("mt-1 truncate font-mono text-[clamp(14px,1.08vw,17px)] leading-tight text-ink-1000", valueClassName)}>
         {value}
       </p>
-      {detail ? <p className="mt-2 line-clamp-2 text-body-sm leading-snug text-fg-muted">{detail}</p> : null}
+      {detail ? <p className="mt-1 line-clamp-2 text-body-sm leading-snug text-fg-muted">{detail}</p> : null}
     </div>
   );
 }
@@ -1644,7 +1646,7 @@ function DecisionQueue({
   onConnectBroker?: () => void;
 }) {
   return (
-    <div className="min-w-0 bg-bg-elev-1 p-5 md:p-6">
+    <div className="min-w-0 bg-bg-elev-1 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <ListChecks className="size-5 shrink-0 text-primary" aria-hidden />
@@ -1656,13 +1658,13 @@ function DecisionQueue({
           </div>
         </div>
       </div>
-      <div className="mt-5 grid gap-3">
+      <div className="mt-3 grid gap-2.5">
         {showDemoSeedCta && onConnectBroker ? (
           <button
             type="button"
             data-slot="action-stack-demo-seed-cta"
             onClick={onConnectBroker}
-            className="card-stagger group grid min-h-[104px] grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-md border border-amber/30 bg-amber/5 px-4 py-4 text-left transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-amber/50 hover:bg-amber/10"
+            className="card-stagger group grid min-h-[86px] grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-md border border-amber/30 bg-amber/5 px-3 py-3 text-left transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-amber/50 hover:bg-amber/10"
           >
             <span className="flex size-9 items-center justify-center rounded-sm border border-amber/30 bg-amber/10 text-amber">
               <Key className="size-4" aria-hidden />
@@ -1671,7 +1673,7 @@ function DecisionQueue({
               <p className="text-body font-semibold leading-tight text-ink-1000">
                 Connect your broker
               </p>
-              <p className="mt-2 line-clamp-2 text-body-sm leading-snug text-fg-muted">
+              <p className="mt-1 line-clamp-2 text-body-sm leading-snug text-fg-muted">
                 Your desk is showing demo data. Link a paper or live brokerage in Settings to start trading your real account.
               </p>
             </div>
@@ -1687,7 +1689,7 @@ function DecisionQueue({
               key={item.title}
               type="button"
               onClick={onClick}
-              className="card-stagger group grid min-h-[104px] grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-md border border-border-hair bg-bg px-4 py-4 text-left transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-primary/35 hover:bg-primary/5"
+              className="card-stagger group grid min-h-[86px] grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-md border border-border-hair bg-bg px-3 py-3 text-left transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-primary/35 hover:bg-primary/5"
               style={{ animationDelay: `${index * 45}ms` }}
             >
               <span className={cn(
@@ -1701,7 +1703,7 @@ function DecisionQueue({
               </span>
               <div className="min-w-0">
                 <p className="text-body font-semibold leading-tight text-ink-1000">{item.title}</p>
-                <p className="mt-2 line-clamp-2 text-body-sm leading-snug text-fg-muted">{item.detail}</p>
+                <p className="mt-1 line-clamp-2 text-body-sm leading-snug text-fg-muted">{item.detail}</p>
               </div>
               <ArrowRight className="mt-1 size-4 shrink-0 text-fg-muted transition-transform group-hover:translate-x-0.5" aria-hidden />
             </button>
@@ -1736,7 +1738,7 @@ function RiskEscalationPanel({
   const hotCount = items.filter((item) => item.tone === "loss" || item.tone === "amber").length;
 
   return (
-    <div className="min-w-0 bg-bg-elev-1 p-5 md:p-6">
+    <div className="min-w-0 bg-bg-elev-1 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-sm bg-loss/10 text-loss">
@@ -1754,7 +1756,7 @@ function RiskEscalationPanel({
         </span>
       </div>
 
-      <div className="mt-5 divide-y divide-border-hair border-y border-border-hair">
+      <div className="mt-3 divide-y divide-border-hair border-y border-border-hair">
         {items.slice(0, 4).map((item, index) => {
           const Icon = item.tone === "loss" ? ShieldWarning : item.tone === "amber" ? WarningCircle : ShieldCheck;
           return (
@@ -1778,14 +1780,14 @@ function RiskEscalationPanel({
                   <span className="shrink-0 font-mono text-label uppercase text-fg-hint">{item.owner}</span>
                 </div>
                 <p className="mt-1 line-clamp-2 text-body-sm leading-snug text-fg-muted">{item.detail}</p>
-                <p className="mt-2 font-mono text-label text-fg">{item.metric}</p>
+                <p className="mt-1 font-mono text-label text-fg">{item.metric}</p>
               </div>
             </div>
           );
         })}
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-3">
+      <div className="mt-3 grid grid-cols-3 gap-2">
         <SmallDatum label="BP" value={account.ready ? formatCurrency(account.buyingPower, true) : "Locked"} />
         <SmallDatum label="Cash" value={account.ready ? formatPercent(account.cashPct) : "Locked"} />
         <SmallDatum label="Shock" value={account.ready ? formatCurrency(account.twoPctShock, true) : "Locked"} />
@@ -1805,7 +1807,7 @@ function AuditTrailPanel({ items }: { items: readonly AuditItem[] }) {
   return (
     <section
       aria-labelledby="audit-trail-title"
-      className="overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/95 shadow-[0_18px_48px_-38px_rgba(16,22,17,0.36)]"
+      className="overflow-hidden rounded-md border border-border-hair bg-bg-elev-1/95 shadow-[0_16px_44px_-38px_rgba(16,22,17,0.36)]"
     >
       <PanelHeader
         id="audit-trail-title"
@@ -1817,7 +1819,7 @@ function AuditTrailPanel({ items }: { items: readonly AuditItem[] }) {
         {items.map((item) => {
           const Icon = iconFor(item.kind);
           return (
-            <div key={item.label} className="grid grid-cols-[auto_minmax(0,1fr)] gap-3 bg-bg-elev-1 px-4 py-3">
+            <div key={item.label} className="grid grid-cols-[auto_minmax(0,1fr)] gap-3 bg-bg-elev-1 px-3 py-2.5">
               <span className="mt-0.5 flex size-8 items-center justify-center rounded-sm border border-border-hair bg-bg text-primary">
                 <Icon className="size-4" aria-hidden />
               </span>
@@ -1859,8 +1861,8 @@ function SessionSnapshot({
   onPipeline: () => void;
 }) {
   return (
-    <section className="overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/95 shadow-[0_18px_48px_-38px_rgba(16,22,17,0.36)]">
-      <header className="flex items-start justify-between gap-3 border-b border-border-hair px-4 py-3">
+    <section className="overflow-hidden rounded-md border border-border-hair bg-bg-elev-1/95 shadow-[0_16px_44px_-38px_rgba(16,22,17,0.36)]">
+      <header className="flex items-start justify-between gap-3 border-b border-border-hair px-3 py-2.5">
         <div className="flex min-w-0 items-start gap-2">
           <Pulse className="size-4 shrink-0 text-primary" aria-hidden />
           <div className="min-w-0">
@@ -1892,7 +1894,7 @@ function SessionSnapshot({
           toneClass={pipelineStatus?.running ? "text-profit" : "text-fg-muted"}
         />
       </div>
-      <div className="border-t border-border-hair px-4 py-3">
+      <div className="border-t border-border-hair px-3 py-2.5">
         <button
           type="button"
           onClick={onPipeline}
@@ -1920,7 +1922,7 @@ function RiskPanel({ account, greeks }: { account: AccountSnapshot; greeks: Port
   return (
     <section
       aria-labelledby="risk-posture-title"
-      className="overflow-hidden rounded-lg border border-border-hair bg-bg-elev-1/95 shadow-[0_18px_48px_-38px_rgba(16,22,17,0.36)]"
+      className="overflow-hidden rounded-md border border-border-hair bg-bg-elev-1/95 shadow-[0_16px_44px_-38px_rgba(16,22,17,0.36)]"
     >
       <PanelHeader
         id="risk-posture-title"
@@ -1946,8 +1948,8 @@ function RiskPanel({ account, greeks }: { account: AccountSnapshot; greeks: Port
         )}
       </div>
       {(hasGreekExposure || greeks.isDemo) && (
-        <div className="border-t border-border-hair bg-bg-elev-1 px-4 py-4">
-          <div className="grid gap-3 md:grid-cols-2">
+        <div className="border-t border-border-hair bg-bg-elev-1 px-3 py-3">
+          <div className="grid gap-2 md:grid-cols-2">
             <RiskStat
               label="Beta-weighted Δ"
               value={greeks.isDemo ? "—" : formatGreek(greeks.betaWeightedDelta, 2)}
@@ -1983,7 +1985,7 @@ function PanelHeader({
   onAction?: () => void;
 }) {
   return (
-    <header className="flex items-start justify-between gap-3 border-b border-border-hair bg-bg-elev-1 px-4 py-3 sm:items-center">
+    <header className="flex items-start justify-between gap-3 border-b border-border-hair bg-bg-elev-1 px-3 py-2.5 sm:items-center">
       <div className="flex min-w-0 items-start gap-2 sm:items-center">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
           <Icon className="size-4" aria-hidden />
@@ -2015,7 +2017,7 @@ function SessionRow({
   toneClass: string;
 }) {
   return (
-    <div className="bg-bg-elev-1 px-4 py-3">
+    <div className="bg-bg-elev-1 px-3 py-2.5">
       <div className="flex items-center justify-between gap-3">
         <span className="t-label text-fg-hint">{label}</span>
         <p className={cn("shrink-0 truncate font-mono text-label", toneClass)}>{value}</p>
@@ -2030,12 +2032,12 @@ function SessionRow({
 function RiskMeter({ label, value, detail }: { label: string; value: number; detail: string }) {
   const clamped = Math.max(0, Math.min(100, value));
   return (
-    <div className="bg-bg-elev-1 p-4">
+    <div className="bg-bg-elev-1 p-3">
       <div className="flex items-center justify-between gap-3">
         <span className="t-label text-fg-hint">{label}</span>
         <span className="font-mono text-body-sm text-ink-1000">{formatPercent(value)}</span>
       </div>
-      <div className="mt-4 h-2 overflow-hidden rounded-sm bg-bg-elev-2">
+      <div className="mt-3 h-2 overflow-hidden rounded-sm bg-bg-elev-2">
         <div
           className={cn(
             "h-full rounded-sm transition-all duration-500",
@@ -2061,9 +2063,9 @@ function RiskStat({
   tone?: "default" | "loss" | "muted";
 }) {
   return (
-    <div className="bg-bg-elev-1 p-4">
+    <div className="bg-bg-elev-1 p-3">
       <span className="t-label text-fg-hint">{label}</span>
-      <p className={cn("mt-3 truncate font-mono text-numeric-lg", tone === "loss" ? "text-loss" : tone === "muted" ? "text-fg-muted" : "text-ink-1000")}>
+      <p className={cn("mt-2 truncate font-mono text-numeric-lg", tone === "loss" ? "text-loss" : tone === "muted" ? "text-fg-muted" : "text-ink-1000")}>
         {value}
       </p>
       <p className="mt-2 truncate text-body-sm text-fg-muted">{detail}</p>

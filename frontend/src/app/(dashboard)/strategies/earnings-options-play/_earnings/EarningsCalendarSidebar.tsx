@@ -137,7 +137,7 @@ export default function EarningsCalendarSidebar({
 
   if (error) {
     return (
-      <aside data-slot="earnings-calendar-sidebar" className="rounded border border-border-hair bg-bg-elev-1/60 p-3">
+      <aside data-slot="earnings-calendar-sidebar" className="rounded border border-border-hair bg-bg-elev-1/60 p-2.5">
         <EmptyState
           title="Earnings calendar unavailable"
           description="The desk's data feed timed out. Retry, or pick a different window above."
@@ -152,7 +152,7 @@ export default function EarningsCalendarSidebar({
       <aside
         data-slot="earnings-calendar-sidebar"
         aria-busy="true"
-        className="rounded border border-border-hair bg-bg-elev-1/60 p-3"
+        className="rounded border border-border-hair bg-bg-elev-1/60 p-2.5"
       >
         <p className="font-mono text-body-sm text-fg-muted">Loading earnings…</p>
       </aside>
@@ -170,7 +170,7 @@ export default function EarningsCalendarSidebar({
       filters,
     });
     return (
-      <aside data-slot="earnings-calendar-sidebar" className="rounded border border-border-hair bg-bg-elev-1/60 p-3">
+      <aside data-slot="earnings-calendar-sidebar" className="rounded border border-border-hair bg-bg-elev-1/60 p-2.5">
         {partialBanner}
         <p className="font-mono text-body-sm text-fg-muted">
           {emptyMessage}
@@ -209,17 +209,17 @@ export default function EarningsCalendarSidebar({
       data-refetching={refetching || undefined}
       aria-busy={refetching || undefined}
       className={cn(
-        "self-start rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] p-3 transition-opacity",
+        "self-start rounded border border-[color:var(--fg-border)] bg-[color:var(--bg-card)] p-2.5 transition-opacity",
         refetching && "opacity-70",
       )}
     >
-      <p className="t-label mb-2 text-[color:var(--fg-muted)]" data-slot="calendar-summary">
+      <p className="t-label mb-1.5 text-[color:var(--fg-muted)]" data-slot="calendar-summary">
         CALENDAR <span className="text-[color:var(--fg-muted)]">· {headerLabel} · {fmtPlural(rows.length, "report")}</span>
       </p>
       {partialBanner}
       {grouped.map(({ date, label, rows: dayRows }) => (
         <div key={date} data-slot="day-group" className="mb-3">
-          <h3 className="t-section-cap italic pb-1 border-b border-[color:var(--fg-border)]">
+          <h3 className="t-section-cap border-b border-[color:var(--fg-border)] pb-1 italic">
             {label} <span className="t-label text-[color:var(--fg-muted)]">· {fmtPlural(dayRows.length, "report")}</span>
           </h3>
           <ul className="mt-1 space-y-0.5">
@@ -297,7 +297,7 @@ export default function EarningsCalendarSidebar({
                       // the previous padding-only approach allowed slim rows
                       // (~36px) on phones with compressed line-height. QA r4-4
                       // migrated the arbitrary value onto the token utility.
-                      "flex w-full min-h-touch items-center justify-between rounded px-3 py-2 font-mono text-body-sm text-left transition-colors",
+                      "flex w-full min-h-touch items-center justify-between rounded px-2.5 py-1.5 text-left font-mono text-body-sm transition-colors md:min-h-10",
                       r.symbol === selected
                         ? "bg-[color:var(--bg-accent-subtle)] border-l-2 border-[color:var(--fg-accent)] text-[color:var(--fg-base)]"
                         : "hover:bg-[color:var(--bg-elevated)] text-[color:var(--fg-muted)] hover:text-[color:var(--fg-base)]",
