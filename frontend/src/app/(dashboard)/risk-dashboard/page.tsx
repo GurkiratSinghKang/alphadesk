@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 
 import Section from "@/components/composites/Section";
-import EmptyState from "@/components/primitives/EmptyState";
+import StatusBanner from "@/components/composites/StatusBanner";
+
+import RiskHero from "./_components/RiskHero";
+import StressScenarios from "./_components/StressScenarios";
+import SectorTreemap from "./_components/SectorTreemap";
+import RiskConcentration from "./_components/RiskConcentration";
+import RiskMemoAIStrip from "./_components/RiskMemoAIStrip";
 
 export const metadata: Metadata = {
   title: "Risk dashboard — AlphaDesk",
@@ -10,29 +16,37 @@ export const metadata: Metadata = {
 };
 
 /**
- * Phase 0 route shell. The full Risk dashboard is implemented in
- * Phase 1.1 — this shell exists so:
- *   1. ⌘K command palette + `g r` chord can target the route now.
- *   2. The `/risk` → `/legal/risk` migration ships in the same commit
- *      without leaving the trader-facing slug undefined.
- *   3. Internal links in TopBar nav (added in Phase 1.1) have a
- *      destination immediately upon navigation refactor.
+ * /risk-dashboard — Phase 1.1 risk-posture page per v2-plan §1.1.
+ *
+ * Composition: identity band → RiskHero (VaR + ES + intraday budget)
+ * → StressScenarios → SectorTreemap → RiskConcentration → RiskMemoAIStrip.
+ *
+ * The data is currently demo-seeded so the page renders end-to-end
+ * without backend dependencies. Wire to /api/v1/risk/* via Phase 1.1
+ * follow-up (the existing endpoints — getRiskDashboard, getCorrelation,
+ * getExposure, getVar, getDrawdown, getCrowding — are all live; the
+ * scenario stress and intraday-burndown endpoints are NEW).
  */
-export default function RiskDashboardShell() {
+export default function RiskDashboardPage() {
   return (
-    <main className="px-6 pt-6 pb-12 max-w-screen-2xl mx-auto">
+    <main className="px-6 pt-6 pb-12 max-w-screen-2xl mx-auto space-y-8">
       <Section
         eyebrow="RISK · DASHBOARD"
         title="Risk dashboard"
-        description="VaR, stress scenarios, sector heat, beta correlation, concentration. Trader-facing."
+        description="VaR, stress scenarios, sector heat, concentration. Refreshed every 30s; AI memo every 15 minutes."
         level={1}
       >
-        <EmptyState
-          eyebrow="COMING SOON"
-          title="The risk dashboard ships in Phase 1.1."
-          description="Hero VaR (1d/5d, 95/99) + ES + intraday risk-budget burn-down. Scenario stress tests. Sector exposure heatmap. Beta + correlation matrix. Concentration limits with utilization bars. AI risk memo."
+        <StatusBanner
+          tone="info"
+          message="Phase 1.1 — page renders against demo data. Backend stress + intraday burn-down endpoints land in the Phase 1.1 follow-up cycle."
         />
       </Section>
+
+      <RiskHero />
+      <StressScenarios />
+      <SectorTreemap />
+      <RiskConcentration />
+      <RiskMemoAIStrip />
     </main>
   );
 }
