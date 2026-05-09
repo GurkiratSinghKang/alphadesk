@@ -901,6 +901,116 @@ function NotificationsFeed() {
   );
 }
 
+// ─── Active rules panel (matches alerts-dark.png right rail) ────
+
+// Rule taxonomy from the design comp. These represent the operator's
+// "what am I listening for" preferences, distinct from per-symbol
+// price triggers that live in the CRUD section below. Backend doesn't
+// surface a rules endpoint yet, so the toggles persist locally — the
+// follow-up will swap the in-memory map for /api/v1/notification-rules.
+type RuleId =
+  | "daily-risk-budget"
+  | "position-concentration"
+  | "strategy-stop-hit"
+  | "pead-signals"
+  | "macro-events"
+  | "sector-rotation";
+
+const ACTIVE_RULES: { id: RuleId; title: string; detail: string; defaultOn: boolean }[] = [
+  { id: "daily-risk-budget", title: "Daily risk budget", detail: "Notify when ≥ 60% used", defaultOn: true },
+  { id: "position-concentration", title: "Position concentration", detail: "Notify when any name ≥ 12%", defaultOn: true },
+  { id: "strategy-stop-hit", title: "Strategy stop hit", detail: "Always notify", defaultOn: true },
+  { id: "pead-signals", title: "PEAD signals", detail: "Active for current book", defaultOn: true },
+  { id: "macro-events", title: "Macro events", detail: "FOMC, CPI, NFP", defaultOn: true },
+  { id: "sector-rotation", title: "Sector rotation", detail: "Notify on regime shift", defaultOn: false },
+];
+
+function ActiveRulesPanel() {
+  // Per-session toggle state — in-memory only until backend B.X ships
+  // the rules endpoint. Mirrors the design's switch column.
+  const [enabled, setEnabled] = useState<Record<RuleId, boolean>>(() => {
+    const init = {} as Record<RuleId, boolean>;
+    for (const r of ACTIVE_RULES) init[r.id] = r.defaultOn;
+    return init;
+  });
+
+  return (
+    <section
+      className="rounded-md border border-border-hair p-4"
+      style={{ background: "var(--bg-elev-1)" }}
+      aria-label="Active rules"
+    >
+      <header className="mb-3">
+        <p
+          className="t-eyebrow-italic"
+          style={{ color: "var(--brand)", letterSpacing: "0.18em", margin: 0 }}
+        >
+          ACTIVE RULES
+        </p>
+        <h3
+          className="m-0 mt-1 italic"
+          style={{
+            fontFamily: "var(--font-display)",
+            color: "var(--ink-1000)",
+            fontSize: 22,
+            fontWeight: 400,
+            lineHeight: 1.15,
+            letterSpacing: "-0.015em",
+          }}
+        >
+          What you're listening for.
+        </h3>
+      </header>
+
+      <ol className="divide-y divide-border-hair">
+        {ACTIVE_RULES.map((r) => {
+          const on = enabled[r.id];
+          return (
+            <li key={r.id} className="flex items-center justify-between gap-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-body text-fg font-medium leading-tight">{r.title}</p>
+                <p className="font-mono text-eyebrow uppercase tracking-[0.06em] text-fg-muted leading-snug">
+                  {r.detail}
+                </p>
+              </div>
+              <button
+                role="switch"
+                aria-checked={on}
+                aria-label={`${r.title} — ${on ? "on" : "off"}`}
+                onClick={() => setEnabled((prev) => ({ ...prev, [r.id]: !prev[r.id] }))}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-pill border px-2 py-0.5 font-mono text-eyebrow uppercase tracking-[0.08em] font-semibold transition-colors shrink-0",
+                  on
+                    ? "border-profit/40 bg-tint-up-1 text-profit"
+                    : "border-border-hair bg-bg-elev-2 text-fg-muted",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-block h-1.5 w-1.5 rounded-full",
+                    on ? "bg-profit" : "bg-fg-muted/40",
+                  )}
+                  aria-hidden
+                />
+                {on ? "ON" : "OFF"}
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+
+      <button
+        type="button"
+        disabled
+        className="mt-3 w-full rounded-sm border border-brand/60 bg-brand text-brand-on px-3 py-2 font-sans text-eyebrow font-semibold uppercase tracking-[0.08em] opacity-60 cursor-not-allowed"
+        title="Backend rules endpoint (B.X) wires the live add-rule flow"
+      >
+        + Add rule
+      </button>
+    </section>
+  );
+}
+
 // ─── Main Page ──────────────────────────────────────────────
 
 export default function AlertsPage() {
@@ -1196,12 +1306,13 @@ export default function AlertsPage() {
         </p>
       )}
 
-      {/* v2 polish — notifications feed matches alerts-dark.png. Renders
-          above the existing CRUD so the operator's first view is the
-          event stream (Trades / Signals / Risk / News & macro), with
-          the alert-creation form sitting below as a "configure new
-          trigger" affordance. */}
-      <NotificationsFeed />
+      {/* v2 polish — notifications feed (left) + active rules right
+          rail matching alerts-dark.png. Stacks vertically below `lg`
+          so mobile/tablet readers get the feed first. */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-6">
+        <NotificationsFeed />
+        <ActiveRulesPanel />
+      </div>
 
       {/* Configure-new-trigger card — header gives the section purpose
           since the page now leads with the feed instead of the form. */}
