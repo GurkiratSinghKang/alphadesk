@@ -51,6 +51,18 @@ import { handleRadioGroupKeyDown } from "@/lib/radioGroupKeyboard";
 type ReportsRange = "1W" | "1M" | "3M" | "YTD" | "1Y" | "ALL";
 const REPORTS_RANGES: ReportsRange[] = ["1W", "1M", "3M", "YTD", "1Y", "ALL"];
 
+// v2 polish — TAX YEAR chip row per reports-dark.png. "current" means
+// the running YTD bucket (drives the lower PERIOD row); a specific year
+// scopes the entire report to that calendar year.
+type ReportsTaxYear = "current" | number;
+function reportsTaxYearOptions(now: Date = new Date()): ReportsTaxYear[] {
+  const y = now.getFullYear();
+  // Show CURRENT + the running year + 3 prior years (matches the design
+  // comp's "2025 / CURRENT / 2024 / 2023 / 2022" row at the time the
+  // comp was captured).
+  return ["current", y, y - 1, y - 2, y - 3];
+}
+
 function rangeCutoff(range: ReportsRange): Date | null {
   if (range === "ALL") return null;
   const now = new Date();
@@ -62,6 +74,16 @@ function rangeCutoff(range: ReportsRange): Date | null {
   const cutoff = new Date(now);
   cutoff.setDate(cutoff.getDate() - days);
   return cutoff;
+}
+
+// Tax-year window: returns [from, to) for filtering trades by exit_time.
+// `current` = same as no scope (caller falls back to range-only filter).
+function taxYearBounds(year: ReportsTaxYear): { from: Date; to: Date } | null {
+  if (year === "current") return null;
+  return {
+    from: new Date(year, 0, 1, 0, 0, 0),
+    to: new Date(year + 1, 0, 1, 0, 0, 0),
+  };
 }
 
 // ─── CSV Helpers ───────────────────────────────────────────
@@ -1338,6 +1360,10 @@ export default function ReportsPage() {
   // Default 1M to mirror Analytics, so "No closed trades in this period"
   // now literally means "in the selected period" rather than "ever".
   const [range, setRange] = useState<ReportsRange>("1M");
+  // v2 polish — tax-year scoping per reports-dark.png. Default to
+  // "current" so the existing range-chip behavior is unchanged on
+  // first load; selecting a year overrides the range filter.
+  const [taxYear, setTaxYear] = useState<ReportsTaxYear>("current");
 
   // BUG-001 / BUG-015: subscribe to the shared portfolio store so Reports
   // shows exactly the same positions + summary numbers as Desk / Pipeline.
@@ -1393,6 +1419,17 @@ export default function ReportsPage() {
   // trades carry no exit so they drop out of period-scoped reports but
   // remain visible in the position table which isn't historical.
   const filteredTrades = useMemo(() => {
+    const yearWindow = taxYearBounds(taxYear);
+    if (yearWindow) {
+      // Tax-year scope wins — clip to the year's calendar bounds and
+      // ignore the trailing-window range chip below.
+      const fromMs = yearWindow.from.getTime();
+      const toMs = yearWindow.to.getTime();
+      return trades.filter((t) => {
+        const exit = t.exit_time ? new Date(t.exit_time).getTime() : NaN;
+        return Number.isFinite(exit) && exit >= fromMs && exit < toMs;
+      });
+    }
     const cutoff = rangeCutoff(range);
     if (!cutoff) return trades;
     const cutoffMs = cutoff.getTime();
@@ -1403,13 +1440,22 @@ export default function ReportsPage() {
       const exit = t.exit_time ? new Date(t.exit_time).getTime() : NaN;
       return Number.isFinite(exit) && exit >= cutoffMs;
     });
-  }, [trades, range]);
+  }, [trades, range, taxYear]);
 
   // v2 reports polish — derive the resolved date window so the
-  // period bar can show "From → To" alongside the chip group. ALL
-  // resolves to the earliest exit_time across loaded trades; named
-  // ranges resolve to ``rangeCutoff(range)`` → today.
+  // period bar can show "From → To" alongside the chip group. Tax
+  // year scope wins; ALL resolves to the earliest exit_time across
+  // loaded trades; named ranges resolve to ``rangeCutoff(range)`` →
+  // today.
   const periodBounds = useMemo(() => {
+    const yearWindow = taxYearBounds(taxYear);
+    if (yearWindow) {
+      // Cap the right edge at "today" if the year is the running
+      // calendar year; full year otherwise.
+      const now = new Date();
+      const to = yearWindow.to.getTime() > now.getTime() ? now : yearWindow.to;
+      return { from: yearWindow.from, to };
+    }
     const cutoff = rangeCutoff(range);
     const to = new Date();
     if (cutoff) return { from: cutoff, to };
@@ -1423,7 +1469,7 @@ export default function ReportsPage() {
       from: Number.isFinite(earliest) ? new Date(earliest) : null,
       to,
     };
-  }, [range, trades]);
+  }, [range, taxYear, trades]);
 
   const formatPeriodDate = (d: Date) =>
     d.toLocaleDateString(undefined, {
@@ -1465,33 +1511,102 @@ export default function ReportsPage() {
     </div>
   );
 
-  // v2 reports polish — full period bar. Combines the chip group, the
-  // resolved "From → To" date label, and the live trade-count for the
-  // selected window. Sits at the top of the body content (instead of
-  // the page-header actions slot) so the resolved period is visible
-  // alongside the control that drives it.
+  // v2 polish — TAX YEAR chip row matches reports-dark.png. Selecting a
+  // year scopes the entire report to that calendar year (overrides the
+  // PERIOD chips below); "Current" returns to the trailing-window
+  // PERIOD model.
+  const taxYearOptions = reportsTaxYearOptions();
+  const taxYearSelector = (
+    <div
+      role="radiogroup"
+      aria-label="Reports tax year"
+      className="flex flex-wrap items-center gap-1 rounded-md border border-border bg-bg p-0.5"
+      onKeyDown={handleRadioGroupKeyDown}
+    >
+      {taxYearOptions.map((y) => {
+        const active = y === taxYear;
+        const label = y === "current" ? "Current" : String(y);
+        return (
+          <button
+            key={label}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            data-tax-year={label}
+            onClick={() => setTaxYear(y)}
+            className={cn(
+              "font-mono text-label px-2.5 py-1 rounded transition-colors",
+              active ? "bg-bg-elev-2 text-fg" : "text-fg-muted hover:text-fg",
+            )}
+            style={{ letterSpacing: "0.04em" }}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  // v2 reports polish — full period bar. Now renders TAX YEAR + PERIOD
+  // as two parallel rows matching reports-dark.png, with the live
+  // resolved date window + closed-count summary on the left. Sits at
+  // the top of the body content so the resolved period is visible
+  // alongside the controls that drive it.
   const periodBar = (
     <div
-      className="flex flex-col gap-3 rounded-md border border-border-hair bg-bg-elev-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+      className="rounded-md border border-border-hair bg-bg-elev-1 px-4 py-3"
       data-testid="reports-period-bar"
     >
-      <div className="flex flex-col gap-0.5">
-        <p
-          className="t-eyebrow-italic"
-          style={{ color: "var(--fg-muted)", letterSpacing: "0.18em", margin: 0 }}
-        >
-          PERIOD
-        </p>
-        <p className="font-mono text-label tabular-nums text-fg">
-          {periodBounds.from
-            ? `${formatPeriodDate(periodBounds.from)} → ${formatPeriodDate(periodBounds.to)}`
-            : "All time"}
-          <span className="ml-3 text-fg-muted">
-            · {filteredTrades.length} closed
-          </span>
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-0.5">
+          <p
+            className="t-eyebrow-italic"
+            style={{ color: "var(--fg-muted)", letterSpacing: "0.18em", margin: 0 }}
+          >
+            PERIOD
+          </p>
+          <p className="font-mono text-label tabular-nums text-fg">
+            {periodBounds.from
+              ? `${formatPeriodDate(periodBounds.from)} → ${formatPeriodDate(periodBounds.to)}`
+              : "All time"}
+            <span className="ml-3 text-fg-muted">
+              · {filteredTrades.length} closed
+            </span>
+          </p>
+        </div>
+        <div className="flex flex-col items-stretch gap-1.5 sm:items-end">
+          <div className="flex items-center gap-2">
+            <span
+              className="font-mono text-eyebrow uppercase tracking-[0.12em] text-fg-muted"
+              aria-hidden
+            >
+              TAX YEAR
+            </span>
+            {taxYearSelector}
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              className="font-mono text-eyebrow uppercase tracking-[0.12em] text-fg-muted"
+              aria-hidden
+            >
+              PERIOD
+            </span>
+            <div
+              className={cn(
+                "transition-opacity",
+                taxYear !== "current" ? "opacity-50" : "",
+              )}
+              title={
+                taxYear !== "current"
+                  ? "Tax year scope is active — reset to Current to use trailing-window periods"
+                  : undefined
+              }
+            >
+              {rangeSelector}
+            </div>
+          </div>
+        </div>
       </div>
-      {rangeSelector}
     </div>
   );
 
