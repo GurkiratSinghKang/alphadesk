@@ -133,21 +133,18 @@ export default function PlaybookClient({ strategyId }: PlaybookClientProps) {
         </p>
       </header>
 
-      <Section
-        eyebrow={`STRATEGY · PLAYBOOK · ${strategyId}`}
-        title="Momentum + Quality"
-        description="Workflow document — stages, agents per stage, backtest summary, live trades, scoped watchlist."
-        level={1}
-      >
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 rounded-md border border-border-hair bg-bg-elev-1 p-4">
-          <Stat label="MTD return" value="+4.8%" tone="profit" size="md" />
-          <Stat label="Sharpe (1y)" value="1.84" tone="brand" size="md" />
-          <Stat label="Max DD" value="−6.2%" tone="loss" size="md" />
-          <Stat label="Positions" value={8} size="md" />
-          <Stat label="Allocation" value="22.4%" sub="of NAV" size="md" />
-          <Stat label="Win rate" value="58%" sub="Trailing 90d" size="md" />
-        </div>
-      </Section>
+      {/* v2 cleanup — the metric strip used to live inside a level=1
+       * Section that duplicated the editorial hero's eyebrow + title.
+       * Now that the hero is the page's sole header, the metrics
+       * render bare. */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 rounded-md border border-border-hair bg-bg-elev-1 p-4">
+        <Stat label="MTD return" value="+4.8%" tone="profit" size="md" />
+        <Stat label="Sharpe (1y)" value="1.84" tone="brand" size="md" />
+        <Stat label="Max DD" value="−6.2%" tone="loss" size="md" />
+        <Stat label="Positions" value={8} size="md" />
+        <Stat label="Allocation" value="22.4%" sub="of NAV" size="md" />
+        <Stat label="Win rate" value="58%" sub="Trailing 90d" size="md" />
+      </div>
 
       <Section
         eyebrow="STRATEGY · STAGES"
