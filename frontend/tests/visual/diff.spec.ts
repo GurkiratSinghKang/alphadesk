@@ -1,6 +1,6 @@
 import { test, type Page } from "@playwright/test";
-import { mkdirSync, copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { mkdirSync, copyFileSync, existsSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * Side-by-side comparison helper. For each (route, baseline) pair this

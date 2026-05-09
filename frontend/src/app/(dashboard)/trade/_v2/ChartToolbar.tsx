@@ -186,7 +186,7 @@ export default function ChartToolbar({
         aria-haspopup="menu"
         className={cn(
           "inline-flex items-center gap-2 rounded-sm border border-border px-3 py-1.5",
-          "font-ui text-[10px] font-semibold uppercase tracking-[0.16em]",
+          "font-ui text-eyebrow font-semibold uppercase tracking-[0.16em]",
           "transition-colors",
           open
             ? "bg-bg-elev-2 text-ink-1000"
@@ -199,8 +199,8 @@ export default function ChartToolbar({
           style={{ background: "var(--brand)" }}
         />
         Studies
-        <span className="font-mono text-[9.5px] text-fg-hint">{onCount}</span>
-        <span aria-hidden className="ml-0.5 text-[8px] text-fg-hint">
+        <span className="font-mono text-eyebrow text-fg-hint">{onCount}</span>
+        <span aria-hidden className="ml-0.5 text-eyebrow text-fg-hint">
           {open ? "▲" : "▼"}
         </span>
       </button>
@@ -215,7 +215,7 @@ export default function ChartToolbar({
         >
           {OVERLAY_GROUPS.map((g) => (
             <div key={g.group} className="border-b border-border-hair last:border-b-0">
-              <div className="t-label px-3 pb-1 pt-2.5 text-[8.5px] text-fg-hint">{g.group}</div>
+              <div className="t-label px-3 pb-1 pt-2.5 text-eyebrow text-fg-hint">{g.group}</div>
               {g.items.map((it) => {
                 const on = !!overlays[it.key];
                 return (
@@ -232,7 +232,7 @@ export default function ChartToolbar({
                   >
                     <span
                       aria-hidden
-                      className="inline-flex size-3 items-center justify-center rounded-[2px] text-[9px] leading-none"
+                      className="inline-flex size-3 items-center justify-center rounded-[2px] text-eyebrow leading-none"
                       style={{
                         border: `1px solid ${on ? it.dot : "var(--border)"}`,
                         background: on ? it.dot : "transparent",
@@ -243,7 +243,7 @@ export default function ChartToolbar({
                     </span>
                     <span
                       className={cn(
-                        "font-ui text-[11px]",
+                        "font-ui text-eyebrow",
                         on ? "text-ink-1000" : "text-fg",
                       )}
                     >
@@ -254,7 +254,7 @@ export default function ChartToolbar({
               })}
             </div>
           ))}
-          <div className="flex items-center justify-between px-3 py-2 font-mono text-[10px]">
+          <div className="flex items-center justify-between px-3 py-2 font-mono text-eyebrow">
             <button
               type="button"
               onClick={clearAll}
@@ -318,8 +318,8 @@ function SegmentButton({
       className={cn(
         "rounded-[2px] px-2.5 py-1 text-center transition-colors",
         variant === "mono"
-          ? "font-mono text-[10.5px] tracking-[0.04em]"
-          : "font-ui text-[10px] font-semibold uppercase tracking-[0.16em]",
+          ? "font-mono text-eyebrow tracking-[0.04em]"
+          : "font-ui text-eyebrow font-semibold uppercase tracking-[0.16em]",
         active
           ? "bg-bg text-ink-1000"
           : "bg-transparent text-fg-muted hover:bg-bg/40 hover:text-fg",
