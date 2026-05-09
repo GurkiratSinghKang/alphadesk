@@ -81,4 +81,14 @@ test.describe("v2 design parity", () => {
     await gotoAndWait(page, "/risk-dashboard");
     await expect(page).toHaveScreenshot("risk.png", { fullPage: false });
   });
+
+  test("admin · control center", async ({ page }) => {
+    await gotoAndWait(page, "/admin/control-center");
+    await expect(page).toHaveScreenshot("admin-control-center.png", { fullPage: false });
+  });
+
+  test("admin · users", async ({ page }) => {
+    await gotoAndWait(page, "/admin/users");
+    await expect(page).toHaveScreenshot("admin-users.png", { fullPage: false });
+  });
 });
