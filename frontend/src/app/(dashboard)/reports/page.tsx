@@ -1446,6 +1446,12 @@ export default function ReportsPage() {
   // Named `periodTaxYear` to avoid collision with the existing
   // `taxYear: number` state used by the TaxReport section below.
   const [periodTaxYear, setPeriodTaxYear] = useState<ReportsTaxYear>("current");
+  // v2 polish — 5-tab nav matching reports-dark.png. Tabs select which
+  // section renders below the period bar / tax strip; the chrome above
+  // (hero, period bar, tax strip) stays mounted on every tab.
+  const [reportsTab, setReportsTab] = useState<
+    "realized" | "open-lots" | "wash-sales" | "by-strategy" | "documents"
+  >("realized");
 
   // BUG-001 / BUG-015: subscribe to the shared portfolio store so Reports
   // shows exactly the same positions + summary numbers as Desk / Pipeline.
@@ -1890,35 +1896,102 @@ export default function ReportsPage() {
           );
         })()}
 
-        {/* Portfolio Statement */}
-        <SectionCard title="Portfolio statement" eyebrow="§ STATEMENT" icon={FileText}>
-          {summary ? (
-            <PortfolioStatement summary={summary} positions={positions} trades={filteredTrades} />
-          ) : (
-            <p className="font-display italic text-body-sm text-fg-muted text-center py-6">
-              Unable to load portfolio data.
-            </p>
-          )}
-        </SectionCard>
+        {/* v2 polish — 5-tab nav matching reports-dark.png. Each tab
+         * scopes the body to one slice of the report (Realized P&L /
+         * Open lots / Wash sales / By strategy / Documents). The hero,
+         * period bar and 7-metric tax strip above stay mounted on
+         * every tab so the operator's context never disappears. */}
+        {(() => {
+          type TabId = typeof reportsTab;
+          const tabs: { id: TabId; label: string; count?: number | null }[] = [
+            { id: "realized", label: "Realized P&L", count: filteredTrades.length },
+            { id: "open-lots", label: "Open lots", count: positions.length || null },
+            { id: "wash-sales", label: "Wash sales" },
+            { id: "by-strategy", label: "By strategy", count: strategies.length || null },
+            { id: "documents", label: "Documents" },
+          ];
+          return (
+            <div
+              role="tablist"
+              aria-label="Reports view"
+              className="flex flex-wrap items-center gap-1 border-b border-border-hair pb-px"
+              onKeyDown={handleRadioGroupKeyDown}
+            >
+              {tabs.map((t) => {
+                const active = reportsTab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    data-reports-tab={t.id}
+                    onClick={() => setReportsTab(t.id)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-3 py-2 -mb-px border-b-2 font-mono text-eyebrow uppercase tracking-[0.08em] font-semibold transition-colors",
+                      active
+                        ? "border-brand text-fg"
+                        : "border-transparent text-fg-muted hover:text-fg",
+                    )}
+                  >
+                    <span>{t.label}</span>
+                    {t.count != null ? (
+                      <span className="font-mono tabular-nums opacity-70">{t.count}</span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
 
-        {/* Strategy Performance */}
-        <SectionCard title="Strategy performance" eyebrow="§ STRATEGIES" icon={BarChart3}>
-          <StrategyPerformanceReport strategies={strategies} trades={filteredTrades} />
-        </SectionCard>
+        {/* Realized P&L tab — portfolio statement (incl. closed trades). */}
+        {reportsTab === "realized" && (
+          <SectionCard title="Portfolio statement" eyebrow="§ STATEMENT" icon={FileText}>
+            {summary ? (
+              <PortfolioStatement summary={summary} positions={positions} trades={filteredTrades} />
+            ) : (
+              <p className="font-display italic text-body-sm text-fg-muted text-center py-6">
+                Unable to load portfolio data.
+              </p>
+            )}
+          </SectionCard>
+        )}
 
-        {/* M-O S — Execution-quality / slippage telemetry. Panel renders
-            its own header + empty state, so no SectionCard wrapper. */}
-        <SlippagePanel />
+        {/* By strategy tab — strategy performance report. */}
+        {reportsTab === "by-strategy" && (
+          <SectionCard title="Strategy performance" eyebrow="§ STRATEGIES" icon={BarChart3}>
+            <StrategyPerformanceReport strategies={strategies} trades={filteredTrades} />
+          </SectionCard>
+        )}
 
-        {/* v2 phase 1.9 — Tax/Lots section using ControlModule + Stat
-         * + StatusBanner primitives. Demo data; backend B.13 wires
-         * live lot tracking + IRS Pub 550 wash-sale engine + 8949
-         * export. Renders above the legacy "Tax report (simplified)"
-         * card so operators see the v2 lot-level surface first. */}
-        <TaxLotsSection />
+        {/* Documents tab — execution telemetry + tax-report drilldown
+            sit here. Backend B.13 wires the 8949 / TurboTax export
+            CTA shown in the design comp's Documents tab; today the
+            slippage panel + simplified tax report stand in. */}
+        {reportsTab === "documents" && (
+          <>
+            {/* M-O S — Execution-quality / slippage telemetry. Panel
+                renders its own header + empty state, so no SectionCard
+                wrapper. */}
+            <SlippagePanel />
+          </>
+        )}
+
+        {/* Open lots + Wash sales tabs — both render the v2 TaxLotsSection
+            (pensive-kirch PR #123) which contains both subsections. The
+            section is identical across both tabs so users land on a
+            consistent view; once the section is split into separate
+            components a follow-up can scope each tab individually. */}
+        {(reportsTab === "open-lots" || reportsTab === "wash-sales") && (
+          <TaxLotsSection />
+        )}
 
 
-        {/* Tax Report */}
+        {/* Tax Report — sits in the Documents tab next to the slippage
+            telemetry; the design comp's Documents tab also lists IRS
+            forms + tax-export bundles, so this is the natural home. */}
+        {reportsTab === "documents" && (
         <SectionCard title="Tax report (simplified)" eyebrow="§ TAX YEAR" icon={Calculator} defaultOpen={false}>
           <div className="mb-4 flex items-center gap-3">
             <label htmlFor="tax-year" className="t-label">
@@ -1956,6 +2029,7 @@ export default function ReportsPage() {
           </div>
           <TaxReport trades={trades} taxYear={taxYear} />
         </SectionCard>
+        )}
       </DashboardPageLayout>
     </ScrollArea>
   );
