@@ -1,22 +1,29 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
-import StatusDot from "@/components/primitives/StatusDot";
+import AgentChip from "@/components/primitives/AgentChip";
+import type { AgentArchetype } from "@/components/primitives/AgentChip";
 import type { AIMemo } from "./types";
 
 /**
  * AIMemoPanel (composite)
  * ───────────────────────
- * Gold pulsing StatusDot · tracked-caps eyebrow "Claude · Pre-trade memo" ·
- * italic-serif memo body · chip row (Regime fit / Risk ok / Earn 14d) ·
- * confidence + model / latency footer.
+ * Archetype-attributed memo per v2-plan §2.3 — instead of a generic
+ * "AI · Pre-trade memo" eyebrow, the panel reads as if the named
+ * archetype is speaking ("RESEARCH · pre-trade memo"). Caller may pass
+ * `archetype` to override the default ("research"); the eyebrow's mono
+ * tail copy is configurable via `voice` for site-specific phrasing
+ * ("pre-trade memo" / "earnings memo" / "regime read").
  *
- * The memo text may contain inline emphasis — the parent can insert
- * `<em>` spans directly by passing a React node in `memo.text` if they
- * need gold callouts. Keep this composite presentation-only.
+ * Body, chip row, and confidence/model/latency footer are unchanged
+ * from the v1 memo — the reframe is voice + chip, not layout.
  */
 export interface AIMemoPanelProps {
   memo: AIMemo;
+  /** Archetype voice for the eyebrow + chip. Defaults to "research". */
+  archetype?: AgentArchetype;
+  /** Mono tail copy on the eyebrow. Defaults to "pre-trade memo". */
+  voice?: string;
   className?: string;
 }
 
@@ -27,7 +34,12 @@ const chipClass: Record<AIMemo["chips"][number]["tone"], string> = {
   muted: "text-fg-muted bg-bg-elev-1 border-border",
 };
 
-export default function AIMemoPanel({ memo, className }: AIMemoPanelProps) {
+export default function AIMemoPanel({
+  memo,
+  archetype = "research",
+  voice = "pre-trade memo",
+  className,
+}: AIMemoPanelProps) {
   // `emptyMemo` in the desk selectors sets `model: "awaiting"` as a signal
   // that no real Claude memo has been produced yet — the footer
   // "Confidence 0.00 · awaiting · 0 ms" would read as broken telemetry, so
@@ -55,9 +67,9 @@ export default function AIMemoPanel({ memo, className }: AIMemoPanelProps) {
       )}
     >
       <header className="flex items-center gap-2 mb-2.5">
-        <StatusDot tone="brand" pulse size={8} />
-        <span className="t-label uppercase tracking-wider text-primary">
-          AI · Pre-trade memo
+        <AgentChip archetype={archetype} status={isAwaiting ? "queued" : "running"} size="sm" />
+        <span className="t-label uppercase tracking-wider text-fg-muted">
+          · {voice}
         </span>
         <span className="ml-auto t-meta text-fg-hint">
           {memo?.timestamp}
