@@ -26,6 +26,17 @@ vi.mock('@/hooks/useQueries', () => ({
   }),
 }));
 
+// AgentBell (PR #119, pensive-kirch) calls useAgents which uses
+// react-query. Mock it so this suite stays QueryClientProvider-free
+// like the existing pattern above.
+vi.mock('@/hooks/useAgents', () => ({
+  useAgents: () => ({
+    data: [],
+    isLoading: false,
+    error: null,
+  }),
+}));
+
 describe('TopBar', () => {
   it('renders logo text', () => {
     render(<TopBar />);
