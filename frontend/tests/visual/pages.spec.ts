@@ -159,4 +159,14 @@ test.describe("v2 design parity", () => {
     await gotoAndWait(page, "/privacy");
     await expect(page).toHaveScreenshot("privacy.png", { fullPage: false });
   });
+
+  test("position · NVDA", async ({ page }) => {
+    await gotoAndWait(page, "/positions/NVDA", 6500);
+    await expect(page).toHaveScreenshot("position-NVDA.png", { fullPage: false });
+  });
+
+  test("position · flat (AAPL)", async ({ page }) => {
+    await gotoAndWait(page, "/positions/AAPL", 6500);
+    await expect(page).toHaveScreenshot("position-AAPL-flat.png", { fullPage: false });
+  });
 });

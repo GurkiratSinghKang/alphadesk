@@ -70,6 +70,7 @@ const DASHBOARD_ROUTE_PREFIXES = [
   "/analytics",
   "/alerts",
   "/pipeline",
+  "/positions",
   "/reports",
   "/risk-dashboard",
   "/settings",
@@ -92,6 +93,7 @@ function isDashboardRoute(pathname: string | null): boolean {
   if (/^\/strategies\/[^/]+(\/.*)?$/.test(pathname)) return true;
   if (/^\/symbols\/[^/]+(\/.*)?$/.test(pathname)) return true;
   if (/^\/agents\/[^/]+(\/.*)?$/.test(pathname)) return true;
+  if (/^\/positions\/[^/]+(\/.*)?$/.test(pathname)) return true;
   return false;
 }
 

@@ -106,9 +106,30 @@ const HANDLERS: Record<string, MockHandler> = {
   // ─── Trades / orders / positions ──────────────────────────────────
   "GET /trades/halt-status": () => ({ halted: false, scope: "global", reason: null, by: null, at: null }),
   "GET /trades/positions": () => [
-    { symbol: "NVDA", side: "long", qty: 250, avgPrice: 128.40, lastPrice: 134.82, unrealizedPnl: 1605, strategyId: "momentum-quality" },
-    { symbol: "META", side: "long", qty: 80, avgPrice: 502.10, lastPrice: 518.04, unrealizedPnl: 1275, strategyId: "momentum-quality" },
-    { symbol: "MSFT", side: "long", qty: 120, avgPrice: 432.80, lastPrice: 442.15, unrealizedPnl: 1122, strategyId: "regime-adaptive" },
+    // api.ts#getPositions expects snake_case backend shape (avg_cost,
+    // current_price, market_value, unrealized_pnl) with the v2 strategy
+    // slug for archetype attribution on /positions/[symbol].
+    {
+      symbol: "NVDA", side: "long", quantity: 250,
+      avg_cost: 128.40, current_price: 134.82,
+      unrealized_pnl: 1605, market_value: 33_705,
+      sector: "Information technology",
+      strategy: "momentum-quality",
+    },
+    {
+      symbol: "META", side: "long", quantity: 80,
+      avg_cost: 502.10, current_price: 518.04,
+      unrealized_pnl: 1275.20, market_value: 41_443.20,
+      sector: "Communication services",
+      strategy: "momentum-quality",
+    },
+    {
+      symbol: "MSFT", side: "long", quantity: 120,
+      avg_cost: 432.80, current_price: 442.15,
+      unrealized_pnl: 1122.00, market_value: 53_058,
+      sector: "Information technology",
+      strategy: "regime-adaptive",
+    },
   ],
   "GET /trades/orders": () => [],
   "GET /trades/alerts": () => [],
