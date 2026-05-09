@@ -139,4 +139,24 @@ test.describe("v2 design parity", () => {
     await gotoAndWait(page, "/agents/research-regime", 6500);
     await expect(page).toHaveScreenshot("agents-detail.png", { fullPage: false });
   });
+
+  test("about", async ({ page }) => {
+    await gotoAndWait(page, "/about");
+    await expect(page).toHaveScreenshot("about.png", { fullPage: false });
+  });
+
+  test("contact", async ({ page }) => {
+    await gotoAndWait(page, "/contact");
+    await expect(page).toHaveScreenshot("contact.png", { fullPage: false });
+  });
+
+  test("terms", async ({ page }) => {
+    await gotoAndWait(page, "/terms");
+    await expect(page).toHaveScreenshot("terms.png", { fullPage: false });
+  });
+
+  test("privacy", async ({ page }) => {
+    await gotoAndWait(page, "/privacy");
+    await expect(page).toHaveScreenshot("privacy.png", { fullPage: false });
+  });
 });
