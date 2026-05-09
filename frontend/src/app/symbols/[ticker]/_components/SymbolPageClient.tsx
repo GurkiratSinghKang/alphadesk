@@ -9,6 +9,8 @@ import { AgentsDebateCard } from "../_sections/AgentsDebateCard";
 import { ChartBand } from "../_sections/ChartBand";
 import { DecisionStrip, type DecisionStripMarketRegime } from "../_sections/DecisionStrip";
 import { EarningsPanel } from "../_sections/EarningsPanel";
+import { IVStatRow } from "../_sections/IVStatRow";
+import { KeyStats } from "../_sections/KeyStats";
 import { NewsBand } from "../_sections/NewsBand";
 import { NotFound } from "../_sections/NotFound";
 import { OptionsThesisBand } from "../_sections/OptionsThesisBand";
@@ -431,6 +433,10 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
 
       {activeTab === "fundamentals" && (
         <div role="tabpanel" id="symbol-tab-panel-fundamentals" aria-labelledby="symbol-tab-fundamentals">
+          {/* v2 phase 1.3 — KeyStats row (revenue/margins/FCF/ratios)
+            * sits at the top of Fundamentals per design ticker.jsx so the
+            * tab opens to the numbers, not the earnings calendar. */}
+          <KeyStats symbol={symbol} />
           <div className="px-4 sm:px-6 py-4">
             <EarningsPanel
               isETF={data.isETF}
@@ -451,7 +457,11 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
       )}
 
       {activeTab === "options" && (
-        <div role="tabpanel" id="symbol-tab-panel-options" aria-labelledby="symbol-tab-options">
+        <div role="tabpanel" id="symbol-tab-panel-options" aria-labelledby="symbol-tab-options" className="px-4 sm:px-6 py-4 flex flex-col gap-4">
+          {/* v2 phase 1.3 — IV stat row tops the Options tab so IV/IVR/IVP
+            * + HV terms + expected move read at a glance before the deeper
+            * thesis. Mirrors design ticker.jsx Options-tab metrics row. */}
+          <IVStatRow ivData={data.ivData} metrics={metrics} />
           <OptionsThesisBand
             symbol={symbol}
             ivData={data.ivData}
