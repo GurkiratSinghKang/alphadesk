@@ -28,7 +28,7 @@ const LOCKOUT_STORAGE_KEY = "alphadesk.login_failures";
 const LOCKOUT_WINDOW_MS = 10 * 60 * 1000; // 10 min rolling window
 const LOCKOUT_THRESHOLD = 5; // failures that trigger the lockout
 const authInputClass =
-  "h-12 rounded-[8px] border border-[var(--auth-border)] bg-white/80 px-4 font-sans text-body text-[var(--auth-fg)] placeholder:text-[var(--auth-fg-soft)] focus-visible:border-[var(--auth-primary)] focus-visible:shadow-[0_0_0_4px_rgba(15,122,93,0.15)]";
+  "h-12 rounded-[3px] border border-[var(--auth-border)] bg-[var(--bg-elev-1)] px-4 font-mono text-body text-[var(--auth-fg)] placeholder:text-[var(--auth-fg-soft)] focus-visible:border-[var(--auth-primary)] focus-visible:shadow-[0_0_0_4px_rgba(201,166,107,0.18)]";
 const authLabelClass = "font-sans text-body-sm font-medium text-[var(--auth-fg)]";
 const authMutedClass = "font-sans text-body-sm leading-relaxed text-[var(--auth-fg-muted)]";
 
@@ -268,21 +268,38 @@ export default function LoginForm() {
       </noscript>
 
       <div className="border-b border-[var(--auth-border)] pb-5">
-        {/* P2-26: eyebrow used to read "Welcome back" for everyone, which
-            was odd for first-time visitors. Now it reads "Welcome back"
-            only when this browser has a prior-session marker; first-time
-            visitors see "Sign in to AlphaDesk" instead. SSR renders the
-            new-visitor variant so the markup is deterministic; the
-            useEffect above swaps to "Welcome back" post-hydration if the
-            localStorage marker is present. */}
-        <p className="font-mono text-eyebrow font-semibold uppercase tracking-[0.18em] text-[var(--auth-primary)]">
-          {hasPriorSession ? "Welcome back" : "Sign in to AlphaDesk"}
+        <p
+          className="t-eyebrow-italic"
+          style={{ color: "var(--brand)", letterSpacing: "0.2em" }}
+        >
+          {hasPriorSession ? "WELCOME BACK" : "SIGN IN"}
         </p>
-        <h2 className="mt-3 font-sans text-h2 font-semibold leading-tight tracking-tight text-[var(--auth-fg)]">
-          Open your workspace
+        <h2
+          className="m-0 mt-2.5 italic"
+          style={{
+            fontFamily: "var(--font-display)",
+            color: "var(--ink-1000)",
+            fontSize: 38,
+            fontWeight: 400,
+            letterSpacing: "-0.025em",
+            lineHeight: 1.05,
+            textWrap: "balance",
+          }}
+        >
+          Operator login.
         </h2>
-        <p className={`mt-2 ${authMutedClass}`}>
-          Pick up your research, AI reviews, trade plans, and operating history where you left them.
+        <p
+          className="italic"
+          style={{
+            marginTop: 12,
+            fontFamily: "var(--font-display)",
+            fontSize: 15,
+            color: "var(--fg-muted)",
+            lineHeight: 1.55,
+            textWrap: "pretty",
+          }}
+        >
+          Pick up your research, AI reviews, and trade plans where you left them.
         </p>
       </div>
 
