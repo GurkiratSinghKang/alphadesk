@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Plus,
   Trash2,
@@ -25,6 +25,8 @@ import { useToast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 import { fmtPlural } from "@/lib/intl";
 import EmptyState from "@/components/primitives/EmptyState";
+import type { AppNotification, NotificationCategory } from "@/stores/notifications";
+import { useNotificationsStore } from "@/stores/notifications";
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -704,6 +706,201 @@ function AlertMobileCard({
   );
 }
 
+// ─── Notifications feed (matches alerts-dark.png) ───────────
+
+// Maps store NotificationCategory → design's filter chip taxonomy.
+// The design's "News & macro" maps to "system" + "billing" + "support";
+// "Risk" includes risk + agent failures; "Signals" includes pipeline +
+// alerts; "Trades" includes fill + trades.
+type FeedFilter = "all" | "trades" | "signals" | "risk" | "news";
+const FEED_FILTERS: { id: FeedFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "trades", label: "Trades" },
+  { id: "signals", label: "Signals" },
+  { id: "risk", label: "Risk" },
+  { id: "news", label: "News & macro" },
+];
+
+function categoryToFilter(cat: NotificationCategory): FeedFilter {
+  if (cat === "fill" || cat === "trades") return "trades";
+  if (cat === "alerts" || cat === "pipeline" || cat === "agent") return "signals";
+  if (cat === "risk") return "risk";
+  return "news"; // system, billing, support
+}
+
+function categoryChipClass(cat: NotificationCategory): string {
+  const filter = categoryToFilter(cat);
+  if (filter === "trades")
+    return "bg-tint-up-1 text-profit border-profit/40";
+  if (filter === "signals")
+    return "bg-tint-brand-1 text-brand border-brand/40";
+  if (filter === "risk")
+    return "bg-tint-down-1 text-loss border-loss/40";
+  return "bg-bg-elev-2 text-fg-muted border-border-hair";
+}
+
+function categoryLabel(cat: NotificationCategory): string {
+  if (cat === "fill" || cat === "trades") return "TRADE";
+  if (cat === "alerts") return "ALERT";
+  if (cat === "pipeline") return "SIGNAL";
+  if (cat === "agent") return "AGENT";
+  if (cat === "risk") return "RISK";
+  if (cat === "billing") return "BILLING";
+  if (cat === "support") return "SUPPORT";
+  return "NEWS";
+}
+
+function dateBucket(ts: number, now: number = Date.now()): "today" | "yesterday" | "earlier-week" | "earlier" {
+  const d = new Date(ts);
+  const today = new Date(now);
+  const sameDay = d.toDateString() === today.toDateString();
+  if (sameDay) return "today";
+  const yesterday = new Date(now - 86_400_000);
+  if (d.toDateString() === yesterday.toDateString()) return "yesterday";
+  if (now - ts < 7 * 86_400_000) return "earlier-week";
+  return "earlier";
+}
+
+function NotificationsFeed() {
+  const notifications = useNotificationsStore((s) => s.notifications);
+  const [filter, setFilter] = useState<FeedFilter>("all");
+
+  // Filter then group by date bucket. Order within each bucket: newest first.
+  const grouped = useMemo(() => {
+    const filtered = notifications.filter(
+      (n) => filter === "all" || categoryToFilter(n.category) === filter,
+    );
+    const buckets: Record<
+      "today" | "yesterday" | "earlier-week" | "earlier",
+      AppNotification[]
+    > = { today: [], yesterday: [], "earlier-week": [], earlier: [] };
+    for (const n of filtered) {
+      buckets[dateBucket(n.timestamp)].push(n);
+    }
+    return buckets;
+  }, [notifications, filter]);
+
+  const counts = useMemo(() => {
+    const c: Record<FeedFilter, number> = { all: 0, trades: 0, signals: 0, risk: 0, news: 0 };
+    for (const n of notifications) {
+      c.all += 1;
+      c[categoryToFilter(n.category)] += 1;
+    }
+    return c;
+  }, [notifications]);
+
+  const buckets: { key: keyof typeof grouped; label: string }[] = [
+    { key: "today", label: "TODAY" },
+    { key: "yesterday", label: "YESTERDAY" },
+    { key: "earlier-week", label: "EARLIER THIS WEEK" },
+    { key: "earlier", label: "EARLIER" },
+  ];
+
+  const totalShown = (Object.values(grouped) as AppNotification[][]).reduce(
+    (s, arr) => s + arr.length,
+    0,
+  );
+
+  return (
+    <section className="space-y-3" data-slot="alerts-feed">
+      <header className="flex flex-wrap items-center justify-between gap-2">
+        <div
+          role="radiogroup"
+          aria-label="Notification feed filter"
+          className="flex flex-wrap items-center gap-1"
+        >
+          {FEED_FILTERS.map((f) => {
+            const active = filter === f.id;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => setFilter(f.id)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-pill px-3 py-1 font-mono text-eyebrow uppercase tracking-[0.08em] font-semibold transition-colors",
+                  active
+                    ? "bg-bg-elev-2 text-fg border border-border"
+                    : "text-fg-muted hover:text-fg border border-transparent",
+                )}
+              >
+                <span>{f.label}</span>
+                <span className="font-mono tabular-nums opacity-70">
+                  {counts[f.id]}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </header>
+
+      {totalShown === 0 ? (
+        <div
+          className="rounded-md border border-dashed border-border-hair px-5 py-8 text-center"
+          style={{ background: "var(--bg-elev-1)" }}
+        >
+          <p className="font-display italic text-body text-fg-muted">
+            No notifications match this filter — check back when the
+            desk surfaces a new event.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {buckets.map(({ key, label }) => {
+            const rows = grouped[key];
+            if (rows.length === 0) return null;
+            return (
+              <div key={key} className="space-y-1">
+                <p className="font-mono text-eyebrow uppercase tracking-[0.16em] text-fg-muted">
+                  {label}
+                </p>
+                <ol className="rounded-md border border-border-hair divide-y divide-border-hair" style={{ background: "var(--bg-elev-1)" }}>
+                  {rows.map((n) => {
+                    const t = new Date(n.timestamp);
+                    const day = dateBucket(n.timestamp);
+                    const stamp =
+                      day === "today" || day === "yesterday"
+                        ? `${day === "today" ? "Today" : "Yest"} ${t.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })}`
+                        : t.toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+                    return (
+                      <li
+                        key={n.id}
+                        className={cn(
+                          "flex items-baseline gap-3 px-4 py-2.5 transition-colors",
+                          n.read ? "opacity-70" : "",
+                        )}
+                      >
+                        <span className="font-mono text-eyebrow tabular-nums text-fg-muted shrink-0 w-20">
+                          {stamp}
+                        </span>
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-pill border px-2 py-0.5 font-mono text-eyebrow uppercase tracking-[0.08em] font-semibold shrink-0",
+                            categoryChipClass(n.category),
+                          )}
+                        >
+                          {categoryLabel(n.category)}
+                        </span>
+                        <span className="flex-1 italic text-body-sm leading-snug text-fg">
+                          {n.title}
+                          {n.detail ? (
+                            <span className="text-fg-muted"> · {n.detail}</span>
+                          ) : null}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ─── Main Page ──────────────────────────────────────────────
 
 export default function AlertsPage() {
@@ -999,8 +1196,22 @@ export default function AlertsPage() {
         </p>
       )}
 
-      {/* Create Form */}
-      <CreateAlertForm onCreated={handleCreated} />
+      {/* v2 polish — notifications feed matches alerts-dark.png. Renders
+          above the existing CRUD so the operator's first view is the
+          event stream (Trades / Signals / Risk / News & macro), with
+          the alert-creation form sitting below as a "configure new
+          trigger" affordance. */}
+      <NotificationsFeed />
+
+      {/* Configure-new-trigger card — header gives the section purpose
+          since the page now leads with the feed instead of the form. */}
+      <div className="space-y-2">
+        <p className="font-mono text-eyebrow uppercase tracking-[0.16em] text-fg-muted">
+          CONFIGURE · NEW TRIGGER
+        </p>
+        {/* Create Form */}
+        <CreateAlertForm onCreated={handleCreated} />
+      </div>
 
       {/* Loading */}
       {loading && (
