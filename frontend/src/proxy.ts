@@ -88,9 +88,10 @@ function isDevAuthBypassEnabled(): boolean {
 
 export async function proxy(request: NextRequest) {
   if (isDevAuthBypassEnabled()) {
-    if (request.nextUrl.pathname === "/login" || request.nextUrl.pathname.startsWith("/login/")) {
-      return NextResponse.redirect(new URL("/", request.url));
-    }
+    // Pass /login through even though we're "authenticated" — the visual
+    // suite needs to snapshot the login screen, and bouncing to / would
+    // make that impossible. The prod redirect-to-/ behaviour is preserved
+    // when bypass is OFF (the normal else-branch below).
     return forwardRequest();
   }
 

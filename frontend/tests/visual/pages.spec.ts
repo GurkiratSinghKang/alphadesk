@@ -116,4 +116,14 @@ test.describe("v2 design parity", () => {
     await gotoAndWait(page, "/alerts", 6500);
     await expect(page).toHaveScreenshot("alerts.png", { fullPage: false });
   });
+
+  test("login", async ({ page }) => {
+    await gotoAndWait(page, "/login");
+    await expect(page).toHaveScreenshot("login.png", { fullPage: false });
+  });
+
+  test("onboarding", async ({ page }) => {
+    await gotoAndWait(page, "/onboarding");
+    await expect(page).toHaveScreenshot("onboarding.png", { fullPage: false });
+  });
 });
