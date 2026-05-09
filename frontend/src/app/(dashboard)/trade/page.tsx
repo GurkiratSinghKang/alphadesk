@@ -90,6 +90,12 @@ import { cn, formatCurrency } from "@/lib/utils";
 // B.2 (per-agent control) wires the live archetype-attributed
 // memos.
 import PreTradeAgentStrip from "./_v2/PreTradeAgentStrip";
+// v2 phase 1.2 — chrome rebuild. Metric ribbon (8 cells) +
+// asset-tab switcher (Stocks/Options/Builder) above the cockpit
+// header. Existing left/right rails + chart-as-hero remain
+// untouched per preservation register.
+import MetricRibbon from "./_v2/MetricRibbon";
+import AssetTabSwitcher, { type AssetTab } from "./_v2/AssetTabSwitcher";
 import type { Order, Position } from "@/types";
 import { useMarketStore, useQuote } from "@/stores/market";
 import { usePortfolioStore } from "@/stores/portfolio";
@@ -440,6 +446,13 @@ export default function TradePage() {
   const quote = toQuote(selectedQuote ?? undefined);
   const meta = toMetaCells(selectedQuote ?? undefined);
   const symbol = toMarketSymbol(tradeContextSymbol);
+  // v2 phase 1.2 chrome — asset-tab state. Stays presentational in
+  // Phase 1.2 (existing trade surfaces remain mounted; tab acts as
+  // a quick-scroll anchor + visual category indicator). Phase 1.2
+  // follow-up wires it to swap the left rail content atomically.
+  const [assetTab, setAssetTab] = useState<AssetTab>(
+    activeContract != null ? "options" : "stocks",
+  );
   // QA r1 A2: option-contract quote (single-leg). useQuote("") returns null
   // and is a no-op subscription, so this is cheap when no contract is staged.
   const optionContractRawQuote = useQuote(activeContract?.occ ?? "");
@@ -1306,6 +1319,37 @@ export default function TradePage() {
         className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(236,230,210,0.035)_1px,transparent_1px),linear-gradient(to_bottom,rgba(236,230,210,0.03)_1px,transparent_1px)] bg-[size:56px_56px]"
       />
       <div className="relative mx-auto grid w-full max-w-[1880px] gap-3">
+        {/* v2 phase 1.2 — MetricRibbon (8 cells: Symbol · Last ·
+         * Bid×Ask · Spread · Day range · Volume/ADV · IV/Rank ·
+         * Earnings) and AssetTabSwitcher (Stocks/Options/Builder)
+         * mount above the cockpit header. The existing cockpit +
+         * left rail + right rail + chart-as-hero remain untouched
+         * per preservation register. */}
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
+          <div className="flex-1 min-w-0">
+            <MetricRibbon
+              symbol={tradeContextSymbol}
+              last={selectedQuote?.last ?? null}
+              bid={selectedQuote?.bid ?? null}
+              ask={selectedQuote?.ask ?? null}
+              spreadBps={
+                selectedQuote?.bid != null &&
+                selectedQuote?.ask != null &&
+                selectedQuote.ask > 0
+                  ? ((selectedQuote.ask - selectedQuote.bid) / selectedQuote.ask) * 10000
+                  : null
+              }
+              dayLow={selectedQuote?.low ?? null}
+              dayHigh={selectedQuote?.high ?? null}
+              volume={selectedQuote?.volume ?? null}
+              advRatio={null}
+              iv30d={null}
+              ivRank={null}
+              earningsInDays={null}
+            />
+          </div>
+          <AssetTabSwitcher active={assetTab} onChange={setAssetTab} />
+        </div>
         <header
           id="trade-quote"
           className="scroll-mt-4 grid overflow-hidden rounded-md border border-border-hair bg-border-hair shadow-[0_14px_44px_-34px_rgba(16,22,17,0.34)] lg:grid-cols-[minmax(220px,0.46fr)_minmax(0,1fr)_minmax(300px,0.54fr)]"

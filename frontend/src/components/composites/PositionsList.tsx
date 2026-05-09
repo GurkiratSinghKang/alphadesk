@@ -4,6 +4,11 @@ import { cn } from "@/lib/utils";
 import PnLNumber from "@/components/primitives/PnLNumber";
 import Sparkline from "@/components/primitives/Sparkline";
 import { ExtendedHoursBadge } from "@/components/primitives/ExtendedHoursBadge";
+// v2 phase 2 — agent reframe weave. Decorate position rows with the
+// archetype responsible for the owning strategy. Unknown strategies
+// resolve to null and the chip renders absent rather than incorrect.
+import AgentChip from "@/components/primitives/AgentChip";
+import { archetypeForStrategy } from "@/lib/strategyArchetype";
 import { isWorkingOrderStatus } from "@/lib/orders";
 import type { PositionRow, PositionTab } from "./types";
 
@@ -335,8 +340,14 @@ export default function PositionsList({
                   <td className="align-middle py-2.5 pr-2.5">
                     <div className="flex flex-col gap-0.5">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-display italic text-label text-fg-dim truncate">
+                        <span className="font-display italic text-label text-fg-dim truncate inline-flex items-center gap-1.5">
                           {p.strategyName}
+                          {(() => {
+                            const arch = archetypeForStrategy(p.strategyName ?? null);
+                            return arch ? (
+                              <AgentChip archetype={arch} hideStatus size="sm" />
+                            ) : null;
+                          })()}
                         </span>
                         {/* Phase-2 / SP-1 (Tufte): 30-day sparkline gives
                             the row context the scalar P&L cannot — was
