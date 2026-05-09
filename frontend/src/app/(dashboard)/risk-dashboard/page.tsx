@@ -3,6 +3,10 @@ import type { Metadata } from "next";
 import Section from "@/components/composites/Section";
 import StatusBanner from "@/components/composites/StatusBanner";
 
+// Dashboard layout's useNotifications() requires <WebSocketProvider>,
+// which is ssr:false. Skip static prerender.
+export const dynamic = "force-dynamic";
+
 import RiskHero from "./_components/RiskHero";
 import StressScenarios from "./_components/StressScenarios";
 import SectorTreemap from "./_components/SectorTreemap";

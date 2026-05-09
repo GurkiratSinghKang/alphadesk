@@ -7,6 +7,11 @@ export const metadata: Metadata = {
   title: "User detail — AlphaDesk Admin",
 };
 
+// Admin layout shares the dashboard chrome's WS-dependent hooks. Skip
+// static prerender so the build doesn't trip on "useWs must be used
+// within Providers".
+export const dynamic = "force-dynamic";
+
 interface AdminUserDetailShellProps {
   params: Promise<{ id: string }>;
 }
