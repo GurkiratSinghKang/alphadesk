@@ -863,17 +863,33 @@ function NotificationsFeed() {
                       day === "today" || day === "yesterday"
                         ? `${day === "today" ? "Today" : "Yest"} ${t.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })}`
                         : t.toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+                    // v2 polish — unread status dot + OPEN action match
+                    // alerts-dark.png. Dot is solid brand-gold for unread,
+                    // muted otherwise. OPEN clears the unread state.
+                    const filterTone = categoryToFilter(n.category);
+                    const dotColor = !n.read
+                      ? filterTone === "trades"
+                        ? "var(--up-500)"
+                        : filterTone === "risk"
+                          ? "var(--down-500)"
+                          : "var(--brand)"
+                      : "var(--fg-muted)";
                     return (
                       <li
                         key={n.id}
                         className={cn(
-                          "flex items-baseline gap-3 px-4 py-2.5 transition-colors",
+                          "flex items-baseline gap-3 px-4 py-2.5 transition-colors hover:bg-bg-elev-2",
                           n.read ? "opacity-70" : "",
                         )}
                       >
                         <span className="font-mono text-eyebrow tabular-nums text-fg-muted shrink-0 w-20">
                           {stamp}
                         </span>
+                        <span
+                          className="inline-block h-1.5 w-1.5 rounded-full shrink-0 self-center"
+                          style={{ background: dotColor }}
+                          aria-label={n.read ? "Read" : "Unread"}
+                        />
                         <span
                           className={cn(
                             "inline-flex items-center rounded-pill border px-2 py-0.5 font-mono text-eyebrow uppercase tracking-[0.08em] font-semibold shrink-0",
@@ -888,6 +904,14 @@ function NotificationsFeed() {
                             <span className="text-fg-muted"> · {n.detail}</span>
                           ) : null}
                         </span>
+                        <button
+                          type="button"
+                          onClick={() => useNotificationsStore.getState().markAsRead(n.id)}
+                          className="font-mono text-eyebrow uppercase tracking-[0.08em] font-semibold text-fg-muted hover:text-brand transition-colors shrink-0"
+                          title={n.read ? "Already read" : "Mark as read"}
+                        >
+                          OPEN →
+                        </button>
                       </li>
                     );
                   })}
