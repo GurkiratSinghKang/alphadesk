@@ -26,7 +26,7 @@ describe("RequestAccessForm", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /send request/i }));
+    fireEvent.click(screen.getByRole("button", { name: /submit application/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(fetchMock).toHaveBeenCalledWith(
@@ -63,7 +63,7 @@ describe("RequestAccessForm", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /send request/i }));
+    fireEvent.click(screen.getByRole("button", { name: /submit application/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Too many access requests");
   });
