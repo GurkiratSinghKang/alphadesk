@@ -991,6 +991,86 @@ function etDateParts(iso: string): { y: number; m: number; d: number } {
   return { y, m, d };
 }
 
+// v2 polish — period-scoped tax stats for the strip at the top of the
+// page. Pure helper that operates on whatever trade subset the caller
+// passes in (closed-only, range-filtered, or tax-year-filtered). Each
+// number maps to one of the 7 cells in reports-dark.png:
+//
+//   NET REALIZED    — sum of every closed trade's pnl
+//   GROSS GAINS     — sum of pnl for winning trades only
+//   GROSS LOSSES    — sum of pnl for losing trades only (negative)
+//   SHORT-TERM      — net pnl from trades held < 366 days
+//   LONG-TERM       — net pnl from trades held >= 366 days
+//   WASH SALES      — count of disallowed losses (IRS §1091 ±30d)
+//   AVG HOLD DAYS   — mean holding period across closed trades
+//
+// `OPEN-CHARGE` (the design's 7th cell) is open-position notional and
+// is sourced separately from the positions store, not from trade
+// history; the page renders it inline.
+function classifyForTaxStrip(trades: TradeHistoryEntry[]) {
+  const closed = trades.filter(
+    (t) => t.exit_time && Number.isFinite(t.pnl ?? NaN),
+  );
+  let netRealized = 0;
+  let grossGains = 0;
+  let grossLosses = 0;
+  let shortTerm = 0;
+  let longTerm = 0;
+  let washSales = 0;
+  let totalHoldDays = 0;
+
+  // Pre-compute open-day epochs for wash-sale detection across all
+  // trades (a December close + January re-buy spans tax years).
+  type Open = { symbol: string; epoch: number };
+  const allOpens: Open[] = trades
+    .filter((t) => t.entry_time)
+    .map((t) => {
+      const e = etDateParts(t.entry_time);
+      return { symbol: t.symbol, epoch: Date.UTC(e.y, e.m - 1, e.d) };
+    });
+
+  for (const t of closed) {
+    const pnl = t.pnl ?? 0;
+    netRealized += pnl;
+    if (pnl > 0) grossGains += pnl;
+    else if (pnl < 0) grossLosses += pnl;
+
+    const e = etDateParts(t.entry_time);
+    const x = etDateParts(t.exit_time!);
+    const entryMid = Date.UTC(e.y, e.m - 1, e.d);
+    const exitMid = Date.UTC(x.y, x.m - 1, x.d);
+    const days = Math.round((exitMid - entryMid) / 86_400_000);
+    totalHoldDays += days;
+    if (days >= 366) longTerm += pnl;
+    else shortTerm += pnl;
+
+    if (pnl < 0) {
+      // IRS §1091 window — symmetric ±30d around the loss exit.
+      const windowStart = exitMid - 30 * 86_400_000;
+      const windowEnd = exitMid + 30 * 86_400_000;
+      for (const o of allOpens) {
+        if (o.symbol !== t.symbol) continue;
+        if (o.epoch === entryMid) continue; // skip own entry
+        if (o.epoch >= windowStart && o.epoch <= windowEnd) {
+          washSales += 1;
+          break;
+        }
+      }
+    }
+  }
+
+  return {
+    netRealized,
+    grossGains,
+    grossLosses,
+    shortTerm,
+    longTerm,
+    washSales,
+    avgHoldDays: closed.length > 0 ? totalHoldDays / closed.length : 0,
+    closedCount: closed.length,
+  };
+}
+
 function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: number }) {
   const taxTrades = useMemo(() => {
     return trades.filter(t => {
@@ -1755,6 +1835,60 @@ export default function ReportsPage() {
         </header>
 
         {periodBar}
+
+        {/* v2 polish — 7-metric tax strip per reports-dark.png. Numbers
+         * computed from the period-filtered closed trades + the live
+         * positions snapshot. Renders as a clean caps-eyebrow row of
+         * cells matching the design comp. */}
+        {(() => {
+          const tax = classifyForTaxStrip(filteredTrades);
+          const openCharge = positions.reduce(
+            (s, p) => s + Math.abs(p.marketValue ?? 0),
+            0,
+          );
+          const fmt = (n: number) =>
+            `${n > 0 ? "+" : n < 0 ? "−" : ""}$${Math.abs(n).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+          const fmtPlain = (n: number) =>
+            `$${Math.abs(n).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+          const cells: { label: string; value: string; tone?: "profit" | "loss" | "fg" }[] = [
+            { label: "Net realized", value: fmt(tax.netRealized), tone: tax.netRealized > 0 ? "profit" : tax.netRealized < 0 ? "loss" : "fg" },
+            { label: "Gross gains", value: fmtPlain(tax.grossGains), tone: "profit" },
+            { label: "Gross losses", value: `−${fmtPlain(tax.grossLosses)}`, tone: "loss" },
+            { label: "Short-term", value: fmt(tax.shortTerm), tone: tax.shortTerm > 0 ? "profit" : tax.shortTerm < 0 ? "loss" : "fg" },
+            { label: "Long-term", value: fmt(tax.longTerm), tone: tax.longTerm > 0 ? "profit" : tax.longTerm < 0 ? "loss" : "fg" },
+            { label: "Wash sales", value: String(tax.washSales), tone: tax.washSales > 0 ? "loss" : "fg" },
+            { label: "Open-charge", value: fmtPlain(openCharge), tone: "fg" },
+          ];
+          return (
+            <div
+              className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7"
+              data-testid="reports-tax-strip"
+            >
+              {cells.map((c) => (
+                <div
+                  key={c.label}
+                  className="rounded-md border border-border-hair px-3 py-2"
+                  style={{ background: "var(--bg-elev-1)" }}
+                >
+                  <p className="font-mono text-eyebrow uppercase tracking-[0.12em] text-fg-muted">
+                    {c.label}
+                  </p>
+                  <p
+                    className={cn(
+                      "mt-1 font-mono tabular-nums",
+                      c.tone === "profit" && "text-profit",
+                      c.tone === "loss" && "text-loss",
+                      (!c.tone || c.tone === "fg") && "text-fg",
+                    )}
+                    style={{ fontSize: 22, fontWeight: 500, lineHeight: 1.1 }}
+                  >
+                    {c.value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* Portfolio Statement */}
         <SectionCard title="Portfolio statement" eyebrow="§ STATEMENT" icon={FileText}>
