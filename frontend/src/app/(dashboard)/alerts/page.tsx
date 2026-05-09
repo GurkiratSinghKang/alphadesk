@@ -912,6 +912,55 @@ export default function AlertsPage() {
       title="Alerts & triggers"
       actions={headerActions}
     >
+      {/* v2 phase 1.x — editorial italic-Newsreader hero matching
+       * alerts-dark.png. Sits above the existing summary line and
+       * the CRUD form below; the page's working machinery is
+       * unchanged — this just gives the surface its design voice. */}
+      <header
+        className="mb-4 rounded-md border border-border-hair p-5 md:p-6"
+        style={{
+          background: "var(--bg-elev-1)",
+          borderLeft: "2px solid var(--brand)",
+        }}
+      >
+        <p
+          className="t-eyebrow-italic"
+          style={{ color: "var(--brand)", letterSpacing: "0.2em", margin: 0 }}
+        >
+          ALERTS · TRIGGERS
+        </p>
+        <h2
+          className="m-0 mt-3 italic"
+          style={{
+            fontFamily: "var(--font-display)",
+            color: "var(--ink-1000)",
+            fontSize: 38,
+            fontWeight: 400,
+            letterSpacing: "-0.025em",
+            lineHeight: 1.05,
+            textWrap: "balance",
+          }}
+        >
+          Things that need you.
+        </h2>
+        <p
+          className="italic"
+          style={{
+            marginTop: 12,
+            fontFamily: "var(--font-display)",
+            fontSize: 15,
+            color: "var(--fg-muted)",
+            lineHeight: 1.55,
+            maxWidth: 680,
+          }}
+        >
+          Price, indicator, and P&amp;L triggers you've armed.{" "}
+          {!loading && alerts.length > 0
+            ? `${activeAlerts.length} watching · ${triggeredAlerts.length} triggered.`
+            : "Define one below to start listening."}
+        </p>
+      </header>
+
       {/* Round-8 killer-move 2: alerts hero summary line. The page
           previously had no anchor — a 30%-vertical Create form
           dominated even when alerts existed. This 1-line t-meta
