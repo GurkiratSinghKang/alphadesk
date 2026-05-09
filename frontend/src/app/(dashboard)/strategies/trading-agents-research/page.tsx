@@ -544,6 +544,55 @@ export default function TradingAgentsResearchPage() {
       className="[&_header_h1]:overflow-visible [&_header_h1]:whitespace-normal [&_header_h1]:[text-overflow:clip]"
       pageLabel="TradingAgents research"
     >
+      {/* v2 phase 1.x — editorial italic-Newsreader hero matching the
+       * voice established across /settings, /reports, /strategies,
+       * /pipeline, /watchlists, /alerts, /analytics, /backtest,
+       * /playbook, /onboarding. The form/panel grid below is
+       * unchanged. */}
+      <header
+        className="mb-5 rounded-md border border-border-hair p-5 md:p-6"
+        style={{
+          background: "var(--bg-elev-1)",
+          borderLeft: "2px solid var(--brand)",
+        }}
+      >
+        <p
+          className="t-eyebrow-italic"
+          style={{ color: "var(--brand)", letterSpacing: "0.2em", margin: 0 }}
+        >
+          AGENTS · DEEP RESEARCH
+        </p>
+        <h2
+          className="m-0 mt-3 italic"
+          style={{
+            fontFamily: "var(--font-display)",
+            color: "var(--ink-1000)",
+            fontSize: 38,
+            fontWeight: 400,
+            letterSpacing: "-0.025em",
+            lineHeight: 1.05,
+            textWrap: "balance",
+          }}
+        >
+          A reasoned read on a name.
+        </h2>
+        <p
+          className="italic"
+          style={{
+            marginTop: 12,
+            fontFamily: "var(--font-display)",
+            fontSize: 15,
+            color: "var(--fg-muted)",
+            lineHeight: 1.55,
+            maxWidth: 680,
+          }}
+        >
+          Market, social, news, and fundamentals analysts argue both
+          sides; risk and execution sign off; you get a memo with the
+          signal, the case, and what to read.
+        </p>
+      </header>
+
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
         <aside className="order-2 flex flex-col gap-4 xl:order-1">
           <RunForm
