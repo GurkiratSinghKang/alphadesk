@@ -70,9 +70,11 @@ const DASHBOARD_ROUTE_PREFIXES = [
   "/alerts",
   "/pipeline",
   "/reports",
+  "/risk-dashboard",
   "/settings",
   "/strategies",
   "/trade",
+  "/watchlists",
 ] as const;
 
 function isDashboardRoute(pathname: string | null): boolean {
@@ -80,7 +82,9 @@ function isDashboardRoute(pathname: string | null): boolean {
   if (DASHBOARD_ROUTE_PREFIXES.includes(pathname as (typeof DASHBOARD_ROUTE_PREFIXES)[number])) return true;
   if (pathname === "/strategies/trading-agents-research") return true;
   if (pathname === "/strategies/earnings-options-play") return true;
-  return /^\/strategies\/[^/]+$/.test(pathname);
+  if (/^\/strategies\/[^/]+$/.test(pathname)) return true;
+  if (/^\/symbols\/[^/]+$/.test(pathname)) return true;
+  return false;
 }
 
 export function Providers({ children }: { children: ReactNode }) {

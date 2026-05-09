@@ -78,6 +78,11 @@ export interface PriceChartPanelProps {
   enableMarketDepth?: boolean;
   /** Forwarded to the market-depth fetcher for public routes that own 401 handling. */
   marketDepthOptions?: MarketDepthFetchOptions;
+  /** When true, hide the built-in range button row. Set by callers that
+   *  render their own external toolbar (e.g. v2 trade page → ChartToolbar)
+   *  to avoid duplicate range UI. The chart still consumes `activeRange`
+   *  so the keyboard shortcut handler keeps working. */
+  hideRangeBar?: boolean;
   className?: string;
 }
 
@@ -133,7 +138,7 @@ function DashSpan({ size = 13 }: { size?: number }) {
 
 export default function PriceChartPanel({
   symbol, quote, meta, series,
-  activeRange, onRangeChange, isLoading, error, onRetry, density = "standard", tradeOverlays, chartOrderPlacement, onLoadMoreHistory, loadingMoreHistory, enableMarketDepth = true, marketDepthOptions, className,
+  activeRange, onRangeChange, isLoading, error, onRetry, density = "standard", tradeOverlays, chartOrderPlacement, onLoadMoreHistory, loadingMoreHistory, enableMarketDepth = true, marketDepthOptions, hideRangeBar, className,
 }: PriceChartPanelProps) {
   const last = numberOrNull(quote.last);
   const change = numberOrNull(quote.change);
@@ -262,8 +267,10 @@ export default function PriceChartPanel({
           bands" regardless of indicator-menu toggles). Removed.
 
           Range buttons stay on the toolbar (they're a navigation primitive,
-          not a legend). The legend now lives entirely inside the chart. */}
-      <div
+          not a legend). The legend now lives entirely inside the chart.
+          v2 trade page renders its own ChartToolbar above this panel; pass
+          `hideRangeBar` to suppress this row in that scenario. */}
+      {!hideRangeBar && <div
         className={cn(
           "flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-border-hair",
           executionDensity
@@ -291,7 +298,7 @@ export default function PriceChartPanel({
             >{r}</button>
           ))}
         </div>
-      </div>
+      </div>}
 
       {/* Chart canvas height: standard density doubled from the prior
           220px (which only fit ~10 candles vertically and looked like

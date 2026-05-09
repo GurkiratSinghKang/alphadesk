@@ -74,7 +74,26 @@ async function hasActiveBackendSession(request: NextRequest, token: string | und
   }
 }
 
+/**
+ * Local dev / Playwright escape hatch. When the env explicitly opts in *and*
+ * NODE_ENV is not production, treat every request as authenticated. This lets
+ * the visual-regression suite render protected dashboard routes without going
+ * through a real login flow. Production never sees this — even if the env
+ * var leaks, the NODE_ENV guard short-circuits.
+ */
+function isDevAuthBypassEnabled(): boolean {
+  if (process.env.NODE_ENV === "production") return false;
+  return process.env.DEV_AUTH_BYPASS === "1";
+}
+
 export async function proxy(request: NextRequest) {
+  if (isDevAuthBypassEnabled()) {
+    if (request.nextUrl.pathname === "/login" || request.nextUrl.pathname.startsWith("/login/")) {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
+    return forwardRequest();
+  }
+
   const token = request.cookies.get("access_token")?.value;
   const { pathname } = request.nextUrl;
   // Login subpaths (e.g. /login/reset) are public alongside /login itself.
