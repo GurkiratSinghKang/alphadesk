@@ -50,7 +50,10 @@ async function gotoAndWait(page: Page, route: string, settleMs = 2500) {
 
 test.describe("v2 design parity", () => {
   test("dashboard / home", async ({ page }) => {
-    await gotoAndWait(page, "/");
+    // Dashboard mounts a lot of dynamic chrome (TopBar, hero, briefing,
+    // running-strip, body grid) — bump settle so the snapshot includes
+    // every section after hydration.
+    await gotoAndWait(page, "/", 6500);
     await expect(page).toHaveScreenshot("home.png", { fullPage: false });
   });
 

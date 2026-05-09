@@ -7,6 +7,10 @@ import { TopBar } from "@/components/layout/TopBar";
 import V2DashHero from "./_v2/V2DashHero";
 import V2BriefingStrip from "./_v2/V2BriefingStrip";
 import V2BodyGrid from "./_v2/V2BodyGrid";
+// v2-plan §2.2 — "agents running right now" strip. Sits between the
+// briefing strip and the body grid; renders nothing when no agents
+// are running so the dashboard stays calm in the quiet state.
+import V2AgentsRunningStrip from "./_v2/V2AgentsRunningStrip";
 
 /**
  * AlphaDesk v2 dashboard — editorial operating picture.
@@ -56,6 +60,7 @@ export default function DashboardPage() {
       >
         <V2DashHero />
         <V2BriefingStrip />
+        <V2AgentsRunningStrip />
         <V2BodyGrid onPickTicker={onPickTicker} />
       </div>
     </div>

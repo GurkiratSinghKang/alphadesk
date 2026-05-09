@@ -23,6 +23,11 @@ import { UnsupportedAsset } from "../_sections/UnsupportedAsset";
 // + back/forward work. Existing sections are reused; the tab pivot
 // only changes which sections render at any one time.
 import SymbolTabs, { useSymbolTab } from "../_v2/SymbolTabs";
+// v2-plan §2.2 — agents-on-this-name surface. Three archetype cards
+// (Research / Signal / Risk) showing what the desk thinks of THIS
+// symbol. Renders at the top of the History tab above the Trading
+// Agents debate flow.
+import AgentsOnThisName from "../_v2/AgentsOnThisName";
 
 export interface SymbolPageClientProps {
   symbol: string;
@@ -478,7 +483,8 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
 
       {activeTab === "history" && (
         <div role="tabpanel" id="symbol-tab-panel-history" aria-labelledby="symbol-tab-history">
-          <div className="px-4 sm:px-6 py-4">
+          <div className="px-4 sm:px-6 py-4 flex flex-col gap-6">
+            <AgentsOnThisName symbol={symbol} />
             <AgentsDebateCard symbol={symbol} isETF={data.isETF} />
           </div>
         </div>
