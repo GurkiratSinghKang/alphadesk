@@ -302,22 +302,45 @@ export function SymbolPageClient({ symbol }: SymbolPageClientProps) {
       >
         Skip to chart
       </a>
-      <header className="border-b border-border-hair bg-bg px-4 py-4 sm:px-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <header
+        className="border-b border-border-hair px-4 py-5 sm:px-6"
+        style={{ background: "var(--ink-100)" }}
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
             <nav aria-label="Ticker breadcrumbs">
               <Link
                 href="/symbols"
-                className="t-label u-brand transition-colors hover:text-primary"
+                className="t-eyebrow-italic transition-colors hover:text-primary"
+                style={{ color: "var(--brand)", letterSpacing: "0.2em" }}
               >
-                Symbols
+                SYMBOLS · {symbol.toUpperCase()}
               </Link>
             </nav>
-            <h1 className="mt-2 truncate text-h2 font-semibold text-fg">
+            <h1
+              className="m-0 mt-2 italic truncate"
+              style={{
+                fontFamily: "var(--font-display)",
+                color: "var(--ink-1000)",
+                fontSize: 44,
+                fontWeight: 400,
+                letterSpacing: "-0.025em",
+                lineHeight: 1.05,
+              }}
+            >
               {title}
             </h1>
           </div>
-          <p className="max-w-xl text-body-sm text-fg-muted">
+          <p
+            className="italic max-w-xl"
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: 14.5,
+              color: "var(--fg-muted)",
+              lineHeight: 1.55,
+              marginTop: 6,
+            }}
+          >
             Ticker workspace for {symbol.toUpperCase()}: chart, market context, options thesis,
             strategy lookup, and research surfaces.
           </p>
