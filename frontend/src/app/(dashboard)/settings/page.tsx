@@ -665,24 +665,33 @@ export default function SettingsPage() {
               >
                 ON THIS PAGE
               </p>
+              {/* v2 polish — rail items get a small caption per the
+               * settings-dark.png pattern ("name, email, avatar").
+               * Two-line format makes each section legible without
+               * having to recognize the icon-less title alone. */}
               <ul className="flex flex-col gap-0.5">
                 {[
-                  ["appearance", "Appearance"],
-                  ["exit-rules", "Exit rules"],
-                  ["trading-mode", "Trading mode"],
-                  ["brokerage", "Brokerage"],
-                  ["notifications", "Notifications"],
-                  ["display", "Display"],
-                  ["data-refresh", "Data refresh"],
-                  ["export-data", "Export data"],
-                  ["security", "Security"],
-                ].map(([id, label]) => (
+                  ["appearance", "Appearance", "density · theme"],
+                  ["exit-rules", "Exit rules", "auto-close · loss alerts"],
+                  ["trading-mode", "Trading mode", "paper · live"],
+                  ["brokerage", "Brokerage", "connection · API keys"],
+                  ["notifications", "Notifications", "fills · signals · risk"],
+                  ["display", "Display", "compact view · animation"],
+                  ["data-refresh", "Data refresh", "polling cadence"],
+                  ["export-data", "Export data", "CSV · JSON"],
+                  ["security", "Security", "session · 2FA"],
+                ].map(([id, label, sub]) => (
                   <li key={id}>
                     <a
                       href={`#${id}`}
-                      className="block rounded-sm px-2 py-1.5 text-label text-muted-foreground transition-colors hover:bg-bg-elev-2 hover:text-foreground"
+                      className="block rounded-sm px-2 py-1.5 transition-colors hover:bg-bg-elev-2 group"
                     >
-                      {label}
+                      <div className="text-label text-muted-foreground group-hover:text-foreground">
+                        {label}
+                      </div>
+                      <div className="font-mono text-eyebrow uppercase tracking-[0.06em] text-fg-muted/70">
+                        {sub}
+                      </div>
                     </a>
                   </li>
                 ))}
