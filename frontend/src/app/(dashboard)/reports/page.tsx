@@ -1534,6 +1534,52 @@ export default function ReportsPage() {
   return (
     <ScrollArea className="h-full">
       <DashboardPageLayout eyebrow="§ REPORTS" title="Reports" actions={rangeSelector}>
+        {/* v2 phase 1.9 follow-up — editorial italic-Newsreader hero card
+         * matching reports.jsx voice. Sits above the section cards so the
+         * existing wrapper landmark + actions are unchanged. */}
+        <header
+          className="rounded-md border border-border-hair p-5 md:p-6"
+          style={{
+            background: "var(--bg-elev-1)",
+            borderLeft: "2px solid var(--brand)",
+          }}
+        >
+          <p
+            className="t-eyebrow-italic"
+            style={{ color: "var(--brand)", letterSpacing: "0.2em", margin: 0 }}
+          >
+            REPORTS · YOUR RECEIPTS
+          </p>
+          <h2
+            className="m-0 mt-3 italic"
+            style={{
+              fontFamily: "var(--font-display)",
+              color: "var(--ink-1000)",
+              fontSize: 38,
+              fontWeight: 400,
+              letterSpacing: "-0.025em",
+              lineHeight: 1.05,
+            }}
+          >
+            Read what the desk did.
+          </h2>
+          <p
+            className="italic"
+            style={{
+              marginTop: 12,
+              fontFamily: "var(--font-display)",
+              fontSize: 15,
+              color: "var(--fg-muted)",
+              lineHeight: 1.55,
+              maxWidth: 680,
+            }}
+          >
+            Performance, strategies, slippage telemetry, tax lots and wash
+            sales. Every number explained. <span style={{ color: "var(--brand)" }}>NOT TAX ADVICE</span> —
+            confirm wash-sale + holding-period classification with your CPA.
+          </p>
+        </header>
+
         {/* Portfolio Statement */}
         <SectionCard title="Portfolio statement" eyebrow="§ STATEMENT" icon={FileText}>
           {summary ? (
