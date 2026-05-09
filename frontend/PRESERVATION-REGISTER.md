@@ -230,6 +230,33 @@ specific regression class — keep the test or the comment intact.
 
 ---
 
+## H+. v2 Phase 4 a11y audit
+
+Phase 4 (final polish) shipped an automated WCAG 2.1 AA sweep over
+the v2 primitive surface. The suite at
+[`src/__tests__/a11y/v2-primitives.test.tsx`](src/__tests__/a11y/v2-primitives.test.tsx)
+runs `axe-core` directly (jest-axe wrapper isn't installed) and
+asserts no violations of impact ≥ "serious" across:
+
+- AgentChip (every archetype × every status)
+- EmptyState (with eyebrow + action button)
+- Section (level 1 + level 2)
+- Stat (every tone)
+- StatusBanner (info/warn/crit + action + dismiss)
+- ControlModule (default + critical + scoped + footer)
+- StatusDot (every tone + pulse + size)
+
+Color-contrast + region rules are deferred to the visual-regression
+pass on `/_design` (jsdom can't compute computed-style colors).
+Manual contrast verification is captured by the screenshot baseline
+in `frontend/qa-screenshots/`.
+
+**Don't disable rules without writing the reason in
+PRESERVATION-REGISTER.** axe rule disablement is allowed only with
+an explicit comment + a follow-up issue.
+
+---
+
 ## I. Tests pinning specific behaviors
 
 If you change anything in these test files, you are signing up to
