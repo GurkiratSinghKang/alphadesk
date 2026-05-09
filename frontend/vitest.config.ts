@@ -8,6 +8,17 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
+    // Coordination fix (PR #105 follow-up): Vitest auto-discovers any
+    // `*.spec.ts` file under the project root. The Playwright visual
+    // tests under `tests/visual/` use `@playwright/test`'s `test()` and
+    // `test.describe()` APIs, which throw "Playwright Test did not
+    // expect test() to be called here" when imported by Vitest. Excluding
+    // the Playwright tree keeps both runners scoped to their own files.
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      'tests/visual/**',
+    ],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}'],
