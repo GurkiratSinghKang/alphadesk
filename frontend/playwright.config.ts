@@ -30,6 +30,10 @@ export default defineConfig({
       maxDiffPixelRatio: 0.05,
       threshold: 0.2,
       animations: "disabled",
+      // Lightweight-charts canvas keeps repainting on /trade so the
+      // default 5s pixel-stability timeout fires. 15s gives the canvas
+      // enough idle time to settle on the empty-state legend.
+      timeout: 15_000,
     },
   },
   use: {
