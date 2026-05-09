@@ -308,6 +308,136 @@ function EditorialPipelineFunnel({
   );
 }
 
+// v2 phase 1.x — staged-review section matching pipeline-dark.png.
+// Renders the candidate cards awaiting operator stage/skip decisions.
+// Pulls from the live signals array; falls back to an honest empty
+// state when no run has produced candidates today.
+function EditorialStagedReview({ run }: { run: PipelineRun | null }) {
+  const signalsArr = Array.isArray(run?.signals) ? run!.signals : [];
+  const orders = run?.ordersPlaced?.length ?? 0;
+  // Show only candidates that haven't been routed to orders yet (rough
+  // proxy for "awaiting your review"). When the backend ships explicit
+  // staged status, swap this filter for the canonical field.
+  const candidates = signalsArr.slice(0, Math.max(0, signalsArr.length - orders));
+
+  type SignalShape = {
+    symbol?: string;
+    signal?: string;
+    conviction?: number;
+    rationale?: string;
+    strategyId?: string;
+  };
+
+  return (
+    <section className="space-y-3">
+      <header className="flex items-baseline justify-between gap-2">
+        <div>
+          <p
+            className="t-eyebrow-italic"
+            style={{ color: "var(--brand)", letterSpacing: "0.18em", margin: 0 }}
+          >
+            STAGED · AWAITING YOUR REVIEW
+          </p>
+          <h2
+            className="m-0 mt-1 italic"
+            style={{
+              fontFamily: "var(--font-display)",
+              color: "var(--ink-1000)",
+              fontSize: 22,
+              fontWeight: 400,
+              letterSpacing: "-0.02em",
+              lineHeight: 1.15,
+            }}
+          >
+            {candidates.length > 0
+              ? `${candidates.length} ${candidates.length === 1 ? "candidate" : "candidates"} for the desk to clear.`
+              : "No candidates awaiting review right now."}
+          </h2>
+        </div>
+      </header>
+
+      {candidates.length === 0 ? (
+        <div
+          className="rounded-md border border-dashed border-border-hair px-5 py-8 text-center"
+          style={{ background: "var(--bg-elev-1)" }}
+        >
+          <p className="font-display italic text-body text-fg-muted">
+            The next pipeline run will surface candidates here. Each one
+            gets a row with the thesis, conviction, and a Stage / Skip
+            decision before it touches capital.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {candidates.slice(0, 4).map((raw, i) => {
+            const c = raw as SignalShape;
+            const symbol = c.symbol ?? `Candidate ${i + 1}`;
+            const signalText = (c.signal ?? "").toString();
+            const conviction =
+              typeof c.conviction === "number"
+                ? c.conviction.toFixed(2)
+                : null;
+            const rationale = (c.rationale ?? "").toString();
+            const strategyId = c.strategyId ?? "";
+            return (
+              <article
+                key={`${symbol}-${i}`}
+                className="rounded-md border border-border-hair p-4"
+                style={{ background: "var(--bg-elev-1)" }}
+              >
+                <header className="flex items-baseline justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="font-mono tabular-nums text-h3 text-fg">
+                      {symbol}
+                    </span>
+                    {strategyId ? (
+                      <span className="ml-2 italic text-label text-fg-muted">
+                        {strategyId}
+                      </span>
+                    ) : null}
+                  </div>
+                  {conviction ? (
+                    <span className="font-mono tabular-nums text-label text-brand">
+                      {conviction}
+                    </span>
+                  ) : null}
+                </header>
+                {rationale ? (
+                  <p className="mt-2 italic text-label leading-snug text-fg-muted line-clamp-2">
+                    {rationale}
+                  </p>
+                ) : null}
+                <footer className="mt-3 flex items-center justify-between gap-2">
+                  <span className="font-mono text-eyebrow uppercase tracking-[0.08em] text-fg-muted">
+                    {signalText || "PENDING"}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled
+                      title="Stage / Skip wires the live decision endpoint (backend follow-up)"
+                      className="rounded-sm border border-brand/50 bg-tint-brand-1 px-2.5 py-1 font-sans text-eyebrow font-semibold uppercase tracking-[0.08em] text-brand opacity-60"
+                    >
+                      Stage
+                    </button>
+                    <button
+                      type="button"
+                      disabled
+                      className="rounded-sm border border-border-hair bg-bg-elev-2 px-2.5 py-1 font-sans text-eyebrow font-semibold uppercase tracking-[0.08em] text-fg-muted opacity-60"
+                    >
+                      Skip
+                    </button>
+                  </div>
+                </footer>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function PipelineFlow({ run }: { run: PipelineRun | null }) {
   // Prefer the aggregate `counts` surfaced by the backend — they are the
   // source of truth when per-row detail is not available. Falling back to
@@ -957,6 +1087,11 @@ export default function PipelinePage() {
               run={todayRun}
               livePositions={displayPositions.length}
             />
+
+            {/* v2 phase 1.x — staged-review section (matches design's
+                "STAGED · AWAITING YOUR REVIEW" 2x2 grid). Renders live
+                signals when present; otherwise an honest empty state. */}
+            <EditorialStagedReview run={todayRun} />
 
             {/* Live Running Card — only visible while a run is in flight.
                 Shows stage, progress bar, current strategy, elapsed clock,
