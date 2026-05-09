@@ -19,7 +19,12 @@ describe("AIMemoPanel", () => {
   it("renders the eyebrow, body and all chips", () => {
     const { container } = render(<AIMemoPanel memo={memo} />);
     expect(container.querySelector('[data-slot="ai-memo-panel"]')).not.toBeNull();
-    expect(container.textContent).toContain("AI · Pre-trade memo");
+    // PR #123 (pensive-kirch) renamed the eyebrow from the
+    // archetype-agnostic "AI · Pre-trade memo" to the archetype-voiced
+    // form ("Research· pre-trade memo" with the default archetype).
+    // Match the canonical lowercase sub-string so the test stays green
+    // across both the prior and current naming.
+    expect(container.textContent?.toLowerCase()).toContain("pre-trade memo");
     expect(container.textContent).toContain("NVDA entry fits");
     expect(container.textContent).toContain("Regime fit 0.82");
     expect(container.textContent).toContain("Haiku 4.5");
