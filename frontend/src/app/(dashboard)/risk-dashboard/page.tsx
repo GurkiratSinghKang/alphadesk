@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 
-import Section from "@/components/composites/Section";
 import StatusBanner from "@/components/composites/StatusBanner";
 
 // Dashboard layout's useNotifications() requires <WebSocketProvider>,
@@ -34,17 +33,58 @@ export const metadata: Metadata = {
 export default function RiskDashboardPage() {
   return (
     <main className="px-6 pt-6 pb-12 max-w-screen-2xl mx-auto space-y-8">
-      <Section
-        eyebrow="RISK · DASHBOARD"
-        title="Risk dashboard"
-        description="VaR, stress scenarios, sector heat, concentration. Refreshed every 30s; AI memo every 15 minutes."
-        level={1}
+      {/* v2 phase 1.x — editorial italic-Newsreader hero matching
+       * risk-dark.png. Replaces the prior level=1 Section chrome (which
+       * stacked above RiskHero and read as duplicate page header). The
+       * StatusBanner moves below the hero so the warning still surfaces
+       * without competing with the editorial title. */}
+      <header
+        className="rounded-md border border-border-hair p-5 md:p-6"
+        style={{
+          background: "var(--bg-elev-1)",
+          borderLeft: "2px solid var(--brand)",
+        }}
       >
-        <StatusBanner
-          tone="info"
-          message="Phase 1.1 — page renders against demo data. Backend stress + intraday burn-down endpoints land in the Phase 1.1 follow-up cycle."
-        />
-      </Section>
+        <p
+          className="t-eyebrow-italic"
+          style={{ color: "var(--brand)", letterSpacing: "0.2em", margin: 0 }}
+        >
+          RISK · PORTFOLIO SURFACE
+        </p>
+        <h2
+          className="m-0 mt-3 italic"
+          style={{
+            fontFamily: "var(--font-display)",
+            color: "var(--ink-1000)",
+            fontSize: 30,
+            fontWeight: 400,
+            letterSpacing: "-0.025em",
+            lineHeight: 1.05,
+            textWrap: "balance",
+          }}
+        >
+          What can hurt us today.
+        </h2>
+        <p
+          className="italic"
+          style={{
+            marginTop: 12,
+            fontFamily: "var(--font-display)",
+            fontSize: 15,
+            color: "var(--fg-muted)",
+            lineHeight: 1.55,
+            maxWidth: 680,
+          }}
+        >
+          Value at risk, scenario stress, exposure, correlation. Intraday
+          risk budget burns down with every fill.
+        </p>
+      </header>
+
+      <StatusBanner
+        tone="info"
+        message="Phase 1.1 — page renders against demo data. Backend stress + intraday burn-down endpoints land in the Phase 1.1 follow-up cycle."
+      />
 
       <RiskHero />
       <StressScenarios />
