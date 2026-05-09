@@ -97,6 +97,13 @@ import PreTradeAgentStrip from "./_v2/PreTradeAgentStrip";
 import MetricRibbon from "./_v2/MetricRibbon";
 import AssetTabSwitcher, { type AssetTab } from "./_v2/AssetTabSwitcher";
 import V2TradeLeftRail from "./_v2/V2TradeLeftRail";
+// v2 phase 1.5 — Studies/range/mode toolbar above the chart. UI-only;
+// the toggle state is held locally and feeds future overlay wiring as
+// PriceChartPanel grows native support for SMA/EMA/Bollinger/etc.
+import ChartToolbar, {
+  makeEmptyOverlays,
+  type ChartModeId,
+} from "./_v2/ChartToolbar";
 import type { Order, Position } from "@/types";
 import { useMarketStore, useQuote } from "@/stores/market";
 import { usePortfolioStore } from "@/stores/portfolio";
@@ -413,6 +420,14 @@ export default function TradePage() {
   const [series, setSeries] = useState<ChartBar[]>([]);
   const [seriesLoading, setSeriesLoading] = useState(false);
   const [seriesError, setSeriesError] = useState<string | null>(null);
+  // v2 phase 1.5 — chart mode + overlay flags driven from ChartToolbar.
+  // Studies dropdown toggles flags; engine consumes the ones it supports
+  // (SMA / regime today). Other flags persist as a no-op until the chart
+  // engine grows native support.
+  const [chartMode, setChartMode] = useState<ChartModeId>("candle");
+  const [chartOverlays, setChartOverlays] = useState<Record<string, boolean>>(
+    () => makeEmptyOverlays(),
+  );
   const [chartReloadKey, setChartReloadKey] = useState(0);
   useEffect(() => {
     const hasOptionCombo = activeLegs.some((leg) => isOccSymbol(leg.occ));
@@ -1483,6 +1498,16 @@ export default function TradePage() {
               </div>
               <TradeStatusPill label={range} tone="muted" />
             </div>
+            {/* v2 phase 1.5 — chart toolbar (range · mode · studies) */}
+            <ChartToolbar
+              range={range}
+              onRangeChange={setRange}
+              chartMode={chartMode}
+              onChartModeChange={setChartMode}
+              overlays={chartOverlays}
+              onOverlaysChange={setChartOverlays}
+              className="border-b border-border-hair"
+            />
             <PriceChartPanel
               symbol={symbol}
               quote={quote}
@@ -1496,6 +1521,7 @@ export default function TradePage() {
               density="execution"
               tradeOverlays={chartTradeOverlays}
               chartOrderPlacement={chartOrderPlacement}
+              hideRangeBar
               className="h-full min-h-0 bg-bg-elev-1 text-fg"
             />
           </section>
