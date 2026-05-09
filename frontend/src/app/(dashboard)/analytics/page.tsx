@@ -1095,6 +1095,54 @@ export default function AnalyticsPage() {
         title="Portfolio analytics"
         actions={<RangeSelector value={range} onChange={setRange} />}
       >
+        {/* v2 phase 1.x — editorial italic-Newsreader hero matching
+         * analytics-dark.png. Same voice as /settings, /reports,
+         * /strategies, /pipeline, /watchlists, /alerts. Sits above
+         * the existing KPI strip + charts, which keep their current
+         * data wiring untouched. */}
+        <header
+          className="mb-4 rounded-md border border-border-hair p-5 md:p-6"
+          style={{
+            background: "var(--bg-elev-1)",
+            borderLeft: "2px solid var(--brand)",
+          }}
+        >
+          <p
+            className="t-eyebrow-italic"
+            style={{ color: "var(--brand)", letterSpacing: "0.2em", margin: 0 }}
+          >
+            ANALYTICS · {range.toUpperCase()}
+          </p>
+          <h2
+            className="m-0 mt-3 italic"
+            style={{
+              fontFamily: "var(--font-display)",
+              color: "var(--ink-1000)",
+              fontSize: 38,
+              fontWeight: 400,
+              letterSpacing: "-0.025em",
+              lineHeight: 1.05,
+              textWrap: "balance",
+            }}
+          >
+            Performance · review.
+          </h2>
+          <p
+            className="italic"
+            style={{
+              marginTop: 12,
+              fontFamily: "var(--font-display)",
+              fontSize: 15,
+              color: "var(--fg-muted)",
+              lineHeight: 1.55,
+              maxWidth: 680,
+            }}
+          >
+            Equity curve, drawdown, monthly returns, and the trade-stat
+            breakdown — sliced to the range you pick on the right.
+          </p>
+        </header>
+
         {/* Round-8 killer-move 2: hero KpiTile strip. Anchors the page
             in 3 seconds before the user dives into the four charts below.
             Tone-coded so positive returns / rolling Sharpe ≥ 1 read
