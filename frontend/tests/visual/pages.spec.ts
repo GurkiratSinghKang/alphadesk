@@ -37,7 +37,7 @@ async function gotoAndWait(page: Page, route: string, settleMs = 2500) {
   // snapshot. Per-route override allowed via `settleMs` for slow pages
   // like /alerts whose body has text quickly but main content keeps mounting.
   try {
-    await page.waitForFunction(() => document.body.innerText.length > 200, undefined, {
+    await page.waitForFunction(() => document.body.innerText.length > 80, undefined, {
       timeout: 60_000,
     });
   } catch {
@@ -58,7 +58,10 @@ test.describe("v2 design parity", () => {
   });
 
   test("trade terminal", async ({ page }) => {
-    await gotoAndWait(page, "/trade");
+    // Trade is the heaviest page: MetricRibbon, AssetTabs, PreTradeAgentStrip,
+    // chart canvas, right-rail order ticket. Bump settle so all sections
+    // finish hydrating before snapshot.
+    await gotoAndWait(page, "/trade", 6500);
     await expect(page).toHaveScreenshot("trade.png", { fullPage: false });
   });
 
@@ -78,12 +81,14 @@ test.describe("v2 design parity", () => {
   });
 
   test("settings", async ({ page }) => {
-    await gotoAndWait(page, "/settings");
+    // /settings has the heaviest dynamic-import tree (broker cards,
+    // appearance, account sections); needs the longest settle.
+    await gotoAndWait(page, "/settings", 8000);
     await expect(page).toHaveScreenshot("settings.png", { fullPage: false });
   });
 
   test("risk monitor", async ({ page }) => {
-    await gotoAndWait(page, "/risk-dashboard");
+    await gotoAndWait(page, "/risk-dashboard", 6500);
     await expect(page).toHaveScreenshot("risk.png", { fullPage: false });
   });
 
@@ -138,5 +143,42 @@ test.describe("v2 design parity", () => {
   test("agents · detail", async ({ page }) => {
     await gotoAndWait(page, "/agents/research-regime", 6500);
     await expect(page).toHaveScreenshot("agents-detail.png", { fullPage: false });
+  });
+
+  test("about", async ({ page }) => {
+    await gotoAndWait(page, "/about");
+    await expect(page).toHaveScreenshot("about.png", { fullPage: false });
+  });
+
+  test("contact", async ({ page }) => {
+    await gotoAndWait(page, "/contact");
+    await expect(page).toHaveScreenshot("contact.png", { fullPage: false });
+  });
+
+  test("terms", async ({ page }) => {
+    await gotoAndWait(page, "/terms");
+    await expect(page).toHaveScreenshot("terms.png", { fullPage: false });
+  });
+
+  test("privacy", async ({ page }) => {
+    await gotoAndWait(page, "/privacy");
+    await expect(page).toHaveScreenshot("privacy.png", { fullPage: false });
+  });
+
+  test("position · NVDA", async ({ page }) => {
+    await gotoAndWait(page, "/positions/NVDA", 6500);
+    await expect(page).toHaveScreenshot("position-NVDA.png", { fullPage: false });
+  });
+
+  test("position · flat (AAPL)", async ({ page }) => {
+    // Flat-position empty state has only ~650 chars (less than the
+    // gotoAndWait threshold). Use direct waitForTimeout to avoid the
+    // 60s waitForFunction stall.
+    await page.goto("/positions/AAPL", { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(8000);
+    await page.addStyleTag({
+      content: `*,*::before,*::after{animation:none!important;transition:none!important}`,
+    });
+    await expect(page).toHaveScreenshot("position-AAPL-flat.png", { fullPage: false });
   });
 });

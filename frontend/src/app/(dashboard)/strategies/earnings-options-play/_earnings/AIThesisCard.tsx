@@ -85,7 +85,7 @@ export default function AIThesisCard({ structured, full, running, error = null, 
         className="rounded border-l-2 border-[color:var(--brand)] bg-[color:var(--brand-tint)] p-3"
       >
         <div className="flex items-center justify-between gap-2">
-          <p className="t-label u-brand">◇ AI · STRUCTURED</p>
+          <p className="t-label u-brand">◇ RESEARCH · STRUCTURED THESIS</p>
           <div className="flex items-center gap-2">
             {researchLink}
             <span className="t-meta">unavailable</span>
@@ -130,7 +130,7 @@ export default function AIThesisCard({ structured, full, running, error = null, 
       className="rounded border-l-2 border-[color:var(--brand)] bg-[color:var(--brand-tint)] p-3"
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="t-label u-brand">◇ AI · STRUCTURED</p>
+        <p className="t-label u-brand">◇ RESEARCH · STRUCTURED THESIS</p>
         <div className="flex items-center gap-2">
           {researchLink}
           <span className="t-meta">{structured.model}</span>
