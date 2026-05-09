@@ -28,6 +28,7 @@ import {
   metaStage,
   metaKind,
   type StrategyStage,
+  type StrategyGroup,
 } from "@/lib/strategies";
 import ResearchStrategyCard from "@/components/strategies/ResearchStrategyCard";
 import type { ResearchCardMetric } from "@/components/strategies/ResearchStrategyCard";
@@ -71,6 +72,9 @@ interface ListingStrategy {
   // from the shared client-side manifest so the pill appears on first paint.
   liveDisabled: boolean;
   paperOnly: boolean;
+  // v2 polish — group eyebrow ("FUNDAMENTAL" / "TECHNICAL") above the
+  // readiness chip in the catalogue card, mirroring strategies-dark.png.
+  group: StrategyGroup;
 }
 
 type Bucket = "active" | "paused" | "coming_soon";
@@ -182,7 +186,9 @@ function readinessFor(
     return {
       key: "ready",
       label: "Ready",
-      reason: "Enabled system with current catalogue metadata.",
+      // v2 polish — match strategies-dark.png caption voice:
+      // "Live, autonomous, unblocked." instead of generic "Enabled system".
+      reason: "Live, autonomous, unblocked.",
       tone: "profit",
     };
   }
@@ -246,6 +252,15 @@ function StrategyCatalogCard({
     <>
       <header className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
+          {/* v2 polish — group eyebrow ("FUNDAMENTAL" / "TECHNICAL")
+           * matching strategies-dark.png. Sits above the italic title
+           * so the card classifies the strategy at a glance. */}
+          <p
+            className="font-mono text-eyebrow uppercase tracking-[0.16em] text-fg-muted"
+            style={{ margin: 0 }}
+          >
+            {s.group}
+          </p>
           <div
             className="font-display italic text-h3 leading-tight text-fg"
             style={{ letterSpacing: 0 }}
@@ -720,6 +735,7 @@ export default function StrategiesListingPage() {
         maxDD: p?.max_drawdown ?? null,
         liveDisabled,
         paperOnly,
+        group: meta.group,
       } satisfies ListingStrategy;
     });
   }, [summaries, perf, catalog]);
