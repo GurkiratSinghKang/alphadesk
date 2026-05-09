@@ -646,19 +646,12 @@ export default function OrderBar({
             disabled={ticketLocked}
             onClick={() => handleSideClick("buy")}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 text-body-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand disabled:pointer-events-none disabled:opacity-55 transition-colors",
+              "flex items-center justify-center gap-2 px-4 py-2 font-semibold uppercase tracking-[0.14em] text-eyebrow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand disabled:pointer-events-none disabled:opacity-55 transition-colors",
               side === "buy"
-                ? "bg-bg-elev-2 border-r border-profit/40 text-fg"
+                ? "bg-profit text-up-on border-r border-profit"
                 : "bg-transparent border-r border-border-hair text-fg-muted hover:text-fg"
             )}
           >
-            <span
-              className={cn(
-                "size-1.5 rounded-full shrink-0",
-                side === "buy" ? "bg-profit" : "border border-fg-muted"
-              )}
-              aria-hidden
-            />
             BUY
           </button>
           <button
@@ -669,19 +662,12 @@ export default function OrderBar({
             disabled={ticketLocked}
             onClick={() => handleSideClick("sell")}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 text-body-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand disabled:pointer-events-none disabled:opacity-55 transition-colors",
+              "flex items-center justify-center gap-2 px-4 py-2 font-semibold uppercase tracking-[0.14em] text-eyebrow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand disabled:pointer-events-none disabled:opacity-55 transition-colors",
               side === "sell"
-                ? "bg-bg-elev-2 border-l border-down-500/40 text-fg"
+                ? "bg-loss text-down-on border-l border-loss"
                 : "bg-transparent border-l border-border-hair text-fg-muted hover:text-fg"
             )}
           >
-            <span
-              className={cn(
-                "size-1.5 rounded-full shrink-0",
-                side === "sell" ? "bg-down-500" : "border border-fg-muted"
-              )}
-              aria-hidden
-            />
             {sellArming ? "TAP AGAIN" : "SELL"}
           </button>
         </div>
