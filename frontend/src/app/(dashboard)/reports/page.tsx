@@ -1363,7 +1363,9 @@ export default function ReportsPage() {
   // v2 polish — tax-year scoping per reports-dark.png. Default to
   // "current" so the existing range-chip behavior is unchanged on
   // first load; selecting a year overrides the range filter.
-  const [taxYear, setTaxYear] = useState<ReportsTaxYear>("current");
+  // Named `periodTaxYear` to avoid collision with the existing
+  // `taxYear: number` state used by the TaxReport section below.
+  const [periodTaxYear, setPeriodTaxYear] = useState<ReportsTaxYear>("current");
 
   // BUG-001 / BUG-015: subscribe to the shared portfolio store so Reports
   // shows exactly the same positions + summary numbers as Desk / Pipeline.
@@ -1419,7 +1421,7 @@ export default function ReportsPage() {
   // trades carry no exit so they drop out of period-scoped reports but
   // remain visible in the position table which isn't historical.
   const filteredTrades = useMemo(() => {
-    const yearWindow = taxYearBounds(taxYear);
+    const yearWindow = taxYearBounds(periodTaxYear);
     if (yearWindow) {
       // Tax-year scope wins — clip to the year's calendar bounds and
       // ignore the trailing-window range chip below.
@@ -1440,7 +1442,7 @@ export default function ReportsPage() {
       const exit = t.exit_time ? new Date(t.exit_time).getTime() : NaN;
       return Number.isFinite(exit) && exit >= cutoffMs;
     });
-  }, [trades, range, taxYear]);
+  }, [trades, range, periodTaxYear]);
 
   // v2 reports polish — derive the resolved date window so the
   // period bar can show "From → To" alongside the chip group. Tax
@@ -1448,7 +1450,7 @@ export default function ReportsPage() {
   // loaded trades; named ranges resolve to ``rangeCutoff(range)`` →
   // today.
   const periodBounds = useMemo(() => {
-    const yearWindow = taxYearBounds(taxYear);
+    const yearWindow = taxYearBounds(periodTaxYear);
     if (yearWindow) {
       // Cap the right edge at "today" if the year is the running
       // calendar year; full year otherwise.
@@ -1469,7 +1471,7 @@ export default function ReportsPage() {
       from: Number.isFinite(earliest) ? new Date(earliest) : null,
       to,
     };
-  }, [range, taxYear, trades]);
+  }, [range, periodTaxYear, trades]);
 
   const formatPeriodDate = (d: Date) =>
     d.toLocaleDateString(undefined, {
@@ -1524,7 +1526,7 @@ export default function ReportsPage() {
       onKeyDown={handleRadioGroupKeyDown}
     >
       {taxYearOptions.map((y) => {
-        const active = y === taxYear;
+        const active = y === periodTaxYear;
         const label = y === "current" ? "Current" : String(y);
         return (
           <button
@@ -1533,7 +1535,7 @@ export default function ReportsPage() {
             role="radio"
             aria-checked={active}
             data-tax-year={label}
-            onClick={() => setTaxYear(y)}
+            onClick={() => setPeriodTaxYear(y)}
             className={cn(
               "font-mono text-label px-2.5 py-1 rounded transition-colors",
               active ? "bg-bg-elev-2 text-fg" : "text-fg-muted hover:text-fg",
@@ -1594,10 +1596,10 @@ export default function ReportsPage() {
             <div
               className={cn(
                 "transition-opacity",
-                taxYear !== "current" ? "opacity-50" : "",
+                periodTaxYear !== "current" ? "opacity-50" : "",
               )}
               title={
-                taxYear !== "current"
+                periodTaxYear !== "current"
                   ? "Tax year scope is active — reset to Current to use trailing-window periods"
                   : undefined
               }
