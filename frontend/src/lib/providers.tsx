@@ -66,6 +66,7 @@ const DataPipelineBridge = dynamic(
 
 const DASHBOARD_ROUTE_PREFIXES = [
   "/",
+  "/agents",
   "/analytics",
   "/alerts",
   "/pipeline",
@@ -84,6 +85,7 @@ function isDashboardRoute(pathname: string | null): boolean {
   if (pathname === "/strategies/earnings-options-play") return true;
   if (/^\/strategies\/[^/]+$/.test(pathname)) return true;
   if (/^\/symbols\/[^/]+$/.test(pathname)) return true;
+  if (/^\/agents\/[^/]+$/.test(pathname)) return true;
   return false;
 }
 

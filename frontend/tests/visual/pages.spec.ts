@@ -126,4 +126,14 @@ test.describe("v2 design parity", () => {
     await gotoAndWait(page, "/onboarding");
     await expect(page).toHaveScreenshot("onboarding.png", { fullPage: false });
   });
+
+  test("agents · roster", async ({ page }) => {
+    await gotoAndWait(page, "/agents", 6500);
+    await expect(page).toHaveScreenshot("agents.png", { fullPage: false });
+  });
+
+  test("agents · detail", async ({ page }) => {
+    await gotoAndWait(page, "/agents/research-regime", 6500);
+    await expect(page).toHaveScreenshot("agents-detail.png", { fullPage: false });
+  });
 });
