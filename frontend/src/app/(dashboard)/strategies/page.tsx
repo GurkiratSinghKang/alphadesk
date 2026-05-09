@@ -477,6 +477,117 @@ const READINESS_FILTERS: Array<{ value: ReadinessFilter; label: string }> = [
   { value: "blocked", label: "Blocked" },
 ];
 
+// v2 polish — "TODAY'S CONTRIBUTION" section per strategies-dark.png.
+// We don't yet track daily P&L per strategy, so this section uses the
+// cumulative return-since-inception as the closest honest proxy and
+// labels itself accordingly. The structure (eyebrow + title + total
+// + per-strategy bar segments) matches the design comp.
+function CumulativeContribution({ strategies }: { strategies: ListingStrategy[] }) {
+  const contributions = strategies
+    .map((s) => ({
+      id: s.id,
+      name: s.displayName,
+      group: s.group,
+      // Live cumulative return in dollars. `totalReturnPct` is a
+      // percentage (e.g. 36.2 → 36.2%), so divide by 100.
+      dollars: s.investedAmount * (s.totalReturnPct / 100),
+      invested: s.investedAmount,
+    }))
+    .filter((c) => c.invested > 0 && Number.isFinite(c.dollars) && c.dollars !== 0)
+    .sort((a, b) => Math.abs(b.dollars) - Math.abs(a.dollars));
+
+  const total = contributions.reduce((acc, c) => acc + c.dollars, 0);
+  const totalPos = contributions
+    .filter((c) => c.dollars > 0)
+    .reduce((acc, c) => acc + c.dollars, 0);
+  const totalNeg = contributions
+    .filter((c) => c.dollars < 0)
+    .reduce((acc, c) => acc + c.dollars, 0);
+  const denom = totalPos + Math.abs(totalNeg) || 1;
+
+  return (
+    <section className="rounded-lg border border-border-hair bg-bg-elev-1/95 p-4">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="t-label text-fg-hint">Cumulative contribution</p>
+          <h2 className="mt-2 t-h2 text-ink-1000">
+            What each strategy has earned since inception.
+          </h2>
+        </div>
+        <div className="text-right">
+          <p
+            className={cn(
+              "font-mono tabular-nums",
+              total > 0 ? "text-profit" : total < 0 ? "text-loss" : "text-fg",
+            )}
+            style={{ fontSize: 28, fontWeight: 500, lineHeight: 1.1 }}
+          >
+            {total >= 0 ? "+" : "−"}${Math.abs(total).toLocaleString("en-US", {
+              minimumFractionDigits: 0,
+              maximumFractionDigits: 0,
+            })}
+          </p>
+          <p className="font-mono text-eyebrow uppercase tracking-[0.08em] text-fg-muted">
+            <span className="text-profit">+${totalPos.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
+            {" · "}
+            <span className="text-loss">−${Math.abs(totalNeg).toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
+          </p>
+        </div>
+      </div>
+
+      {contributions.length === 0 ? (
+        <p className="mt-4 font-display italic text-body text-fg-muted">
+          No strategy has produced realized contribution yet — the
+          breakdown will populate as live trades close.
+        </p>
+      ) : (
+        <>
+          {/* Stacked bar — positive contributions render left (green),
+              negatives right (coral). Width per segment is proportional
+              to absolute contribution against the gross total. */}
+          <div
+            className="mt-4 flex h-3 w-full overflow-hidden rounded-sm bg-bg"
+            role="img"
+            aria-label={`Per-strategy cumulative contribution, total ${total >= 0 ? "+" : "-"}$${Math.abs(total).toFixed(0)}`}
+          >
+            {contributions.map((c) => {
+              const widthPct = Math.max(2, (Math.abs(c.dollars) / denom) * 100);
+              return (
+                <div
+                  key={c.id}
+                  title={`${c.name}: ${c.dollars >= 0 ? "+" : "−"}$${Math.abs(c.dollars).toFixed(0)}`}
+                  className={cn(
+                    "h-full",
+                    c.dollars >= 0 ? "bg-profit" : "bg-loss",
+                  )}
+                  style={{ width: `${widthPct}%`, opacity: 0.85 }}
+                />
+              );
+            })}
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3 lg:grid-cols-4">
+            {contributions.slice(0, 8).map((c) => (
+              <div key={c.id} className="flex items-baseline justify-between gap-2 t-meta">
+                <span className="truncate font-display italic text-fg">
+                  {c.name}
+                </span>
+                <span
+                  className={cn(
+                    "font-mono tabular-nums",
+                    c.dollars > 0 ? "text-profit" : c.dollars < 0 ? "text-loss" : "text-fg-muted",
+                  )}
+                >
+                  {c.dollars >= 0 ? "+" : "−"}${Math.abs(c.dollars).toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 function StrategyReadinessWorkbench({
   counts,
   activeFilter,
@@ -970,6 +1081,10 @@ export default function StrategiesListingPage() {
               Retry
             </button>
           </div>
+        )}
+
+        {!loading && (
+          <CumulativeContribution strategies={strategies} />
         )}
 
         {!loading && (
