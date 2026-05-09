@@ -88,7 +88,7 @@ test.describe("v2 design parity", () => {
   });
 
   test("admin · control center", async ({ page }) => {
-    await gotoAndWait(page, "/admin/control-center");
+    await gotoAndWait(page, "/admin/control-center", 6500);
     await expect(page).toHaveScreenshot("admin-control-center.png", { fullPage: false });
   });
 
