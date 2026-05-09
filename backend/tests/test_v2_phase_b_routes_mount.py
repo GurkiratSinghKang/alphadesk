@@ -73,6 +73,7 @@ def test_v2_phase_b_routes_mounted() -> None:
         "/api/v1/onboarding/answers",
         # B.12 Reports
         "/api/v1/reports/runs",
+        "/api/v1/reports/runs/{run_id}/download/{format}",
         # B.13 Tax
         "/api/v1/tax/lots",
         "/api/v1/tax/wash-sales",
@@ -84,11 +85,15 @@ def test_v2_phase_b_routes_mounted() -> None:
         # B.17 Billing
         "/api/v1/billing/plans",
         "/api/v1/billing/subscription",
+        "/api/v1/billing/webhook",
         # B.18 Documentation
         "/api/v1/docs/categories",
         "/api/v1/docs/articles",
         # B.7 Jarvis
         "/api/v1/jarvis/history",
+        "/api/v1/jarvis/parse",
+        "/api/v1/jarvis/confirm/{intent_id}",
+        "/api/v1/jarvis/modules",
     }
 
     missing = expected - paths

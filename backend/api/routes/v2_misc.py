@@ -28,7 +28,7 @@ from __future__ import annotations
 from datetime import datetime, date, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -162,6 +162,16 @@ async def queue_backtest_run(
     username: str = Depends(require_auth),
     db=Depends(get_db),
 ) -> BacktestRunOut:
+    """B.10 — queue + dispatch backtest run.
+
+    Inserts the BacktestRun row, fires the orchestrator as a
+    fire-and-forget asyncio task, returns immediately so the
+    frontend can poll. Phase 1.x follow-up moves the orchestrator
+    behind a worker queue (RQ / Celery) for durable execution
+    across process restarts.
+    """
+    import asyncio
+
     from data.storage.models import BacktestRun
 
     row = BacktestRun(
@@ -185,6 +195,9 @@ async def queue_backtest_run(
         request_id=None,
         details={"run_id": row.id, "strategy": payload.strategy},
     )
+    # Fire the orchestrator in the background. Failures are logged
+    # to backtest_run.error + backtest_failed audit by the worker.
+    asyncio.create_task(_run_backtest_safe(int(row.id)))
     return BacktestRunOut(
         id=int(row.id),
         strategy=row.strategy,
@@ -195,6 +208,22 @@ async def queue_backtest_run(
         metrics=row.metrics,
         created_at=row.created_at.isoformat(),
     )
+
+
+async def _run_backtest_safe(run_id: int) -> None:
+    """Wrap run_backtest so an exception in the fire-and-forget path
+    can't crash the event loop. The orchestrator already updates the
+    BacktestRun row to status='failed' on error; this just swallows
+    the propagation."""
+    import logging
+
+    from services.backtest_orchestrator import run_backtest
+
+    logger = logging.getLogger("alphadesk.v2.backtest_orchestrator")
+    try:
+        await run_backtest(run_id)
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.exception("backtest run %s failed: %s", run_id, exc)
 
 
 # ── B.11 Onboarding state ───────────────────────────────────────────
@@ -305,6 +334,58 @@ async def list_report_runs(
         )
         for r in result.scalars().all()
     ]
+
+
+@reports_v2_router.get("/{run_id}/download/{format}")
+async def download_report(
+    run_id: int,
+    format: str,
+    username: str = Depends(require_auth),
+    db=Depends(get_db),
+):
+    """B.12 — render a stored ReportRun via the v2 HTML renderer.
+
+    `format` ∈ {"html", "pdf"}. PDF requires WeasyPrint at runtime;
+    when not installed the endpoint returns 501 + a hint pointing
+    at the HTML fallback.
+    """
+    from fastapi import Response
+    from data.storage.models import ReportRun
+    from services.reports.renderer import render_html, render_pdf
+
+    result = await db.execute(
+        select(ReportRun).where(
+            ReportRun.id == run_id, ReportRun.username == username
+        )
+    )
+    row = result.scalars().first()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Report not found")
+
+    title = f"{row.report_type.replace('_', ' ').title()} · {row.period_end.isoformat()}"
+    html = render_html(
+        report_type=row.report_type,
+        title=title,
+        period_start=row.period_start,
+        period_end=row.period_end,
+        ai_summary=row.ai_summary,
+        data=row.data or {},
+    )
+    if format == "html":
+        return Response(content=html, media_type="text/html")
+    if format == "pdf":
+        try:
+            pdf_bytes = render_pdf(html)
+        except ImportError as exc:
+            raise HTTPException(
+                status.HTTP_501_NOT_IMPLEMENTED,
+                f"{exc}. Use ?format=html and print-to-PDF in your browser.",
+            )
+        return Response(content=pdf_bytes, media_type="application/pdf")
+    raise HTTPException(
+        status.HTTP_400_BAD_REQUEST,
+        f"Unknown format {format!r}; use html or pdf.",
+    )
 
 
 # ── B.13 Tax / lots (list) ──────────────────────────────────────────
@@ -481,6 +562,30 @@ async def list_plans(db=Depends(get_db)) -> list[PlanOut]:
     ]
 
 
+@billing_router.post("/webhook")
+async def stripe_webhook(request: Request, db=Depends(get_db)) -> dict[str, Any]:
+    """B.17 — Stripe webhook receiver.
+
+    Signature-verified + idempotent. NOT auth-gated — the
+    Stripe-Signature header is the auth. Per the redesign plan §B.17:
+    we route all card collection through Stripe-hosted Checkout to
+    avoid PCI-DSS scope; this endpoint receives lifecycle events
+    (invoice.paid, customer.subscription.updated, etc.) and persists
+    them to billing_event for downstream reconciliation.
+    """
+    from services.billing.stripe_webhook import (
+        StripeSignatureError,
+        ingest_webhook,
+    )
+
+    payload = await request.body()
+    signature = request.headers.get("stripe-signature", "")
+    try:
+        return await ingest_webhook(payload, signature, db)
+    except StripeSignatureError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Stripe webhook: {exc}")
+
+
 @billing_router.get("/subscription", response_model=SubscriptionOut | None)
 async def get_subscription(
     username: str = Depends(require_auth), db=Depends(get_db)
@@ -561,7 +666,7 @@ async def list_doc_articles(
     ]
 
 
-# ── B.7 Jarvis intent log (read) ────────────────────────────────────
+# ── B.7 Jarvis: parse, confirm, history, modules ───────────────────
 jarvis_router = APIRouter(prefix="/jarvis", tags=["jarvis"])
 
 
@@ -569,10 +674,173 @@ class JarvisIntentOut(BaseModel):
     id: int
     prompt: str
     parsed_intent: dict | None = None
+    dry_run_diff: dict | None = None
     confirmed_at: str | None = None
     executed_at: str | None = None
     error: str | None = None
     created_at: str
+
+
+class JarvisParseRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=500)
+
+
+class JarvisParseResponse(BaseModel):
+    intent_id: int
+    parsed_intent: dict | None
+    dry_run_diff: dict | None
+    confirm_required: bool
+
+
+class JarvisRegistryItem(BaseModel):
+    module: str
+    actions: list[str]
+
+
+@jarvis_router.get("/modules", response_model=list[JarvisRegistryItem])
+async def list_jarvis_modules(
+    _: str = Depends(require_auth),
+) -> list[JarvisRegistryItem]:
+    """Frontend introspection — what modules + actions does Jarvis know?"""
+    from agents.jarvis import REGISTRY
+
+    return [
+        JarvisRegistryItem(module=m, actions=list(actions))
+        for m, actions in REGISTRY.items()
+    ]
+
+
+@jarvis_router.post("/parse", response_model=JarvisParseResponse)
+async def parse_jarvis_prompt(
+    payload: JarvisParseRequest,
+    username: str = Depends(require_auth),
+    db=Depends(get_db),
+) -> JarvisParseResponse:
+    """Parse a free-text prompt into a typed intent (no mutation).
+
+    Always writes a JarvisIntent row even when parsing fails — the
+    log captures every prompt the user attempts so investigators
+    can see what was tried (per the B.7 risk register in the
+    redesign plan).
+    """
+    from agents.jarvis import dry_run_diff, parse_intent
+    from data.storage.models import JarvisIntent
+
+    spec = parse_intent(payload.prompt)
+    parsed_dict: dict | None = None
+    diff: dict | None = None
+    error: str | None = None
+
+    if spec is None:
+        error = "Could not classify prompt against the frozen module registry."
+    else:
+        try:
+            parsed_dict = {
+                "module": spec.module,
+                "action": spec.action,
+                "scope": dict(spec.scope),
+                "params": dict(spec.params),
+            }
+            diff = dry_run_diff(spec)
+        except Exception as exc:  # pragma: no cover — defensive
+            error = f"Dry-run failed: {exc}"
+
+    row = JarvisIntent(
+        username=username,
+        prompt=payload.prompt,
+        parsed_intent=parsed_dict,
+        dry_run_diff=diff,
+        error=error,
+    )
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+
+    await write_audit(
+        event="jarvis_intent_parsed",
+        username=username,
+        ip=None,
+        request_id=None,
+        details={
+            "intent_id": int(row.id),
+            "ok": error is None,
+            "module": parsed_dict.get("module") if parsed_dict else None,
+            "action": parsed_dict.get("action") if parsed_dict else None,
+        },
+    )
+
+    return JarvisParseResponse(
+        intent_id=int(row.id),
+        parsed_intent=parsed_dict,
+        dry_run_diff=diff,
+        confirm_required=spec is not None,
+    )
+
+
+@jarvis_router.post("/confirm/{intent_id}")
+async def confirm_jarvis_intent(
+    intent_id: int,
+    username: str = Depends(require_auth),
+    db=Depends(get_db),
+) -> dict[str, Any]:
+    """Mark a parsed intent confirmed. Re-validates the parsed shape
+    against the frozen registry before recording confirmation.
+
+    Phase 1 records confirmation + audits but defers the per-module
+    dispatcher to the 1.6 follow-up — frontend Jarvis bar still
+    deep-links operators to the highlighted control on Admin to
+    execute. Per the B.7 risk register: confirm NEVER mutates without
+    re-validating the IntentSpec against the current REGISTRY.
+    """
+    from agents.jarvis import IntentSpec
+    from data.storage.models import JarvisIntent
+    from datetime import datetime, timezone
+
+    result = await db.execute(
+        select(JarvisIntent).where(
+            JarvisIntent.id == intent_id, JarvisIntent.username == username
+        )
+    )
+    row = result.scalars().first()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Intent not found")
+    if row.parsed_intent is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Intent has no parsed payload"
+        )
+
+    parsed = row.parsed_intent
+    try:
+        IntentSpec(
+            module=parsed["module"],
+            action=parsed["action"],
+            scope=parsed.get("scope", {}),
+            params=parsed.get("params", {}),
+        )
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"Stale or invalid intent: {exc}",
+        )
+
+    row.confirmed_at = datetime.now(timezone.utc)
+    await db.commit()
+    await write_audit(
+        event="jarvis_intent_confirmed",
+        username=username,
+        ip=None,
+        request_id=None,
+        details={
+            "intent_id": intent_id,
+            "module": parsed["module"],
+            "action": parsed["action"],
+        },
+    )
+    return {
+        "ok": True,
+        "intent_id": intent_id,
+        "dispatch": "pending — Phase 1.6 follow-up wires the per-module dispatcher",
+    }
 
 
 @jarvis_router.get("/history", response_model=list[JarvisIntentOut])
@@ -594,6 +862,7 @@ async def list_jarvis_intents(
             id=int(r.id),
             prompt=r.prompt,
             parsed_intent=r.parsed_intent,
+            dry_run_diff=r.dry_run_diff,
             confirmed_at=r.confirmed_at.isoformat() if r.confirmed_at else None,
             executed_at=r.executed_at.isoformat() if r.executed_at else None,
             error=r.error,
