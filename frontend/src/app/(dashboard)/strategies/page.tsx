@@ -288,31 +288,54 @@ function StrategyCatalogCard({
             </span>
           ) : null}
         </div>
-        {/* v2 catalog polish — pair regime + readiness as a single
-         * chip stack in the top-right corner so the two indicators
-         * read as one unit at a glance. The verbose readiness reason
-         * drops below as a quieter caption (no sub-bar chrome). */}
+        {/* v2 catalog polish — top-right pill stack matches
+         * strategies-dark.png. Lifetime return takes the prominent
+         * top spot when non-zero (design comp shows "+3.42% MTD" —
+         * we use lifetime since the backend doesn't surface MTD per
+         * strategy yet, and label accordingly). Regime pill below
+         * keeps the live state legible. The readiness chip moved
+         * down into the body row next to the caption (less visual
+         * duplication with the chip + caption pair). */}
         <div className="flex flex-col items-end gap-1">
+          {Number.isFinite(s.totalReturnPct) && s.totalReturnPct !== 0 ? (
+            <span
+              title={`Lifetime return ${s.totalReturnPct.toFixed(2)}% (MTD lights up once backend ships per-strategy daily P&L)`}
+              className={cn(
+                "inline-flex items-center rounded-pill px-2 py-0.5 font-mono text-label font-semibold tabular-nums",
+                s.totalReturnPct > 0
+                  ? "bg-tint-up-1 text-profit border border-profit/40"
+                  : "bg-tint-down-1 text-loss border border-loss/40",
+              )}
+            >
+              {s.totalReturnPct > 0 ? "+" : ""}
+              {s.totalReturnPct.toFixed(2)}% TOT
+            </span>
+          ) : null}
           <RegimePill
             regime={regime.regime}
             vol={regime.vol}
             label={regime.label.toUpperCase()}
           />
-          <span
-            className={cn(
-              "inline-flex items-center rounded-pill border px-2 py-0.5 font-mono text-label uppercase tracking-wider",
-              readinessChipClass(readiness.tone),
-            )}
-            title={readiness.reason}
-          >
-            {readiness.label}
-          </span>
         </div>
       </header>
 
-      <p className="text-label leading-snug text-fg-muted">
-        {readiness.reason}
-      </p>
+      {/* Body — readiness chip + caption pair. Previously the chip
+          sat in the top-right with the regime pill; moving it down
+          here pairs it visibly with the reason text and lets the
+          top-right own the return + state pills. */}
+      <div className="flex items-baseline gap-2 -mt-1">
+        <span
+          className={cn(
+            "inline-flex items-center rounded-pill border px-2 py-0.5 font-mono text-label uppercase tracking-wider shrink-0",
+            readinessChipClass(readiness.tone),
+          )}
+        >
+          {readiness.label}
+        </span>
+        <span className="t-meta italic text-fg-muted leading-snug">
+          {readiness.reason}
+        </span>
+      </div>
 
       <div className="grid grid-cols-3 gap-3 border-t border-border-hair pt-3">
         <MetricCell label="OOS SHARPE" value={signedNumber(s.sharpe)} />
