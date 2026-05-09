@@ -80,16 +80,64 @@ interface PlaybookClientProps {
 export default function PlaybookClient({ strategyId }: PlaybookClientProps) {
   return (
     <main className="px-6 pt-6 pb-12 max-w-screen-2xl mx-auto space-y-8">
+      {/* v2 phase 1.x — editorial italic-Newsreader hero matching
+       * playbook-dark.png. Sits above the metric strip and stage
+       * workflow so the strategy gets its name in the design's voice
+       * before the dashboard chrome takes over. */}
+      <header
+        className="rounded-md border border-border-hair p-5 md:p-6"
+        style={{
+          background: "var(--bg-elev-1)",
+          borderLeft: "2px solid var(--brand)",
+        }}
+      >
+        <div className="flex items-center justify-between gap-4">
+          <p
+            className="t-eyebrow-italic"
+            style={{ color: "var(--brand)", letterSpacing: "0.2em", margin: 0 }}
+          >
+            STRATEGY · PLAYBOOK · {strategyId}
+          </p>
+          <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-pill bg-tint-up-1 border border-profit/40 text-profit text-eyebrow font-semibold uppercase tracking-[0.08em]">
+            ENABLED
+          </span>
+        </div>
+        <h2
+          className="m-0 mt-3 italic"
+          style={{
+            fontFamily: "var(--font-display)",
+            color: "var(--ink-1000)",
+            fontSize: 38,
+            fontWeight: 400,
+            letterSpacing: "-0.025em",
+            lineHeight: 1.05,
+            textWrap: "balance",
+          }}
+        >
+          Momentum &amp; Quality.
+        </h2>
+        <p
+          className="italic"
+          style={{
+            marginTop: 12,
+            fontFamily: "var(--font-display)",
+            fontSize: 15,
+            color: "var(--fg-muted)",
+            lineHeight: 1.55,
+            maxWidth: 680,
+          }}
+        >
+          Sizing 1% NAV per name (Kelly-capped at 2%). Long-only,
+          quality-screened universe. Held until the trailing stop, profit
+          take, or 60-day time stop — whichever comes first.
+        </p>
+      </header>
+
       <Section
         eyebrow={`STRATEGY · PLAYBOOK · ${strategyId}`}
         title="Momentum + Quality"
         description="Workflow document — stages, agents per stage, backtest summary, live trades, scoped watchlist."
         level={1}
-        right={
-          <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-pill bg-tint-up-1 border border-profit/40 text-profit text-eyebrow font-semibold uppercase tracking-[0.08em]">
-            ENABLED
-          </span>
-        }
       >
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 rounded-md border border-border-hair bg-bg-elev-1 p-4">
           <Stat label="MTD return" value="+4.8%" tone="profit" size="md" />

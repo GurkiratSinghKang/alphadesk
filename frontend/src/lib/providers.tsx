@@ -83,9 +83,15 @@ function isDashboardRoute(pathname: string | null): boolean {
   if (DASHBOARD_ROUTE_PREFIXES.includes(pathname as (typeof DASHBOARD_ROUTE_PREFIXES)[number])) return true;
   if (pathname === "/strategies/trading-agents-research") return true;
   if (pathname === "/strategies/earnings-options-play") return true;
-  if (/^\/strategies\/[^/]+$/.test(pathname)) return true;
-  if (/^\/symbols\/[^/]+$/.test(pathname)) return true;
-  if (/^\/agents\/[^/]+$/.test(pathname)) return true;
+  // 2026-05-09 fix: previously the regex only matched single-segment
+  // strategy detail (`/strategies/[id]`). Subroutes like `/playbook` and
+  // `/backtest` fell through, the WebSocketProvider didn't mount, and
+  // `WsStatusBanner` (which the dashboard layout renders unconditionally)
+  // crashed with "useWs must be used within Providers". Match the detail
+  // route AND any nested subroute.
+  if (/^\/strategies\/[^/]+(\/.*)?$/.test(pathname)) return true;
+  if (/^\/symbols\/[^/]+(\/.*)?$/.test(pathname)) return true;
+  if (/^\/agents\/[^/]+(\/.*)?$/.test(pathname)) return true;
   return false;
 }
 

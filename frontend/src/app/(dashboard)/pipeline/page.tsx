@@ -118,6 +118,196 @@ function SignalBadge({ signal }: { signal: string }) {
 
 // ─── Pipeline Flow Diagram ──────────────────────────────────
 
+// v2 phase 1.x — editorial pipeline funnel matching pipeline-dark.png.
+// Renders the "Universe → live" hero + 6-stage card strip at the top of
+// the page. Counts read from the live run; missing stages show "—" so
+// the scaffold remains honest when the backend hasn't shipped a stage
+// yet (e.g. pre-filter universe size, awaiting-review staging count).
+function EditorialPipelineFunnel({
+  run,
+  livePositions,
+}: {
+  run: PipelineRun | null;
+  livePositions: number;
+}) {
+  // Stage count derivations — each stage falls through real → derived → null.
+  const filtered = run?.counts?.screened ?? run?.screened?.length ?? null;
+  const ranked = run?.counts?.analyzed ?? run?.analyzed?.length ?? null;
+  const signalsArr = Array.isArray(run?.signals) ? run!.signals : [];
+  const candidates = signalsArr.length || null;
+  const orders = run?.ordersPlaced?.length ?? 0;
+  // Staged is the slice of candidates that haven't yet been submitted as
+  // orders — closest honest mapping to the design's "awaiting your
+  // review" stage. Falls back to null when we have no signals data.
+  const staged =
+    candidates != null ? Math.max(0, candidates - orders) : null;
+  const live = orders > 0 ? orders : livePositions || null;
+
+  type StageRow = {
+    n: string;
+    label: string;
+    count: number | null;
+    caption: string;
+  };
+  const stages: StageRow[] = [
+    {
+      n: "01",
+      label: "Universe",
+      count: null,
+      caption: "S&P 1500 + ADRs · liquidity > $20m",
+    },
+    {
+      n: "02",
+      label: "Filtered",
+      count: filtered,
+      caption: "Regime fit > 0.6 · sector momentum > 1σ",
+    },
+    {
+      n: "03",
+      label: "Ranked",
+      count: ranked,
+      caption: "Strategy scores · top quintile",
+    },
+    {
+      n: "04",
+      label: "Candidates",
+      count: candidates,
+      caption: "Risk-budget approved · earnings clear",
+    },
+    {
+      n: "05",
+      label: "Staged",
+      count: staged,
+      caption: "Awaiting your review",
+    },
+    {
+      n: "06",
+      label: "Live",
+      count: live,
+      caption: livePositions > 0 ? "Open positions" : "Submitted today",
+    },
+  ];
+
+  // Compute the largest count across stages for the progress-bar denominator.
+  const maxCount = stages.reduce(
+    (m, s) => (s.count != null && s.count > m ? s.count : m),
+    0,
+  );
+
+  // From-prior delta — only meaningful when both stages have counts.
+  const deltaFromPrior = (idx: number): string => {
+    if (idx === 0) return "—";
+    const cur = stages[idx].count;
+    const prev = stages[idx - 1].count;
+    if (cur == null || prev == null || prev === 0) return "—";
+    const pct = Math.round(((cur - prev) / prev) * 100);
+    return `${pct > 0 ? "+" : ""}${pct}% from prior`;
+  };
+
+  const universeForCopy = stages[0].count ?? "thousands of";
+  const liveForCopy = stages[5].count ?? 0;
+
+  return (
+    <div className="space-y-4">
+      {/* Editorial hero — italic Newsreader voice, brand-left rule, mirrors
+          the pattern used by /settings, /reports, /strategies. */}
+      <header
+        className="rounded-md border border-border-hair p-5 md:p-6"
+        style={{
+          background: "var(--bg-elev-1)",
+          borderLeft: "2px solid var(--brand)",
+        }}
+      >
+        <p
+          className="t-eyebrow-italic"
+          style={{ color: "var(--brand)", letterSpacing: "0.2em", margin: 0 }}
+        >
+          PIPELINE · DAILY
+        </p>
+        <h2
+          className="m-0 mt-3 italic"
+          style={{
+            fontFamily: "var(--font-display)",
+            color: "var(--ink-1000)",
+            fontSize: 38,
+            fontWeight: 400,
+            letterSpacing: "-0.025em",
+            lineHeight: 1.05,
+            textWrap: "balance",
+          }}
+        >
+          Universe → live.
+        </h2>
+        <p
+          className="italic"
+          style={{
+            marginTop: 12,
+            fontFamily: "var(--font-display)",
+            fontSize: 15,
+            color: "var(--fg-muted)",
+            lineHeight: 1.55,
+            maxWidth: 680,
+          }}
+        >
+          How {universeForCopy} names get squeezed into {liveForCopy}{" "}
+          {liveForCopy === 1 ? "trade" : "trades"}.
+        </p>
+      </header>
+
+      {/* 6-stage funnel strip. Each card: NN eyebrow + count + delta + thin
+          progress bar + caption. Cards collapse to 2-col on small screens. */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        {stages.map((s, i) => {
+          const ratio =
+            s.count != null && maxCount > 0 ? s.count / maxCount : 0;
+          return (
+            <div
+              key={s.n}
+              className="rounded-md border border-border-hair p-3"
+              style={{ background: "var(--bg-elev-1)" }}
+            >
+              <p
+                className="font-mono text-eyebrow uppercase tracking-[0.16em] text-fg-muted"
+                style={{ margin: 0 }}
+              >
+                {s.n} · {s.label}
+              </p>
+              <p
+                className="mt-1 font-mono tabular-nums text-fg"
+                style={{ fontSize: 26, fontWeight: 500, lineHeight: 1.1 }}
+              >
+                {s.count != null ? s.count.toLocaleString() : "—"}
+              </p>
+              <p className="mt-0.5 font-mono text-eyebrow uppercase tracking-[0.06em] text-fg-muted">
+                {deltaFromPrior(i)}
+              </p>
+              <div
+                className="mt-2 h-0.5 w-full rounded-full"
+                style={{ background: "var(--bg-elev-2)" }}
+                aria-hidden
+              >
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${Math.round(ratio * 100)}%`,
+                    background: "var(--brand)",
+                  }}
+                />
+              </div>
+              <p
+                className="mt-2 italic text-eyebrow leading-snug text-fg-muted"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                {s.caption}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function PipelineFlow({ run }: { run: PipelineRun | null }) {
   // Prefer the aggregate `counts` surfaced by the backend — they are the
   // source of truth when per-row detail is not available. Falling back to
@@ -759,6 +949,15 @@ export default function PipelinePage() {
           </div>
         ) : (
           <>
+            {/* v2 phase 1.x — editorial pipeline funnel. Sits above the
+                Live Running Card so the operator's first impression is
+                the universe→live narrative; the run-state machinery
+                below stays exactly as it was. */}
+            <EditorialPipelineFunnel
+              run={todayRun}
+              livePositions={displayPositions.length}
+            />
+
             {/* Live Running Card — only visible while a run is in flight.
                 Shows stage, progress bar, current strategy, elapsed clock,
                 and a Cancel button (admin-only on the backend; we render

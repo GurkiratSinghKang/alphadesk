@@ -642,10 +642,62 @@ export default function SettingsPage() {
           </p>
         </header>
 
+        {/* v2 phase 1.5 follow-up — settings rail.
+         * Below the editorial hero, the page splits into a sticky
+         * 240px rail (jump-links) and the existing card stack on
+         * the right. The rail collapses below `lg`; on small
+         * screens the page reads as a single linear column. */}
+        <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+          <aside
+            aria-label="Settings sections"
+            className="hidden lg:block"
+          >
+            <nav
+              className="sticky top-24 rounded-md border border-border-hair p-3"
+              style={{ background: "var(--bg-elev-1)" }}
+            >
+              <p
+                className="t-eyebrow-italic mb-2 px-2"
+                style={{
+                  color: "var(--fg-muted)",
+                  letterSpacing: "0.18em",
+                }}
+              >
+                ON THIS PAGE
+              </p>
+              <ul className="flex flex-col gap-0.5">
+                {[
+                  ["appearance", "Appearance"],
+                  ["exit-rules", "Exit rules"],
+                  ["trading-mode", "Trading mode"],
+                  ["brokerage", "Brokerage"],
+                  ["notifications", "Notifications"],
+                  ["display", "Display"],
+                  ["data-refresh", "Data refresh"],
+                  ["export-data", "Export data"],
+                  ["security", "Security"],
+                ].map(([id, label]) => (
+                  <li key={id}>
+                    <a
+                      href={`#${id}`}
+                      className="block rounded-sm px-2 py-1.5 text-label text-muted-foreground transition-colors hover:bg-bg-elev-2 hover:text-foreground"
+                    >
+                      {label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          </aside>
+
+          <div className="space-y-4">
+
         {/* v2 phase 1.5 — Appearance section using ControlModule
          * primitive scoped to the user. Density (quiet/dense) +
          * theme. */}
-        <AppearanceSection />
+        <div id="appearance" className="scroll-mt-24">
+          <AppearanceSection />
+        </div>
 
         {/* PM-5 (audit/2026-05-05-position-management): minimal admin
             CRUD for the configurable exit-rules engine. Backed by
@@ -653,10 +705,12 @@ export default function SettingsPage() {
             edits are the most consequential action on this page —
             an enabled 21-DTE rule will close every position one
             Friday before opex. */}
-        <ExitRulesPanel />
+        <div id="exit-rules" className="scroll-mt-24">
+          <ExitRulesPanel />
+        </div>
 
         {/* Trading Mode */}
-        <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
+        <div id="trading-mode" className="scroll-mt-24 rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
             <Monitor className="h-4 w-4 text-muted-foreground" aria-hidden />
             <h2 className="t-section-display text-foreground">Trading mode</h2>
@@ -732,7 +786,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Brokerage */}
-        <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
+        <div id="brokerage" className="scroll-mt-24 rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <Key className="h-4 w-4 text-muted-foreground" aria-hidden />
@@ -1034,7 +1088,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Notifications */}
-        <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
+        <div id="notifications" className="scroll-mt-24 rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
             <Bell className="h-4 w-4 text-muted-foreground" aria-hidden />
             <h2 className="t-section-display text-foreground">Notifications</h2>
@@ -1066,7 +1120,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Display */}
-        <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
+        <div id="display" className="scroll-mt-24 rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
             <Palette className="h-4 w-4 text-muted-foreground" aria-hidden />
             <h2 className="t-section-display text-foreground">Display</h2>
@@ -1119,7 +1173,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Data Refresh */}
-        <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
+        <div id="data-refresh" className="scroll-mt-24 rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
             <RefreshCw className="h-4 w-4 text-muted-foreground" aria-hidden />
             <h2 className="t-section-display text-foreground">Data refresh</h2>
@@ -1131,7 +1185,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Export */}
-        <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
+        <div id="export-data" className="scroll-mt-24 rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
             <Download className="h-4 w-4 text-muted-foreground" aria-hidden />
             <h2 className="t-section-display text-foreground">Export data</h2>
@@ -1188,7 +1242,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Security */}
-        <div className="rounded-lg border border-border bg-bg-elev-1 p-4">
+        <div id="security" className="scroll-mt-24 rounded-lg border border-border bg-bg-elev-1 p-4">
           <div className="flex items-center gap-3 mb-3">
             <Shield className="h-4 w-4 text-muted-foreground" aria-hidden />
             <h2 className="t-section-display text-foreground">Security</h2>
@@ -1229,6 +1283,8 @@ export default function SettingsPage() {
             )}
             Reset to defaults
           </Button>
+        </div>
+          </div>
         </div>
       </div>
 

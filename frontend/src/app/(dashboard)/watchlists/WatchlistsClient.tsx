@@ -20,18 +20,57 @@ import { cn } from "@/lib/utils";
  * /api/v1/watchlists endpoint family. Phase 1.8 follow-up wires
  * column-picker drawer + drag-reorder + share token mint.
  */
+type WatchlistFilter =
+  | "all"
+  | "movers"
+  | "with-signal"
+  | "premarket"
+  | "held";
+
 export default function WatchlistsClient() {
   const [activeId, setActiveId] = React.useState<string>(MOCK_WATCHLISTS[0].id);
-  const [filter, setFilter] = React.useState<"all" | "with-signal" | "earnings" | "held">("all");
+  const [filter, setFilter] = React.useState<WatchlistFilter>("all");
   const active = MOCK_WATCHLISTS.find((w) => w.id === activeId) ?? MOCK_WATCHLISTS[0];
 
-  const visibleRows = React.useMemo<WatchlistRow[]>(() => {
-    if (filter === "all") return active.rows;
-    if (filter === "with-signal") return active.rows.filter((r) => r.signal !== "neutral" && r.signal !== "hold");
-    if (filter === "earnings") return active.rows.filter((r) => r.earningsInDays !== undefined && Math.abs(r.earningsInDays) <= 7);
-    if (filter === "held") return active.rows.filter((r) => r.held);
-    return active.rows;
-  }, [active.rows, filter]);
+  // v2 watchlists polish — filter predicates extracted so the chip
+  // group can show live counts ("All 7", "Movers 3", "Held 1") next
+  // to each label, matching the editorial design.
+  const filterPredicate = React.useCallback(
+    (f: WatchlistFilter) => (r: WatchlistRow) => {
+      if (f === "all") return true;
+      if (f === "movers") return Math.abs(r.pctDay) >= 1;
+      if (f === "with-signal")
+        return r.signal !== "neutral" && r.signal !== "hold";
+      if (f === "premarket")
+        return r.preMktPct !== undefined && Math.abs(r.preMktPct) > 0;
+      if (f === "held") return r.held;
+      return true;
+    },
+    [],
+  );
+
+  const filterCounts = React.useMemo(() => {
+    return {
+      all: active.rows.length,
+      movers: active.rows.filter(filterPredicate("movers")).length,
+      "with-signal": active.rows.filter(filterPredicate("with-signal")).length,
+      premarket: active.rows.filter(filterPredicate("premarket")).length,
+      held: active.rows.filter(filterPredicate("held")).length,
+    } satisfies Record<WatchlistFilter, number>;
+  }, [active.rows, filterPredicate]);
+
+  const visibleRows = React.useMemo<WatchlistRow[]>(
+    () => active.rows.filter(filterPredicate(filter)),
+    [active.rows, filter, filterPredicate],
+  );
+
+  // Aggregate the unique strategy tags consumed by the active list so
+  // the metadata strip can render "3 FEED STRATEGIES · MQ · PEAD · …".
+  const activeStrats = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const r of active.rows) for (const s of r.strats) set.add(s);
+    return [...set].sort();
+  }, [active.rows]);
 
   const stats = React.useMemo(() => {
     const totalNames = MOCK_WATCHLISTS.reduce((acc, wl) => acc + wl.rows.length, 0);
@@ -183,29 +222,75 @@ export default function WatchlistsClient() {
               {(
                 [
                   { value: "all", label: "All" },
+                  { value: "movers", label: "Movers" },
                   { value: "with-signal", label: "With signal" },
-                  { value: "earnings", label: "Earnings ≤ 7d" },
+                  { value: "premarket", label: "Pre-mkt" },
                   { value: "held", label: "Held" },
                 ] as const
-              ).map((chip) => (
-                <button
-                  key={chip.value}
-                  type="button"
-                  aria-pressed={filter === chip.value}
-                  onClick={() => setFilter(chip.value)}
-                  className={cn(
-                    "px-2 py-0.5 rounded-pill text-eyebrow font-semibold uppercase tracking-[0.08em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
-                    filter === chip.value
-                      ? "bg-brand text-brand-on"
-                      : "bg-bg-elev-1 text-fg-muted hover:text-fg",
-                  )}
-                >
-                  {chip.label}
-                </button>
-              ))}
+              ).map((chip) => {
+                const count = filterCounts[chip.value];
+                return (
+                  <button
+                    key={chip.value}
+                    type="button"
+                    aria-pressed={filter === chip.value}
+                    onClick={() => setFilter(chip.value)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-pill text-eyebrow font-semibold uppercase tracking-[0.08em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+                      filter === chip.value
+                        ? "bg-brand text-brand-on"
+                        : "bg-bg-elev-1 text-fg-muted hover:text-fg",
+                    )}
+                  >
+                    <span>{chip.label}</span>
+                    <span
+                      className={cn(
+                        "font-mono tabular-nums",
+                        filter === chip.value ? "opacity-80" : "opacity-70",
+                      )}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           }
         >
+          {/* v2 watchlists polish — metadata strip mirrors the design's
+              "84 SYMBOLS · 3 FEED STRATEGIES · MQ · PEAD · …" line. Sits
+              between the section header and the table so users see the
+              list's shape (size + which strategies eat from it) before
+              they scan the rows. */}
+          <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-eyebrow uppercase tracking-[0.08em] text-fg-muted">
+            <span className="font-mono tabular-nums text-fg">
+              {active.rows.length}
+            </span>
+            <span>symbols</span>
+            <span className="text-border">·</span>
+            <span className="font-mono tabular-nums text-fg">
+              {activeStrats.length}
+            </span>
+            <span>
+              {activeStrats.length === 1 ? "feed strategy" : "feed strategies"}
+            </span>
+            {activeStrats.length > 0 && (
+              <>
+                <span className="text-border">·</span>
+                <span className="flex flex-wrap items-center gap-1.5">
+                  {activeStrats.map((s) => (
+                    <span
+                      key={s}
+                      className="rounded-sm border border-border-hair bg-bg-elev-2 px-1.5 py-0.5 font-mono text-eyebrow normal-case tracking-[0.05em] text-fg"
+                    >
+                      {s}
+                    </span>
+                  ))}
+                </span>
+              </>
+            )}
+          </div>
+
           {visibleRows.length === 0 ? (
             <EmptyState
               eyebrow="NO MATCH"
