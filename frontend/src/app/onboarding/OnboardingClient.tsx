@@ -67,10 +67,33 @@ export default function OnboardingClient() {
           <span className="font-display italic text-h2 text-brand">α</span>
           <span className="font-display italic text-h2 text-fg">AlphaDesk</span>
         </div>
+        {/* v2 phase 1.x — left-rail editorial header matching
+         * onboarding-dark.png. Eyebrow + italic-Newsreader title +
+         * two-line body, replacing the prior generic intro. */}
+        <p
+          className="t-eyebrow-italic"
+          style={{ color: "var(--brand)", letterSpacing: "0.2em", margin: 0 }}
+        >
+          WELCOME · OPERATOR
+        </p>
+        <h2
+          className="m-0 italic"
+          style={{
+            fontFamily: "var(--font-display)",
+            color: "var(--ink-1000)",
+            fontSize: 30,
+            fontWeight: 400,
+            letterSpacing: "-0.025em",
+            lineHeight: 1.1,
+            textWrap: "balance",
+          }}
+        >
+          Six small steps before your first market open.
+        </h2>
         <p className="font-display italic text-body text-fg-dim leading-relaxed">
-          A six-step setup gets your dashboard tailored to your capital,
-          risk profile, and strategy interest. You can skip any step
-          and come back later.
+          You can change every choice here later in Settings or Control
+          Center. Nothing here puts capital at risk — live trading needs
+          a separate approval after broker linkage.
         </p>
         <ol className="mt-4 flex flex-col gap-1.5">
           {STEPS.map((s) => {
@@ -126,14 +149,90 @@ export default function OnboardingClient() {
           level={1}
         >
           {activeStep === "welcome" && (
-            <div className="space-y-4">
-              <p className="font-display italic text-h3 text-fg leading-relaxed">
-                AlphaDesk is an AI-augmented trading desk. Four agent
-                archetypes — Research, Signal, Risk, Exec — work together
-                to surface candidates, confirm setups, gate risk, and
-                route orders. You stay in the loop.
+            <div className="space-y-5">
+              {/* v2 phase 1.x — design-mined italic-Newsreader hook +
+               * 2×2 day-rhythm quadrant cards (MORNING / INTRADAY /
+               * RISK / EVENING) matching onboarding-dark.png. */}
+              <h3
+                className="m-0 italic"
+                style={{
+                  fontFamily: "var(--font-display)",
+                  color: "var(--ink-1000)",
+                  fontSize: 28,
+                  fontWeight: 400,
+                  letterSpacing: "-0.02em",
+                  lineHeight: 1.15,
+                  textWrap: "balance",
+                }}
+              >
+                A trading desk that reads, decides, and trades alongside
+                you.
+              </h3>
+              <p className="font-display italic text-body text-fg-dim leading-relaxed">
+                AlphaDesk is a tightly-scoped trading environment for
+                serious operators. Six AI agents — Scout, Strategist,
+                Analyst, Risk, Execution, Memo — pre-process the open,
+                surface candidates, and execute the rules you set. You
+                stay in command of every order.
               </p>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {[
+                  {
+                    eyebrow: "MORNING",
+                    title: "Briefed before the bell",
+                    body: "06:30 ET pre-market memo: overnight news, gap movers, your watchlists, and which strategies the agents think are live today.",
+                  },
+                  {
+                    eyebrow: "INTRADAY",
+                    title: "Pipeline of candidates",
+                    body: "Scout filters the universe down to a working pipeline. You approve, defer, or veto — the desk doesn't move money without your say-so.",
+                  },
+                  {
+                    eyebrow: "RISK",
+                    title: "Pre-trade and live limits",
+                    body: "Per-trade max loss, per-day stop-out, per-strategy book size, and a live drawdown circuit-breaker. All editable, all auditable.",
+                  },
+                  {
+                    eyebrow: "EVENING",
+                    title: "Memo every fill",
+                    body: "Every trade gets a structured memo: thesis, fill quality, deviation from rules, and what to read tonight. Post-mortem in the morning.",
+                  },
+                ].map((q) => (
+                  <article
+                    key={q.eyebrow}
+                    className="rounded-md border border-border-hair p-4"
+                    style={{ background: "var(--bg-elev-1)" }}
+                  >
+                    <p
+                      className="t-eyebrow-italic"
+                      style={{
+                        color: "var(--brand)",
+                        letterSpacing: "0.18em",
+                        margin: 0,
+                      }}
+                    >
+                      {q.eyebrow}
+                    </p>
+                    <h4
+                      className="mt-1.5 italic"
+                      style={{
+                        fontFamily: "var(--font-display)",
+                        color: "var(--ink-1000)",
+                        fontSize: 18,
+                        fontWeight: 400,
+                        margin: 0,
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {q.title}
+                    </h4>
+                    <p className="mt-2 font-display italic text-body-sm text-fg-dim leading-snug">
+                      {q.body}
+                    </p>
+                  </article>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
                 <AgentChip archetype="research" hideStatus size="lg" />
                 <AgentChip archetype="signal"   hideStatus size="lg" />
                 <AgentChip archetype="risk"     hideStatus size="lg" />
