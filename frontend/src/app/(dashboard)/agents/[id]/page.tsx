@@ -7,6 +7,11 @@ export const metadata: Metadata = {
   title: "Agent detail — AlphaDesk",
 };
 
+// Dashboard layout's useNotifications() requires <WebSocketProvider>,
+// which is ssr:false. Skip static prerender so the build doesn't trip
+// on "useWs must be used within Providers".
+export const dynamic = "force-dynamic";
+
 interface AgentDetailShellProps {
   params: Promise<{ id: string }>;
 }

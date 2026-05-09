@@ -4,6 +4,13 @@ import Section from "@/components/composites/Section";
 import AgentActivityFeed from "@/components/composites/AgentActivityFeed";
 import { useAgents } from "@/hooks/useAgents";
 
+// Dashboard layout calls useNotifications() which depends on useWs — that
+// hook only resolves under <WebSocketProvider>, which is dynamic({ ssr:
+// false }) for browser-only WebSocket APIs. Static prerender therefore
+// throws "useWs must be used within Providers". Force dynamic render so
+// the build skips the prerender attempt.
+export const dynamic = "force-dynamic";
+
 /**
  * Phase 0 route shell. The full Agents page (roster + filter +
  * search + per-agent drill) lands in Phase 2 — but this shell

@@ -7,6 +7,10 @@ export const metadata: Metadata = {
   title: "Watchlist detail — AlphaDesk",
 };
 
+// Dashboard layout's useNotifications() requires <WebSocketProvider>,
+// which is ssr:false. Skip static prerender.
+export const dynamic = "force-dynamic";
+
 interface WatchlistDetailShellProps {
   params: Promise<{ id: string }>;
 }
