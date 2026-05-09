@@ -35,19 +35,66 @@ export default function BacktestClient({ strategyId }: BacktestClientProps) {
 
   return (
     <main className="px-6 pt-6 pb-12 max-w-screen-2xl mx-auto space-y-8">
-      <Section
-        eyebrow={`STRATEGY · BACKTEST · ${strategyId}`}
-        title="Backtest workbench"
-        description="Configure universe + date range + cost model + sweep params; compare runs; publish to playbook."
-        level={1}
-        right={
+      {/* v2 phase 1.x — editorial italic-Newsreader hero matching
+       * backtest-dark.png. Sits above the existing config + run-output
+       * sections so the workbench gets the design's voice without
+       * touching any of the live workflow UI below. */}
+      <header
+        className="rounded-md border border-border-hair p-5 md:p-6"
+        style={{
+          background: "var(--bg-elev-1)",
+          borderLeft: "2px solid var(--brand)",
+        }}
+      >
+        <div className="flex items-center justify-between gap-4">
+          <p
+            className="t-eyebrow-italic"
+            style={{ color: "var(--brand)", letterSpacing: "0.2em", margin: 0 }}
+          >
+            WORKBENCH · BACKTEST
+          </p>
           <Link
             href={`/strategies/${strategyId}/playbook`}
             className="text-eyebrow uppercase tracking-[0.08em] font-semibold text-fg-muted hover:text-fg underline-offset-2 hover:underline"
           >
             ← Back to playbook
           </Link>
-        }
+        </div>
+        <h2
+          className="m-0 mt-3 italic"
+          style={{
+            fontFamily: "var(--font-display)",
+            color: "var(--ink-1000)",
+            fontSize: 38,
+            fontWeight: 400,
+            letterSpacing: "-0.025em",
+            lineHeight: 1.05,
+            textWrap: "balance",
+          }}
+        >
+          Test before you commit capital.
+        </h2>
+        <p
+          className="italic"
+          style={{
+            marginTop: 12,
+            fontFamily: "var(--font-display)",
+            fontSize: 15,
+            color: "var(--fg-muted)",
+            lineHeight: 1.55,
+            maxWidth: 680,
+          }}
+        >
+          Run a strategy across history. Compare runs side by side. Publish
+          one as the strategy's current backtest.
+        </p>
+      </header>
+
+      <Section
+        eyebrow={`STRATEGY · BACKTEST · ${strategyId}`}
+        title="Backtest workbench"
+        description="Configure universe + date range + cost model + sweep params; compare runs; publish to playbook."
+        level={1}
       >
         <StatusBanner
           tone="info"
