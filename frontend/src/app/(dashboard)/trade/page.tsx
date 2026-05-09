@@ -1501,15 +1501,34 @@ export default function TradePage() {
               data-slot="trade-ticket-panel"
               className="scroll-mt-20 overflow-hidden rounded-md border border-border-hair bg-bg-elev-1/95 shadow-[0_16px_48px_-38px_rgba(16,22,17,0.42)]"
             >
-              <header className="flex items-center justify-between gap-3 border-b border-border-hair px-3 py-2.5">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
-                    <ListChecks className="size-4" aria-hidden />
+              <header
+                className="flex items-center justify-between gap-3 border-b border-border-hair px-4 py-3"
+                style={{ background: "var(--ink-100)" }}
+              >
+                <div className="min-w-0 flex flex-col gap-0.5">
+                  <span
+                    className="t-eyebrow-italic"
+                    style={{
+                      color: "var(--brand)",
+                      letterSpacing: "0.2em",
+                      fontSize: 9.5,
+                    }}
+                  >
+                    STAGE ORDER · {intentLabel.toUpperCase()}
                   </span>
-                  <div className="min-w-0">
-                    <h2 className="truncate text-body font-semibold text-ink-1000">Execution ticket</h2>
-                    <p className="truncate text-label text-fg-muted">{intentLabel}</p>
-                  </div>
+                  <h2
+                    className="m-0 italic truncate"
+                    style={{
+                      fontFamily: "var(--font-display)",
+                      color: "var(--ink-1000)",
+                      fontSize: 24,
+                      fontWeight: 400,
+                      letterSpacing: "-0.02em",
+                      lineHeight: 1.1,
+                    }}
+                  >
+                    Stage order.
+                  </h2>
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-2">
                   <QuoteFreshness tsSeconds={quoteAtFillTs} />
