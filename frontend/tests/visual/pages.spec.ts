@@ -14,6 +14,19 @@ import { test, expect, type Page } from "@playwright/test";
  * The diff helper is the right tool to eyeball "are we visually close."
  */
 
+// Gate the onboarding tour modal so it doesn't pop over the dashboard
+// snapshot. The tour reads two localStorage keys; setting either skips it.
+test.beforeEach(async ({ context }) => {
+  await context.addInitScript(() => {
+    try {
+      localStorage.setItem("alphadesk-tour-complete", "1");
+      localStorage.setItem("alphadesk.onboarding_dismissed", "true");
+    } catch {
+      /* private mode — tour will show once, that's fine */
+    }
+  });
+});
+
 async function settle(page: Page) {
   await page.addStyleTag({
     content: `

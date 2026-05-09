@@ -194,15 +194,16 @@ export default function AdminCommandBar() {
         </div>
       )}
 
-      <style jsx global>{`
-        .admin-cat-flash {
-          animation: adminCatFlash 1.5s ease-out;
-        }
-        @keyframes adminCatFlash {
-          0%   { background: var(--tint-brand-2); }
-          100% { background: transparent; }
-        }
-      `}</style>
+      {/* Plain inline <style> — `style jsx` requires the styled-jsx
+        * runtime, which Next 16's RSC pipeline doesn't ship with the
+        * dashboard chunk. Globals.css would be cleaner long-term but
+        * an inline tag keeps the animation co-located with the only
+        * site that ever triggers it. */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `.admin-cat-flash{animation:adminCatFlash 1.5s ease-out}@keyframes adminCatFlash{0%{background:var(--tint-brand-2)}100%{background:transparent}}`,
+        }}
+      />
     </div>
   );
 }
