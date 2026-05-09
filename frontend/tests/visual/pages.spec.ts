@@ -28,21 +28,23 @@ async function settle(page: Page) {
   });
 }
 
-async function gotoAndWait(page: Page, route: string) {
+async function gotoAndWait(page: Page, route: string, settleMs = 2500) {
   await page.goto(route, { waitUntil: "domcontentloaded" });
   // Pages bail to CSR (next/dynamic providers are ssr:false), so we wait for
-  // the body to actually have content. 30s budget covers cold dev compile;
-  // warm pages return in <500ms. The 800ms tail lets late-mounting strips
-  // (status banner, ticker tape) settle before the snapshot.
+  // the body to actually have content. 60s budget covers cold dev compile;
+  // warm pages return in <500ms. The settle tail lets late-mounting strips
+  // (status banner, ticker tape, async data fetches) finish before the
+  // snapshot. Per-route override allowed via `settleMs` for slow pages
+  // like /alerts whose body has text quickly but main content keeps mounting.
   try {
-    await page.waitForFunction(() => document.body.innerText.length > 30, undefined, {
+    await page.waitForFunction(() => document.body.innerText.length > 200, undefined, {
       timeout: 60_000,
     });
   } catch {
     // Some routes (e.g. `/trade` with no backend) render an empty container
     // while data loads. Don't fail the test on that — capture what's there.
   }
-  await page.waitForTimeout(800);
+  await page.waitForTimeout(settleMs);
   await settle(page);
 }
 
@@ -90,5 +92,28 @@ test.describe("v2 design parity", () => {
   test("admin · users", async ({ page }) => {
     await gotoAndWait(page, "/admin/users");
     await expect(page).toHaveScreenshot("admin-users.png", { fullPage: false });
+  });
+
+  test("watchlists", async ({ page }) => {
+    await gotoAndWait(page, "/watchlists");
+    await expect(page).toHaveScreenshot("watchlists.png", { fullPage: false });
+  });
+
+  test("pipeline", async ({ page }) => {
+    await gotoAndWait(page, "/pipeline");
+    await expect(page).toHaveScreenshot("pipeline.png", { fullPage: false });
+  });
+
+  test("analytics", async ({ page }) => {
+    await gotoAndWait(page, "/analytics");
+    await expect(page).toHaveScreenshot("analytics.png", { fullPage: false });
+  });
+
+  test("alerts", async ({ page }) => {
+    // /alerts hydrates in two stages — header arrives <500ms, the create-alert
+    // form + scope panel mount ~6s later. Bump settle so the snapshot includes
+    // the form, not just the empty-state below it.
+    await gotoAndWait(page, "/alerts", 6500);
+    await expect(page).toHaveScreenshot("alerts.png", { fullPage: false });
   });
 });
