@@ -84,13 +84,13 @@ type ReadinessFilter = "all" | ReadinessKey;
 // ─── Formatters ──────────────────────────────────────────────
 
 function signedNumber(n: number | null): string {
-  if (n == null || !Number.isFinite(n)) return "Needs OOS";
+  if (n == null || !Number.isFinite(n)) return "—";
   const sign = n >= 0 ? "+" : "\u2212";
   return `${sign}${Math.abs(n).toFixed(2)}`;
 }
 
 function fractionToPct(n: number | null, digits = 1): string {
-  if (n == null || !Number.isFinite(n)) return "Backtest pending";
+  if (n == null || !Number.isFinite(n)) return "—";
   const pct = n * 100;
   const sign = pct >= 0 ? "+" : "\u2212";
   return `${sign}${Math.abs(pct).toFixed(digits)}%`;
@@ -99,7 +99,7 @@ function fractionToPct(n: number | null, digits = 1): string {
 function drawdownToPct(n: number | null): string {
   // MaxDD is rendered as a signed loss number. Backends emit either a
   // negative or positive fraction; use absolute value then prepend minus.
-  if (n == null || !Number.isFinite(n)) return "No drawdown yet";
+  if (n == null || !Number.isFinite(n)) return "—";
   const pct = Math.abs(n) * 100;
   return `\u2212${pct.toFixed(1)}%`;
 }
