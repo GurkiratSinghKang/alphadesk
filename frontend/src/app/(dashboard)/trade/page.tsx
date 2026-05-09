@@ -96,6 +96,7 @@ import PreTradeAgentStrip from "./_v2/PreTradeAgentStrip";
 // untouched per preservation register.
 import MetricRibbon from "./_v2/MetricRibbon";
 import AssetTabSwitcher, { type AssetTab } from "./_v2/AssetTabSwitcher";
+import V2TradeLeftRail from "./_v2/V2TradeLeftRail";
 import type { Order, Position } from "@/types";
 import { useMarketStore, useQuote } from "@/stores/market";
 import { usePortfolioStore } from "@/stores/portfolio";
@@ -1462,7 +1463,11 @@ export default function TradePage() {
 
         <MobileTradeNav />
 
-        <div className="grid grid-cols-1 gap-3 xl:h-[calc(100dvh-226px)] xl:min-h-[620px] xl:max-h-[980px] xl:grid-cols-[minmax(0,1fr)_minmax(360px,420px)] xl:overflow-hidden 2xl:grid-cols-[minmax(0,1fr)_minmax(380px,440px)]">
+        <div className="grid grid-cols-1 gap-3 xl:h-[calc(100dvh-226px)] xl:min-h-[620px] xl:max-h-[980px] xl:grid-cols-[36px_minmax(0,1fr)_minmax(360px,420px)] xl:overflow-hidden 2xl:grid-cols-[36px_minmax(0,1fr)_minmax(380px,440px)]">
+          {/* v2 design — slim 36px left rail with collapsible Order book +
+              Time & sales overlay matching trade.jsx. Hidden below xl since
+              mobile/tablet swap to a stacked layout. */}
+          <V2TradeLeftRail symbol={tradeContextSymbol} last={Number(quote?.last ?? 0) || 134.82} />
           <section
             id="trade-chart"
             aria-label="Primary chart"
