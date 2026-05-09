@@ -181,8 +181,8 @@ export default function RuntimeControls({
       className={cn("flex flex-col gap-8", className)}
     >
       {grouped.map(({ category: cat, items }) => (
+        <div key={cat} id={`admin-cat-${cat}`} className="scroll-mt-24">
         <Section
-          key={cat}
           eyebrow={`ADMIN · ${cat.toUpperCase()}`}
           title={CATEGORY_LABELS[cat] ?? cat}
           description={`${items.length} control${items.length === 1 ? "" : "s"}`}
@@ -204,6 +204,7 @@ export default function RuntimeControls({
             ))}
           </div>
         </Section>
+        </div>
       ))}
     </div>
   );

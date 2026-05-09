@@ -26,6 +26,9 @@ import HaltTradingButton from "./HaltTradingButton";
 // NotificationCenter is retained in the tree for one release
 // per locked decision D5.
 import NotificationBell from "./NotificationBell";
+// v2-plan §2.1 — global agent activity drawer trigger. Sibling to the
+// notification bell; opens the slide-over agent feed.
+import AgentBell from "./AgentBell";
 import { ThemeToggle } from "./ThemeToggle";
 import StatusPills from "./StatusPills";
 import PaperLiveToggle from "@/components/composites/PaperLiveToggle";
@@ -178,6 +181,7 @@ export function TopBar() {
          * route through /strategies/{id} per-strategy switches. */}
         <HaltTradingButton className="hidden sm:inline-flex" />
         <ThemeToggle className="hidden h-11 w-11 sm:inline-flex sm:h-8 sm:w-8" />
+        <AgentBell />
         <NotificationBell />
         <ProfileMenu />
       </div>

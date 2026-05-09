@@ -7,6 +7,11 @@ import { AppMindMap } from "./_components/AppMindMap";
 import HealthTileRow from "./_components/HealthTileRow";
 import RuntimeControls from "./_components/RuntimeControls";
 import AuditTail from "./_components/AuditTail";
+// v2-plan §1.6 polish — conversational command bar (⌘⇧J) + sticky
+// category sub-rail. Both ship UI-only in Phase 0; backend B.1 wires
+// the actual dispatch path.
+import AdminCommandBar from "./_components/AdminCommandBar";
+import AdminCategoryRail from "./_components/AdminCategoryRail";
 import Section from "@/components/composites/Section";
 import { useControlCounts } from "@/hooks/useControls";
 import {
@@ -51,7 +56,13 @@ export default function AdminControlCenterClient() {
   const { total, critical } = useControlCounts();
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-10 px-4 py-8 md:px-6">
+    <div className="mx-auto max-w-[1600px] px-4 py-8 md:px-6">
+      {/* v2-plan §1.6 — conversational command bar above the identity
+       * band. ⌘⇧J focuses + opens. Sticky so it stays available while
+       * scrolling through the full registry. */}
+      <AdminCommandBar />
+
+      <div className="space-y-10">
       {/* v2 redesign — identity band via Section primitive. The legacy
        * dashboard / symbols / admin chip nav stays as the right slot for
        * familiarity; full nav refactor lands in Phase 1.6 follow-up. */}
@@ -128,13 +139,18 @@ export default function AdminControlCenterClient() {
       <LayoutConfigPanel />
       <DeployPanel />
 
-      {/* v2 redesign — runtime controls (every category as Section + grid
-       * of ControlModule cards). Read-only render in Phase 0; backend
-       * mutation endpoints (B.1/B.2/B.6/B.8) wire in Phase 1.6 follow-up. */}
-      <RuntimeControls />
-
-      {/* v2 redesign — audit tail (last 10 admin writes). */}
-      <AuditTail />
+      {/* v2-plan §1.6 — runtime controls now live in a 2-col layout
+       * with a sticky category sub-rail on the left. The rail uses
+       * IntersectionObserver to highlight the current section as the
+       * operator scrolls. */}
+      <div className="grid grid-cols-1 lg:grid-cols-[200px,1fr] gap-6">
+        <AdminCategoryRail />
+        <div className="min-w-0 space-y-10">
+          <RuntimeControls />
+          <AuditTail />
+        </div>
+      </div>
+      </div>
     </div>
   );
 }

@@ -50,7 +50,10 @@ async function gotoAndWait(page: Page, route: string, settleMs = 2500) {
 
 test.describe("v2 design parity", () => {
   test("dashboard / home", async ({ page }) => {
-    await gotoAndWait(page, "/");
+    // Dashboard mounts a lot of dynamic chrome (TopBar, hero, briefing,
+    // running-strip, body grid) — bump settle so the snapshot includes
+    // every section after hydration.
+    await gotoAndWait(page, "/", 6500);
     await expect(page).toHaveScreenshot("home.png", { fullPage: false });
   });
 
@@ -85,7 +88,7 @@ test.describe("v2 design parity", () => {
   });
 
   test("admin · control center", async ({ page }) => {
-    await gotoAndWait(page, "/admin/control-center");
+    await gotoAndWait(page, "/admin/control-center", 6500);
     await expect(page).toHaveScreenshot("admin-control-center.png", { fullPage: false });
   });
 
@@ -125,5 +128,15 @@ test.describe("v2 design parity", () => {
   test("onboarding", async ({ page }) => {
     await gotoAndWait(page, "/onboarding");
     await expect(page).toHaveScreenshot("onboarding.png", { fullPage: false });
+  });
+
+  test("agents · roster", async ({ page }) => {
+    await gotoAndWait(page, "/agents", 6500);
+    await expect(page).toHaveScreenshot("agents.png", { fullPage: false });
+  });
+
+  test("agents · detail", async ({ page }) => {
+    await gotoAndWait(page, "/agents/research-regime", 6500);
+    await expect(page).toHaveScreenshot("agents-detail.png", { fullPage: false });
   });
 });
