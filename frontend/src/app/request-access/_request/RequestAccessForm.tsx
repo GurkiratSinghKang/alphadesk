@@ -47,7 +47,7 @@ const instrumentOptions: Array<{ value: Instrument; label: string }> = [
 ];
 
 const inputClass =
-  "h-12 w-full rounded-[8px] border border-[var(--auth-border)] bg-white/80 px-4 font-sans text-body text-[var(--auth-fg)] outline-none transition-colors placeholder:text-[var(--auth-fg-soft)] focus-visible:border-[var(--auth-primary)] focus-visible:shadow-[0_0_0_4px_rgba(15,122,93,0.15)]";
+  "h-12 w-full rounded-[3px] border border-[var(--auth-border)] bg-[var(--bg-elev-1)] px-4 font-mono text-body text-[var(--auth-fg)] outline-none transition-colors placeholder:text-[var(--auth-fg-soft)] focus-visible:border-[var(--auth-primary)] focus-visible:shadow-[0_0_0_4px_rgba(201,166,107,0.18)]";
 const labelClass = "font-sans text-body-sm font-medium text-[var(--auth-fg)]";
 const helperClass = "font-sans text-label leading-snug text-[var(--auth-fg-muted)]";
 
@@ -168,9 +168,29 @@ export default function RequestAccessForm() {
             </p>
           )}
         </div>
-        <div className="grid gap-3 rounded-[8px] border border-[var(--auth-border)] bg-white/70 p-4">
-          <p className="font-sans text-body-sm font-medium text-[var(--auth-fg)]">What happens next</p>
-          <p className="font-sans text-body-sm leading-relaxed text-[var(--auth-fg-muted)]">
+        <div
+          className="grid gap-3 rounded-[3px] p-4"
+          style={{
+            background: "var(--bg)",
+            border: "1px solid var(--border)",
+            borderLeft: "2px solid var(--brand)",
+          }}
+        >
+          <p
+            className="t-eyebrow-italic"
+            style={{ color: "var(--brand)", letterSpacing: "0.2em", fontSize: 9.5 }}
+          >
+            WHAT HAPPENS NEXT
+          </p>
+          <p
+            className="italic"
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: 14,
+              color: "var(--fg-muted)",
+              lineHeight: 1.55,
+            }}
+          >
             We review the book context, trading mode, jurisdiction, and instrument set. If there is a fit, onboarding starts with paper routing and an operator walkthrough.
           </p>
         </div>
@@ -183,7 +203,12 @@ export default function RequestAccessForm() {
             setState("idle");
             setRequestId("");
           }}
-          className="h-12 rounded-[8px]"
+          className="h-12 rounded-[3px] font-medium"
+          style={{
+            background: "var(--brand)",
+            color: "var(--ink-050)",
+            border: "1px solid var(--brand)",
+          }}
         >
           Submit another request
         </Button>
@@ -200,13 +225,37 @@ export default function RequestAccessForm() {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div className="border-b border-[var(--auth-border)] pb-4">
-        <p className="font-mono text-eyebrow font-semibold uppercase tracking-[0.18em] text-[var(--auth-primary)]">
-          Access intake
+        <p
+          className="t-eyebrow-italic"
+          style={{ color: "var(--brand)", letterSpacing: "0.2em" }}
+        >
+          ACCESS INTAKE
         </p>
-        <h2 className="mt-3 font-sans text-h2 font-semibold leading-tight tracking-tight text-[var(--auth-fg)]">
-          Start your workspace request
+        <h2
+          className="m-0 mt-2.5 italic"
+          style={{
+            fontFamily: "var(--font-display)",
+            color: "var(--ink-1000)",
+            fontSize: 32,
+            fontWeight: 400,
+            letterSpacing: "-0.02em",
+            lineHeight: 1.05,
+            textWrap: "balance",
+          }}
+        >
+          Start your workspace request.
         </h2>
-        <p className="mt-2 font-sans text-body-sm leading-relaxed text-[var(--auth-fg-muted)]">
+        <p
+          className="italic"
+          style={{
+            marginTop: 12,
+            fontFamily: "var(--font-display)",
+            fontSize: 15,
+            color: "var(--fg-muted)",
+            lineHeight: 1.55,
+            textWrap: "pretty",
+          }}
+        >
           Tell us what you trade, how you work, and where an AI review layer would help most.
         </p>
       </div>
@@ -369,7 +418,7 @@ export default function RequestAccessForm() {
           id="request-note"
           value={form.note}
           onChange={(e) => update("note", e.target.value)}
-          className="min-h-24 w-full resize-y rounded-[8px] border border-[var(--auth-border)] bg-white/80 px-4 py-3 font-sans text-body leading-normal text-[var(--auth-fg)] outline-none transition-colors placeholder:text-[var(--auth-fg-soft)] focus-visible:border-[var(--auth-primary)] focus-visible:shadow-[0_0_0_4px_rgba(15,122,93,0.15)]"
+          className="min-h-24 w-full resize-y rounded-[3px] border border-[var(--auth-border)] bg-[var(--bg-elev-1)] px-4 py-3 font-sans text-body leading-normal text-[var(--auth-fg)] outline-none transition-colors placeholder:text-[var(--auth-fg-soft)] focus-visible:border-[var(--auth-primary)] focus-visible:shadow-[0_0_0_4px_rgba(201,166,107,0.18)]"
           placeholder="Describe the strategy work, execution needs, and what would make AlphaDesk useful."
           required
           minLength={20}
@@ -404,14 +453,20 @@ export default function RequestAccessForm() {
         size="lg"
         variant="primary"
         disabled={state === "loading"}
-        className="h-12 rounded-[8px] disabled:bg-[var(--auth-border-soft)] disabled:text-[var(--auth-fg)] disabled:opacity-100"
+        className="h-12 rounded-[3px] font-medium disabled:opacity-60"
+        style={{
+          background: "var(--brand)",
+          color: "var(--ink-050)",
+          border: "1px solid var(--brand)",
+        }}
       >
-        {state === "loading" ? (
+        {state === "loading" && (
           <CircleNotch className="mr-2 h-4 w-4 animate-spin" aria-hidden weight="regular" />
-        ) : (
-          <ArrowRight className="mr-2 h-4 w-4" aria-hidden weight="regular" />
         )}
-        Send request
+        Submit application
+        {state !== "loading" && (
+          <ArrowRight className="ml-2 h-4 w-4" aria-hidden weight="regular" />
+        )}
       </Button>
     </form>
   );

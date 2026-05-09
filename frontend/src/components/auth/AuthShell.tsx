@@ -4,20 +4,54 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 /**
- * AuthShell — full-screen takeover matching the v2 auth design
- * (two-column grid: left brand pane with morning brief, right form pane).
+ * AuthShell — full-screen takeover matching the v2 auth design (two-column
+ * grid: left brand pane with editorial copy + briefing card, right form pane).
  *
- * Uses the existing dark-theme design tokens (--ink-100, --brand, --bg-elev-*,
- * --font-display, --font-mono) so the editorial-quiet voice carries through.
- * No layout chrome — this replaces AuthProductFrame for sign-in / 2FA /
- * recovery / pending / rejected / locked states.
+ * Used by /login (default brand-pane copy = sign-in welcome) and
+ * /request-access (custom brand-pane copy = apply intake).
  */
-export function AuthShell({ children }: { children: ReactNode }) {
-  // Override --auth-* tokens scoped to the AuthShell so the existing
-  // LoginForm (which uses `text-[var(--auth-fg)]`, `bg-[var(--auth-bg-tint)]`,
-  // etc) picks up the dark editorial palette without rewriting 300 lines
-  // of class names. The auth tokens were originally tuned for a light
-  // marketing-style auth frame; this scope shifts them onto v2 dark.
+export interface AuthShellProps {
+  children: ReactNode;
+  /**
+   * Override the brand-pane content. Defaults to the sign-in welcome
+   * (italic "Welcome back to your desk." + morning brief card).
+   */
+  brand?: {
+    eyebrow?: string;
+    /**
+     * The headline. Use {brand: ReactNode} to mix italic with brand-gold
+     * spans. Defaults match the design's auth.jsx welcome.
+     */
+    title?: ReactNode;
+    body?: ReactNode;
+    card?: ReactNode;
+  };
+  /**
+   * Right-pane top-right link copy. Defaults to "Apply for access ↗"
+   * pointing at /request-access.
+   */
+  topRight?: { label: string; href: string };
+  /**
+   * Right-pane footer copy (left side). Default surfaces "AlphaDesk · v2".
+   */
+  footerLeft?: ReactNode;
+  /**
+   * Right-pane footer copy (right side). Default surfaces audit hint.
+   */
+  footerRight?: ReactNode;
+}
+
+export function AuthShell({
+  children,
+  brand,
+  topRight = { label: "Apply for access ↗", href: "/request-access" },
+  footerLeft,
+  footerRight,
+}: AuthShellProps) {
+  // Override --auth-* tokens scoped to the AuthShell so existing form
+  // components (LoginForm, RequestAccessForm) which use `text-[var(--auth-fg)]`,
+  // `bg-[var(--auth-bg-tint)]`, etc pick up the dark editorial palette
+  // without rewriting hundreds of class names.
   const darkAuthTokens: React.CSSProperties = {
     "--auth-fg": "var(--ink-1000)",
     "--auth-fg-muted": "var(--fg-muted)",
@@ -40,27 +74,32 @@ export function AuthShell({ children }: { children: ReactNode }) {
       className="fixed inset-0 z-[100] grid overflow-hidden bg-bg"
       style={darkAuthTokens}
     >
-      <AuthBrandPane />
-      <AuthFormPane>{children}</AuthFormPane>
+      <AuthBrandPane brand={brand} />
+      <AuthFormPane topRight={topRight} footerLeft={footerLeft} footerRight={footerRight}>
+        {children}
+      </AuthFormPane>
     </div>
   );
 }
 
-function AuthBrandPane() {
+function AuthBrandPane({ brand }: { brand?: AuthShellProps["brand"] }) {
   const today = new Date();
   const longDate = today
     .toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })
     .toUpperCase();
-  const shortDate = today
-    .toLocaleDateString("en-US", { month: "short", day: "numeric" })
-    .toUpperCase();
 
-  const briefRows = [
-    { t: "Scout has surfaced", b: "47 candidates · 3 above 0.85 confidence" },
-    { t: "Risk gating is GREEN", b: "Drawdown headroom 4.6% · book size 71% of cap" },
-    { t: "Earnings tonight", b: "NVDA · CRM · ZS · 2 in your watchlists" },
-    { t: "1 strategy needs review", b: "Pairs · drift outside cointegration band" },
-  ];
+  const eyebrow =
+    brand?.eyebrow ?? `${longDate} · 09:14 ET`;
+  const title =
+    brand?.title ?? (
+      <>
+        Welcome back to <span style={{ color: "var(--brand)" }}>your desk</span>.
+      </>
+    );
+  const body =
+    brand?.body ??
+    "The morning brief is ready. Three new pipeline candidates surfaced overnight, the Risk agent is green across all books, and your weekly memo is queued.";
+  const card = brand?.card ?? <DefaultBriefingCard today={today} />;
 
   return (
     <aside
@@ -95,7 +134,7 @@ function AuthBrandPane() {
           className="t-eyebrow-italic"
           style={{ color: "var(--brand)", letterSpacing: "0.2em" }}
         >
-          {longDate} · 09:14 ET
+          {eyebrow}
         </div>
         <h1
           className="m-0 mt-4 italic"
@@ -109,7 +148,7 @@ function AuthBrandPane() {
             textWrap: "balance",
           }}
         >
-          Welcome back to <span style={{ color: "var(--brand)" }}>your desk</span>.
+          {title}
         </h1>
         <p
           className="mt-[18px] italic"
@@ -122,67 +161,10 @@ function AuthBrandPane() {
             textWrap: "pretty",
           }}
         >
-          The morning brief is ready. Three new pipeline candidates surfaced overnight, the Risk
-          agent is green across all books, and your weekly memo is queued.
+          {body}
         </p>
 
-        <div
-          className="mt-8 rounded-[3px]"
-          style={{
-            padding: "16px 18px",
-            background: "var(--bg)",
-            border: "1px solid var(--border)",
-            borderLeft: "2px solid var(--brand)",
-          }}
-        >
-          <div
-            className="t-eyebrow-italic"
-            style={{ color: "var(--brand)", letterSpacing: "0.2em", fontSize: 9.5 }}
-          >
-            BEFORE THE BELL · {shortDate}
-          </div>
-          <ul className="m-0 mt-2.5 list-none p-0">
-            {briefRows.map((r, i) => (
-              <li
-                key={r.t}
-                className="flex gap-3"
-                style={{
-                  padding: "8px 0",
-                  borderBottom: i < briefRows.length - 1 ? "1px solid var(--border-hair)" : "none",
-                }}
-              >
-                <span
-                  className="t-mono"
-                  style={{ color: "var(--brand)", fontSize: 11, marginTop: 2 }}
-                >
-                  ·
-                </span>
-                <div className="flex-1">
-                  <div
-                    className="italic"
-                    style={{
-                      fontFamily: "var(--font-display)",
-                      fontSize: 14,
-                      color: "var(--ink-1000)",
-                    }}
-                  >
-                    {r.t}
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 1,
-                      fontFamily: "var(--font-mono)",
-                      fontSize: 10.5,
-                      color: "var(--fg-muted)",
-                    }}
-                  >
-                    {r.b}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
+        {card && <div className="mt-8">{card}</div>}
       </div>
 
       <div className="mt-6 flex items-center justify-between">
@@ -203,7 +185,161 @@ function AuthBrandPane() {
   );
 }
 
-function AuthFormPane({ children }: { children: ReactNode }) {
+function DefaultBriefingCard({ today }: { today: Date }) {
+  const shortDate = today
+    .toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    .toUpperCase();
+  const briefRows = [
+    { t: "Scout has surfaced", b: "47 candidates · 3 above 0.85 confidence" },
+    { t: "Risk gating is GREEN", b: "Drawdown headroom 4.6% · book size 71% of cap" },
+    { t: "Earnings tonight", b: "NVDA · CRM · ZS · 2 in your watchlists" },
+    { t: "1 strategy needs review", b: "Pairs · drift outside cointegration band" },
+  ];
+  return (
+    <div
+      className="rounded-[3px]"
+      style={{
+        padding: "16px 18px",
+        background: "var(--bg)",
+        border: "1px solid var(--border)",
+        borderLeft: "2px solid var(--brand)",
+      }}
+    >
+      <div
+        className="t-eyebrow-italic"
+        style={{ color: "var(--brand)", letterSpacing: "0.2em", fontSize: 9.5 }}
+      >
+        BEFORE THE BELL · {shortDate}
+      </div>
+      <ul className="m-0 mt-2.5 list-none p-0">
+        {briefRows.map((r, i) => (
+          <li
+            key={r.t}
+            className="flex gap-3"
+            style={{
+              padding: "8px 0",
+              borderBottom: i < briefRows.length - 1 ? "1px solid var(--border-hair)" : "none",
+            }}
+          >
+            <span
+              className="t-mono"
+              style={{ color: "var(--brand)", fontSize: 11, marginTop: 2 }}
+            >
+              ·
+            </span>
+            <div className="flex-1">
+              <div
+                className="italic"
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontSize: 14,
+                  color: "var(--ink-1000)",
+                }}
+              >
+                {r.t}
+              </div>
+              <div
+                style={{
+                  marginTop: 1,
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 10.5,
+                  color: "var(--fg-muted)",
+                }}
+              >
+                {r.b}
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * ApplyBrandCard — alternative brand-pane card for /request-access.
+ * Surfaces what an applicant gets after approval rather than the
+ * morning brief. Keeps the editorial typography + brand left-border.
+ */
+export function ApplyBrandCard() {
+  const items = [
+    { t: "Reviewed access", b: "Sarah reads every application personally · 5 business days" },
+    { t: "Paper-first workspace", b: "Your desk lands in paper mode · live routing comes after a check-in" },
+    { t: "Operator agreement", b: "Plain-English terms · we explain every clause" },
+    { t: "Onboarding cohort", b: "Next cohort: May 22 · 14 of 47 seats reserved" },
+  ];
+  return (
+    <div
+      className="rounded-[3px]"
+      style={{
+        padding: "16px 18px",
+        background: "var(--bg)",
+        border: "1px solid var(--border)",
+        borderLeft: "2px solid var(--brand)",
+      }}
+    >
+      <div
+        className="t-eyebrow-italic"
+        style={{ color: "var(--brand)", letterSpacing: "0.2em", fontSize: 9.5 }}
+      >
+        AFTER YOU APPLY
+      </div>
+      <ul className="m-0 mt-2.5 list-none p-0">
+        {items.map((r, i) => (
+          <li
+            key={r.t}
+            className="flex gap-3"
+            style={{
+              padding: "8px 0",
+              borderBottom: i < items.length - 1 ? "1px solid var(--border-hair)" : "none",
+            }}
+          >
+            <span
+              className="t-mono"
+              style={{ color: "var(--brand)", fontSize: 11, marginTop: 2 }}
+            >
+              ·
+            </span>
+            <div className="flex-1">
+              <div
+                className="italic"
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontSize: 14,
+                  color: "var(--ink-1000)",
+                }}
+              >
+                {r.t}
+              </div>
+              <div
+                style={{
+                  marginTop: 1,
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 10.5,
+                  color: "var(--fg-muted)",
+                }}
+              >
+                {r.b}
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function AuthFormPane({
+  children,
+  topRight,
+  footerLeft,
+  footerRight,
+}: {
+  children: ReactNode;
+  topRight: { label: string; href: string };
+  footerLeft?: ReactNode;
+  footerRight?: ReactNode;
+}) {
   return (
     <div className="flex flex-col overflow-auto" style={{ padding: "32px 60px" }}>
       <header className="flex items-center justify-end gap-3.5">
@@ -214,7 +350,7 @@ function AuthFormPane({ children }: { children: ReactNode }) {
           NEW HERE?
         </span>
         <Link
-          href="/request-access"
+          href={topRight.href}
           className="rounded-[3px] inline-flex items-center"
           style={{
             background: "var(--bg-elev-1)",
@@ -225,7 +361,7 @@ function AuthFormPane({ children }: { children: ReactNode }) {
             fontSize: 12.5,
           }}
         >
-          Apply for access ↗
+          {topRight.label}
         </Link>
       </header>
 
@@ -241,13 +377,13 @@ function AuthFormPane({ children }: { children: ReactNode }) {
           className="t-mono"
           style={{ fontSize: 9.5, color: "var(--fg-hint)", letterSpacing: "0.05em" }}
         >
-          AlphaDesk · v2
+          {footerLeft ?? "AlphaDesk · v2"}
         </span>
         <span
           className="t-mono"
           style={{ fontSize: 9.5, color: "var(--fg-hint)", letterSpacing: "0.05em" }}
         >
-          Sign-ins are logged with IP and device fingerprint.
+          {footerRight ?? "Sign-ins are logged with IP and device fingerprint."}
         </span>
       </footer>
     </div>
