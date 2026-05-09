@@ -497,7 +497,7 @@ function WatchlistTable({ list, rows }: { list: Watchlist; rows: WatchlistRow[] 
             <th className="text-right px-3 py-2 font-semibold hidden sm:table-cell">Vol</th>
             <th className="text-right px-3 py-2 font-semibold hidden md:table-cell">Tech</th>
             <th className="text-right px-3 py-2 font-semibold hidden md:table-cell">Fund</th>
-            <th className="text-left px-3 py-2 font-semibold hidden lg:table-cell">Signal</th>
+            <th className="text-left px-3 py-2 font-semibold hidden lg:table-cell">Status</th>
             <th className="text-left px-3 py-2 font-semibold hidden xl:table-cell">Reason</th>
             <th className="text-right px-3 py-2 font-semibold hidden lg:table-cell">Earnings</th>
             <th className="text-right px-3 py-2 font-semibold">Action</th>
@@ -528,19 +528,29 @@ function WatchlistTable({ list, rows }: { list: Watchlist; rows: WatchlistRow[] 
               <td className="px-3 py-2.5 text-right t-mono text-fg-muted hidden sm:table-cell">{r.vol}</td>
               <td className="px-3 py-2.5 text-right t-mono text-fg-muted hidden md:table-cell">{r.techScore}</td>
               <td className="px-3 py-2.5 text-right t-mono text-fg-muted hidden md:table-cell">{r.fundScore}</td>
+              {/* v2 polish — STATUS column matches watchlists-dark.png:
+                  HELD (gold pill) for currently-held names, CANDIDATE
+                  (amber outline) for active signals, "—" otherwise. The
+                  underlying signal stays accessible via the title attr
+                  for power users + screen readers. */}
               <td className="px-3 py-2.5 hidden lg:table-cell">
-                <span className={cn(
-                  "px-1.5 py-0.5 rounded-pill text-eyebrow uppercase tracking-[0.08em] font-semibold",
-                  r.signal.startsWith("trend+") || r.signal === "PEAD"
-                    ? "bg-tint-up-1 text-profit"
-                    : r.signal === "vol+"
-                    ? "bg-tint-brand-1 text-brand"
-                    : r.signal === "trim"
-                    ? "bg-tint-down-1 text-loss"
-                    : "bg-bg-elev-2 text-fg-muted",
-                )}>
-                  {r.signal}
-                </span>
+                {r.held ? (
+                  <span
+                    title={`Held · signal: ${r.signal}`}
+                    className="inline-flex items-center rounded-pill bg-tint-brand-1 border border-brand/50 px-2 py-0.5 font-mono text-eyebrow uppercase tracking-[0.08em] font-semibold text-brand"
+                  >
+                    Held
+                  </span>
+                ) : r.signal && r.signal !== "neutral" && r.signal !== "hold" && r.signal !== "watch" ? (
+                  <span
+                    title={`Signal: ${r.signal}`}
+                    className="inline-flex items-center rounded-pill border border-amber/50 px-2 py-0.5 font-mono text-eyebrow uppercase tracking-[0.08em] font-semibold text-amber"
+                  >
+                    Candidate
+                  </span>
+                ) : (
+                  <span className="text-fg-muted">—</span>
+                )}
               </td>
               <td className="px-3 py-2.5 text-fg-muted italic hidden xl:table-cell line-clamp-1 max-w-[260px]">
                 {r.reason}
