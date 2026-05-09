@@ -48,8 +48,10 @@ export default defineConfig({
   webServer: {
     // DEV_AUTH_BYPASS lets the proxy treat every request as authenticated so
     // the suite can snapshot protected dashboard routes without a real login.
-    // Guarded by NODE_ENV !== production in proxy.ts; production never honors it.
-    command: "DEV_AUTH_BYPASS=1 npm run dev",
+    // NEXT_PUBLIC_ENABLE_MOCKS turns on the v2 mock handlers under
+    // `src/app/api/v1/[[...path]]/route.ts` so the chrome paints real numbers
+    // instead of the degraded "DATA UNAVAILABLE" banner. Both gates are dev-only.
+    command: "DEV_AUTH_BYPASS=1 NEXT_PUBLIC_ENABLE_MOCKS=1 npm run dev",
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
