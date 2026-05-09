@@ -828,6 +828,51 @@ export default function StrategiesListingPage() {
       actions={actions}
     >
       <main aria-label="Strategies catalogue" className="flex flex-col gap-8">
+        {/* v2 follow-up — editorial italic-Newsreader hero card matching
+         * strategies.jsx voice. Sits above the catalogue hero strip. */}
+        <header
+          className="rounded-md border border-border-hair p-5 md:p-6"
+          style={{
+            background: "var(--bg-elev-1)",
+            borderLeft: "2px solid var(--brand)",
+          }}
+        >
+          <p
+            className="t-eyebrow-italic"
+            style={{ color: "var(--brand)", letterSpacing: "0.2em", margin: 0 }}
+          >
+            STRATEGIES · LIBRARY
+          </p>
+          <h2
+            className="m-0 mt-3 italic"
+            style={{
+              fontFamily: "var(--font-display)",
+              color: "var(--ink-1000)",
+              fontSize: 38,
+              fontWeight: 400,
+              letterSpacing: "-0.025em",
+              lineHeight: 1.05,
+            }}
+          >
+            Strategies the desk hunts with.
+          </h2>
+          <p
+            className="italic"
+            style={{
+              marginTop: 12,
+              fontFamily: "var(--font-display)",
+              fontSize: 15,
+              color: "var(--fg-muted)",
+              lineHeight: 1.55,
+              maxWidth: 680,
+            }}
+          >
+            Explicit, auditable rules — momentum, mean-reversion, earnings
+            drift, options income, pairs. Click any card to read the
+            playbook, run a backtest, or queue a paper trade.
+          </p>
+        </header>
+
         {/* Round-8 killer-move 2: catalogue hero strip. Three KpiTile-style
             cards anchor the page in 3 seconds — a portfolio view of all
             active strategies. Hidden when no active strategies exist (cold
