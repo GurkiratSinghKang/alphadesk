@@ -90,17 +90,14 @@ export default function BacktestClient({ strategyId }: BacktestClientProps) {
         </p>
       </header>
 
-      <Section
-        eyebrow={`STRATEGY · BACKTEST · ${strategyId}`}
-        title="Backtest workbench"
-        description="Configure universe + date range + cost model + sweep params; compare runs; publish to playbook."
-        level={1}
-      >
-        <StatusBanner
-          tone="info"
-          message="Phase 1.10 — workbench renders against 4 demo runs. Backend B.10 (POST /backtest/runs + asyncio orchestrator + WS progress) lights up the live execution path."
-        />
-      </Section>
+      {/* v2 cleanup — the StatusBanner used to live inside a level=1
+       * Section that duplicated the editorial hero's eyebrow + title.
+       * Now that the hero is the page's sole header, the banner
+       * renders bare. */}
+      <StatusBanner
+        tone="info"
+        message="Phase 1.10 — workbench renders against 4 demo runs. Backend B.10 (POST /backtest/runs + asyncio orchestrator + WS progress) lights up the live execution path."
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-[320px,1fr] gap-6">
         <aside className="space-y-3">

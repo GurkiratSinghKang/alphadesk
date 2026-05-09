@@ -325,6 +325,10 @@ function StrategyCatalogCard({
         // at 10.5px, below the post-redesign readable floor. Bumped to
         // .t-meta (13px, mono, tabular) so dollar figures keep their column
         // alignment with the card's other numeric cells.
+        // 2026-05-09 v2 polish — added "Open playbook →" link on the right
+        // edge per strategies-dark.png. Sits adjacent to the invested figure
+        // so the card has a clear "next step" affordance instead of
+        // requiring users to click the entire card body.
         <div className="flex items-center justify-between t-meta text-fg-muted">
           <span className="flex items-center gap-1.5">
             <StatusDot
@@ -333,14 +337,23 @@ function StrategyCatalogCard({
             />
             <span className="tabular-nums">{s.activePositions} positions</span>
           </span>
-          <span
-            title={formatUsdPrecise(s.investedAmount)}
-            aria-label={`Invested ${formatUsdPrecise(s.investedAmount)}`}
-          >
-            Invested{" "}
-            <b className="font-medium text-fg">
-              {formatUsd(s.investedAmount)}
-            </b>
+          <span className="flex items-center gap-3">
+            <span
+              title={formatUsdPrecise(s.investedAmount)}
+              aria-label={`Invested ${formatUsdPrecise(s.investedAmount)}`}
+            >
+              Invested{" "}
+              <b className="font-medium text-fg">
+                {formatUsd(s.investedAmount)}
+              </b>
+            </span>
+            <Link
+              href={`/strategies/${s.id}/playbook`}
+              className="font-mono text-eyebrow uppercase tracking-[0.08em] font-semibold text-fg-muted hover:text-brand transition-colors"
+              onClick={(e) => e.stopPropagation()}
+            >
+              Open playbook →
+            </Link>
           </span>
         </div>
       )}
