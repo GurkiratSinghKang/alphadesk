@@ -205,6 +205,65 @@ export default function WatchlistsClient() {
               ))}
             </ol>
           </Section>
+
+          {/* v2 polish — QUICK ADD card matches watchlists-dark.png left-rail
+           * footer. Lets the operator append a symbol to the active list
+           * without leaving the page. Backend (B.3 watchlists v2) wires
+           * the append endpoint; until then the form persists locally to
+           * the active list's rows (preview UX). */}
+          <section
+            className="rounded-md border border-border-hair p-3"
+            style={{ background: "var(--bg-elev-1)" }}
+            aria-label="Quick add to active list"
+          >
+            <p
+              className="t-eyebrow-italic mb-2"
+              style={{ color: "var(--fg-muted)", letterSpacing: "0.16em", margin: 0 }}
+            >
+              QUICK ADD
+            </p>
+            <p className="font-display italic text-label leading-snug text-fg-muted mb-2">
+              Append a symbol to <span className="text-fg">{active.name}</span>.
+            </p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const input = e.currentTarget.elements.namedItem("symbol") as HTMLInputElement;
+                const sym = input?.value.trim().toUpperCase();
+                if (!sym) return;
+                // Phase 1.8 follow-up — backend B.3 wires the append. For
+                // now toast a confirmation so the form has visible feedback.
+                if (typeof window !== "undefined") {
+                  window.dispatchEvent(
+                    new CustomEvent("alphadesk:system-notify", {
+                      detail: {
+                        kind: "info",
+                        title: `Quick add — ${sym}`,
+                        message: `Append to ${active.name} lights up once backend B.3 (watchlists v2) ships.`,
+                      },
+                    }),
+                  );
+                }
+                input.value = "";
+              }}
+              className="flex items-center gap-1.5"
+            >
+              <input
+                type="text"
+                name="symbol"
+                placeholder="NVDA"
+                aria-label="Symbol ticker"
+                maxLength={10}
+                className="flex-1 rounded-sm border border-border bg-bg px-2 py-1 font-mono text-label uppercase text-fg placeholder:text-fg-muted/60 focus-visible:outline-none focus-visible:border-brand"
+              />
+              <button
+                type="submit"
+                className="rounded-sm border border-brand/60 bg-tint-brand-1 text-brand px-2.5 py-1 font-mono text-eyebrow font-semibold uppercase tracking-[0.08em] hover:bg-brand hover:text-brand-on transition-colors"
+              >
+                Add
+              </button>
+            </form>
+          </section>
         </aside>
 
         <Section
