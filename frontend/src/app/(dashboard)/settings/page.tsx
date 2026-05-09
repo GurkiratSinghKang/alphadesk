@@ -588,11 +588,63 @@ export default function SettingsPage() {
     <>
     <DashboardPageLayout eyebrow="§ SETTINGS" title="Settings">
       <div className="space-y-4">
+        {/* v2 phase 1.5 follow-up — editorial italic-Newsreader hero
+         * matching settings.jsx STHeader. Sits at the top of the page
+         * body so the existing DashboardPageLayout chrome above keeps
+         * its semantics + landmark; the visible voice now matches the
+         * design without rewriting every existing section. */}
+        <header
+          className="rounded-md border border-border-hair p-5 md:p-6"
+          style={{
+            background: "var(--bg-elev-1)",
+            borderLeft: "2px solid var(--brand)",
+          }}
+        >
+          <p
+            className="t-eyebrow-italic"
+            style={{
+              color: "var(--brand)",
+              letterSpacing: "0.2em",
+              margin: 0,
+            }}
+          >
+            ACCOUNT · SETTINGS
+          </p>
+          <h2
+            className="m-0 mt-3 italic"
+            style={{
+              fontFamily: "var(--font-display)",
+              color: "var(--ink-1000)",
+              fontSize: 38,
+              fontWeight: 400,
+              letterSpacing: "-0.025em",
+              lineHeight: 1.05,
+              textWrap: "balance",
+            }}
+          >
+            Tune the desk to how you trade.
+          </h2>
+          <p
+            className="italic"
+            style={{
+              marginTop: 12,
+              fontFamily: "var(--font-display)",
+              fontSize: 15,
+              color: "var(--fg-muted)",
+              lineHeight: 1.55,
+              textWrap: "pretty",
+              maxWidth: 680,
+            }}
+          >
+            Personal account configuration — appearance, trading defaults,
+            broker connection, notifications, AI access, security. Operator
+            controls live in <span style={{ color: "var(--brand)" }}>Admin · Control Center</span>.
+          </p>
+        </header>
+
         {/* v2 phase 1.5 — Appearance section using ControlModule
          * primitive scoped to the user. Density (quiet/dense) +
-         * theme. Phase 1.5 follow-up will tab the full settings
-         * page (Account · Trading · Risk · Alerts · Data ·
-         * Appearance · Shortcuts · Privacy · Danger). */}
+         * theme. */}
         <AppearanceSection />
 
         {/* PM-5 (audit/2026-05-05-position-management): minimal admin
