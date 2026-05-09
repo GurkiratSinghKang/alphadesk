@@ -458,15 +458,21 @@ export default function LoginForm() {
         type="submit"
         size="lg"
         variant="primary"
-        className="mt-1 h-12 w-full rounded-[8px] font-sans text-body font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_1px_2px_rgba(0,0,0,0.08)] disabled:bg-[var(--auth-border-soft)] disabled:text-[var(--auth-fg)] disabled:opacity-100"
+        className="mt-1 h-12 w-full rounded-[3px] font-sans text-body font-medium disabled:opacity-60"
+        style={{
+          background: "var(--brand)",
+          color: "var(--ink-050)",
+          border: "1px solid var(--brand)",
+        }}
         disabled={disabled}
       >
-        {loading ? (
+        {loading && (
           <CircleNotch className="mr-2 h-4 w-4 animate-spin" aria-hidden weight="regular" />
-        ) : (
-          <ArrowRight className="mr-2 h-4 w-4" aria-hidden weight="regular" />
         )}
         {totpRequired ? "Verify code" : "Sign in"}
+        {!loading && (
+          <ArrowRight className="ml-2 h-4 w-4" aria-hidden weight="regular" />
+        )}
       </Button>
 
       <p className="mt-1 text-center font-sans text-body-sm text-[var(--auth-fg-muted)]">
