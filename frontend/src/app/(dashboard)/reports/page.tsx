@@ -1405,6 +1405,33 @@ export default function ReportsPage() {
     });
   }, [trades, range]);
 
+  // v2 reports polish — derive the resolved date window so the
+  // period bar can show "From → To" alongside the chip group. ALL
+  // resolves to the earliest exit_time across loaded trades; named
+  // ranges resolve to ``rangeCutoff(range)`` → today.
+  const periodBounds = useMemo(() => {
+    const cutoff = rangeCutoff(range);
+    const to = new Date();
+    if (cutoff) return { from: cutoff, to };
+    // ALL — fall back to the earliest closed-trade exit if available,
+    // otherwise leave from undefined and let the bar show "All time".
+    const earliest = trades
+      .map((t) => (t.exit_time ? new Date(t.exit_time).getTime() : NaN))
+      .filter((n) => Number.isFinite(n))
+      .reduce((acc, n) => (n < acc ? n : acc), Number.POSITIVE_INFINITY);
+    return {
+      from: Number.isFinite(earliest) ? new Date(earliest) : null,
+      to,
+    };
+  }, [range, trades]);
+
+  const formatPeriodDate = (d: Date) =>
+    d.toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+
   const rangeSelector = (
     <div
       role="radiogroup"
@@ -1435,6 +1462,36 @@ export default function ReportsPage() {
           </button>
         );
       })}
+    </div>
+  );
+
+  // v2 reports polish — full period bar. Combines the chip group, the
+  // resolved "From → To" date label, and the live trade-count for the
+  // selected window. Sits at the top of the body content (instead of
+  // the page-header actions slot) so the resolved period is visible
+  // alongside the control that drives it.
+  const periodBar = (
+    <div
+      className="flex flex-col gap-3 rounded-md border border-border-hair bg-bg-elev-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+      data-testid="reports-period-bar"
+    >
+      <div className="flex flex-col gap-0.5">
+        <p
+          className="t-eyebrow-italic"
+          style={{ color: "var(--fg-muted)", letterSpacing: "0.18em", margin: 0 }}
+        >
+          PERIOD
+        </p>
+        <p className="font-mono text-label tabular-nums text-fg">
+          {periodBounds.from
+            ? `${formatPeriodDate(periodBounds.from)} → ${formatPeriodDate(periodBounds.to)}`
+            : "All time"}
+          <span className="ml-3 text-fg-muted">
+            · {filteredTrades.length} closed
+          </span>
+        </p>
+      </div>
+      {rangeSelector}
     </div>
   );
 
@@ -1533,7 +1590,7 @@ export default function ReportsPage() {
 
   return (
     <ScrollArea className="h-full">
-      <DashboardPageLayout eyebrow="§ REPORTS" title="Reports" actions={rangeSelector}>
+      <DashboardPageLayout eyebrow="§ REPORTS" title="Reports">
         {/* v2 phase 1.9 follow-up — editorial italic-Newsreader hero card
          * matching reports.jsx voice. Sits above the section cards so the
          * existing wrapper landmark + actions are unchanged. */}
@@ -1579,6 +1636,8 @@ export default function ReportsPage() {
             confirm wash-sale + holding-period classification with your CPA.
           </p>
         </header>
+
+        {periodBar}
 
         {/* Portfolio Statement */}
         <SectionCard title="Portfolio statement" eyebrow="§ STATEMENT" icon={FileText}>
