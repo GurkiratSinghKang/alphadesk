@@ -510,7 +510,12 @@ export default function ChartPane({
   // v2 chart polish — range chip selector. ``ALL`` keeps the existing
   // full-data behavior; specific ranges trim ``data`` to the trailing
   // window anchored at the last bar's timestamp.
-  const [rangeChip, setRangeChip] = React.useState<RangeChipId>("ALL");
+  // 2026-05-09 cleanup: the inline range chips were retired (pensive-kirch's
+  // _v2/ChartToolbar now owns range selection above every consumer). State
+  // is parked at ALL so `visibleData` continues to pass through the full
+  // bar set; a future consumer can re-thread an external setter through
+  // ChartPaneProps if it wants per-pane range scoping back.
+  const rangeChip: RangeChipId = "ALL";
 
   // Initialize cursor to a sensible position when replay is first enabled.
   // Default to ~60% of history so the user immediately sees motion.
@@ -1025,39 +1030,14 @@ export default function ChartPane({
             })}
           </div>
 
-          {/* v2 chart polish — range chips. Trims the visible bar set
-              to the trailing window anchored at the last loaded bar.
-              Sits adjacent to the chart-type group so users move from
-              "what kind of chart" to "what time window" left-to-right
-              before reaching for compare/indicators. */}
-          <div
-            role="radiogroup"
-            aria-label="Visible time range"
-            className="flex items-center gap-0.5 ml-1 mr-1 border-l border-border-hair pl-1.5"
-          >
-            {RANGE_CHIPS.map((r) => {
-              const active = rangeChip === r.id;
-              return (
-                <button
-                  key={r.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  onClick={() => setRangeChip(r.id)}
-                  title={`Show last ${r.label === "ALL" ? "all bars" : r.label}`}
-                  className={cn(
-                    "inline-flex h-7 items-center px-2 rounded-xs transition-colors",
-                    "font-mono text-eyebrow font-medium uppercase tracking-[0.06em] tabular-nums",
-                    active
-                      ? "text-ink-1000 bg-bg-elev-2"
-                      : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
-                  )}
-                >
-                  {r.label}
-                </button>
-              );
-            })}
-          </div>
+          {/* (Range chips removed 2026-05-09 — pensive-kirch's
+              `_v2/ChartToolbar.tsx` now owns the range pills above
+              every consumer of ChartPane (trade page, symbol pages),
+              and rendering both produced two stacked toolbars on
+              tradingalpha.net. The internal `rangeChip` state below
+              still drives `visibleData` if a future consumer needs to
+              re-expose a chip group inline; for now it stays parked at
+              ALL by default.) */}
 
           {/* Slice-9 / CH-3C: "+ Compare" toolbar button.
               Click to expand a small input where the user types a symbol
