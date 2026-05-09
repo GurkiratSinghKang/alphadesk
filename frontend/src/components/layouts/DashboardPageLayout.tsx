@@ -37,6 +37,14 @@ export interface DashboardPageLayoutProps {
    * editorial title ("This week · next week") so SR users get context.
    */
   pageLabel?: string;
+  /**
+   * v2 polish — pages that ship their own editorial italic-Newsreader hero
+   * pass `hideHeader` so the chrome <header> doesn't stack above the hero.
+   * The `<div role="region" aria-label>` landmark stays so screen readers
+   * still get the page name; the `actions` slot is dropped (those pages
+   * embed actions into their own hero).
+   */
+  hideHeader?: boolean;
 }
 
 export default function DashboardPageLayout({
@@ -46,6 +54,7 @@ export default function DashboardPageLayout({
   children,
   className,
   pageLabel,
+  hideHeader,
 }: DashboardPageLayoutProps) {
   return (
     /* B-89 — WCAG 2.4.1 / 4.1.2: give the page content an accessible
@@ -63,28 +72,30 @@ export default function DashboardPageLayout({
         className
       )}
     >
-      <header className="relative overflow-hidden rounded-md border border-border-hair bg-bg-elev-1/88 px-3 py-3 shadow-[0_14px_42px_-34px_rgba(0,0,0,0.72)] md:px-4">
-        <div
-          aria-hidden
-          className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,var(--brand),transparent)] opacity-65"
-        />
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-          <div className="min-w-0">
-            <div className="t-label uppercase tracking-wider text-primary/85">
-              {eyebrow.replace("§ ", "")}
+      {hideHeader ? null : (
+        <header className="relative overflow-hidden rounded-md border border-border-hair bg-bg-elev-1/88 px-3 py-3 shadow-[0_14px_42px_-34px_rgba(0,0,0,0.72)] md:px-4">
+          <div
+            aria-hidden
+            className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,var(--brand),transparent)] opacity-65"
+          />
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+            <div className="min-w-0">
+              <div className="t-label uppercase tracking-wider text-primary/85">
+                {eyebrow.replace("§ ", "")}
+              </div>
+              <h1
+                className="mt-1 max-w-[32ch] break-words text-h2 font-semibold leading-tight tracking-tight text-ink-1000 md:max-w-none md:text-h1"
+                style={{ letterSpacing: 0 }}
+              >
+                {title}
+              </h1>
             </div>
-            <h1
-              className="mt-1 max-w-[32ch] break-words text-h2 font-semibold leading-tight tracking-tight text-ink-1000 md:max-w-none md:text-h1"
-              style={{ letterSpacing: 0 }}
-            >
-              {title}
-            </h1>
+            {actions ? (
+              <div className="flex flex-wrap items-center gap-2 md:justify-end">{actions}</div>
+            ) : null}
           </div>
-          {actions ? (
-            <div className="flex flex-wrap items-center gap-2 md:justify-end">{actions}</div>
-          ) : null}
-        </div>
-      </header>
+        </header>
+      )}
 
       <div className="flex min-h-0 flex-1 flex-col gap-4">{children}</div>
     </div>

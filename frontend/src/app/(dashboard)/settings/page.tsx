@@ -586,7 +586,7 @@ export default function SettingsPage() {
 
   return (
     <>
-    <DashboardPageLayout eyebrow="§ SETTINGS" title="Settings">
+    <DashboardPageLayout eyebrow="§ SETTINGS" title="Settings" hideHeader>
       <div className="space-y-4">
         {/* v2 phase 1.5 follow-up — editorial italic-Newsreader hero
          * matching settings.jsx STHeader. Sits at the top of the page

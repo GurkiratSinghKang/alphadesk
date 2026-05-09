@@ -910,8 +910,18 @@ export default function AlertsPage() {
     <DashboardPageLayout
       eyebrow="§ ALERTS"
       title="Alerts & triggers"
-      actions={headerActions}
+      hideHeader
     >
+      {/* v2 polish — inline alerts controls. Previously these lived in
+          the chrome header `actions` slot, which we dropped via
+          `hideHeader` so the editorial hero below is the only header
+          on the page. Render only when the page has alerts to act on. */}
+      {headerActions ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {headerActions}
+        </div>
+      ) : null}
+
       {/* v2 phase 1.x — editorial italic-Newsreader hero matching
        * alerts-dark.png. Sits above the existing summary line and
        * the CRUD form below; the page's working machinery is

@@ -540,10 +540,16 @@ export default function TradingAgentsResearchPage() {
     <DashboardPageLayout
       eyebrow="RESEARCH"
       title="TradingAgents Research"
-      actions={actions}
+      hideHeader
       className="[&_header_h1]:overflow-visible [&_header_h1]:whitespace-normal [&_header_h1]:[text-overflow:clip]"
       pageLabel="TradingAgents research"
     >
+      {/* v2 polish — READ-ONLY pill (previously chrome `actions`)
+          rendered inline at the top of the body now that `hideHeader`
+          drops the chrome stack. */}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {actions}
+      </div>
       {/* v2 phase 1.x — editorial italic-Newsreader hero matching the
        * voice established across /settings, /reports, /strategies,
        * /pipeline, /watchlists, /alerts, /analytics, /backtest,
