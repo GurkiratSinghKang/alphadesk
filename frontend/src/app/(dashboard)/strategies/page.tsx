@@ -273,21 +273,31 @@ function StrategyCatalogCard({
             </span>
           ) : null}
         </div>
-        <RegimePill
-          regime={regime.regime}
-          vol={regime.vol}
-          label={regime.label.toUpperCase()}
-        />
-      </header>
-
-      <div className="rounded-sm border border-border-hair bg-bg px-3 py-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={cn("inline-flex rounded-sm border px-2 py-0.5 font-mono text-label", readinessChipClass(readiness.tone))}>
+        {/* v2 catalog polish — pair regime + readiness as a single
+         * chip stack in the top-right corner so the two indicators
+         * read as one unit at a glance. The verbose readiness reason
+         * drops below as a quieter caption (no sub-bar chrome). */}
+        <div className="flex flex-col items-end gap-1">
+          <RegimePill
+            regime={regime.regime}
+            vol={regime.vol}
+            label={regime.label.toUpperCase()}
+          />
+          <span
+            className={cn(
+              "inline-flex items-center rounded-pill border px-2 py-0.5 font-mono text-label uppercase tracking-wider",
+              readinessChipClass(readiness.tone),
+            )}
+            title={readiness.reason}
+          >
             {readiness.label}
           </span>
-          <span className="text-label leading-snug text-fg-muted">{readiness.reason}</span>
         </div>
-      </div>
+      </header>
+
+      <p className="text-label leading-snug text-fg-muted">
+        {readiness.reason}
+      </p>
 
       <div className="grid grid-cols-3 gap-3 border-t border-border-hair pt-3">
         <MetricCell label="OOS SHARPE" value={signedNumber(s.sharpe)} />

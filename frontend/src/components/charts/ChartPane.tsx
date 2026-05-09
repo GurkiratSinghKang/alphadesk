@@ -136,6 +136,21 @@ const TYPES: { id: ChartType; label: string; icon: React.ReactNode }[] = [
 
 const ALL_INDICATORS: Indicator[] = ["VWAP", "EMA", "SMA", "Bollinger", "RSI", "MACD"];
 
+// Range chips — visual time-window scoper. Filters `data` down to the
+// trailing N seconds before passing into TradingChart, anchored to the
+// last loaded bar (not Date.now()) so historical data still renders
+// sensibly. ``ALL`` passes through unfiltered (default).
+type RangeChipId = "1D" | "5D" | "1M" | "3M" | "6M" | "1Y" | "ALL";
+const RANGE_CHIPS: { id: RangeChipId; label: string; seconds: number | null }[] = [
+  { id: "1D", label: "1D", seconds: 1 * 86400 },
+  { id: "5D", label: "5D", seconds: 5 * 86400 },
+  { id: "1M", label: "1M", seconds: 30 * 86400 },
+  { id: "3M", label: "3M", seconds: 90 * 86400 },
+  { id: "6M", label: "6M", seconds: 180 * 86400 },
+  { id: "1Y", label: "1Y", seconds: 365 * 86400 },
+  { id: "ALL", label: "ALL", seconds: null },
+];
+
 // Drawing tools: the toolbar renders a chrome rail; the actual drawing
 // capture + render lives in the drawing plugin. We expose the tool state
 // as a callback so the parent (or a future drawings-store hook) can wire
@@ -492,6 +507,11 @@ export default function ChartPane({
   const [replaySpeed, setReplaySpeed] = React.useState<1 | 2 | 5 | 10>(2);
   const [replayPlaying, setReplayPlaying] = React.useState(false);
 
+  // v2 chart polish — range chip selector. ``ALL`` keeps the existing
+  // full-data behavior; specific ranges trim ``data`` to the trailing
+  // window anchored at the last bar's timestamp.
+  const [rangeChip, setRangeChip] = React.useState<RangeChipId>("ALL");
+
   // Initialize cursor to a sensible position when replay is first enabled.
   // Default to ~60% of history so the user immediately sees motion.
   React.useEffect(() => {
@@ -538,11 +558,27 @@ export default function ChartPane({
   // this is the identity — full data. ``React.useMemo`` keeps the
   // reference stable so TradingChart's didFitRef logic isn't broken.
   const visibleData = React.useMemo(
-    () =>
-      replayEnabled
+    () => {
+      const base = replayEnabled
         ? data.slice(0, Math.min(Math.max(replayCursor, 1), data.length))
-        : data,
-    [data, replayEnabled, replayCursor],
+        : data;
+      const chip = RANGE_CHIPS.find((r) => r.id === rangeChip);
+      if (!chip || chip.seconds == null || base.length === 0) return base;
+      const lastTime =
+        typeof base[base.length - 1].time === "number"
+          ? (base[base.length - 1].time as number)
+          : Number(base[base.length - 1].time);
+      if (!Number.isFinite(lastTime)) return base;
+      const cutoff = lastTime - chip.seconds;
+      const trimmed = base.filter((b) => {
+        const t = typeof b.time === "number" ? b.time : Number(b.time);
+        return Number.isFinite(t) && t >= cutoff;
+      });
+      // If the requested range is wider than what we have loaded, fall
+      // back to the full base — never render an empty chart for a chip.
+      return trimmed.length > 1 ? trimmed : base;
+    },
+    [data, replayEnabled, replayCursor, rangeChip],
   );
   const tradeOverlayPrices = React.useMemo(
     () => uniqueTradeOverlayPrices(tradeOverlays),
@@ -984,6 +1020,40 @@ export default function ChartPane({
                 >
                   {t.icon}
                   <span className="hidden sm:inline">{t.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* v2 chart polish — range chips. Trims the visible bar set
+              to the trailing window anchored at the last loaded bar.
+              Sits adjacent to the chart-type group so users move from
+              "what kind of chart" to "what time window" left-to-right
+              before reaching for compare/indicators. */}
+          <div
+            role="radiogroup"
+            aria-label="Visible time range"
+            className="flex items-center gap-0.5 ml-1 mr-1 border-l border-border-hair pl-1.5"
+          >
+            {RANGE_CHIPS.map((r) => {
+              const active = rangeChip === r.id;
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setRangeChip(r.id)}
+                  title={`Show last ${r.label === "ALL" ? "all bars" : r.label}`}
+                  className={cn(
+                    "inline-flex h-7 items-center px-2 rounded-xs transition-colors",
+                    "font-mono text-eyebrow font-medium uppercase tracking-[0.06em] tabular-nums",
+                    active
+                      ? "text-ink-1000 bg-bg-elev-2"
+                      : "text-fg-muted hover:text-fg hover:bg-bg-elev-1",
+                  )}
+                >
+                  {r.label}
                 </button>
               );
             })}
