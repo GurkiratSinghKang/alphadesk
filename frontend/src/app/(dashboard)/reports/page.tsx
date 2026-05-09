@@ -1590,7 +1590,7 @@ export default function ReportsPage() {
 
   return (
     <ScrollArea className="h-full">
-      <DashboardPageLayout eyebrow="§ REPORTS" title="Reports">
+      <DashboardPageLayout eyebrow="§ REPORTS" title="Reports" hideHeader>
         {/* v2 phase 1.9 follow-up — editorial italic-Newsreader hero card
          * matching reports.jsx voice. Sits above the section cards so the
          * existing wrapper landmark + actions are unchanged. */}

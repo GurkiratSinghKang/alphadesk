@@ -827,31 +827,17 @@ export default function StrategiesListingPage() {
 
   const loading = summaries == null && !loadError;
 
-  const summaryLine = loading ? (
-    "Loading catalogue\u2026"
-  ) : (
-    <>
-      {counts.active} active · {counts.paused} paused · {counts.coming_soon}{" "}
-      in development
-      <span className="text-fg-hint"> · {counts.total} total</span>
-    </>
-  );
-
-  const actions = (
-    // 2026-04-21 polish: header summary was 11px — on the floor but still
-    // hard to scan next to the 28px italic title. Bumped to fs-label (12px)
-    // via `.t-meta` so the live count reads with the same weight as every
-    // other meta label on the page.
-    <span className="t-meta tabular-nums">
-      {summaryLine}
-    </span>
-  );
+  // 2026-05-09 cleanup: chrome header is hidden via `hideHeader` below so
+  // the editorial hero is the page's sole header. The previous
+  // `summaryLine` + chrome `actions` slot were retired — the
+  // StrategyReadinessWorkbench section already exposes the same counts at
+  // higher fidelity.
 
   return (
     <DashboardPageLayout
       eyebrow="§ STRATEGIES"
       title="Strategies"
-      actions={actions}
+      hideHeader
     >
       <main aria-label="Strategies catalogue" className="flex flex-col gap-8">
         {/* v2 follow-up — editorial italic-Newsreader hero card matching

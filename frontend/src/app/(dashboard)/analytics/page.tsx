@@ -1093,13 +1093,15 @@ export default function AnalyticsPage() {
       <DashboardPageLayout
         eyebrow="§ ANALYTICS"
         title="Portfolio analytics"
-        actions={<RangeSelector value={range} onChange={setRange} />}
+        hideHeader
       >
         {/* v2 phase 1.x — editorial italic-Newsreader hero matching
          * analytics-dark.png. Same voice as /settings, /reports,
          * /strategies, /pipeline, /watchlists, /alerts. Sits above
          * the existing KPI strip + charts, which keep their current
-         * data wiring untouched. */}
+         * data wiring untouched. The range selector moves into the
+         * hero's top-right corner so the chrome page header can be
+         * dropped (`hideHeader` above). */}
         <header
           className="mb-4 rounded-md border border-border-hair p-5 md:p-6"
           style={{
@@ -1107,12 +1109,15 @@ export default function AnalyticsPage() {
             borderLeft: "2px solid var(--brand)",
           }}
         >
-          <p
-            className="t-eyebrow-italic"
-            style={{ color: "var(--brand)", letterSpacing: "0.2em", margin: 0 }}
-          >
-            ANALYTICS · {range.toUpperCase()}
-          </p>
+          <div className="flex items-center justify-between gap-4">
+            <p
+              className="t-eyebrow-italic"
+              style={{ color: "var(--brand)", letterSpacing: "0.2em", margin: 0 }}
+            >
+              ANALYTICS · {range.toUpperCase()}
+            </p>
+            <RangeSelector value={range} onChange={setRange} />
+          </div>
           <h2
             className="m-0 mt-3 italic"
             style={{

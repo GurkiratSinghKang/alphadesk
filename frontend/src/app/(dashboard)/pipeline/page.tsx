@@ -942,7 +942,7 @@ export default function PipelinePage() {
 
   if (!mounted) {
     return (
-      <DashboardPageLayout eyebrow="§ PIPELINE" title="Daily pipeline">
+      <DashboardPageLayout eyebrow="§ PIPELINE" title="Daily pipeline" hideHeader>
         <div className="flex h-64 items-center justify-center">
           <p className="font-display italic text-body text-fg-muted">Loading pipeline.</p>
         </div>
@@ -1065,7 +1065,7 @@ export default function PipelinePage() {
     <DashboardPageLayout
       eyebrow="§ PIPELINE"
       title="Daily pipeline"
-      actions={pipelineActions}
+      hideHeader
     >
       {loading ? (
           // Phase-1 / SK-1: replace page-level spinner with content-shape
@@ -1087,6 +1087,14 @@ export default function PipelinePage() {
               run={todayRun}
               livePositions={displayPositions.length}
             />
+
+            {/* v2 polish — inline pipeline controls. Previously these
+                lived in the chrome header `actions` slot, which we dropped
+                via `hideHeader` to remove the duplicate page-chrome stack
+                above the editorial hero. */}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {pipelineActions}
+            </div>
 
             {/* v2 phase 1.x — staged-review section (matches design's
                 "STAGED · AWAITING YOUR REVIEW" 2x2 grid). Renders live
