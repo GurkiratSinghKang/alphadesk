@@ -65,7 +65,7 @@ export default function BacktestClient({ strategyId }: BacktestClientProps) {
           style={{
             fontFamily: "var(--font-display)",
             color: "var(--ink-1000)",
-            fontSize: 38,
+            fontSize: 30,
             fontWeight: 400,
             letterSpacing: "-0.025em",
             lineHeight: 1.05,
