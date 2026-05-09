@@ -9,7 +9,7 @@ export const mockPush = vi.fn();
 export const mockBack = vi.fn();
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: mockPush, back: mockBack }),
+  useRouter: () => ({ push: mockPush, back: mockBack, replace: vi.fn() }),
   usePathname: () => '/',
   useSearchParams: () => new URLSearchParams(globalThis.window?.location?.search ?? ''),
   useParams: () => ({ id: 'pead' }),

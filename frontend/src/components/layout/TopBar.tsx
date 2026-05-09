@@ -21,9 +21,14 @@ import { useUIStore } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 import { ProfileMenu } from "./ProfileMenu";
 import HaltTradingButton from "./HaltTradingButton";
-import { NotificationCenter } from "./NotificationCenter";
+// v2 phase 1.7 — NotificationBell mounts the Sheet-based
+// NotificationDrawer (Phase 0b). The popover-based
+// NotificationCenter is retained in the tree for one release
+// per locked decision D5.
+import NotificationBell from "./NotificationBell";
 import { ThemeToggle } from "./ThemeToggle";
 import StatusPills from "./StatusPills";
+import PaperLiveToggle from "@/components/composites/PaperLiveToggle";
 // Round-11 / W-1 (P0): WorkspaceSelector was a placebo — selecting
 // "Morning Research" persisted to localStorage, dispatched
 // ``alphadesk:workspace-change`` into the void (zero subscribers
@@ -159,6 +164,13 @@ export function TopBar() {
         <div className="hidden lg:block">
           <StatusPills />
         </div>
+        {/* v2 redesign — first-class paper/live toggle per v2-plan §0.13.
+         * Reads existing useUIStore.tradingMode (cross-tab synced —
+         * preservation invariant #1). Paper→live still routes through
+         * the existing admin-gated toast (Round-10 / W-2 fix preserved).
+         * The ProfileMenu radio stays for one release as a redundant
+         * secondary control until v2.1 cleanup. */}
+        <PaperLiveToggle className="hidden md:inline-flex" />
         {/* Audit Persona F4.2 (2026-05-05): system-wide halt-trading
          * button. Admin-only — backend returns 403 for non-admin and
          * the component hides itself. Hidden on the smallest mobile
@@ -166,7 +178,7 @@ export function TopBar() {
          * route through /strategies/{id} per-strategy switches. */}
         <HaltTradingButton className="hidden sm:inline-flex" />
         <ThemeToggle className="hidden h-11 w-11 sm:inline-flex sm:h-8 sm:w-8" />
-        <NotificationCenter />
+        <NotificationBell />
         <ProfileMenu />
       </div>
     </header>

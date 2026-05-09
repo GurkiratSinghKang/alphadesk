@@ -144,6 +144,48 @@
   --chart-book-bid: rgba(168, 208, 77, 0.30);   /* up-500 @ 30% */
   --chart-book-ask: rgba(224, 120, 86, 0.30);   /* down-500 @ 30% */
 
+  /* ─── v2 redesign — additive tokens ────────────────────────────
+     Three-stop tint ramps for chart fills, regime bands, AI strip
+     backgrounds, and pill chrome. Light theme overrides retune these
+     to moss / rust / warm-brown / plum at higher alpha so paper does
+     not wash them out. Zero existing consumers in dark — purely
+     additive on this branch.
+
+     `--brand-on/--up-on/--down-on` are foreground colors for text or
+     icons placed on a filled brand/up/down button. They're ink colors,
+     not semantic tones — never use them as text on neutral surfaces.
+
+     `--chart-line` is the primary line color on price charts; gold on
+     dark reads beautifully, but warm-brown on cream paper is muddy, so
+     light theme overrides it to `--c-ink-2`. */
+  --brand-on: #1a1206;
+  --up-on:    #0b0a09;
+  --down-on:  #1a0d09;
+  --chart-line: var(--gold-500);
+
+  --tint-up-1:    rgba(168, 208, 77, 0.10);
+  --tint-up-2:    rgba(168, 208, 77, 0.18);
+  --tint-up-3:    rgba(168, 208, 77, 0.32);
+  --tint-down-1:  rgba(224, 120, 86, 0.10);
+  --tint-down-2:  rgba(224, 120, 86, 0.16);
+  --tint-down-3:  rgba(224, 120, 86, 0.32);
+  --tint-brand-1: rgba(201, 166, 107, 0.10);
+  --tint-brand-2: rgba(201, 166, 107, 0.18);
+  --tint-info-1:  rgba(141, 179, 196, 0.06);
+
+  --regime-up:   rgba(168, 208, 77, 0.05);
+  --regime-down: rgba(199, 106, 61, 0.05);
+  --regime-info: rgba(141, 179, 196, 0.04);
+
+  --pill-bg: rgba(20, 17, 12, 0.7);
+
+  /* v2 redesign — paper-mode money color. When tradingMode=paper,
+     dollar-amount components flip color to this token instead of
+     the usual --profit / --loss / --fg, signaling "this is play
+     money" without screaming "DEMO" via giant banners. Cross-
+     references usePaperLive() hook in Phase 0c stores. */
+  --money-color-paper: var(--fg-muted);
+
   --neutral: var(--fg-muted);
   --fg-base: var(--fg);
   --fg-strong: var(--ink-1000);
@@ -234,13 +276,20 @@
      CSS chain, which already includes an automatic size-matched
      fallback.
 
-     chrome-batch-D P1-11: `--font-ui` and `--font-display` are now
-     aliases that resolve to the single `--font-geist` variable. The
+     chrome-batch-D P1-11: `--font-ui` and `--font-display` were
+     aliases that resolved to the single `--font-geist` variable. The
      two-call pattern that emitted two preload tags for the same payload
      is gone; consumers that still read `--font-ui` / `--font-display`
-     keep working unchanged. */
+     keep working unchanged.
+
+     v2 redesign: `--font-display` re-points to `--font-newsreader`
+     (italic display serif, Newsreader). Editorial-quiet voice depends
+     on it — `.t-display-*`, `.t-section-display`, `.t-eyebrow-italic`,
+     EmptyState titles, AIStrip body all consume `--font-display` and
+     therefore render Newsreader italic. Geist remains the body UI face
+     via `--font-ui`; Geist Mono remains numerics via `--font-mono`. */
   --font-ui: var(--font-geist);
-  --font-display: var(--font-geist);
+  --font-display: var(--font-newsreader);
 
   /* Type scale — editorial. Larger jumps than typical web.
    *
@@ -343,77 +392,135 @@
   --dur-4: 520ms;
 }
 
-/* ─── LIGHT MODE ────────────────────────────────────────────────
-   Premium, clean, and intentionally not "cream dashboard": porcelain
-   surfaces, graphite typography, champagne brass, emerald profit, and
-   persimmon loss. The token names stay stable so existing bg-ink-* and
-   text-ink-* utility usage follows the active theme automatically. */
-.light {
-  --ink-000: #fffdf8;
-  --ink-050: #f6f7f2;
-  --ink-100: #ffffff;
-  --ink-150: #f0f3ed;
-  --ink-200: #e8ede5;
-  --ink-300: #d6dece;
-  --ink-400: #b8c4ae;
-  --ink-500: #839078;
-  --ink-600: #68735f;
-  --ink-700: #4f5949;
-  --ink-800: #343c31;
-  --ink-900: #20271f;
-  --ink-1000: #101611;
+/* ─── DENSITY ───────────────────────────────────────────────────
+   v2 lock: editorial-quiet is the default voice. `data-density="dense"`
+   on <body> tightens spacing tokens for active-trader workflows (see
+   open decision D8). Other components opt in to dense via slot-name
+   selectors (e.g. `body[data-density="dense"] [data-slot="positions-list"]`)
+   when they need a row-height collapse beyond what spacing alone gives.
+   No prop drilling — the body attribute cascades through the CSS-var
+   chain. */
+body[data-density="dense"] {
+  --space-3: 8px;       /* was 12 */
+  --space-4: 12px;      /* was 16 */
+  --space-5: 16px;      /* was 20 */
+  --space-6: 16px;      /* was 24 */
+  --space-8: 24px;      /* was 32 */
+  --space-10: 28px;     /* was 40 */
+}
 
-  --gold-100: #f3e6c8;
-  --gold-300: #8b641f;
-  --gold-500: #765319;
-  --gold-600: #805c21;
-  --gold-700: #5f4218;
+/* ─── LIGHT MODE — v2 warm-paper ───────────────────────────────
+   v2 redesign: replaces the porcelain (off-white + champagne brass +
+   emerald + persimmon) palette with the v2 warm-paper voice — cream
+   surfaces, warm-brown brand, moss/rust earth-tone P&L, near-black
+   ink. Same token names as dark; `[data-theme="light"]` mirrors the
+   `.light` selector so v2's attribute-based pattern works alongside
+   the existing class-based one (extend ThemeController to write both).
 
-  --up-100:   #d9f1e5;
-  --up-500:   #12845f;
-  --up-700:   #0b5d45;
+   Both selectors reference the same shared underlying palette via
+   nested custom-property aliases so we have one source of truth. */
+.light,
+[data-theme="light"] {
+  /* ── Shared underlying palette (paper + warm-ink + warm brand) ── */
 
-  --down-100: #f7d7cc;
-  --down-500: #b14225;
-  --down-700: #8f351f;
+  /* Paper surfaces */
+  --paper:   #f4eee2;            /* warm cream — app bg */
+  --paper-2: #ebe3d2;            /* panel / card surface */
+  --paper-3: #e1d6bf;            /* elevated / hover */
 
-  --ice-500:  #436f86;
-  /* DEPRECATED in light mode too — see :root note. */
-  --amber-500: #9a6f20;
-  --rust-500:  #ad6234;          /* ember/rust — distinct warm tone (QA r4-2) */
-  --wine-500: #8b2e45;
+  /* Warm near-blacks for ink */
+  --c-ink:   #1a1814;            /* primary text */
+  --c-ink-2: #3a342a;            /* headings, strong body */
+  --c-ink-3: #6a6256;            /* dim, secondary */
+  --c-ink-4: #94897a;            /* muted, hint */
 
-  /* Decomposed warn/state palette — light-mode variants (QA r4-2) */
-  --state-warning:        #9a6f20;
-  --state-warning-bg:     #fff5d8;
-  --state-warning-border: #d6a957;
-  --state-warning-fg:     #5b3f0c;
+  /* Warm-brown brand replaces gold (gold on cream reads cheap) */
+  --c-brand:   #7a5230;          /* primary brand */
+  --c-brand-2: #a36b3c;          /* pressed / accent */
+  --c-brand-3: #cb945e;          /* bright / glow */
+  --c-brand-deep: #5a3c22;       /* deep / pressed */
+  --c-gold:    #b48a3e;          /* warning / pre-event amber */
+
+  /* Moss + rust + plum P&L (more "ledger" than neon on paper) */
+  --c-moss: #5d6e3e;             /* up — sage green */
+  --c-rust: #a64b2a;             /* down — earthy rust */
+  --c-plum: #5b4767;             /* info / regime accent */
+
+  /* ── Re-point ink scale tokens onto paper palette ── */
+  --ink-000:  #ddd0b7;           /* deeper paper for vignette */
+  --ink-050:  var(--paper);
+  --ink-100:  var(--paper-2);
+  --ink-150:  var(--paper-3);
+  --ink-200:  var(--paper-2);
+  --ink-300:  rgba(26, 24, 20, 0.18);
+  --ink-400:  rgba(26, 24, 20, 0.28);
+  --ink-500:  var(--c-ink-4);
+  --ink-600:  var(--c-ink-3);
+  --ink-700:  var(--c-ink-2);
+  --ink-800:  var(--c-ink-2);
+  --ink-900:  var(--c-ink);
+  --ink-1000: #0e0c08;
+
+  /* Re-point gold scale onto warm-brown */
+  --gold-100: rgba(122, 82, 48, 0.12);
+  --gold-300: var(--c-brand-3);
+  --gold-500: var(--c-brand);
+  --gold-600: var(--c-brand-2);
+  --gold-700: var(--c-brand-deep);
+
+  /* P&L scale onto moss / rust */
+  --up-100:   #cbd6a8;
+  --up-500:   var(--c-moss);
+  --up-700:   #3f4b29;
+  --down-100: #e8c2b1;
+  --down-500: var(--c-rust);
+  --down-700: #6e2f18;
+
+  --ice-500:  #5b7d8a;
+  /* DEPRECATED — see :root note. */
+  --amber-500: #a07020;
+  --rust-500:  #a64b2a;
+  --wine-500:  #6e2a3a;
+
+  /* Decomposed warn/state palette — paper variants */
+  --state-warning:          #a07020;
+  --state-warning-bg:       #f8e9c4;
+  --state-warning-border:   #c89a4a;
+  --state-warning-fg:       #5a3f0c;
   --state-warning-fg-muted: #7a5a1c;
-  --state-info-time:      #8a6e3f;
+  --state-info-time:        #8a6e3f;
+  --state-stale-color:      #8a6e3f;
+  --state-mode:             #a07020;
 
-  --bg:         var(--ink-050);
-  --bg-elev-1:  var(--ink-100);
-  --bg-elev-2:  var(--ink-150);
-  --bg-card:    var(--ink-200);
+  /* ── Semantic tokens (shape unchanged from dark) ── */
+  --bg:         var(--paper);
+  --bg-elev-1:  var(--paper-2);
+  --bg-elev-2:  var(--paper-3);
+  --bg-card:    var(--paper-2);
 
-  --fg:         var(--ink-900);
-  --fg-dim:     var(--ink-700);
-  --fg-muted:   var(--ink-600);
-  --fg-hint:    #6f7868;
+  --fg:         var(--c-ink);
+  --fg-dim:     var(--c-ink-2);
+  --fg-muted:   var(--c-ink-3);
+  --fg-hint:    var(--c-ink-4);
 
-  --border:     var(--ink-300);
-  --border-strong: var(--ink-400);
-  --border-hair: rgba(16, 22, 17, 0.08);
+  --border:        rgba(26, 24, 20, 0.18);
+  --border-strong: rgba(26, 24, 20, 0.28);
+  --border-hair:   rgba(26, 24, 20, 0.10);
 
-  --brand:      var(--gold-500);
-  --brand-dim:  var(--gold-700);
-  --brand-tint: rgba(155, 115, 48, 0.12);
+  --brand:      var(--c-brand);
+  --brand-dim:  var(--c-brand-deep);
+  --brand-tint: rgba(122, 82, 48, 0.10);
+  --brand-on:   #f6efe0;        /* cream ink on warm-brown button */
 
-  --profit:     var(--up-500);
-  --loss:       var(--down-500);
-  --profit-tint: rgba(18, 132, 95, 0.12);
-  --loss-tint:   rgba(201, 82, 49, 0.12);
+  --profit:      var(--c-moss);
+  --loss:        var(--c-rust);
+  --profit-tint: rgba(93, 110, 62, 0.12);
+  --loss-tint:   rgba(166, 75, 42, 0.10);
+  --up-on:       #f4eee2;        /* cream on saturated moss */
+  --down-on:     #f9efe4;        /* cream on saturated rust */
 
+  /* LCH perceptually-uniform variants — anchor lifted to L=48 to
+     compensate for brighter paper background; AA contrast preserved. */
   --brand-lch:  lch(48 50 75);
   --profit-lch: lch(48 48 150);
   --loss-lch:   lch(48 58 38);
@@ -425,27 +532,58 @@
   --loss-tint-lch:   lch(48 58 38 / 0.12);
   --info-tint-lch:   lch(48 35 240 / 0.12);
 
-  --primary-foreground: #101611;
-  --profit-foreground: #fffdf8;
-  --loss-foreground: #050503;
+  --primary-foreground: var(--brand-on);
+  --profit-foreground:  #f4eee2;
+  --loss-foreground:    #f9efe4;
 
-  /* QA r6-2 — chart structure / book chrome (light variants).
-     Built off the light-mode --up-500 (#12845f) and --down-500 (#b14225)
-     so structure overlays carry the same green/coral semantic but read
-     correctly on porcelain surfaces. */
-  --chart-structure-support:    rgba(18, 132, 95, 0.18);
-  --chart-structure-resistance: rgba(177, 66, 37, 0.18);
-  --chart-structure-demand:     rgba(67, 111, 134, 0.16);
-  --chart-structure-supply:     rgba(155, 115, 48, 0.16);
-  --chart-structure-poc:        rgba(118, 83, 25, 0.26);
+  /* Chart structure overlays retuned for paper (moss / rust / cool /
+     warm-sand / warm-brown). Slightly higher alpha because cream
+     surfaces wash out low-alpha tints. */
+  --chart-structure-support:    rgba(93, 110, 62, 0.18);
+  --chart-structure-resistance: rgba(166, 75, 42, 0.18);
+  --chart-structure-demand:     rgba(91, 125, 138, 0.16);
+  --chart-structure-supply:     rgba(180, 138, 62, 0.16);
+  --chart-structure-poc:        rgba(122, 82, 48, 0.28);
 
-  --chart-book-bid: rgba(18, 132, 95, 0.26);
-  --chart-book-ask: rgba(177, 66, 37, 0.26);
+  --chart-book-bid: rgba(93, 110, 62, 0.28);
+  --chart-book-ask: rgba(166, 75, 42, 0.28);
 
+  /* v2 additive tokens — paper variants. Tints bumped vs dark because
+     paper amplifies low-alpha bands; researched against Bloomberg
+     Light, TradingView Light, Robinhood web. */
+  --tint-up-1:    rgba(93, 110, 62, 0.12);
+  --tint-up-2:    rgba(93, 110, 62, 0.22);
+  --tint-up-3:    rgba(93, 110, 62, 0.38);
+  --tint-down-1:  rgba(166, 75, 42, 0.10);
+  --tint-down-2:  rgba(166, 75, 42, 0.18);
+  --tint-down-3:  rgba(166, 75, 42, 0.32);
+  --tint-brand-1: rgba(122, 82, 48, 0.10);
+  --tint-brand-2: rgba(122, 82, 48, 0.20);
+  --tint-info-1:  rgba(91, 71, 103, 0.08);
+  --regime-up:    rgba(93, 110, 62, 0.07);
+  --regime-down:  rgba(166, 75, 42, 0.06);
+  --regime-info:  rgba(91, 71, 103, 0.05);
+  --pill-bg:      rgba(244, 238, 226, 0.92);
+
+  /* Chart line: warm-brown reads muddy on cream paper, so override
+     to ink-2 (near-black). Bloomberg Light + TradingView Light both
+     converge on near-black for the primary price line. */
+  --chart-line: var(--c-ink-2);
+
+  --money-color-paper: var(--fg-muted);
+
+  /* Shadows — paper UIs lean on shadow more than borders */
   --shadow-hair: 0 0 0 1px var(--border-hair);
-  --shadow-1: 0 1px 2px rgba(41, 48, 39, 0.08), 0 0 0 1px var(--border-hair);
-  --shadow-2: 0 10px 30px rgba(41, 48, 39, 0.12), 0 0 0 1px var(--border-hair);
-  --shadow-glow-gold: 0 0 32px rgba(155, 115, 48, 0.15);
+  --shadow-1: 0 1px 2px rgba(26, 24, 20, 0.08), 0 0 0 1px var(--border-hair);
+  --shadow-2: 0 12px 32px rgba(26, 24, 20, 0.10), 0 0 0 1px var(--border-hair);
+  --shadow-glow-gold: 0 0 32px rgba(122, 82, 48, 0.10);
+}
+
+/* Polish — italic eyebrow currently hard-codes --gold-500. Re-route
+   through --brand so it picks up the warm-brown automatically in light. */
+.light .t-eyebrow-italic,
+[data-theme="light"] .t-eyebrow-italic {
+  color: var(--brand);
 }
 
 /* ─── BASE ─────────────────────────────────────────────────────── */

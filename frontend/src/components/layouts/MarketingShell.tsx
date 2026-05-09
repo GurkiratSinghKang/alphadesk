@@ -37,7 +37,7 @@ const NAV_LINKS: NavLink[] = [
   { label: "Docs", href: "/docs" },
   { label: "Privacy", href: "/privacy" },
   { label: "Terms", href: "/terms" },
-  { label: "Risk", href: "/risk" },
+  { label: "Risk", href: "/legal/risk" },
 ];
 
 const FOOTER_COLS: { heading: string; items: { label: string; href: string }[] }[] = [
@@ -58,9 +58,10 @@ const FOOTER_COLS: { heading: string; items: { label: string; href: string }[] }
   {
     heading: "Legal",
     items: [
-      // "Risk disclosure" is the canonical label for /risk; the earlier
-      // "Not investment advice" duplicate link was removed.
-      { label: "Risk disclosure", href: "/risk" },
+      // "Risk disclosure" is the canonical label; v2 redesign moved
+      // the URL from /risk to /legal/risk to free the /risk* slug for
+      // the new authenticated trading risk dashboard.
+      { label: "Risk disclosure", href: "/legal/risk" },
       { label: "Terms", href: "/terms" },
       { label: "Privacy", href: "/privacy" },
     ],

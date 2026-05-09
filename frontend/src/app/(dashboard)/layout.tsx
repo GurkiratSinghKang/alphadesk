@@ -7,6 +7,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { BottomTabBar } from "@/components/layout/BottomTabBar";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { AICopilot } from "@/components/layout/AICopilot";
+import JarvisBar from "@/components/layout/JarvisBar";
 import { OnboardingTour } from "@/components/layout/OnboardingTour";
 import { WsStatusBanner } from "@/components/layout/WsStatusBanner";
 import { SessionExpiryBanner } from "@/components/layout/SessionExpiryBanner";
@@ -253,6 +254,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </div>
         <CommandPalette />
         <AICopilot />
+        <JarvisBar />
         {overlayOpen && <ShortcutOverlay onClose={() => setOverlayOpen(false)} />}
         <OnboardingTour />
         {/* persona-mobile-only P2 (2026-05-05): fixed bottom-tab nav for

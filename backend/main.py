@@ -44,6 +44,13 @@ from api.routes import exit_rules as exit_rules_routes
 from api.routes import admin_control as admin_control_routes
 from api.routes import metrics as metrics_routes
 from api.routes import user as user_routes
+# v2 Phase B (B.1–B.18) backend extensions. Each module owns one
+# slice of the redesign plan; ALL_V2_MISC_ROUTERS aggregates the
+# lighter-weight read-mostly slices into a single import.
+from api.routes import v2_pipeline_stages, v2_agent_control, v2_watchlists
+from api.routes import v2_notifications, v2_user_settings, v2_user_layout
+from api.routes import v2_feature_flags
+from api.routes.v2_misc import ALL_V2_MISC_ROUTERS
 from api.middleware.skip_db_init_warning import SkipDbInitWarningMiddleware
 from api.websocket.handler import websocket_endpoint
 from data.ingestion.alpaca_stream import start_alpaca_stream, stop_alpaca_stream
@@ -610,6 +617,22 @@ app.include_router(auth_routes.router, prefix="/api/v1/auth", tags=["Auth"])
 # on the erase path — a router-level dep would fire before we can read the
 # body for the password field.
 app.include_router(user_routes.router, prefix="/api/v1/user", tags=["User Rights"])
+
+# v2 Phase B (B.1–B.18) — backend extensions per the redesign plan.
+# Mounted after the existing routers so frontends opt in via the new
+# /api/v1 paths without disturbing established endpoints. Each router
+# owns one slice; ALL_V2_MISC_ROUTERS bundles the read-mostly slices
+# (B.5/B.7/B.9–B.15/B.17/B.18) for compactness.
+app.include_router(v2_pipeline_stages.router, prefix="/api/v1", tags=["v2 Pipeline Stages"])
+app.include_router(v2_agent_control.router, prefix="/api/v1", tags=["v2 Agent Control"])
+app.include_router(v2_watchlists.router, prefix="/api/v1", tags=["v2 Watchlists"])
+app.include_router(v2_notifications.router, prefix="/api/v1", tags=["v2 Notifications"])
+app.include_router(v2_user_settings.router, prefix="/api/v1", tags=["v2 User Settings"])
+app.include_router(v2_user_layout.router, prefix="/api/v1", tags=["v2 User Layout"])
+app.include_router(v2_feature_flags.router, prefix="/api/v1", tags=["v2 Feature Flags"])
+app.include_router(v2_feature_flags.admin_router, prefix="/api/v1", tags=["v2 Feature Flags Admin"])
+for v2_router in ALL_V2_MISC_ROUTERS:
+    app.include_router(v2_router, prefix="/api/v1")
 
 # --- WebSocket ---
 app.websocket("/ws")(websocket_endpoint)

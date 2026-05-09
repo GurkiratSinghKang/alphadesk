@@ -927,12 +927,12 @@ export default function StrategyDetailPage() {
           metrics are derived from historical data; live results may
           differ materially. See the{" "}
           <Link
-            href="/risk"
+            href="/legal/risk"
             className="underline underline-offset-2 hover:text-fg-muted"
           >
             Risk Disclosure
           </Link>{" "}
-          at /risk.
+          at /legal/risk.
         </p>
       </footer>
       {destructive.pending && (

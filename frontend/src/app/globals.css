@@ -150,6 +150,29 @@
      (warning intent). Keeps chart series visually distinct from warnings. */
   --color-chart-5: var(--rust-500);
 
+  /* v2 redesign — additive utility classes for new tints, regime,
+     pill, chart-line, brand-on. Unlocks `bg-tint-up-2`, `bg-regime-down`,
+     `bg-pill-bg`, `stroke-chart-line`, `text-brand-on` etc. — used by
+     Phase 1 chart overlays + AIStrip + StatusBanner + Section. */
+  --color-tint-up-1: var(--tint-up-1);
+  --color-tint-up-2: var(--tint-up-2);
+  --color-tint-up-3: var(--tint-up-3);
+  --color-tint-down-1: var(--tint-down-1);
+  --color-tint-down-2: var(--tint-down-2);
+  --color-tint-down-3: var(--tint-down-3);
+  --color-tint-brand-1: var(--tint-brand-1);
+  --color-tint-brand-2: var(--tint-brand-2);
+  --color-tint-info-1: var(--tint-info-1);
+  --color-regime-up: var(--regime-up);
+  --color-regime-down: var(--regime-down);
+  --color-regime-info: var(--regime-info);
+  --color-pill-bg: var(--pill-bg);
+  --color-chart-line: var(--chart-line);
+  --color-brand-on: var(--brand-on);
+  --color-up-on: var(--up-on);
+  --color-down-on: var(--down-on);
+  --color-money-paper: var(--money-color-paper);
+
   /* Fonts — wired to design-tokens.css font vars */
   --font-display: var(--font-display);
   --font-sans: var(--font-ui);

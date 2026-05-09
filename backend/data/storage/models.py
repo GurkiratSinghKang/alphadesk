@@ -968,6 +968,583 @@ def _define_models() -> dict[str, Any]:
             ),
         )
 
+    # ─── v2 Phase 1 backend extensions (B.1–B.18) ─────────────────
+    # Models below land in alembic migration 0024_v2_phase_b. Routes
+    # consume them via the lazy __getattr__ resolver at the bottom
+    # of this file. Frozen taxonomies (PipelineStage names, Agent
+    # archetypes, Notification categories) match the frontend mocks
+    # in `frontend/src/lib/mocks/`.
+
+    class PipelineStageState(Base):
+        """B.1 — per-stage pipeline pause/resume."""
+
+        __tablename__ = "pipeline_stage_state"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        stage = Column(String(32), nullable=False, unique=True)
+        is_paused = Column(Boolean, nullable=False, default=False)
+        paused_by = Column(String(255), nullable=True)
+        paused_at = Column(DateTime(timezone=True), nullable=True)
+        reason = Column(Text, nullable=True)
+        last_run_started_at = Column(DateTime(timezone=True), nullable=True)
+        last_run_finished_at = Column(DateTime(timezone=True), nullable=True)
+        last_run_status = Column(String(16), nullable=True)
+        queue_depth = Column(Integer, nullable=False, default=0)
+        updated_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            onupdate=func.now(),
+        )
+
+    class AgentControl(Base):
+        """B.2 — per-agent (archetype × model × provider) control."""
+
+        __tablename__ = "agent_control"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        archetype = Column(String(32), nullable=False)
+        model = Column(String(120), nullable=True)
+        provider = Column(String(32), nullable=True)
+        is_paused = Column(Boolean, nullable=False, default=False)
+        daily_spend_cap_usd = Column(Numeric(10, 4), nullable=True)
+        paused_by = Column(String(255), nullable=True)
+        paused_at = Column(DateTime(timezone=True), nullable=True)
+        reason = Column(Text, nullable=True)
+        updated_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            onupdate=func.now(),
+        )
+
+        __table_args__ = (
+            UniqueConstraint(
+                "archetype", "model", "provider", name="agent_control_key_unique"
+            ),
+        )
+
+    class Watchlist(Base):
+        """B.3 — multi-list watchlists v2 (replaces single user_watchlist)."""
+
+        __tablename__ = "watchlist"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        username = Column(String(255), nullable=False, index=True)
+        name = Column(String(255), nullable=False)
+        description = Column(Text, nullable=True)
+        kind = Column(String(16), nullable=False, default="manual")  # manual | auto_strategy | auto_earnings
+        auto_source_strategy = Column(String(60), nullable=True)
+        column_set = Column(JSONB, nullable=True)
+        share_mode = Column(String(16), nullable=False, default="private")  # private | tenant | public
+        share_token = Column(String(48), nullable=True, unique=True)
+        position = Column(Integer, nullable=False, default=0)
+        created_at = Column(
+            DateTime(timezone=True), nullable=False, server_default=func.now()
+        )
+        updated_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            onupdate=func.now(),
+        )
+
+        __table_args__ = (
+            UniqueConstraint("username", "name", name="watchlist_user_name_unique"),
+        )
+
+    class WatchlistItem(Base):
+        """B.3 — symbol membership in a Watchlist."""
+
+        __tablename__ = "watchlist_item"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        watchlist_id = Column(BigInteger, nullable=False, index=True)
+        symbol = Column(String(20), nullable=False)
+        position = Column(Integer, nullable=False, default=0)
+        note = Column(Text, nullable=True)
+        added_at = Column(
+            DateTime(timezone=True), nullable=False, server_default=func.now()
+        )
+
+        __table_args__ = (
+            UniqueConstraint(
+                "watchlist_id", "symbol", name="watchlist_item_unique"
+            ),
+        )
+
+    class Notification(Base):
+        """B.4 — user-scoped notification inbox."""
+
+        __tablename__ = "notification"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        username = Column(String(255), nullable=False)
+        type = Column(String(24), nullable=False)  # fill | agent | risk | system | billing | support
+        severity = Column(String(8), nullable=False, default="info")
+        title = Column(String(255), nullable=False)
+        body = Column(Text, nullable=False)
+        link = Column(Text, nullable=True)
+        notification_metadata = Column("metadata", JSONB, nullable=True)
+        created_at = Column(
+            DateTime(timezone=True), nullable=False, server_default=func.now()
+        )
+        read_at = Column(DateTime(timezone=True), nullable=True)
+
+        __table_args__ = (
+            Index("notification_user_unread_idx", "username", "read_at", "created_at"),
+            Index("notification_user_type_idx", "username", "type"),
+        )
+
+    class NotificationPreference(Base):
+        """B.4 — per-user-per-type channel routing + quiet hours."""
+
+        __tablename__ = "notification_preference"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        username = Column(String(255), nullable=False)
+        type = Column(String(24), nullable=False)
+        channel_email = Column(Boolean, nullable=False, default=True)
+        channel_push = Column(Boolean, nullable=False, default=False)
+        channel_slack = Column(Boolean, nullable=False, default=False)
+        quiet_hours_start = Column(String(8), nullable=True)  # "HH:MM" local
+        quiet_hours_end = Column(String(8), nullable=True)
+        quiet_hours_tz = Column(String(48), nullable=True)
+        min_severity = Column(String(8), nullable=False, default="info")
+        updated_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            onupdate=func.now(),
+        )
+
+        __table_args__ = (
+            UniqueConstraint(
+                "username", "type", name="notif_pref_user_type_unique"
+            ),
+        )
+
+    class RejectReasonTemplate(Base):
+        """B.5 — applicant rejection reason library."""
+
+        __tablename__ = "reject_reason_template"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        slug = Column(String(64), nullable=False, unique=True)
+        title = Column(String(255), nullable=False)
+        body = Column(Text, nullable=False)
+        created_by = Column(String(255), nullable=True)
+        updated_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            onupdate=func.now(),
+        )
+
+    class WelcomeTemplate(Base):
+        """B.5 — applicant welcome email library."""
+
+        __tablename__ = "welcome_template"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        slug = Column(String(64), nullable=False, unique=True)
+        title = Column(String(255), nullable=False)
+        body = Column(Text, nullable=False)
+        created_by = Column(String(255), nullable=True)
+        updated_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            onupdate=func.now(),
+        )
+
+    class UserLayoutConfig(Base):
+        """B.6 — user-scoped layout overrides."""
+
+        __tablename__ = "user_layout_config"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        username = Column(String(255), nullable=False)
+        config_key = Column("key", String(64), nullable=False)
+        value_json = Column(JSONB, nullable=False)
+        updated_by = Column(String(255), nullable=True)
+        updated_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            onupdate=func.now(),
+        )
+
+        __table_args__ = (
+            UniqueConstraint(
+                "username", "key", name="user_layout_config_unique"
+            ),
+        )
+
+    class JarvisIntent(Base):
+        """B.7 — replay/audit log for the ⌘⇧J Jarvis command bar."""
+
+        __tablename__ = "jarvis_intent"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        username = Column(String(255), nullable=False)
+        prompt = Column(Text, nullable=False)
+        parsed_intent = Column(JSONB, nullable=True)
+        dry_run_diff = Column(JSONB, nullable=True)
+        confirmed_at = Column(DateTime(timezone=True), nullable=True)
+        executed_at = Column(DateTime(timezone=True), nullable=True)
+        error = Column(Text, nullable=True)
+        created_at = Column(
+            DateTime(timezone=True), nullable=False, server_default=func.now()
+        )
+
+        __table_args__ = (
+            Index("jarvis_intent_user_idx", "username", "created_at"),
+        )
+
+    class FeatureFlag(Base):
+        """B.8 — feature flag registry."""
+
+        __tablename__ = "feature_flag"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        flag_key = Column("key", String(120), nullable=False, unique=True)
+        description = Column(Text, nullable=True)
+        default_enabled = Column(Boolean, nullable=False, default=False)
+        rollout_status = Column(String(16), nullable=False, default="off")  # off | canary | on
+        created_at = Column(
+            DateTime(timezone=True), nullable=False, server_default=func.now()
+        )
+
+    class FeatureFlagOverride(Base):
+        """B.8 — per-scope feature flag overrides."""
+
+        __tablename__ = "feature_flag_override"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        flag_id = Column(BigInteger, nullable=False, index=True)
+        scope_type = Column(String(16), nullable=False)  # tenant | user | environment
+        scope_value = Column(String(255), nullable=False)
+        enabled = Column(Boolean, nullable=False)
+        updated_by = Column(String(255), nullable=True)
+        updated_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            onupdate=func.now(),
+        )
+
+        __table_args__ = (
+            UniqueConstraint(
+                "flag_id", "scope_type", "scope_value", name="feature_flag_override_unique"
+            ),
+        )
+
+    class StrategyPlaybook(Base):
+        """B.9 — versioned workflow document per strategy."""
+
+        __tablename__ = "strategy_playbook"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        strategy = Column(String(60), nullable=False, unique=True)
+        current_version = Column(Integer, nullable=False, default=1)
+
+    class StrategyPlaybookVersion(Base):
+        """B.9 — published playbook revisions."""
+
+        __tablename__ = "strategy_playbook_version"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        playbook_id = Column(BigInteger, nullable=False, index=True)
+        version = Column(Integer, nullable=False)
+        content = Column(JSONB, nullable=False)
+        notes = Column(Text, nullable=True)
+        published_at = Column(DateTime(timezone=True), nullable=True)
+        published_by = Column(String(255), nullable=True)
+
+        __table_args__ = (
+            UniqueConstraint(
+                "playbook_id", "version", name="strategy_playbook_version_unique"
+            ),
+        )
+
+    class BacktestRun(Base):
+        """B.10 — backtest workbench runs."""
+
+        __tablename__ = "backtest_run"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        username = Column(String(255), nullable=False, index=True)
+        strategy = Column(String(60), nullable=False, index=True)
+        universe = Column(JSONB, nullable=True)
+        start_date = Column(Date, nullable=False)
+        end_date = Column(Date, nullable=False)
+        cost_model = Column(JSONB, nullable=True)
+        sweep_params = Column(JSONB, nullable=True)
+        status = Column(String(16), nullable=False, default="queued")  # queued|running|completed|failed|cancelled
+        progress = Column(Float, nullable=False, default=0.0)
+        error = Column(Text, nullable=True)
+        metrics = Column(JSONB, nullable=True)
+        equity_curve = Column(JSONB, nullable=True)
+        trade_log_count = Column(Integer, nullable=True)
+        created_at = Column(
+            DateTime(timezone=True), nullable=False, server_default=func.now()
+        )
+        started_at = Column(DateTime(timezone=True), nullable=True)
+        completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    class BacktestRunPublication(Base):
+        """B.10 — current published backtest per strategy."""
+
+        __tablename__ = "backtest_run_publication"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        run_id = Column(BigInteger, nullable=False, unique=True)
+        strategy = Column(String(60), nullable=False, index=True)
+        published_by = Column(String(255), nullable=False)
+        published_at = Column(
+            DateTime(timezone=True), nullable=False, server_default=func.now()
+        )
+
+    class OnboardingQuestionnaire(Base):
+        """B.11 — onboarding questionnaire state per user."""
+
+        __tablename__ = "onboarding_questionnaire"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        username = Column(String(255), nullable=False, unique=True)
+        answers = Column(JSONB, nullable=True)
+        step = Column(String(24), nullable=False, default="not_started")
+        submitted_at = Column(DateTime(timezone=True), nullable=True)
+        updated_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            onupdate=func.now(),
+        )
+
+    class RecommendationSnapshot(Base):
+        """B.11 — RecommendationEngine snapshots."""
+
+        __tablename__ = "recommendation_snapshot"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        username = Column(String(255), nullable=False, index=True)
+        engine_version = Column(String(16), nullable=False)
+        recommended_layout = Column(JSONB, nullable=True)
+        recommended_agents = Column(JSONB, nullable=True)
+        recommended_watchlist = Column(JSONB, nullable=True)
+        created_at = Column(
+            DateTime(timezone=True), nullable=False, server_default=func.now()
+        )
+
+    class ReportSchedule(Base):
+        """B.12 — scheduled report config per user."""
+
+        __tablename__ = "report_schedule"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        username = Column(String(255), nullable=False, index=True)
+        report_type = Column(String(32), nullable=False)
+        cron_expression = Column(String(120), nullable=False)
+        enabled = Column(Boolean, nullable=False, default=True)
+        delivery_channels = Column(JSONB, nullable=True)
+        last_run_at = Column(DateTime(timezone=True), nullable=True)
+        last_run_status = Column(String(16), nullable=True)
+        created_at = Column(
+            DateTime(timezone=True), nullable=False, server_default=func.now()
+        )
+
+    class ReportRun(Base):
+        """B.12 — generated report runs (scheduled or on-demand)."""
+
+        __tablename__ = "report_run"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        schedule_id = Column(BigInteger, nullable=True)
+        username = Column(String(255), nullable=False, index=True)
+        report_type = Column(String(32), nullable=False)
+        period_start = Column(Date, nullable=False)
+        period_end = Column(Date, nullable=False)
+        status = Column(String(16), nullable=False, default="queued")
+        pdf_uri = Column(Text, nullable=True)
+        html_uri = Column(Text, nullable=True)
+        data = Column(JSONB, nullable=True)
+        ai_summary = Column(Text, nullable=True)
+        created_at = Column(
+            DateTime(timezone=True), nullable=False, server_default=func.now()
+        )
+        completed_at = Column(DateTime(timezone=True), nullable=True)
+
+        __table_args__ = (
+            Index("report_run_user_type_period_idx", "username", "report_type", "period_end"),
+        )
+
+    class Lot(Base):
+        """B.13 — tax lot per acquired share batch."""
+
+        __tablename__ = "lot"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        username = Column(String(255), nullable=False, index=True)
+        symbol = Column(String(20), nullable=False)
+        acquisition_date = Column(Date, nullable=False)
+        acquisition_qty = Column(Numeric(20, 4), nullable=False)
+        acquisition_price = Column(Numeric(20, 6), nullable=False)
+        parent_trade_id = Column(BigInteger, nullable=True)
+        lot_method = Column(String(8), nullable=False, default="fifo")  # fifo | lifo | hifo
+        disposed_qty = Column(Numeric(20, 4), nullable=False, default=0)
+        disposed_at = Column(DateTime(timezone=True), nullable=True)
+        disposal_trade_id = Column(BigInteger, nullable=True)
+        cost_basis_adjusted = Column(Numeric(20, 6), nullable=True)
+        holding_period_classification = Column(String(8), nullable=True)  # short | long
+        lot_id_external = Column(String(64), nullable=True, unique=True)
+
+        __table_args__ = (
+            Index("lot_user_symbol_acq_idx", "username", "symbol", "acquisition_date"),
+        )
+
+    class WashSaleAdjustment(Base):
+        """B.13 — IRS Pub 550 30-day wash-sale adjustments."""
+
+        __tablename__ = "wash_sale_adjustment"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        loss_lot_id = Column(BigInteger, nullable=False)
+        replacement_lot_id = Column(BigInteger, nullable=False)
+        disallowed_loss_amount = Column(Numeric(20, 6), nullable=False)
+        applied_at = Column(
+            DateTime(timezone=True), nullable=False, server_default=func.now()
+        )
+        rule_window_days = Column(Integer, nullable=False, default=30)
+        notes = Column(Text, nullable=True)
+
+    class ImpersonationSession(Base):
+        """B.14 — operator impersonation session log."""
+
+        __tablename__ = "impersonation_session"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        operator_username = Column(String(255), nullable=False, index=True)
+        target_username = Column(String(255), nullable=False, index=True)
+        started_at = Column(
+            DateTime(timezone=True), nullable=False, server_default=func.now()
+        )
+        ended_at = Column(DateTime(timezone=True), nullable=True)
+        reason = Column(Text, nullable=False)
+        consent_token = Column(String(48), nullable=True, unique=True)
+
+        __table_args__ = (
+            Index("impersonation_op_idx", "operator_username", "started_at"),
+            Index("impersonation_tgt_idx", "target_username", "started_at"),
+        )
+
+    class UserSettings(Base):
+        """B.16 — per-user settings (default broker, slippage tol, etc.)."""
+
+        __tablename__ = "user_settings"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        username = Column(String(255), nullable=False, unique=True)
+        default_broker_connection_id = Column(BigInteger, nullable=True)
+        slippage_tolerance_bps = Column(Numeric(8, 2), nullable=False, default=10)
+        default_order_qty = Column(Integer, nullable=False, default=100)
+        fast_fill_confirms = Column(Boolean, nullable=False, default=True)
+        appearance = Column(JSONB, nullable=True)
+        shortcuts = Column(JSONB, nullable=True)
+        feed_providers = Column(JSONB, nullable=True)
+        created_at = Column(
+            DateTime(timezone=True), nullable=False, server_default=func.now()
+        )
+        updated_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            onupdate=func.now(),
+        )
+
+    class Plan(Base):
+        """B.17 — billing plan tier."""
+
+        __tablename__ = "plan"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        tier_slug = Column(String(32), nullable=False, unique=True)
+        display_name = Column(String(120), nullable=False)
+        monthly_price_usd = Column(Numeric(10, 2), nullable=False, default=0)
+        features = Column(JSONB, nullable=True)
+        max_brokers = Column(Integer, nullable=False, default=1)
+        paper_only = Column(Boolean, nullable=False, default=True)
+        is_active = Column(Boolean, nullable=False, default=True)
+
+    class Subscription(Base):
+        """B.17 — user subscription."""
+
+        __tablename__ = "subscription"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        username = Column(String(255), nullable=False, index=True)
+        plan_id = Column(BigInteger, nullable=False)
+        status = Column(String(16), nullable=False, default="active")
+        stripe_customer_id = Column(String(120), nullable=True)
+        stripe_subscription_id = Column(String(120), nullable=True, unique=True)
+        started_at = Column(
+            DateTime(timezone=True), nullable=False, server_default=func.now()
+        )
+        current_period_end = Column(DateTime(timezone=True), nullable=True)
+        canceled_at = Column(DateTime(timezone=True), nullable=True)
+        trial_end = Column(DateTime(timezone=True), nullable=True)
+
+        __table_args__ = (
+            Index("subscription_user_status_idx", "username", "status"),
+        )
+
+    class BillingEvent(Base):
+        """B.17 — Stripe webhook archive."""
+
+        __tablename__ = "billing_event"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        subscription_id = Column(BigInteger, nullable=True)
+        kind = Column(String(40), nullable=False)
+        payload = Column(JSONB, nullable=False)
+        received_at = Column(
+            DateTime(timezone=True), nullable=False, server_default=func.now()
+        )
+
+    class DocCategory(Base):
+        """B.18 — public docs category."""
+
+        __tablename__ = "doc_category"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        slug = Column(String(64), nullable=False, unique=True)
+        title = Column(String(255), nullable=False)
+        position = Column(Integer, nullable=False, default=0)
+
+    class DocArticle(Base):
+        """B.18 — public docs article."""
+
+        __tablename__ = "doc_article"
+
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        category_id = Column(BigInteger, nullable=False, index=True)
+        slug = Column(String(120), nullable=False, unique=True)
+        title = Column(String(255), nullable=False)
+        body_markdown = Column(Text, nullable=False)
+        body_html = Column(Text, nullable=True)
+        author = Column(String(255), nullable=True)
+        created_at = Column(
+            DateTime(timezone=True), nullable=False, server_default=func.now()
+        )
+        updated_at = Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            onupdate=func.now(),
+        )
+        published_at = Column(DateTime(timezone=True), nullable=True)
+
     _models_cache.update({
         "OHLCVBar": OHLCVBar,
         "OptionsSnapshot": OptionsSnapshot,
@@ -989,6 +1566,36 @@ def _define_models() -> dict[str, Any]:
         "AccessRequest": AccessRequest,
         "HaltState": HaltState,
         "ExitRule": ExitRule,
+        # ─── v2 Phase B (B.1–B.18) ──────────────────────────
+        "PipelineStageState": PipelineStageState,
+        "AgentControl": AgentControl,
+        "Watchlist": Watchlist,
+        "WatchlistItem": WatchlistItem,
+        "Notification": Notification,
+        "NotificationPreference": NotificationPreference,
+        "RejectReasonTemplate": RejectReasonTemplate,
+        "WelcomeTemplate": WelcomeTemplate,
+        "UserLayoutConfig": UserLayoutConfig,
+        "JarvisIntent": JarvisIntent,
+        "FeatureFlag": FeatureFlag,
+        "FeatureFlagOverride": FeatureFlagOverride,
+        "StrategyPlaybook": StrategyPlaybook,
+        "StrategyPlaybookVersion": StrategyPlaybookVersion,
+        "BacktestRun": BacktestRun,
+        "BacktestRunPublication": BacktestRunPublication,
+        "OnboardingQuestionnaire": OnboardingQuestionnaire,
+        "RecommendationSnapshot": RecommendationSnapshot,
+        "ReportSchedule": ReportSchedule,
+        "ReportRun": ReportRun,
+        "Lot": Lot,
+        "WashSaleAdjustment": WashSaleAdjustment,
+        "ImpersonationSession": ImpersonationSession,
+        "UserSettings": UserSettings,
+        "Plan": Plan,
+        "Subscription": Subscription,
+        "BillingEvent": BillingEvent,
+        "DocCategory": DocCategory,
+        "DocArticle": DocArticle,
     })
     return _models_cache
 

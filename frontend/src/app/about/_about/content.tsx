@@ -84,7 +84,7 @@ export const ABOUT_CLAUSES: StaticClause[] = [
           <EditorialP>
             Trading securities involves substantial risk of loss. Read the{" "}
             <a
-              href="/risk"
+              href="/legal/risk"
               className="text-primary underline decoration-brand-dim underline-offset-4 hover:text-gold-300"
             >
               Risk Disclosure

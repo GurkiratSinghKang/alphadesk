@@ -51,7 +51,14 @@ const NON_DASHBOARD_PREFIXES = [
   "/docs",
   "/privacy",
   "/terms",
+  // v2 redesign: /risk moved to /legal/risk. The legacy slug stays in
+  // the list because the 301 redirect resolves on the server, but the
+  // public visitor never sees the dashboard chrome at /risk during the
+  // round-trip. /legal/* covers the new public legal subtree (and any
+  // future legal pages — we deliberately match the prefix not the exact
+  // path so adding /legal/disclosures later does not require code edits).
   "/risk",
+  "/legal",
 ];
 
 export function BottomTabBar() {

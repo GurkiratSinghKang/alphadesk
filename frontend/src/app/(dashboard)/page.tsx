@@ -78,6 +78,10 @@ import { useSparklineBars } from "@/hooks/useSparklineBars";
 import { useToast } from "@/hooks/useToast";
 import type { Position, Order, PortfolioGreeks, PortfolioSummary } from "@/types";
 import { StrategyPanel } from "./_desk/StrategyPanel";
+// v2 phase 1.0 — agent activity feed panel. Mounts inside a
+// ConfigurableSection so the operator can hide / reorder it from
+// Admin → Dashboard layout composer (id: "agent_feed").
+import AgentFeedPanel from "./_desk/AgentFeedPanel";
 
 import {
   selectIsDemoSeedAccount,
@@ -1185,6 +1189,12 @@ function DashboardCommandCenter({
             </ConfigurableSection>
           </section>
         </section>
+        {/* v2 phase 1.0 — agent activity feed. Mounted last in the
+         * desk grid so the operator can drag it higher from Admin if
+         * the agent reframe (Phase 2) makes it the lead surface. */}
+        <ConfigurableSection id="agent_feed" applyOrder>
+          <AgentFeedPanel />
+        </ConfigurableSection>
       </div>
     </div>
   );

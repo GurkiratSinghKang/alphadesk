@@ -27,7 +27,7 @@ function WarningBanner() {
 export default function RiskDisclosurePage() {
   return (
     <StaticArticle
-      route="/risk"
+      route="/legal/risk"
       title="Risk Disclosure"
       lastUpdated="2026-04-12"
       note={<WarningBanner />}

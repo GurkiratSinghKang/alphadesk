@@ -168,6 +168,7 @@ describe("clearPersistedStores — cross-user data-leak fix", () => {
         tickerTapeOn: true,
         compactStrategyView: true,
         theme: "light",
+        density: "dense",
       },
       data: { refreshInterval: 60 },
       notifications: {
