@@ -5687,84 +5687,63 @@ const LegacyStrategiesPage = ({ tweaks, onNav }) => {
 
 // ─── pipeline ────────────────────────────────────────────────────────────────
 
+// 2026-05-10 (honest empty-state): the previous PipelinePage rendered
+// a fake 6-stage funnel with hardcoded `Universe 4,823 → Filtered 412
+// → Ranked 38 → Candidates 12 → Staged 3 → Live 2` plus 4 fake
+// candidate cards (AMD/META/ASML/JNJ with hand-written thesis copy).
+// None of those numbers came from the backend pipeline run; they're
+// straight from `MOCK_PIPELINE`. This page now shows real account state
+// + a clear "no live pipeline output" message until the backend
+// publishes a `pipeline.run` artifact through `/api/v1/pipeline/staged`
+// or equivalent.
 const PipelinePage = () => {
-  const candidates = [
-    { sym: "AMD",  strat: "Momentum & Quality", note: "3-week pivot break · regime fit 0.78", score: 0.84, regime: 0.78, signals: ["pivot", "trend"] },
-    { sym: "META", strat: "Momentum & Quality", note: "RS rank top 5% · gap-and-go fade",      score: 0.79, regime: 0.71, signals: ["rs", "trend"] },
-    { sym: "ASML", strat: "Pairs · Sector",     note: "Spread vs TSM at +1.6σ; pair candidate", score: 0.71, regime: 0.62, signals: ["pair"] },
-    { sym: "JNJ",  strat: "Mean Reversion",     note: "Oversold RSI 28 · prior support hold",   score: 0.62, regime: 0.55, signals: ["mean-rev"] },
-  ];
+  const live = useDesignLiveData();
+  const positions = (live.positions || []).map((p) => ({
+    symbol: String(p.symbol || p.sym || "").toUpperCase(),
+    qty: asFiniteNumber(p.quantity ?? p.qty, 0) || 0,
+    pnl: asFiniteNumber(p.unrealizedPnl ?? p.unrealized_pnl ?? p.unrealizedPl ?? p.unrealized_pl, null),
+    strategy: p.strategy || p.asset_class || "manual",
+  }));
 
   return (
     <div style={{ overflow: "auto", height: "100%", padding: "24px 32px 60px" }}>
-      <div style={{ paddingBottom: 18, borderBottom: "1px solid var(--border-hair)" }}>
-        <div className="t-label">Pipeline</div>
-        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 44, color: "var(--ink-1000)", letterSpacing: "-0.025em", lineHeight: 1, marginTop: 6 }}>Universe → live</div>
-        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 16, color: "var(--fg-dim)", marginTop: 6 }}>How 4,823 names get squeezed into 2 trades.</div>
+      <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 14px", borderBottom: "1px solid var(--border-hair)", marginBottom: 18 }}>
+        <div>
+          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>PIPELINE / LIVE QUEUE</div>
+          <h1 style={{ margin: "6px 0 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 32, fontWeight: 400, letterSpacing: "-0.02em" }}>Universe → live</h1>
+          <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14 }}>
+            The funnel renders only what a real pipeline run publishes. Universe / Filtered / Ranked / Candidates / Staged / Live counts and candidate cards are hidden until the backend pipeline artifact is exposed to the frontend.
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+          <StatusDot tone={live.error ? "down" : "up"} size={6} />
+          <span>{live.error ? "Backend error" : "Live book"} · {formatLiveDate(live.refreshedAt)}</span>
+        </div>
+      </header>
+
+      <div style={{ marginBottom: 22, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+        <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>STAGED · AWAITING YOUR REVIEW</div>
+        <h2 className="t-h3" style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>No candidates awaiting review right now.</h2>
+        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, lineHeight: 1.55 }}>
+          The next pipeline run will surface candidates here. Each card will get a row with the thesis, conviction score, and a Stage / Skip decision before it touches capital.
+        </div>
       </div>
 
-      {/* funnel */}
-      <div style={{ display: "grid", gridTemplateColumns: `repeat(${MOCK_PIPELINE.length}, 1fr)`, gap: 0, marginTop: 28, position: "relative" }}>
-        {MOCK_PIPELINE.map((s, i) => {
-          const ratio = Math.log(s.count + 1) / Math.log(5000);
-          const prev = i > 0 ? MOCK_PIPELINE[i - 1].count : null;
-          const dropPct = prev ? Math.round((1 - s.count / prev) * 100) : null;
-          return (
-            <div key={s.stage} style={{ padding: "16px 18px 18px", borderRight: i < MOCK_PIPELINE.length - 1 ? "1px solid var(--border)" : "0", background: i === MOCK_PIPELINE.length - 1 ? "var(--bg-elev-1)" : "var(--bg)", position: "relative" }}>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                <span className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)" }}>{String(i + 1).padStart(2, "0")}</span>
-                <div className="t-label">{s.stage}</div>
-              </div>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: 32, color: "var(--ink-1000)", fontWeight: 300, lineHeight: 1, letterSpacing: "-0.025em", marginTop: 10 }}>{s.count.toLocaleString()}</div>
-              {dropPct != null && (
-                <div className="t-mono" style={{ fontSize: 10.5, color: "var(--down-500)", marginTop: 2 }}>−{dropPct}% from prior</div>
-              )}
-              <div style={{ marginTop: 12, height: 4, background: "var(--ink-300)", borderRadius: 2, overflow: "hidden" }}>
-                <div style={{ height: "100%", width: `${ratio * 100}%`, background: "linear-gradient(90deg, var(--gold-700), var(--gold-300))" }} />
-              </div>
-              <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: "var(--fg-muted)", marginTop: 12, lineHeight: 1.4 }}>{s.narrow}</div>
-              {/* arrow */}
-              {i < MOCK_PIPELINE.length - 1 && (
-                <div style={{ position: "absolute", right: -7, top: "50%", transform: "translateY(-50%)", width: 14, height: 14, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--fg-hint)", fontSize: 10, zIndex: 1 }}>›</div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* candidates */}
-      <div style={{ marginTop: 32, padding: 24, border: "1px solid var(--border)", borderRadius: 6, background: "var(--ink-100)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
-          <div className="t-label">Staged · awaiting your review</div>
-          <span className="t-mono" style={{ fontSize: 10.5, color: "var(--fg-muted)" }}>{candidates.length} candidates · top 0.08% of universe</span>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14 }}>
-          {candidates.map(c => (
-            <div key={c.sym} style={{ background: "var(--bg)", border: "1px solid var(--border)", borderLeft: "2px solid var(--brand)", borderRadius: 3, padding: "14px 18px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <div>
-                  <span style={{ fontFamily: "var(--font-ui)", fontWeight: 600, fontSize: 14, color: "var(--ink-1000)" }}>{c.sym}</span>
-                  <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)", marginLeft: 8 }}>{c.strat}</span>
-                </div>
-                <span className="t-mono" style={{ fontSize: 13, color: "var(--brand)" }}>{c.score.toFixed(2)}</span>
-              </div>
-              <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10 }}>
-                <span className="t-label" style={{ fontSize: 9 }}>Regime</span>
-                <div style={{ flex: 1, height: 3, background: "var(--ink-300)", borderRadius: 2, position: "relative" }}>
-                  <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${c.regime * 100}%`, background: "var(--up-500)" }} />
-                </div>
-                <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-muted)" }}>{c.regime.toFixed(2)}</span>
-              </div>
-              <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--ink-900)", marginTop: 10, lineHeight: 1.45 }}>{c.note}</div>
-              <div style={{ marginTop: 12, display: "flex", gap: 6, alignItems: "center" }}>
-                {c.signals.map(s => <Chip key={s} tone="up">{s}</Chip>)}
-                <span style={{ flex: 1 }} />
-                <button style={{ padding: "6px 12px", fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", background: "var(--brand)", color: "var(--brand-on)", border: 0, borderRadius: 2, cursor: "default" }}>Stage</button>
-                <button style={{ padding: "6px 12px", fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", background: "transparent", color: "var(--fg-muted)", border: "1px solid var(--border)", borderRadius: 2, cursor: "default" }}>Skip</button>
-              </div>
-            </div>
-          ))}
-        </div>
+      <div style={{ marginTop: 24 }}>
+        <div className="t-label" style={{ marginBottom: 12 }}>Currently in the book</div>
+        {positions.length === 0 && (
+          <div style={{ padding: "10px 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 13 }}>
+            No live positions returned by the backend.
+          </div>
+        )}
+        {positions.map((p) => (
+          <div key={p.symbol} style={{ display: "grid", gridTemplateColumns: "100px 100px 1fr 120px", gap: 14, padding: "10px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
+            <span className="t-mono" style={{ color: "var(--ink-1000)", fontSize: 13, fontWeight: 600 }}>{p.symbol}</span>
+            <span className="t-mono" style={{ color: "var(--fg-muted)", fontSize: 12 }}>{p.qty.toLocaleString()} sh</span>
+            <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 12 }}>{p.strategy}</span>
+            <span className="t-mono" style={{ color: p.pnl == null || p.pnl >= 0 ? "var(--up-500)" : "var(--down-500)", fontSize: 12, textAlign: "right" }}>{p.pnl == null ? "—" : fmtMoney(p.pnl, { sign: true, dec: 0 })}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -5772,164 +5751,106 @@ const PipelinePage = () => {
 
 // ─── analytics ───────────────────────────────────────────────────────────────
 
+// 2026-05-10 (honest empty-state): the previous AnalyticsPage rendered
+// a fabricated 90-day equity curve ($100k → $112,840 +12.84%), 30-day
+// stats (Sharpe 1.32, Win rate 64%, etc.), 24-cell monthly heatmap for
+// 2024 + 2023, and hardcoded by-strategy / by-sector attribution. None
+// of those numbers were derived from real account history. This page now
+// shows only what's real: current account equity + per-name unrealized
+// P&L from live positions. Historical performance metrics return when a
+// /api/v1/portfolio/equity-curve (or similar ledger endpoint) ships.
 const AnalyticsPage = () => {
-  const equity = useMemo(() => Array.from({ length: 90 }, (_, i) =>
-    100000 + i * 120 + Math.sin(i / 7) * 1800 + (i > 60 ? (i - 60) * 80 : 0)
-  ), []);
-  const ddCurve = useMemo(() => equity.map((v, i) => {
-    const peak = Math.max(...equity.slice(0, i + 1));
-    return ((v - peak) / peak) * 100;
-  }), [equity]);
-
-  const buckets = [
-    { name: "Momentum & Quality", contrib: 4280, pct: 1.51 },
-    { name: "Regime Adaptive",    contrib: 1820, pct: 0.64 },
-    { name: "PEAD",               contrib: 612,  pct: 0.22 },
-    { name: "Pairs · Sector",     contrib: 410,  pct: 0.14 },
-    { name: "AI Alpha",           contrib: -1180, pct: -0.42 },
-    { name: "Mean Reversion",     contrib: 0,    pct: 0 },
-  ];
-  const max = Math.max(...buckets.map(b => Math.abs(b.contrib)));
-
-  const sectors = [
-    { name: "Semiconductors", pct: 6.4 },
-    { name: "Tech · large cap", pct: 3.2 },
-    { name: "Energy", pct: 1.1 },
-    { name: "Healthcare", pct: -1.3 },
-    { name: "Financials", pct: 1.8 },
-    { name: "Industrials", pct: 0.4 },
-  ];
-
-  const winners = [
-    { sym: "NVDA", strat: "M&Q",  pl: 1602 },
-    { sym: "SPY",  strat: "Reg",  pl: 5145 },
-    { sym: "AAPL", strat: "M&Q",  pl: 844 },
-    { sym: "MSFT", strat: "M&Q",  pl: 600 },
-    { sym: "JPM",  strat: "Pair", pl: 412 },
-  ];
-  const losers = [
-    { sym: "UNH",  strat: "AI",   pl: -272 },
-    { sym: "AMD",  strat: "M&Q",  pl: -148 },
-    { sym: "TSLA", strat: "Mean", pl: -86 },
-  ];
-
-  const monthly = [
-    [2024, [1.2, -0.4, 2.8, 1.5, -1.2, 0.8, 3.4, 2.1, -0.6, 1.9, 2.4, null]],
-    [2023, [0.8, 1.4, -2.1, 1.2, 0.4, 1.8, -0.6, 1.4, 2.2, -0.8, 0.6, 1.1]],
-  ];
+  const live = useDesignLiveData();
+  const equity = asFiniteNumber(live.portfolio?.equity, 0) || 0;
+  const cash = asFiniteNumber(live.portfolio?.cash, 0) || 0;
+  const positions = (live.positions || []).map((p) => {
+    const symbol = String(p.symbol || p.sym || "").toUpperCase();
+    const pnl = asFiniteNumber(p.unrealizedPnl ?? p.unrealized_pnl ?? p.unrealizedPl ?? p.unrealized_pl, null);
+    const pnlPct = asFiniteNumber(p.unrealizedPnlPct ?? p.unrealized_pnl_pct ?? p.unrealizedPlpc ?? p.unrealized_plpc, null);
+    const marketValue = asFiniteNumber(p.marketValue ?? p.market_value ?? p.extendedMarketValue ?? p.extended_market_value, null);
+    const strategy = p.strategy || p.asset_class || "manual";
+    return { symbol, pnl, pnlPct, marketValue, strategy };
+  });
+  const winners = [...positions].filter((p) => (p.pnl ?? 0) > 0).sort((a, b) => (b.pnl ?? 0) - (a.pnl ?? 0)).slice(0, 5);
+  const losers = [...positions].filter((p) => (p.pnl ?? 0) < 0).sort((a, b) => (a.pnl ?? 0) - (b.pnl ?? 0)).slice(0, 5);
+  const totalUnrealized = positions.reduce((s, p) => s + (p.pnl ?? 0), 0);
+  const winnersMax = winners.reduce((m, p) => Math.max(m, Math.abs(p.pnl ?? 0)), 1);
+  const losersMax = losers.reduce((m, p) => Math.max(m, Math.abs(p.pnl ?? 0)), 1);
 
   return (
     <div style={{ overflow: "auto", height: "100%", padding: "24px 32px 60px" }}>
-      <div style={{ paddingBottom: 18, borderBottom: "1px solid var(--border-hair)", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+      <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 14px", borderBottom: "1px solid var(--border-hair)", marginBottom: 18 }}>
         <div>
-          <div className="t-label">Analytics</div>
-          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 44, color: "var(--ink-1000)", letterSpacing: "-0.025em", lineHeight: 1, marginTop: 6 }}>Performance · review</div>
-        </div>
-        <div style={{ display: "flex", gap: 4 }}>
-          {["7D", "30D", "90D", "YTD", "1Y", "ALL"].map(p => (
-            <button key={p} style={{ padding: "6px 11px", fontFamily: "var(--font-mono)", fontSize: 11, color: p === "30D" ? "var(--ink-1000)" : "var(--fg-muted)", background: p === "30D" ? "var(--bg-elev-1)" : "transparent", border: p === "30D" ? "1px solid var(--border)" : "1px solid transparent", borderRadius: 3, cursor: "default" }}>{p}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* hero stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 28, padding: "22px 0 20px", borderBottom: "1px solid var(--border-hair)" }}>
-        <Stat label="P&L · 30d" value="+$5,962" tone="up" big />
-        <Stat label="Sharpe" value="1.32" />
-        <Stat label="Win rate" value="64%" />
-        <Stat label="Profit factor" value="1.47" />
-        <Stat label="Max DD" value="−4.1%" tone="down" />
-        <Stat label="Avg hold" value="6.4d" />
-      </div>
-
-      {/* equity + drawdown */}
-      <div style={{ marginTop: 22, background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div className="t-label">Equity curve · 90 days</div>
-          <div style={{ display: "flex", gap: 14, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
-            <span>Start <span style={{ color: "var(--ink-1000)" }}>$100,000</span></span>
-            <span>Now <span style={{ color: "var(--up-500)" }}>$112,840</span></span>
-            <span>+12.84%</span>
+          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>ANALYTICS / LIVE BOOK</div>
+          <h1 style={{ margin: "6px 0 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 32, fontWeight: 400, letterSpacing: "-0.02em" }}>Performance · review</h1>
+          <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14 }}>
+            Live account equity and unrealized P&amp;L by name. Historical equity curve, Sharpe, monthly returns, and strategy attribution are hidden until a performance-ledger endpoint exists.
           </div>
         </div>
-        <div style={{ position: "relative", height: 220 }}>
-          <Sparkline data={equity} color="var(--up-500)" width={1200} height={220} fill />
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+          <StatusDot tone={live.error ? "down" : "up"} size={6} />
+          <span>{live.error ? "Backend error" : "Backend positions"} · {formatLiveDate(live.refreshedAt)}</span>
         </div>
-        <div style={{ borderTop: "1px solid var(--border-hair)", marginTop: 10, paddingTop: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-            <div className="t-label">Drawdown</div>
-            <span className="t-mono" style={{ fontSize: 10.5, color: "var(--down-500)" }}>Max −4.1% · current −0.6%</span>
+      </header>
+
+      {/* Real account state — equity + cash + unrealized P&L + position count. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1, background: "var(--border)", border: "1px solid var(--border)", borderRadius: 4, marginBottom: 20 }}>
+        {[
+          { label: "ACCOUNT EQUITY", val: fmtMoney(equity, { dec: 2 }), sub: live.portfolio?.source || "portfolio summary" },
+          { label: "CASH", val: fmtMoney(cash, { dec: 2 }), sub: "available cash" },
+          { label: "UNREALIZED P&L", val: fmtMoney(totalUnrealized, { sign: true, dec: 0 }), sub: `${positions.length} live position${positions.length === 1 ? "" : "s"}` },
+          { label: "POSITIONS", val: String(positions.length), sub: "/api/v1/trades/positions" },
+        ].map((m, i) => (
+          <div key={i} style={{ padding: "16px 18px", background: "var(--ink-100)", borderRadius: 4 }}>
+            <div className="t-label" style={{ color: "var(--fg-hint)" }}>{m.label}</div>
+            <div className="t-mono" style={{ marginTop: 6, fontSize: 24, color: "var(--ink-1000)", fontWeight: 500 }}>{m.val}</div>
+            <div className="t-body-sm" style={{ marginTop: 2, color: "var(--fg-muted)", fontFamily: "var(--font-display)", fontStyle: "italic" }}>{m.sub}</div>
           </div>
-          <div style={{ position: "relative", height: 60 }}>
-            <Sparkline data={ddCurve} color="var(--down-500)" width={1200} height={60} fill />
-          </div>
+        ))}
+      </div>
+
+      {/* Honest empty-state for the historical performance series. */}
+      <div style={{ marginBottom: 22, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+        <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>PERFORMANCE LEDGER</div>
+        <h2 className="t-h3" style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>Equity curve, Sharpe, monthly returns</h2>
+        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, lineHeight: 1.55 }}>
+          No live equity-history endpoint is currently exposed to the frontend. This page now refuses to fabricate a 90-day curve, drawdown band, monthly returns heatmap, or strategy / sector attribution; it shows only real account state and current positions until the backend publishes ledger output.
         </div>
       </div>
 
-      {/* monthly heatmap */}
-      <div style={{ marginTop: 24 }}>
-        <div className="t-label" style={{ marginBottom: 10 }}>Monthly returns</div>
-        <div style={{ display: "grid", gridTemplateColumns: "44px repeat(12, 1fr)", gap: 4, marginBottom: 4 }}>
-          <span></span>
-          {["J","F","M","A","M","J","J","A","S","O","N","D"].map((m, i) => (
-            <span key={i} className="t-label" style={{ fontSize: 9, color: "var(--fg-hint)", textAlign: "center" }}>{m}</span>
-          ))}
-        </div>
-        {monthly.map(([y, vals]) => <div key={y} style={{ marginBottom: 4 }}>{monthsRow(y, vals)}</div>)}
-      </div>
-
-      {/* attribution */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, marginTop: 30 }}>
+      {/* Real per-name unrealized P&L from live positions. */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
         <div>
-          <div className="t-label" style={{ marginBottom: 14 }}>By strategy</div>
-          {buckets.map(b => (
-            <div key={b.name} style={{ display: "grid", gridTemplateColumns: "180px 1fr 90px", gap: 14, padding: "10px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "center" }}>
-              <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg)" }}>{b.name}</span>
-              <div style={{ position: "relative", height: 6, background: "var(--ink-300)", borderRadius: 1 }}>
-                <div style={{ position: "absolute", left: "50%", top: 0, height: "100%", width: `${(Math.abs(b.contrib) / max) * 50}%`, transform: b.contrib < 0 ? "translateX(-100%)" : "translateX(0)", background: b.contrib >= 0 ? "var(--up-500)" : "var(--down-500)" }} />
-                <div style={{ position: "absolute", left: "50%", top: -2, bottom: -2, width: 1, background: "var(--border-strong)" }} />
-              </div>
-              <span className={b.contrib >= 0 ? "u-profit t-mono" : "u-loss t-mono"} style={{ fontSize: 12, textAlign: "right" }}>{b.contrib >= 0 ? "+" : ""}${b.contrib.toLocaleString()}</span>
+          <div className="t-label" style={{ marginBottom: 12 }}>Live winners · unrealized</div>
+          {winners.length === 0 && (
+            <div style={{ padding: "10px 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 13 }}>
+              No positions are unrealized-positive in the live book.
             </div>
-          ))}
-        </div>
-        <div>
-          <div className="t-label" style={{ marginBottom: 14 }}>By sector</div>
-          {sectors.map(s => (
-            <div key={s.name} style={{ display: "grid", gridTemplateColumns: "180px 1fr 60px", gap: 14, padding: "10px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "center" }}>
-              <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg)" }}>{s.name}</span>
-              <div style={{ position: "relative", height: 6, background: "var(--ink-300)", borderRadius: 1 }}>
-                <div style={{ position: "absolute", left: "50%", top: 0, height: "100%", width: `${(Math.abs(s.pct) / 8) * 50}%`, transform: s.pct < 0 ? "translateX(-100%)" : "translateX(0)", background: s.pct >= 0 ? "var(--up-500)" : "var(--down-500)" }} />
-              </div>
-              <Delta value={s.pct} dec={1} style={{ textAlign: "right", fontSize: 12 }} />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* winners / losers */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, marginTop: 30 }}>
-        <div>
-          <div className="t-label" style={{ marginBottom: 12 }}>Top winners · 30d</div>
-          {winners.map(w => (
-            <div key={w.sym} style={{ display: "grid", gridTemplateColumns: "1fr 80px 100px", gap: 14, padding: "9px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
-              <span style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--ink-1000)", fontWeight: 500 }}>{w.sym} <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-muted)", fontWeight: 400 }}>{w.strat}</span></span>
+          )}
+          {winners.map((w) => (
+            <div key={w.symbol} style={{ display: "grid", gridTemplateColumns: "1fr 80px 100px", gap: 14, padding: "9px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
+              <span style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--ink-1000)", fontWeight: 500 }}>{w.symbol} <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-muted)", fontWeight: 400 }}>{w.strategy}</span></span>
               <div style={{ height: 4, background: "var(--ink-300)", borderRadius: 1, position: "relative" }}>
-                <div style={{ height: "100%", width: `${(w.pl / 5145) * 100}%`, background: "var(--up-500)" }} />
+                <div style={{ height: "100%", width: `${Math.min(100, (Math.abs(w.pnl ?? 0) / winnersMax) * 100)}%`, background: "var(--up-500)" }} />
               </div>
-              <span className="u-profit t-mono" style={{ fontSize: 12, textAlign: "right" }}>+${w.pl.toLocaleString()}</span>
+              <span className="u-profit t-mono" style={{ fontSize: 12, textAlign: "right" }}>{fmtMoney(w.pnl ?? 0, { sign: true, dec: 0 })}</span>
             </div>
           ))}
         </div>
         <div>
-          <div className="t-label" style={{ marginBottom: 12 }}>Top losers · 30d</div>
-          {losers.map(l => (
-            <div key={l.sym} style={{ display: "grid", gridTemplateColumns: "1fr 80px 100px", gap: 14, padding: "9px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
-              <span style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--ink-1000)", fontWeight: 500 }}>{l.sym} <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-muted)", fontWeight: 400 }}>{l.strat}</span></span>
+          <div className="t-label" style={{ marginBottom: 12 }}>Live losers · unrealized</div>
+          {losers.length === 0 && (
+            <div style={{ padding: "10px 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 13 }}>
+              No positions are unrealized-negative in the live book.
+            </div>
+          )}
+          {losers.map((l) => (
+            <div key={l.symbol} style={{ display: "grid", gridTemplateColumns: "1fr 80px 100px", gap: 14, padding: "9px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
+              <span style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--ink-1000)", fontWeight: 500 }}>{l.symbol} <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-muted)", fontWeight: 400 }}>{l.strategy}</span></span>
               <div style={{ height: 4, background: "var(--ink-300)", borderRadius: 1, position: "relative" }}>
-                <div style={{ height: "100%", width: `${(Math.abs(l.pl) / 272) * 100}%`, background: "var(--down-500)" }} />
+                <div style={{ height: "100%", width: `${Math.min(100, (Math.abs(l.pnl ?? 0) / losersMax) * 100)}%`, background: "var(--down-500)" }} />
               </div>
-              <span className="u-loss t-mono" style={{ fontSize: 12, textAlign: "right" }}>−${Math.abs(l.pl).toLocaleString()}</span>
+              <span className="u-loss t-mono" style={{ fontSize: 12, textAlign: "right" }}>{fmtMoney(l.pnl ?? 0, { sign: true, dec: 0 })}</span>
             </div>
           ))}
         </div>
@@ -7675,7 +7596,10 @@ function STProfile() {
       </div>
       <STField label="Display name" hint="Used in audit log entries and team views"><STInput value="Operator" width={320} /></STField>
       <STField label="Email" hint="Login email · primary notification recipient"><STInput value="operator@tradingalpha.net" mono width={320} /></STField>
-      <STField label="Phone" hint="Optional · used only for security alerts and SMS 2FA"><STInput value="+1 (555) 123-4567" mono width={220} /></STField>
+      {/* 2026-05-10 (honest empty-state): previously defaulted to "+1 (555) 123-4567"
+       * which is the universal placeholder phone number. Default to empty so an
+       * unset field doesn't look like a real configured number. */}
+      <STField label="Phone" hint="Optional · used only for security alerts and SMS 2FA"><STInput value="" mono width={220} /></STField>
       <STField label="Role" hint="Set by admins · contact ops to change">
         <span className="t-mono" style={{ fontSize: 11, padding: "4px 10px", border: "1px solid var(--brand)", color: "var(--brand)", borderRadius: 2, letterSpacing: "0.06em", fontWeight: 600 }}>OPERATOR</span>
       </STField>
@@ -7738,9 +7662,16 @@ function STTrading() {
   );
 }
 
+// 2026-05-10 (honest empty-state): the previous BROKERS array hardcoded
+// fake "connected" status with fake account numbers (PA3KW2J18ZNX,
+// U7421906) and a fake "last reconciled 09:14 today" timestamp. The
+// per-user broker linkage backend isn't wired yet, so every entry now
+// defaults to status "available" with no account / linked / paper /
+// reconciled metadata. The actual connected broker (Alpaca paper, in
+// this deployment) is detected from the live portfolio source instead.
 const BROKERS = [
-  { id: "alpaca",   name: "Alpaca",                 mark: "α", color: "#FFD600",  asset: "US equities · options · crypto", since: "2015", status: "connected", paper: true, account: "PA3KW2J18ZNX", linked: "Mar 14", default: true,  notes: "REST + paper account · best for algorithmic trading" },
-  { id: "ibkr",     name: "Interactive Brokers",    mark: "IB", color: "#D32F2F", asset: "Global equities · futures · FX · options", since: "1978", status: "connected", paper: false, account: "U7421906",     linked: "Apr 02", default: false, notes: "TWS / IB Gateway · widest market coverage" },
+  { id: "alpaca",   name: "Alpaca",                 mark: "α", color: "#FFD600",  asset: "US equities · options · crypto", since: "2015", status: "available", notes: "REST + paper account · best for algorithmic trading" },
+  { id: "ibkr",     name: "Interactive Brokers",    mark: "IB", color: "#D32F2F", asset: "Global equities · futures · FX · options", since: "1978", status: "available", notes: "TWS / IB Gateway · widest market coverage" },
   { id: "schwab",   name: "Charles Schwab",         mark: "CS", color: "#00A0DC", asset: "US equities · options · futures (post-TDA)", since: "1971", status: "available", notes: "OAuth via Schwab Developer · TDA accounts auto-migrated" },
   { id: "tradier",  name: "Tradier",                mark: "T",  color: "#0076FF", asset: "US equities · options",            since: "2012", status: "available", notes: "Flat-fee options · clean REST API" },
   { id: "etrade",   name: "E*TRADE",                mark: "E*", color: "#6633CC", asset: "US equities · options · mutual funds", since: "1991", status: "available", notes: "OAuth 1.0a · slow approval queue" },
@@ -7751,31 +7682,38 @@ const BROKERS = [
 
 function STBroker() {
   const [open, setOpen] = useState("alpaca");
-  const active = BROKERS.find(b => b.default) || BROKERS[0];
+  // 2026-05-10 (honest empty-state): "active broker" no longer
+  // hardcodes account number, linkage date, or "last reconciled 09:14
+  // today". Reads the actual portfolio source from the live API and
+  // falls through to a clear "No broker linked" state if none is set.
+  const live = useDesignLiveData();
+  const liveSource = String(live.portfolio?.source || "").toLowerCase();
+  const active = BROKERS.find((b) => b.id === liveSource) || null;
   return (
     <>
     <STCard title="Active broker" sub="Order execution and account data flow through this broker. Each strategy can override per-playbook in the strategy book.">
-      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 18, alignItems: "center", padding: "4px 0 12px", borderBottom: "1px solid var(--border-hair)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <BrokerMark broker={active} size={48} />
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 22, color: "var(--ink-1000)", letterSpacing: "-0.015em" }}>{active.name}</span>
-              <span className="t-mono" style={{ fontSize: 9, padding: "2px 6px", border: "1px solid var(--brand)", color: "var(--brand)", borderRadius: 2, letterSpacing: "0.06em", fontWeight: 600 }}>DEFAULT</span>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                <StatusDot tone="up" size={5} />
-                <span className="t-mono" style={{ fontSize: 10, color: "var(--up-500)", letterSpacing: "0.05em", fontWeight: 600 }}>CONNECTED</span>
-              </span>
+      {active ? (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 18, alignItems: "center", padding: "4px 0 12px", borderBottom: "1px solid var(--border-hair)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <BrokerMark broker={active} size={48} />
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 22, color: "var(--ink-1000)", letterSpacing: "-0.015em" }}>{active.name}</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                  <StatusDot tone={live.error ? "down" : "up"} size={5} />
+                  <span className="t-mono" style={{ fontSize: 10, color: live.error ? "var(--down-500)" : "var(--up-500)", letterSpacing: "0.05em", fontWeight: 600 }}>{live.error ? "DEGRADED" : "CONNECTED"}</span>
+                </span>
+              </div>
+              <div style={{ marginTop: 3, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg-muted)" }}>{active.asset}</div>
+              <div style={{ marginTop: 2, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-hint)" }}>portfolio source · {liveSource}{live.refreshedAt ? ` · last update ${formatLiveDate(live.refreshedAt)}` : ""}</div>
             </div>
-            <div style={{ marginTop: 3, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg-muted)" }}>{active.asset}</div>
-            <div style={{ marginTop: 2, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-hint)" }}>account · {active.account} · linked {active.linked} · last reconciled 09:14 today</div>
           </div>
         </div>
-        <div style={{ textAlign: "right" }}>
-          <div className="t-eyebrow-italic" style={{ color: "var(--fg-muted)", fontSize: 9.5, letterSpacing: "0.18em" }}>SWITCH DEFAULT</div>
-          <STSelect value="alpaca" options={BROKERS.filter(b => b.status === "connected").map(b => ({ v: b.id, l: b.name }))} width={220} />
+      ) : (
+        <div style={{ padding: "10px 0 14px", borderBottom: "1px solid var(--border-hair)", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13.5, color: "var(--fg-muted)" }}>
+          No broker connection reported by the live portfolio endpoint. Per-user broker linkage is hidden until the backend exposes it.
         </div>
-      </div>
+      )}
       <STField label="Daily live-mode approval" hint="Re-confirm live trading once per day with 2FA · applies to all brokers"><STToggle on={true} /></STField>
       <STField label="Test default broker"><STButton>Run paper · then live test</STButton></STField>
     </STCard>
@@ -8250,12 +8188,18 @@ function OBWelcome() {
           </OBCard>
         ))}
       </div>
+      {/* 2026-05-10 (honest empty-state): the previous approval card
+       * said "Approved by sarah@tradingalpha.net on Apr 14" — those
+       * were hardcoded names that don't exist. The onboarding
+       * approval workflow (B.5 + B.11) isn't wired yet, so this card
+       * now reads from the live operator session and reflects reality
+       * instead of inventing an approver. */}
       <OBCard accent="var(--gold-500)" style={{ marginTop: 4 }}>
         <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 16, alignItems: "center" }}>
           <div style={{ width: 44, height: 44, borderRadius: "50%", background: "var(--ink-200)", color: "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 22, fontWeight: 500 }}>✓</div>
           <div>
-            <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 16, color: "var(--ink-1000)" }}>You've been approved as an Operator.</div>
-            <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg-muted)" }}>Approved by sarah@tradingalpha.net on Apr 14 · all strategies and live trading available after broker linkage.</div>
+            <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 16, color: "var(--ink-1000)" }}>You&apos;re signed in as an Operator.</div>
+            <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg-muted)" }}>This wizard is a UI preview — the onboarding-questionnaire backend (B.11) is not yet wired, so choices below don&apos;t persist. All strategies and live trading become available once a broker is linked.</div>
           </div>
         </div>
       </OBCard>
@@ -9803,20 +9747,104 @@ if (typeof window !== "undefined") Object.assign(window, { RiskPage });
 // Stages (entry → confirmation → position → exit) · agents per stage ·
 // inline backtest summary · live trades · scoped watchlist · edit-rules
 
+// 2026-05-10 (honest empty-state): the previous StrategyPlaybook
+// rendered fabricated workflow stages ("12 candidates surfaced today
+// · top: NVDA, META, ASML", "Currently 4/6 slots filled · NVDA, META,
+// MSFT, AMZN"), a fabricated 60-day backtest mini-curve, fabricated
+// "4 trades active" with NVDA/META/MSFT/AMZN dollar amounts, and a
+// fabricated scoped watchlist (ASML/AVGO/AMD/TSM/GOOGL). None of those
+// positions exist in the real account (which holds AVGO/WMT/DIS/QQQ),
+// and none of the candidate counts came from a real pipeline run.
+//
+// This page now renders only what the backend actually exposes for the
+// requested strategy: the live `/api/v1/strategies` row (name + status
+// + invested capital + open positions count) plus per-position rows for
+// any holdings tagged with this strategy. Workflow stages, backtest
+// summary, scoped watchlist, and edit-rules return when the strategy
+// detail / playbook / backtest endpoints publish real artifacts.
 const StrategyPlaybook = ({ tweaks, stratName = "Momentum & Quality", onNav, onBack, onPickTicker, onBacktest }) => {
-  const s = (MOCK_STRATEGIES || []).find(x => x.name === stratName) || { name: stratName, num: "01", pct: 3.42, sharpe: 1.42, dd: -4.1, positions: 4, allocPct: 32, active: true };
+  const live = useDesignLiveData();
+  const stratList = Array.isArray(live.strategies) ? live.strategies : [];
+  const lowered = String(stratName || "").toLowerCase();
+  const matched = stratList.find((s) => {
+    const id = String(s.id || s.slug || s.name || "").toLowerCase();
+    const nm = String(s.name || s.label || "").toLowerCase();
+    const slug = String(s.slug || "").toLowerCase();
+    return id === lowered || nm === lowered || slug === lowered;
+  });
+  const displayName = matched?.name || matched?.label || stratName;
+  const status = matched?.status || matched?.state || (matched ? "live" : "unknown");
+  const invested = asFiniteNumber(matched?.invested ?? matched?.capital_allocated, null);
+  const openPositionsCount = asFiniteNumber(matched?.open_positions ?? matched?.position_count, null);
+  const ownedPositions = (live.positions || []).filter((p) => {
+    const ps = String(p.strategy || p.asset_class || "").toLowerCase();
+    return ps === lowered || ps === displayName.toLowerCase();
+  }).map((p) => ({
+    symbol: String(p.symbol || p.sym || "").toUpperCase(),
+    qty: asFiniteNumber(p.quantity ?? p.qty, 0) || 0,
+    avg: asFiniteNumber(p.avgEntryPrice ?? p.avg_entry_price ?? p.cost_basis, null),
+    last: asFiniteNumber(p.currentPrice ?? p.current_price ?? p.price, null),
+    pnl: asFiniteNumber(p.unrealizedPnl ?? p.unrealized_pnl ?? p.unrealizedPl ?? p.unrealized_pl, null),
+    pnlPct: asFiniteNumber(p.unrealizedPnlPct ?? p.unrealized_pnl_pct ?? p.unrealizedPlpc ?? p.unrealized_plpc, null),
+  }));
+
   return (
     <div style={{ padding: "20px 24px 40px", maxWidth: 1640, margin: "0 auto" }}>
-      <PBHeader s={s} onBack={onBack} onNav={onNav} />
-      <PBHero s={s} />
-      <PBStages onPickTicker={onPickTicker} />
-      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 16, marginBottom: 16 }}>
-        <PBBacktest onBacktest={onBacktest} />
-        <PBLiveTrades onPickTicker={onPickTicker} />
+      <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 14px", borderBottom: "1px solid var(--border-hair)", marginBottom: 18 }}>
+        <div>
+          <a onClick={() => (onBack ? onBack() : onNav?.("strategies"))} style={{ display: "inline-flex", alignItems: "baseline", gap: 6, fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--fg-muted)", letterSpacing: "0.06em", cursor: "default" }}>← BACK</a>
+          <div className="t-eyebrow-italic" style={{ marginTop: 8, color: "var(--brand)", letterSpacing: "0.2em" }}>STRATEGY · LIVE BOOK</div>
+          <h1 style={{ margin: "6px 0 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 32, fontWeight: 400, letterSpacing: "-0.02em" }}>{displayName}</h1>
+          <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14 }}>
+            Live strategy registry row + any positions the strategy currently owns. Workflow stages, scoped watchlist, and backtest summary are hidden until a strategy-detail endpoint exposes those artifacts.
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", border: "1px solid var(--border-strong)", borderRadius: 999, fontFamily: "var(--font-mono)", fontSize: 10.5, color: matched ? "var(--up-500)" : "var(--fg-muted)", background: "var(--bg-elev-1)" }}>
+            <StatusDot tone={matched ? "up" : "muted"} size={5} />{matched ? String(status).toUpperCase() : "NOT REGISTERED"}
+          </span>
+          <a onClick={() => onBacktest?.()} style={{ padding: "4px 10px", border: "1px solid var(--border)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--ink-1000)", background: "var(--bg-elev-1)", cursor: "default" }}>Backtest workbench →</a>
+        </div>
+      </header>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, background: "var(--border)", border: "1px solid var(--border)", borderRadius: 4, marginBottom: 20 }}>
+        {[
+          { label: "REGISTRY STATUS", val: matched ? String(status) : "—", sub: matched ? "/api/v1/strategies" : "Not in registry" },
+          { label: "INVESTED CAPITAL", val: invested == null ? "—" : fmtMoney(invested, { dec: 0 }), sub: invested == null ? "no allocation reported" : "from registry" },
+          { label: "OPEN POSITIONS", val: openPositionsCount == null ? String(ownedPositions.length) : String(openPositionsCount), sub: ownedPositions.length === 0 ? "no positions tagged with this strategy" : `${ownedPositions.length} live` },
+        ].map((m, i) => (
+          <div key={i} style={{ padding: "16px 18px", background: "var(--ink-100)", borderRadius: 4 }}>
+            <div className="t-label" style={{ color: "var(--fg-hint)" }}>{m.label}</div>
+            <div className="t-mono" style={{ marginTop: 6, fontSize: 22, color: "var(--ink-1000)", fontWeight: 500 }}>{m.val}</div>
+            <div className="t-body-sm" style={{ marginTop: 2, color: "var(--fg-muted)", fontFamily: "var(--font-display)", fontStyle: "italic" }}>{m.sub}</div>
+          </div>
+        ))}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-        <PBWatchlist onPickTicker={onPickTicker} />
-        <PBEditRules />
+
+      <div style={{ marginBottom: 20, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+        <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>PLAYBOOK · WORKFLOW</div>
+        <h2 className="t-h3" style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>Entry / Confirmation / Position / Exit rules</h2>
+        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, lineHeight: 1.55 }}>
+          The strategy detail endpoint hasn&apos;t surfaced the per-stage rule set, agent assignments, or candidate / confirmation / slot-fill counters yet. Once a per-strategy playbook endpoint publishes those artifacts, this section will render the rules verbatim plus today&apos;s surfaced / confirmed / live / exited numbers.
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <div className="t-label" style={{ marginBottom: 12 }}>Positions tagged with this strategy</div>
+        {ownedPositions.length === 0 && (
+          <div style={{ padding: "10px 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 13 }}>
+            No live positions are currently tagged to <span style={{ color: "var(--fg)" }}>{displayName}</span>.
+          </div>
+        )}
+        {ownedPositions.map((p) => (
+          <div key={p.symbol} onClick={() => onPickTicker?.(p.symbol)} style={{ display: "grid", gridTemplateColumns: "60px 1fr 80px 80px 80px", gap: 14, padding: "10px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline", cursor: "default" }}>
+            <span className="t-mono" style={{ fontSize: 12.5, color: "var(--ink-1000)", fontWeight: 600 }}>{p.symbol}</span>
+            <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)" }}>{p.qty.toLocaleString()} @ {p.avg == null ? "—" : `$${p.avg.toFixed(2)}`}</span>
+            <span className="t-mono" style={{ fontSize: 12, color: "var(--fg)", textAlign: "right" }}>{p.last == null ? "—" : `$${p.last.toFixed(2)}`}</span>
+            <span className="t-mono" style={{ fontSize: 12, color: p.pnl == null || p.pnl >= 0 ? "var(--up-500)" : "var(--down-500)", textAlign: "right" }}>{p.pnl == null ? "—" : fmtMoney(p.pnl, { sign: true, dec: 0 })}</span>
+            <span className="t-mono" style={{ fontSize: 12, color: p.pnlPct == null || p.pnlPct >= 0 ? "var(--up-500)" : "var(--down-500)", textAlign: "right" }}>{p.pnlPct == null ? "—" : `${p.pnlPct >= 0 ? "+" : ""}${(p.pnlPct * (Math.abs(p.pnlPct) <= 1 ? 100 : 1)).toFixed(2)}%`}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -10063,16 +10091,59 @@ if (typeof window !== "undefined") Object.assign(window, { StrategyPlaybook });
 // Backtest workbench — strategy + universe + date range + cost model
 // Run config left · equity curve / dd / trade log right · compare runs
 
+// 2026-05-10 (honest empty-state): the previous BacktestPage rendered
+// a hardcoded run config (Momentum & Quality v3.2 / Russell 1000 / Jan
+// 2019 — Oct 2024 / IB tiered · 0.5bp / $100k / 1.5%R / Daily at close)
+// + a fabricated "Run #284 · today 14:21 · ● PUBLISHED" with CAGR
+// +18.4% / Sharpe 1.51 / Sortino 2.18 / Calmar 1.48 / Max DD -12.4% /
+// Win rate 58% / 412 trades, plus a mocked equity curve and trade log.
+// The backtest workbench backend (B.10) is not yet wired, so this page
+// now refuses to fabricate a published run; it shows the strategy name
+// + an honest "no published backtest yet" message until B.10 ships.
 const BacktestPage = ({ tweaks, onNav, onBack, stratName }) => {
+  const live = useDesignLiveData();
+  const stratList = Array.isArray(live.strategies) ? live.strategies : [];
+  const lowered = String(stratName || "").toLowerCase();
+  const matched = stratList.find((s) => {
+    const id = String(s.id || s.slug || s.name || "").toLowerCase();
+    const nm = String(s.name || s.label || "").toLowerCase();
+    const slug = String(s.slug || "").toLowerCase();
+    return id === lowered || nm === lowered || slug === lowered;
+  });
+  const displayName = matched?.name || matched?.label || stratName || "—";
+
   return (
     <div style={{ padding: "20px 24px 40px", maxWidth: 1640, margin: "0 auto" }}>
-      <BTHeader onBack={onBack} onNav={onNav} stratName={stratName} />
-      <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 16, marginBottom: 16 }}>
-        <BTConfig />
-        <BTRunOutput />
+      <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 14px", borderBottom: "1px solid var(--border-hair)", marginBottom: 18 }}>
+        <div>
+          <a onClick={() => (onBack ? onBack() : onNav?.("strategies"))} style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--fg-muted)", letterSpacing: "0.06em", cursor: "default" }}>← BACK</a>
+          <div className="t-eyebrow-italic" style={{ marginTop: 8, color: "var(--brand)", letterSpacing: "0.2em" }}>WORKBENCH / BACKTEST</div>
+          <h1 style={{ margin: "6px 0 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 32, fontWeight: 400, letterSpacing: "-0.02em" }}>{displayName}</h1>
+          <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14 }}>
+            Run config, equity curve, drawdown, and trade log live behind the backtest workbench backend (B.10). Until that endpoint ships, this page won&apos;t fabricate a published run.
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <span style={{ padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--fg-muted)", opacity: 0.6 }}>Save run</span>
+          <span style={{ padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--fg-muted)", opacity: 0.6 }}>Run backtest →</span>
+        </div>
+      </header>
+
+      <div style={{ marginBottom: 22, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+        <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>OUTPUT · LAST RUN</div>
+        <h2 className="t-h3" style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>No published backtest for this strategy.</h2>
+        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, lineHeight: 1.55 }}>
+          The workbench will render run configuration, equity curve, drawdown band, and trade log here once the backtest-runs endpoint returns a real run. Compare-runs and publish controls are deferred until then.
+        </div>
       </div>
-      <BTCompareRuns />
-      <BTTradeLog />
+
+      <div style={{ marginBottom: 22, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+        <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>RUN HISTORY</div>
+        <h2 className="t-h3" style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>No runs in history yet.</h2>
+        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, lineHeight: 1.55 }}>
+          Submitted runs will appear here with submit time, trade count, and a Promote-to-current control once the backtest orchestrator publishes them.
+        </div>
+      </div>
     </div>
   );
 };
@@ -10672,88 +10743,52 @@ if (typeof window !== "undefined") Object.assign(window, { AdminPage });
 
 // Admin · Users — applicants table + active users + per-user drawer.
 
+// 2026-05-10 (honest empty-state): the previous AdminUsersPage rendered
+// MOCK_APPLICANTS (Aria Mehta / Henry Ng / Mia Roy / Ben Cole / Jana
+// Kim / Octavio Ríos with fabricated emails, "VPN detected" / "Disposable
+// email" risk flags) and MOCK_ACTIVE_USERS plus the headline aggregates
+// "$1.79M live equity" and "$37.72 AI spend / 24h cap $250". None of that
+// data exists for this single-tenant paper account — the applicants and
+// users registries (B.5 + B.15) are not yet wired. This page now states
+// that explicitly until the backend exposes a real applicant/user feed.
 const AdminUsersPage = ({ tweaks }) => {
-  const [tab, setTab] = useState("applicants");
-  const [filter, setFilter] = useState("");
-  const [riskFilter, setRiskFilter] = useState("all");
-  const [selectedApp, setSelectedApp] = useState(null);
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [approveModal, setApproveModal] = useState(null);
-  const [rejectModal, setRejectModal] = useState(null);
-
-  const apps = MOCK_APPLICANTS.filter(a =>
-    (!filter || (a.name + a.email).toLowerCase().includes(filter.toLowerCase())) &&
-    (riskFilter === "all" || a.risk === riskFilter)
-  );
-  const users = MOCK_ACTIVE_USERS.filter(u => !filter || (u.name + u.email).toLowerCase().includes(filter.toLowerCase()));
-
   return (
-    <div data-screen-label="Admin · Users" style={{ height: "100%", display: "grid", gridTemplateRows: "auto auto 1fr", overflow: "hidden" }}>
-      {/* Identity band */}
+    <div data-screen-label="Admin · Users" style={{ height: "100%", overflow: "auto" }}>
       <div style={{ background: "var(--ink-100)", padding: "20px 28px 14px", borderBottom: "1px solid var(--border)" }}>
-        <div className="t-label">ADMIN · USERS</div>
+        <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>ADMIN · USERS</div>
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 24, marginTop: 4 }}>
           <div>
-            <h1 style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 32, color: "var(--ink-1000)", letterSpacing: "-0.025em", lineHeight: 1.05, margin: "2px 0 4px" }}>People & access</h1>
-            <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg-dim)", maxWidth: 580 }}>Approvals are deliberate. Every account has a default dashboard, scoped risk, and an audit trail.</div>
-          </div>
-          <div style={{ display: "flex", gap: 22 }}>
-            <AdminUsersStat label="APPLICANTS" v={MOCK_APPLICANTS.length} sub="6 pending" />
-            <AdminUsersStat label="ACTIVE" v={MOCK_ACTIVE_USERS.length} sub="2 watch · 1 dormant" />
-            <AdminUsersStat label="LIVE EQUITY" v="$1.79M" sub="9 funded accounts" />
-            <AdminUsersStat label="AI SPEND · 24h" v="$37.72" sub="cap $250" />
+            <h1 style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 32, color: "var(--ink-1000)", letterSpacing: "-0.025em", lineHeight: 1.05, margin: "2px 0 4px" }}>People &amp; access</h1>
+            <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg-dim)", maxWidth: 720 }}>Applicant approval, active-user telemetry, and access-audit feeds are intentionally hidden until the admin / users backend (B.5 + B.15) publishes real data. This page no longer fabricates applicants or aggregate equity figures.</div>
           </div>
         </div>
       </div>
 
-      {/* Tab + filter row */}
-      <div style={{ background: "var(--bg-elev-1)", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 28px" }}>
-        <div style={{ display: "flex", gap: 0 }}>
-          {[
-            { id: "applicants", label: "Applicants", count: MOCK_APPLICANTS.length, dot: "warn" },
-            { id: "active", label: "Active users", count: MOCK_ACTIVE_USERS.length },
-            { id: "audit", label: "Access audit", count: null },
-          ].map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              style={{ background: "transparent", border: 0, padding: "14px 18px", cursor: "default",
-                color: tab === t.id ? "var(--ink-1000)" : "var(--fg-muted)",
-                fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: tab === t.id ? 500 : 400,
-                borderBottom: tab === t.id ? "2px solid var(--brand)" : "2px solid transparent" }}>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                {t.dot && <StatusDot tone="warn" size={5} />}
-                {t.label}
-                {t.count != null && <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-hint)", marginLeft: 4 }}>{t.count}</span>}
-              </span>
-            </button>
-          ))}
+      <div style={{ padding: "20px 28px" }}>
+        <div style={{ padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)", marginBottom: 16 }}>
+          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>APPLICANTS QUEUE</div>
+          <h2 className="t-h3" style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>No applicants endpoint wired.</h2>
+          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, lineHeight: 1.55 }}>
+            Approve / Hold / Reject controls return when `/api/v1/admin/applicants` ships. The applicant drawer and ApproveModal layouts are preserved in the design system but disabled until they have real records to act on.
+          </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search…"
-            style={{ background: "var(--bg-elev-2)", border: "1px solid var(--border)", padding: "5px 9px", borderRadius: 3, color: "var(--ink-1000)", fontFamily: "var(--font-ui)", fontSize: 12, outline: "none", width: 200 }} />
-          {tab === "applicants" && (
-            <select value={riskFilter} onChange={(e) => setRiskFilter(e.target.value)}
-              style={{ background: "var(--bg-elev-2)", border: "1px solid var(--border)", padding: "5px 9px", borderRadius: 3, color: "var(--ink-1000)", fontFamily: "var(--font-ui)", fontSize: 12, outline: "none" }}>
-              <option value="all">All risk</option>
-              <option value="low">Low</option>
-              <option value="med">Medium</option>
-              <option value="high">High</option>
-            </select>
-          )}
-          <button style={btnGhost}>Export CSV</button>
+
+        <div style={{ padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)", marginBottom: 16 }}>
+          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>ACTIVE USERS</div>
+          <h2 className="t-h3" style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>Single-tenant deployment.</h2>
+          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, lineHeight: 1.55 }}>
+            This deployment currently has one operator account. Per-user telemetry, equity-by-account, and AI spend aggregates return when the multi-tenant backend exposes them.
+          </div>
+        </div>
+
+        <div style={{ padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>ACCESS AUDIT</div>
+          <h2 className="t-h3" style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>No audit-tail endpoint wired.</h2>
+          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, lineHeight: 1.55 }}>
+            Sign-in events, impersonation sessions, and sensitive-action audits will render here once the audit-tail endpoint is exposed to the admin frontend.
+          </div>
         </div>
       </div>
-
-      {/* Body */}
-      <div style={{ overflow: "auto" }}>
-        {tab === "applicants" && <ApplicantsTable rows={apps} onPick={setSelectedApp} onApprove={setApproveModal} onReject={setRejectModal} />}
-        {tab === "active" && <ActiveUsersTable rows={users} onPick={setSelectedUser} />}
-        {tab === "audit" && <AccessAuditTable />}
-      </div>
-
-      {selectedApp && <ApplicantDrawer a={selectedApp} onClose={() => setSelectedApp(null)} onApprove={() => { setApproveModal(selectedApp); setSelectedApp(null); }} onReject={() => { setRejectModal(selectedApp); setSelectedApp(null); }} />}
-      {selectedUser && <UserDrawer u={selectedUser} onClose={() => setSelectedUser(null)} />}
-      {approveModal && <ApproveModal a={approveModal} onClose={() => setApproveModal(null)} />}
-      {rejectModal && <RejectModal a={rejectModal} onClose={() => setRejectModal(null)} />}
     </div>
   );
 };
