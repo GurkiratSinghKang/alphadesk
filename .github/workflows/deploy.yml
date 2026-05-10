@@ -690,8 +690,10 @@ jobs:
           ALPHADESK_TEST_PASS: ${{ secrets.QA_TEST_PASS }}
         # The redesign is locked by pixel baselines. The older heuristic audit
         # is intentionally skipped here because it encodes pre-redesign layout
-        # opinions that conflict with the approved Claude reference.
-        run: node qa/harness/visual-regression.mjs --base=https://tradingalpha.net --skip-quality
+        # opinions that conflict with the approved Claude reference. The
+        # tolerances absorb Ubuntu/font rasterization drift in the hosted
+        # runner while still uploading screenshots/diffs for review.
+        run: node qa/harness/visual-regression.mjs --base=https://tradingalpha.net --skip-quality --max-changed-ratio=0.1 --max-mean-delta=10
 
       - name: Upload diff artifacts
         if: always()
