@@ -9339,10 +9339,10 @@ const RiskPage = ({ tweaks, onNav, onPickTicker }) => {
   const rows = positions.map((p) => {
     const symbol = String(p.symbol || p.sym || "").toUpperCase();
     const qty = asFiniteNumber(p.quantity ?? p.qty, 0) || 0;
-    const px = asFiniteNumber(p.current_price ?? p.extended_price ?? p.price, null);
-    const marketValue = asFiniteNumber(p.market_value ?? p.extended_market_value, null) ?? (px == null ? 0 : qty * px);
-    const pnl = asFiniteNumber(p.unrealized_pnl ?? p.unrealized_pl, null);
-    const pnlPct = asFiniteNumber(p.unrealized_pnl_pct ?? p.unrealized_plpc, null);
+    const px = asFiniteNumber(p.currentPrice ?? p.current_price ?? p.extendedPrice ?? p.extended_price ?? p.price, null);
+    const marketValue = asFiniteNumber(p.marketValue ?? p.market_value ?? p.extendedMarketValue ?? p.extended_market_value, null) ?? (px == null ? 0 : qty * px);
+    const pnl = asFiniteNumber(p.unrealizedPnl ?? p.unrealized_pnl ?? p.unrealizedPl ?? p.unrealized_pl, null);
+    const pnlPct = asFiniteNumber(p.unrealizedPnlPct ?? p.unrealized_pnl_pct ?? p.unrealizedPlpc ?? p.unrealized_plpc, null);
     return { symbol, qty, px, marketValue, pnl, pnlPct, weight: equity > 0 ? (Math.abs(marketValue) / equity) * 100 : 0, strategy: p.strategy || p.asset_class || "position" };
   }).sort((a, b) => Math.abs(b.marketValue) - Math.abs(a.marketValue));
   const gross = rows.reduce((a, r) => a + Math.abs(r.marketValue), 0);
