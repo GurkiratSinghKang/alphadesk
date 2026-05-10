@@ -3048,6 +3048,20 @@ export async function getPipelineHistory(): Promise<PipelineHistoryEntry[]> {
   return apiFetch<PipelineHistoryEntry[]>('/api/v1/pipeline/history');
 }
 
+// v2 backend (PR #146 follow-up) — pre-screen universe size for the
+// pipeline funnel hero. Backend may degrade gracefully to a known-good
+// ballpark when the symbol catalogue is unavailable.
+export interface PipelineUniverseResponse {
+  count: number;
+  source: string;
+  filter_criteria: string;
+  as_of: string;
+}
+
+export function getPipelineUniverse() {
+  return apiFetch<PipelineUniverseResponse>('/api/v1/pipeline/universe');
+}
+
 export async function getPipelineRun(date: string): Promise<PipelineRun> {
   const raw = await apiFetch<Record<string, unknown>>(`/api/v1/pipeline/history/${date}`);
   return mapPipelineRun(raw);

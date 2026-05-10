@@ -53,6 +53,7 @@ import {
   getPipelineHistory,
   getPipelineRun,
   getPipelinePositions,
+  getPipelineUniverse,
   getPositions,
   getRiskMonitorState,
   setRiskMonitorState,
@@ -130,6 +131,27 @@ function EditorialPipelineFunnel({
   run: PipelineRun | null;
   livePositions: number;
 }) {
+  // v2 backend (PR #146 follow-up) — pre-screen universe size +
+  // filter criteria from /api/v1/pipeline/universe. Fetched once on
+  // mount; the count rarely changes intra-day so no polling needed.
+  const [universe, setUniverse] = useState<{ count: number; caption: string } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getPipelineUniverse()
+      .then((data) => {
+        if (!cancelled) {
+          setUniverse({ count: data.count, caption: data.filter_criteria });
+        }
+      })
+      .catch(() => {
+        // Fall back to the static caption + null count if backend
+        // unreachable; the funnel cell renders "—" honestly.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Stage count derivations — each stage falls through real → derived → null.
   const filtered = run?.counts?.screened ?? run?.screened?.length ?? null;
   const ranked = run?.counts?.analyzed ?? run?.analyzed?.length ?? null;
@@ -153,8 +175,8 @@ function EditorialPipelineFunnel({
     {
       n: "01",
       label: "Universe",
-      count: null,
-      caption: "S&P 1500 + ADRs · liquidity > $20m",
+      count: universe?.count ?? null,
+      caption: universe?.caption ?? "S&P 1500 + ADRs · liquidity > $20m",
     },
     {
       n: "02",
