@@ -486,6 +486,38 @@ export function getStrategyPerformance(strategyId: string) {
   return apiFetch<StrategyPerformance>(`/api/v1/strategies/${strategyId}/performance`);
 }
 
+// v2 backend — per-strategy P&L breakdown for the catalog page's
+// CUMULATIVE CONTRIBUTION section. Aggregates closed trades into
+// today / month-to-date / lifetime buckets per strategy.
+export interface StrategyContribution {
+  strategy: string;
+  today_pnl: number;
+  mtd_pnl: number;
+  total_pnl: number;
+  invested: number;
+  closed_count: number;
+}
+
+export interface StrategyContributionResponse {
+  as_of: string;
+  total_today: number;
+  total_mtd: number;
+  total_lifetime: number;
+  contributions: StrategyContribution[];
+}
+
+export function getStrategyContribution() {
+  return apiFetch<StrategyContributionResponse>(`/api/v1/strategies/contribution`);
+}
+
+// v2 backend — Risk dashboard recompute. Frontend's "Recompute" button
+// (Risk hero, top-right corner) calls this when an operator wants a
+// fresh number after an intraday spike. Body is identical shape to
+// GET /api/v1/risk/dashboard.
+export function recomputeRiskDashboard() {
+  return apiFetch<unknown>(`/api/v1/risk/recompute`, { method: "POST" });
+}
+
 export interface StrategyTrade {
   id: number;
   symbol: string;

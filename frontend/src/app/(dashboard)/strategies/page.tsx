@@ -16,8 +16,10 @@ import type {
 import {
   getStrategies,
   getStrategyCatalog,
+  getStrategyContribution,
   getStrategyPerformance,
   type StrategyCatalogEntry,
+  type StrategyContributionResponse,
   type StrategyPerformance,
 } from "@/lib/api";
 import {
@@ -506,20 +508,55 @@ const READINESS_FILTERS: Array<{ value: ReadinessFilter; label: string }> = [
 // labels itself accordingly. The structure (eyebrow + title + total
 // + per-strategy bar segments) matches the design comp.
 function CumulativeContribution({ strategies }: { strategies: ListingStrategy[] }) {
-  const contributions = strategies
-    .map((s) => ({
-      id: s.id,
-      name: s.displayName,
-      group: s.group,
-      // Live cumulative return in dollars. `totalReturnPct` is a
-      // percentage (e.g. 36.2 → 36.2%), so divide by 100.
-      dollars: s.investedAmount * (s.totalReturnPct / 100),
-      invested: s.investedAmount,
-    }))
-    .filter((c) => c.invested > 0 && Number.isFinite(c.dollars) && c.dollars !== 0)
-    .sort((a, b) => Math.abs(b.dollars) - Math.abs(a.dollars));
+  // v2 backend (PR #146) — `GET /api/v1/strategies/contribution`
+  // returns per-strategy realized P&L bucketed today / MTD / lifetime.
+  // Prefer the live response when available; fall back to a
+  // per-strategy proxy (investedAmount × totalReturnPct) when the
+  // backend hasn't responded yet so the section never blanks.
+  const [serverData, setServerData] = useState<StrategyContributionResponse | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getStrategyContribution()
+      .then((data) => {
+        if (!cancelled) setServerData(data);
+      })
+      .catch(() => {
+        // Silent fall-through to the proxy below.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const total = contributions.reduce((acc, c) => acc + c.dollars, 0);
+  // Build a name lookup so the server-side `strategy` ids can render
+  // with the catalogue's display names (italic Newsreader form).
+  const nameById = new Map(strategies.map((s) => [s.id, s.displayName]));
+  const groupById = new Map(strategies.map((s) => [s.id, s.group]));
+
+  const contributions = serverData
+    ? serverData.contributions
+        .map((c) => ({
+          id: c.strategy,
+          name: nameById.get(c.strategy) ?? c.strategy,
+          group: groupById.get(c.strategy) ?? "other",
+          dollars: c.total_pnl,
+          invested: c.invested,
+        }))
+        .filter((c) => c.dollars !== 0)
+        .sort((a, b) => Math.abs(b.dollars) - Math.abs(a.dollars))
+    : strategies
+        .map((s) => ({
+          id: s.id,
+          name: s.displayName,
+          group: s.group,
+          // Proxy until the server response lands.
+          dollars: s.investedAmount * (s.totalReturnPct / 100),
+          invested: s.investedAmount,
+        }))
+        .filter((c) => c.invested > 0 && Number.isFinite(c.dollars) && c.dollars !== 0)
+        .sort((a, b) => Math.abs(b.dollars) - Math.abs(a.dollars));
+
+  const total = serverData?.total_lifetime ?? contributions.reduce((acc, c) => acc + c.dollars, 0);
   const totalPos = contributions
     .filter((c) => c.dollars > 0)
     .reduce((acc, c) => acc + c.dollars, 0);
@@ -527,14 +564,20 @@ function CumulativeContribution({ strategies }: { strategies: ListingStrategy[] 
     .filter((c) => c.dollars < 0)
     .reduce((acc, c) => acc + c.dollars, 0);
   const denom = totalPos + Math.abs(totalNeg) || 1;
+  const todayTotal = serverData?.total_today ?? null;
+  const mtdTotal = serverData?.total_mtd ?? null;
 
   return (
     <section className="rounded-lg border border-border-hair bg-bg-elev-1/95 p-4">
       <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="t-label text-fg-hint">Cumulative contribution</p>
+          <p className="t-label text-fg-hint">
+            {serverData ? "Today's contribution" : "Cumulative contribution"}
+          </p>
           <h2 className="mt-2 t-h2 text-ink-1000">
-            What each strategy has earned since inception.
+            {serverData
+              ? "What each strategy made today."
+              : "What each strategy has earned since inception."}
           </h2>
         </div>
         <div className="text-right">
@@ -551,9 +594,29 @@ function CumulativeContribution({ strategies }: { strategies: ListingStrategy[] 
             })}
           </p>
           <p className="font-mono text-eyebrow uppercase tracking-[0.08em] text-fg-muted">
-            <span className="text-profit">+${totalPos.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
-            {" · "}
-            <span className="text-loss">−${Math.abs(totalNeg).toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
+            {/* When the server is talking, show the today / MTD / lifetime
+                breakdown so the operator can see the day's slice in
+                context. Falls back to the +gain / -loss breakdown when
+                the proxy is in use. */}
+            {serverData ? (
+              <>
+                <span className={(todayTotal ?? 0) >= 0 ? "text-profit" : "text-loss"}>
+                  {(todayTotal ?? 0) >= 0 ? "+" : "−"}$
+                  {Math.abs(todayTotal ?? 0).toLocaleString("en-US", { maximumFractionDigits: 0 })} today
+                </span>
+                {" · "}
+                <span className={(mtdTotal ?? 0) >= 0 ? "text-profit" : "text-loss"}>
+                  {(mtdTotal ?? 0) >= 0 ? "+" : "−"}$
+                  {Math.abs(mtdTotal ?? 0).toLocaleString("en-US", { maximumFractionDigits: 0 })} MTD
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="text-profit">+${totalPos.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
+                {" · "}
+                <span className="text-loss">−${Math.abs(totalNeg).toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
+              </>
+            )}
           </p>
         </div>
       </div>
