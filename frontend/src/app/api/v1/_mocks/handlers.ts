@@ -161,6 +161,34 @@ const HANDLERS: Record<string, MockHandler> = {
     vix:  Array.from({ length: 30 }, (_, i) => 14 + Math.sin(i / 2) * 1.2),
   }),
   "GET /market/quotes/:symbol": (_, { symbol }) => quoteFor(symbol),
+  "GET /market/market-status": () => ({
+    state: "regular",
+    isOpen: true,
+    next_close: new Date(Date.now() + 6 * 3600_000).toISOString(),
+    next_open: new Date(Date.now() + 18 * 3600_000).toISOString(),
+    session_label: "REGULAR",
+  }),
+  // Synthetic OHLCV bars — 350 of them — keeps the chart engine happy.
+  "GET /market/bars/:symbol": (_, { symbol }) => {
+    const sym = symbol.toUpperCase();
+    const seed = SEED_PRICES[sym] ?? 100;
+    const now = Date.now();
+    const bars = Array.from({ length: 350 }, (_, i) => {
+      const t = now - (349 - i) * 3600_000;
+      const drift = Math.sin(i / 12) * (seed * 0.04);
+      const wobble = Math.sin(i / 3) * (seed * 0.008);
+      const o = seed + drift;
+      const c = o + wobble;
+      const h = Math.max(o, c) + Math.abs(wobble) * 0.4;
+      const l = Math.min(o, c) - Math.abs(wobble) * 0.4;
+      return {
+        t: Math.floor(t / 1000),
+        o: +o.toFixed(2), h: +h.toFixed(2), l: +l.toFixed(2), c: +c.toFixed(2),
+        v: 1_200_000 + Math.round(Math.abs(wobble) * 90_000),
+      };
+    });
+    return { symbol: sym, timeframe: "1h", bars };
+  },
 
   // ─── Strategies index ─────────────────────────────────────────────
   "GET /strategies": () => [

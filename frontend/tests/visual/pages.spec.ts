@@ -14,6 +14,34 @@ import { test, expect, type Page } from "@playwright/test";
  * The diff helper is the right tool to eyeball "are we visually close."
  */
 
+// Pre-warm every route the suite snapshots. Cold dev compile on a
+// route can take 30-50s — the per-test waitForFunction would otherwise
+// catch a half-rendered page. One hit per route during beforeAll
+// triggers compile so all subsequent test runs are warm.
+const ROUTES_TO_WARM = [
+  "/", "/trade", "/symbols/AAPL", "/strategies", "/reports", "/settings",
+  "/risk-dashboard", "/admin/control-center", "/admin/users",
+  "/watchlists", "/pipeline", "/analytics", "/alerts",
+  "/login", "/onboarding", "/agents", "/agents/research-regime",
+  "/about", "/contact", "/terms", "/privacy",
+  "/positions/NVDA", "/positions/AAPL",
+];
+test.beforeAll(async ({ browser }) => {
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  for (const r of ROUTES_TO_WARM) {
+    try {
+      await page.goto(`http://localhost:3000${r}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+      await page.waitForTimeout(800);
+    } catch { /* no-op — best-effort warming */ }
+  }
+  await ctx.close();
+}, 300_000);
+
+// Hide the onboarding tour via CSS instead of localStorage. Playwright's
+// `addInitScript` (in any form) interferes with one of the dashboard
+// chunks in Next 16 RSC mode and yields "Invalid or unexpected token"
+// at runtime, killing hydration. Pure CSS is the safe escape hatch.
 async function settle(page: Page) {
   await page.addStyleTag({
     content: `
@@ -24,28 +52,33 @@ async function settle(page: Page) {
         transition-delay: 0s !important;
         caret-color: transparent !important;
       }
+      /* Suppress the OnboardingTour modal so it doesn't cover the
+         dashboard snapshot. localStorage-based suppression isn't
+         available because Playwright's addInitScript breaks Next 16
+         RSC hydration (see docstring above). */
+      [data-testid="onboarding-tour"],
+      [data-testid="onboarding-tour-backdrop"] {
+        display: none !important;
+      }
     `,
   });
 }
 
-async function gotoAndWait(page: Page, route: string, settleMs = 2500) {
+async function gotoAndWait(page: Page, route: string, settleMs = 8000) {
+  // waitForFunction-based gating raced hydration on every (dashboard) route
+  // — it returned `true` on the SSR shell (which has innerText from the
+  // banner CSS) before the client tree mounted, then settle ran on the
+  // empty body. Plain timed wait is more predictable.
   await page.goto(route, { waitUntil: "domcontentloaded" });
-  // Pages bail to CSR (next/dynamic providers are ssr:false), so we wait for
-  // the body to actually have content. 60s budget covers cold dev compile;
-  // warm pages return in <500ms. The settle tail lets late-mounting strips
-  // (status banner, ticker tape, async data fetches) finish before the
-  // snapshot. Per-route override allowed via `settleMs` for slow pages
-  // like /alerts whose body has text quickly but main content keeps mounting.
-  try {
-    await page.waitForFunction(() => document.body.innerText.length > 80, undefined, {
-      timeout: 60_000,
-    });
-  } catch {
-    // Some routes (e.g. `/trade` with no backend) render an empty container
-    // while data loads. Don't fail the test on that — capture what's there.
-  }
   await page.waitForTimeout(settleMs);
   await settle(page);
+  // Sacrificial first screenshot — kicks the Chromium rendering
+  // pipeline into committing pending paint frames before the real
+  // screenshot below reads pixels. Without this the first screenshot
+  // in a fresh context routinely captures a black viewport even when
+  // innerText shows the page is fully hydrated.
+  await page.screenshot();
+  await page.waitForTimeout(300);
 }
 
 test.describe("v2 design parity", () => {
