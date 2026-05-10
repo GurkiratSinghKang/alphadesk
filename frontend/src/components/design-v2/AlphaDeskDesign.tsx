@@ -6,6 +6,14 @@
 // Keep this as the visual source of truth for the route-level redesign.
 import React from "react";
 import { usePathname, useRouter } from "next/navigation";
+// 2026-05-10 (restore-wiring): paper/live mode toggle now reads/writes
+// `useUIStore.tradingMode` instead of a local `localStorage["alpha-mode"]`
+// key. The store is persisted under `alphadesk-ui` and has a `storage`
+// event listener that mirrors flips across tabs (preservation
+// invariant #1). Also fans out to every $-amount component that
+// already subscribes to the store, so paper-mode treatment is
+// consistent across the app.
+import { useUIStore } from "@/stores/ui";
 
 const TWEAK_DEFAULTS = {
   page: "dashboard",
@@ -1013,8 +1021,13 @@ function Section({ eyebrow, title, right, children, style = {} }) {
 // ─── top bar ─────────────────────────────────────────────────────────────────
 
 function TopBar({ page, onNav, onSearch, regime, theme = "dark", onTheme }) {
-  const [mode, setMode] = useState(() => { try { return localStorage.getItem("alpha-mode") || "paper"; } catch { return "paper"; } });
-  const setModeP = (v) => { setMode(v); try { localStorage.setItem("alpha-mode", v); } catch {} };
+  // 2026-05-10 (restore-wiring): use useUIStore.tradingMode instead of a
+  // local `localStorage["alpha-mode"]` key, restoring cross-tab sync
+  // (preservation invariant #1) so flipping paper→live in tab A
+  // immediately propagates to tab B's persistence + storage event.
+  const mode = useUIStore((s) => s.tradingMode);
+  const setTradingMode = useUIStore((s) => s.setTradingMode);
+  const setModeP = (v) => setTradingMode(v === "live" ? "live" : "paper");
   const navs = [
     { id: "dashboard",  label: "Dashboard" },
     { id: "watchlists", label: "Watchlists" },
@@ -10505,7 +10518,7 @@ export function AlphaDeskDesignApp({ initialPage = "dashboard", initialSymbol = 
   const standalone = page === "marketing" || page === "auth" || page === "onboarding" || page === "mobile";
 
   return (
-    <div data-screen-label={`AlphaDesk · ${page}`} style={{ display: "grid", gridTemplateRows: standalone ? "1fr" : "auto 1fr auto", height: "100vh", background: "var(--bg)" }}>
+    <div data-screen-label={`AlphaDesk · ${page}`} style={{ display: "grid", gridTemplateRows: standalone ? "1fr" : "auto 1fr auto", height: "100%", minHeight: 0, background: "var(--bg)" }}>
       {!standalone && <TopBar page={page} onNav={onNav} onSearch={onPickTicker} regime={MOCK_REGIME.state} theme={t.theme || "dark"} onTheme={v => setTweak("theme", v)} />}
       <main style={{ overflow: "hidden", position: "relative" }}>
         {body}
