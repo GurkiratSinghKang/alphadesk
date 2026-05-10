@@ -104,6 +104,104 @@ async def mark_read(
     await db.commit()
 
 
+# ─────────────────────────────────────────────────────────────────
+# Server-side helpers — call these from any backend code path that
+# needs to surface a notification (fill events, risk alerts, agent
+# failures, etc.). Insert + WS publish in one call so the operator's
+# frontend lights up the bell + alerts feed instantly.
+# ─────────────────────────────────────────────────────────────────
+
+async def push_notification(
+    *,
+    username: str,
+    type: str,
+    title: str,
+    body: str,
+    severity: str = "info",
+    link: str | None = None,
+    db_session=None,
+) -> int | None:
+    """Insert a notification row + publish a WS event.
+
+    Returns the new row's id, or None on insert failure (still attempts
+    a WS push so listeners can react even if persistence is degraded).
+
+    Usage from a route or service:
+
+        await push_notification(
+            username=username,
+            type="risk",
+            title="Position concentration breach",
+            body="NVDA exceeds 12% of NAV",
+            severity="warning",
+            link="/risk-dashboard",
+        )
+
+    The frontend `useNotifications` hook subscribes to the
+    `notifications` WS channel and pushes the payload into the local
+    Zustand store, so the bell + alerts feed update without waiting
+    for the next hydration tick.
+    """
+    from data.storage.models import Notification
+    from core.database import get_db
+    from core.redis import publish, CHANNEL_NOTIFICATIONS
+
+    new_id: int | None = None
+
+    async def _insert(session) -> int | None:
+        from sqlalchemy import insert
+        try:
+            res = await session.execute(
+                insert(Notification)
+                .values(
+                    username=username,
+                    type=type,
+                    severity=severity,
+                    title=title,
+                    body=body,
+                    link=link,
+                )
+                .returning(Notification.id)
+            )
+            row = res.first()
+            await session.commit()
+            return int(row[0]) if row else None
+        except Exception:
+            await session.rollback()
+            return None
+
+    if db_session is not None:
+        new_id = await _insert(db_session)
+    else:
+        # Open our own session when called outside a request context.
+        async for session in get_db():  # type: ignore[misc]
+            new_id = await _insert(session)
+            break
+
+    # Publish the WS event regardless of insert outcome — listeners
+    # can decide what to do with a transient that didn't persist.
+    try:
+        await publish(
+            CHANNEL_NOTIFICATIONS,
+            {
+                "_user_id": username,
+                "id": new_id,
+                "type": type,
+                "severity": severity,
+                "title": title,
+                "body": body,
+                "link": link,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+    except Exception:
+        # Pub/sub failure is non-fatal — the notification is in the DB
+        # and will appear on the next hydration call.
+        pass
+
+    return new_id
+
+
 @router.post("/read-all", status_code=status.HTTP_204_NO_CONTENT)
 async def mark_all_read(
     type: NotificationType | None = None,

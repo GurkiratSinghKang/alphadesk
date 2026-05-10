@@ -646,16 +646,47 @@ async def get_drawdown() -> DrawdownResponse:
 async def post_risk_recompute() -> RiskDashboard:
     """Force a fresh recomputation of the risk dashboard.
 
+    Steps:
+      1. Bust any Redis cache keys with `risk:*` / `dashboard:risk:*`
+         / `var:*` prefix so the next downstream consumer pulls fresh
+         from Alpaca + the trade ledger
+      2. Re-run the dashboard generator
+      3. Audit log entry for compliance
+
     The frontend's "Recompute" button (Risk hero, top-right corner)
     calls this when an operator wants to kick the tires after an
-    intraday spike. Today the response is identical to a fresh GET
-    /api/v1/risk/dashboard call — the underlying generators are
-    cache-free. The endpoint exists so the UI button has a real
-    target and audit log entry; once a cache layer lands the body
-    can bust it before re-running the math.
+    intraday spike — the dashboard refresh on the next polling tick
+    will use the freshly-generated data.
     """
-    logger.info("Risk dashboard recomputed via /risk/recompute")
-    return await _generate_risk_dashboard()
+    # Step 1 — bust cached risk-related Redis keys (best-effort).
+    keys_busted = 0
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        # Scan-and-delete pattern matches risk-prefixed keys without
+        # blocking the event loop on a KEYS scan over the whole DB.
+        for prefix in ("risk:*", "dashboard:risk:*", "var:*", "leaderboard:*"):
+            cursor = 0
+            while True:
+                cursor, keys = await redis.scan(cursor=cursor, match=prefix, count=100)
+                if keys:
+                    await redis.delete(*keys)
+                    keys_busted += len(keys)
+                if cursor == 0:
+                    break
+    except Exception:
+        logger.debug("risk/recompute: redis bust skipped (unavailable)", exc_info=True)
+
+    # Step 2 — fresh recomputation.
+    dashboard = await _generate_risk_dashboard()
+
+    # Step 3 — audit + log line.
+    logger.info(
+        "Risk dashboard recomputed via /risk/recompute (keys_busted=%d)",
+        keys_busted,
+    )
+
+    return dashboard
 
 
 @router.get("/crowding")

@@ -337,8 +337,15 @@ class ConnectionManager:
         # Extract the routing hints up-front so we only peel them off the
         # payload once, not per-client.
         stream_id = data.get("_id") if isinstance(data, dict) else None
+        # Per-user filtering applies to channels carrying tenant-scoped
+        # data (trade_updates, notifications). The `_user_id` hint on
+        # the payload pins delivery to one operator's connections only.
+        from core.redis import CHANNEL_NOTIFICATIONS as _CH_NOTIF
+        _USER_SCOPED_CHANNELS = {CHANNEL_TRADE_UPDATES, _CH_NOTIF}
         payload_user = (
-            data.get("_user_id") if isinstance(data, dict) and channel == CHANNEL_TRADE_UPDATES else None
+            data.get("_user_id")
+            if isinstance(data, dict) and channel in _USER_SCOPED_CHANNELS
+            else None
         )
 
         async with self._lock:
