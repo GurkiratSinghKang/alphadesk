@@ -297,7 +297,7 @@
    * --fs-label (10.5), --fs-hint (11), --fs-micro (9.5) were all below
    * the threshold at which JetBrains Mono / Inter retain stroke integrity
    * on mac/iOS subpixel AA at normal trading-desk viewing distance. New
-   * floor is 12px (label) with a 13px meta and 15px body. The prior names
+   * floor is 12.5px (label) with a 13.5px meta and 16px body. The prior names
    * are kept as aliases for backward compat during the token migration,
    * but they now all resolve to the new floor. */
   --fs-display-xl: clamp(56px, 8vw, 104px);    /* hero marketing */
@@ -318,13 +318,13 @@
   --fs-numeric-lg:   20px;  /* position-row dollar P&L, ContextBar value */
   --fs-numeric-md:   16px;  /* row %/deltas, status pills, chart meta values */
 
-  --fs-body: 15px;       /* was 14px; raised — inputs, row symbols, nav */
-  --fs-body-sm: 13px;    /* secondary UI text */
-  --fs-label: 12px;      /* was 10.5px — ALL caps eyebrows, field captions */
-  --fs-eyebrow: 11px;    /* QA r3-2 — uppercase eyebrow micro-labels (29 site convergence) */
-  --fs-hint: 13px;       /* was 11px — hint text kept above label floor */
-  --fs-micro: 12px;      /* was 9.5px — alias retained; clamped to floor */
-  --fs-meta: 13px;       /* clock, timestamps, micro footers, reject reasons */
+  --fs-body: 16px;       /* production readability floor — inputs, row symbols, nav */
+  --fs-body-sm: 14px;    /* secondary UI text */
+  --fs-label: 12.5px;    /* ALL caps eyebrows, field captions */
+  --fs-eyebrow: 12px;    /* uppercase eyebrow micro-labels */
+  --fs-hint: 14px;       /* hint text kept above label floor */
+  --fs-micro: 12.5px;    /* alias retained; clamped to floor */
+  --fs-meta: 13.5px;     /* clock, timestamps, micro footers, reject reasons */
 
   --lh-tight: 1.02;
   --lh-snug: 1.18;
