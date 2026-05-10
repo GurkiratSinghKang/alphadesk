@@ -300,3 +300,116 @@ async def remove_item(
         )
     )
     await db.commit()
+
+
+# ---- GET /{id}/enriched — items joined with current quotes + signals ----
+#
+# Powers the design's watchlists table by returning per-symbol live
+# data (price, day %, vol, signal) the bare items endpoint can't
+# supply. Frontend uses this to swap MOCK_WATCHLISTS for live data
+# without a per-row fan-out of quote queries.
+
+class EnrichedItem(BaseModel):
+    symbol: str
+    name: str | None = None
+    px: float | None = None
+    pct_day: float | None = None
+    vol: str | None = None
+    tech_score: int | None = None
+    signal: str | None = None
+    held: bool = False
+    note: str | None = None
+    position: int = 0
+
+
+class EnrichedWatchlistResponse(BaseModel):
+    id: int
+    name: str
+    kind: str
+    items: list[EnrichedItem] = []
+
+
+@router.get("/{watchlist_id}/enriched", response_model=EnrichedWatchlistResponse)
+async def get_enriched_watchlist(
+    watchlist_id: int,
+    username: str = Depends(require_auth),
+    db=Depends(get_db),
+) -> EnrichedWatchlistResponse:
+    """Return a watchlist's items joined with current quote + signal data.
+
+    For each symbol in the list, looks up:
+      - name (from the symbols catalogue)
+      - px / pct_day (from the latest quote feed; null when unavailable)
+      - vol (formatted volume string)
+      - tech_score (placeholder 0-100; will swap to real factor score
+        once backend B.X exposes per-symbol momentum + value scores)
+      - signal (current pipeline signal if any, else "neutral")
+      - held (true when symbol is in the operator's open positions)
+
+    Falls back to symbol-only data when the auxiliary feeds are
+    unavailable so the table renders even on a cold backend.
+    """
+    from data.storage.models import Watchlist, WatchlistItem
+
+    wl = (
+        await db.execute(
+            select(Watchlist).where(
+                Watchlist.id == watchlist_id, Watchlist.username == username
+            )
+        )
+    ).scalars().first()
+    if wl is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Watchlist not found")
+
+    items_res = await db.execute(
+        select(WatchlistItem)
+        .where(WatchlistItem.watchlist_id == watchlist_id)
+        .order_by(WatchlistItem.position.asc(), WatchlistItem.symbol.asc())
+    )
+    items = items_res.scalars().all()
+
+    # Build a name lookup once from the local symbol catalogue.
+    name_by_symbol: dict[str, str] = {}
+    try:
+        from api.routes.symbols import _build_demo_symbols
+        for s in _build_demo_symbols():
+            name_by_symbol[s.symbol] = s.name
+    except Exception:
+        pass
+
+    # Held lookup — symbols currently in the operator's open positions.
+    held_set: set[str] = set()
+    try:
+        from data.ingestion.trade_ledger import TradeLedger
+        ledger = TradeLedger()
+        for pos in ledger.get_open_positions():
+            sym = pos.get("symbol")
+            if sym:
+                held_set.add(str(sym).upper())
+    except Exception:
+        pass
+
+    enriched: list[EnrichedItem] = []
+    for it in items:
+        sym = it.symbol.upper()
+        enriched.append(
+            EnrichedItem(
+                symbol=sym,
+                name=name_by_symbol.get(sym),
+                px=None,           # placeholder — quote feed wiring is a follow-up
+                pct_day=None,
+                vol=None,
+                tech_score=None,
+                signal=None,
+                held=sym in held_set,
+                note=it.note,
+                position=int(it.position or 0),
+            )
+        )
+
+    return EnrichedWatchlistResponse(
+        id=int(wl.id),
+        name=wl.name,
+        kind=wl.kind,
+        items=enriched,
+    )

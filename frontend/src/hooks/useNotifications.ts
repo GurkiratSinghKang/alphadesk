@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/useToast";
 import { useNotificationsStore, type NotificationCategory } from "@/stores/notifications";
 import { shouldNotify } from "@/lib/notificationPrefs";
 import { fetchPortfolioData } from "@/hooks/useDataPipeline";
+import { getNotifications } from "@/lib/api";
 
 type FillPayload = {
   symbol?: string;
@@ -112,6 +113,49 @@ export function useNotifications() {
     pushRef.current = addNotification;
     toastRef.current = toast;
   }, [addNotification, queryClient, toast]);
+
+  // v2 backend hydration — on mount, pull the user's persisted
+  // notifications from `/api/v1/notifications` and seed the local
+  // store with anything not already there. The store stays the
+  // single source of truth for the bell + alerts feed; this hook
+  // just makes sure server-side notifications (issued while the
+  // user was away) appear without waiting for a fresh WS event.
+  // Maps backend `type` → frontend `NotificationCategory` 1:1.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const remote = await getNotifications({ limit: 50 });
+        if (cancelled) return;
+        const known = new Set(
+          useNotificationsStore.getState().notifications.map((n) => n.title + ":" + n.detail),
+        );
+        for (const n of remote) {
+          const dedupeKey = `${n.title}:${n.body}`;
+          if (known.has(dedupeKey)) continue;
+          // Map backend category to local taxonomy. Backend types
+          // (fill / agent / risk / system / billing / support) are a
+          // subset of the local NotificationCategory union, so the
+          // cast is sound at runtime.
+          pushRef.current({
+            category: n.type as NotificationCategory,
+            title: n.title,
+            detail: n.body,
+            icon: undefined,
+          });
+        }
+      } catch {
+        // Silent — the store stays driven by WS events + custom
+        // events when the API is unreachable.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Run once on mount; re-running on every store change would
+    // double-push the local entries we just added.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Helper to push one notification of a category with its gating pref
   const maybePush = (

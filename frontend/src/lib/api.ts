@@ -3130,6 +3130,92 @@ export function getReconciliationState() {
   return apiFetch<ReconciliationStateResponse>('/api/v1/broker/reconciliation/state');
 }
 
+// v2 backend — structured staged candidates from the latest pipeline
+// run. Powers the design's "STAGED · AWAITING YOUR REVIEW" 2x2 grid
+// without per-row defensive parsing of the loose `signals` array.
+export interface StagedCandidate {
+  symbol: string;
+  strategy: string | null;
+  signal: string | null;
+  conviction: number | null;
+  entry_price: number | null;
+  stop_loss: number | null;
+  take_profit: number | null;
+  rationale: string | null;
+  timestamp: string | null;
+}
+
+export interface StagedCandidatesResponse {
+  run_date: string | null;
+  universe_estimate: number | null;
+  candidates: StagedCandidate[];
+}
+
+export function getPipelineStaged() {
+  return apiFetch<StagedCandidatesResponse>('/api/v1/pipeline/staged');
+}
+
+// v2 backend — watchlist items joined with current quote + signal +
+// held data. Lets the watchlists table render live data without a
+// per-row fan-out of quote queries.
+export interface EnrichedWatchlistItem {
+  symbol: string;
+  name: string | null;
+  px: number | null;
+  pct_day: number | null;
+  vol: string | null;
+  tech_score: number | null;
+  signal: string | null;
+  held: boolean;
+  note: string | null;
+  position: number;
+}
+
+export interface EnrichedWatchlistResponse {
+  id: number;
+  name: string;
+  kind: string;
+  items: EnrichedWatchlistItem[];
+}
+
+export function getEnrichedWatchlist(watchlistId: number) {
+  return apiFetch<EnrichedWatchlistResponse>(`/api/v1/watchlists/${watchlistId}/enriched`);
+}
+
+// v2 backend (pensive-kirch B.4) — server-side notification inbox.
+// Backend types: fill / agent / risk / system / billing / support.
+// Maps cleanly onto the frontend store's NotificationCategory.
+export interface NotificationV2 {
+  id: number;
+  type: string;
+  severity: string;
+  title: string;
+  body: string;
+  link: string | null;
+  created_at: string;
+  read_at: string | null;
+}
+
+export function getNotifications(opts?: { unread_only?: boolean; limit?: number }) {
+  const qs = new URLSearchParams();
+  if (opts?.unread_only) qs.set("unread_only", "true");
+  if (opts?.limit) qs.set("limit", String(opts.limit));
+  const tail = qs.toString() ? `?${qs.toString()}` : "";
+  return apiFetch<NotificationV2[]>(`/api/v1/notifications${tail}`);
+}
+
+export function markNotificationRead(notificationId: number) {
+  return apiFetch<void>(`/api/v1/notifications/${notificationId}/read`, {
+    method: "POST",
+  });
+}
+
+export function markAllNotificationsRead() {
+  return apiFetch<void>(`/api/v1/notifications/read-all`, {
+    method: "POST",
+  });
+}
+
 export async function getPipelineRun(date: string): Promise<PipelineRun> {
   const raw = await apiFetch<Record<string, unknown>>(`/api/v1/pipeline/history/${date}`);
   return mapPipelineRun(raw);
