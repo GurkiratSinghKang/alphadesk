@@ -642,6 +642,22 @@ async def get_drawdown() -> DrawdownResponse:
     return await _generate_drawdown()
 
 
+@router.post("/recompute", response_model=RiskDashboard)
+async def post_risk_recompute() -> RiskDashboard:
+    """Force a fresh recomputation of the risk dashboard.
+
+    The frontend's "Recompute" button (Risk hero, top-right corner)
+    calls this when an operator wants to kick the tires after an
+    intraday spike. Today the response is identical to a fresh GET
+    /api/v1/risk/dashboard call — the underlying generators are
+    cache-free. The endpoint exists so the UI button has a real
+    target and audit log entry; once a cache layer lands the body
+    can bust it before re-running the math.
+    """
+    logger.info("Risk dashboard recomputed via /risk/recompute")
+    return await _generate_risk_dashboard()
+
+
 @router.get("/crowding")
 async def get_factor_crowding() -> dict:
     """Detect factor crowding in the current portfolio."""
