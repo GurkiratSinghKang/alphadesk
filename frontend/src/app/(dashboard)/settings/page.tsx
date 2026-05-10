@@ -600,16 +600,28 @@ export default function SettingsPage() {
             borderLeft: "2px solid var(--brand)",
           }}
         >
-          <p
-            className="t-eyebrow-italic"
-            style={{
-              color: "var(--brand)",
-              letterSpacing: "0.2em",
-              margin: 0,
-            }}
-          >
-            ACCOUNT · SETTINGS
-          </p>
+          <div className="flex items-start justify-between gap-4">
+            <p
+              className="t-eyebrow-italic"
+              style={{
+                color: "var(--brand)",
+                letterSpacing: "0.2em",
+                margin: 0,
+              }}
+            >
+              ACCOUNT · SETTINGS
+            </p>
+            {/* v2 polish — "changes save automatically" indicator per
+             * settings-dark.png top-right corner. Communicates that
+             * every input below persists immediately so the operator
+             * doesn't hunt for a Save button. */}
+            <p
+              className="font-mono text-eyebrow uppercase tracking-[0.08em] text-fg-muted shrink-0"
+              style={{ margin: 0 }}
+            >
+              changes save automatically
+            </p>
+          </div>
           <h2
             className="m-0 mt-3 italic"
             style={{
