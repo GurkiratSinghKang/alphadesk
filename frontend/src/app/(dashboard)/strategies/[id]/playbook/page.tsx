@@ -1,20 +1,11 @@
-import type { Metadata } from "next";
+import DesignSurface from "@/components/design-v2/DesignSurface";
+import { designStrategyNameFromSlug } from "@/components/design-v2/strategyNames";
 
-import PlaybookClient from "./PlaybookClient";
-
-export const metadata: Metadata = {
-  title: "Strategy playbook — AlphaDesk",
-  description:
-    "Strategy as a workflow document: stages, agents per stage, backtest summary, live trades, scoped watchlist.",
-};
-
-export const dynamic = "force-dynamic";
-
-interface PageProps {
+interface StrategyPlaybookPageProps {
   params: Promise<{ id: string }>;
 }
 
-export default async function StrategyPlaybookPage({ params }: PageProps) {
+export default async function StrategyPlaybookPage({ params }: StrategyPlaybookPageProps) {
   const { id } = await params;
-  return <PlaybookClient strategyId={id} />;
+  return <DesignSurface page="playbook" strategyName={designStrategyNameFromSlug(id)} />;
 }

@@ -20,6 +20,7 @@ const KNOWN_DASHBOARD_ROUTES: readonly string[] = [
   "/admin/control-center",
   "/admin/users",
   "/pipeline",
+  "/positions",
   "/reports",
   "/risk",
   "/risk-dashboard",
@@ -32,10 +33,14 @@ const KNOWN_DASHBOARD_ROUTES: readonly string[] = [
 
 function isKnownDashboardRoute(pathname: string): boolean {
   if (KNOWN_DASHBOARD_ROUTES.includes(pathname)) return true;
+  if (/^\/admin\/users\/[^/]+$/.test(pathname)) return true;
   if (pathname === "/strategies/trading-agents-research") return true;
   if (pathname === "/strategies/earnings-options-play") return true;
   if (/^\/symbols\/[^/]+$/.test(pathname)) return true;
   if (/^\/strategies\/[^/]+$/.test(pathname)) return true;
+  if (/^\/strategies\/[^/]+\/(?:playbook|backtest)$/.test(pathname)) return true;
+  if (/^\/positions\/[^/]+$/.test(pathname)) return true;
+  if (/^\/watchlists\/[^/]+$/.test(pathname)) return true;
   return false;
 }
 

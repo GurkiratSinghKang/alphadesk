@@ -1,20 +1,11 @@
-import type { Metadata } from "next";
+import DesignSurface from "@/components/design-v2/DesignSurface";
+import { designStrategyNameFromSlug } from "@/components/design-v2/strategyNames";
 
-import BacktestClient from "./BacktestClient";
-
-export const metadata: Metadata = {
-  title: "Backtest workbench — AlphaDesk",
-  description:
-    "Strategy backtest workbench: configure universe + date range + cost model + param sweep, compare runs, publish.",
-};
-
-export const dynamic = "force-dynamic";
-
-interface PageProps {
+interface BacktestPageProps {
   params: Promise<{ id: string }>;
 }
 
-export default async function BacktestPage({ params }: PageProps) {
+export default async function BacktestPage({ params }: BacktestPageProps) {
   const { id } = await params;
-  return <BacktestClient strategyId={id} />;
+  return <DesignSurface page="backtest" strategyName={designStrategyNameFromSlug(id)} />;
 }

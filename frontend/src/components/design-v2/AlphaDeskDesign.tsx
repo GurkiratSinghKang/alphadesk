@@ -5,6 +5,7 @@
 // Generated from the Claude AlphaDesk v2 design bundle in /tmp/alphadesk_design.
 // Keep this as the visual source of truth for the route-level redesign.
 import React from "react";
+import { usePathname, useRouter } from "next/navigation";
 
 const TWEAK_DEFAULTS = {
   page: "dashboard",
@@ -1068,7 +1069,7 @@ function TopBar({ page, onNav, onSearch, regime, theme = "dark", onTheme }) {
 function NavItem({ n, page, onNav }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
-  const childIds = (n.children || []).map(c => c.id);
+  const childIds = (n.children || []).map(c => c.id).concat(n.id === "strategies" ? ["playbook"] : []);
   const isActive = page === n.id || childIds.includes(page);
   useEffect(() => {
     if (!open) return;
@@ -10305,11 +10306,81 @@ if (typeof window !== "undefined") Object.assign(window, { AdminUsersPage });
 
 export type AlphaDeskDesignPage = "dashboard" | "research" | "positions" | "mobile" | "ticker" | "trade" | "strategies" | "watchlists" | "reports" | "settings" | "onboarding" | "marketing" | "auth" | "pipeline" | "analytics" | "alerts" | "risk" | "playbook" | "backtest" | "admin" | "admin-users";
 
-export function AlphaDeskDesignApp({ initialPage = "dashboard", initialSymbol = "NVDA" }: { initialPage?: AlphaDeskDesignPage; initialSymbol?: string }) {
+const DESIGN_PAGE_ROUTES = {
+  dashboard: "/",
+  research: "/watchlists",
+  watchlists: "/watchlists",
+  ticker: "/symbols/NVDA",
+  trade: "/trade",
+  strategies: "/strategies",
+  pipeline: "/pipeline",
+  analytics: "/analytics",
+  alerts: "/alerts",
+  reports: "/reports",
+  settings: "/settings",
+  risk: "/risk",
+  positions: "/positions/NVDA",
+  playbook: "/strategies/momentum-quality/playbook",
+  backtest: "/strategies/momentum-quality/backtest",
+  admin: "/admin/control-center",
+  "admin-users": "/admin/users",
+  onboarding: "/onboarding",
+  marketing: "/",
+  auth: "/login",
+};
+
+const STRATEGY_NAME_TO_SLUG = {
+  "Momentum & Quality": "momentum-quality",
+  "Regime Adaptive": "regime-adaptive",
+  PEAD: "earnings-options-play",
+  "Mean Reversion": "mean-reversion",
+  "Pairs · Sector": "pairs-trading",
+  "AI Alpha": "trading-agents-research",
+};
+
+const STRATEGY_SLUG_TO_NAME = {
+  "momentum-quality": "Momentum & Quality",
+  "regime-adaptive": "Regime Adaptive",
+  "earnings-options-play": "PEAD",
+  "earnings-vol-premium": "PEAD",
+  "mean-reversion": "Mean Reversion",
+  "pairs-trading": "Pairs · Sector",
+  "pairs-stat-arb": "Pairs · Sector",
+  "trading-agents-research": "AI Alpha",
+  "claude-alpha": "AI Alpha",
+};
+
+function designStrategySlug(name = "Momentum & Quality") {
+  return STRATEGY_NAME_TO_SLUG[name] || String(name).toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "momentum-quality";
+}
+
+export function designStrategyNameFromSlug(slug = "momentum-quality") {
+  return STRATEGY_SLUG_TO_NAME[String(slug).toLowerCase()] || String(slug)
+    .split("-")
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function designRouteFor(page: AlphaDeskDesignPage, opts: { ticker?: string; strat?: string } = {}) {
+  const id = page === "research" ? "watchlists" : page;
+  const ticker = String(opts.ticker || "NVDA").toUpperCase();
+  const stratSlug = designStrategySlug(opts.strat || "Momentum & Quality");
+  if (id === "ticker") return `/symbols/${encodeURIComponent(ticker)}`;
+  if (id === "positions") return `/positions/${encodeURIComponent(ticker)}`;
+  if (id === "trade") return `/trade?symbol=${encodeURIComponent(ticker)}`;
+  if (id === "playbook") return `/strategies/${encodeURIComponent(stratSlug)}/playbook`;
+  if (id === "backtest") return `/strategies/${encodeURIComponent(stratSlug)}/backtest`;
+  return DESIGN_PAGE_ROUTES[id] || "/";
+}
+
+export function AlphaDeskDesignApp({ initialPage = "dashboard", initialSymbol = "NVDA", initialStrategy = "Momentum & Quality" }: { initialPage?: AlphaDeskDesignPage; initialSymbol?: string; initialStrategy?: string }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [t, setTweak] = useTweaks({ ...TWEAK_DEFAULTS, page: initialPage });
   const [page, setPage] = useState(initialPage || "dashboard");
   const [sym, setSym] = useState(initialSymbol || "NVDA");
-  const [stratName, setStratName] = useState("Momentum & Quality");
+  const [stratName, setStratName] = useState(initialStrategy || "Momentum & Quality");
   const [cmdOpen, setCmdOpen] = useState(false);
 
   // Nav history — every forward navigation pushes the previous page so back-
@@ -10319,11 +10390,20 @@ export function AlphaDeskDesignApp({ initialPage = "dashboard", initialSymbol = 
   const isBackRef = useRef(false);
 
   const navigate = React.useCallback((id, opts) => {
-    if (!id || id === page) return;
+    const nextPage = id === "research" ? "watchlists" : id;
+    if (!nextPage) return;
+    const nextSymbol = opts?.ticker || sym;
+    const nextStrategy = opts?.strat || stratName;
+    const sameTicker = !opts?.ticker || String(opts.ticker).toUpperCase() === String(sym).toUpperCase();
+    const sameStrategy = !opts?.strat || opts.strat === stratName;
+    if (nextPage === page && sameTicker && sameStrategy) return;
     if (opts && typeof opts === "object") {
       if (opts.ticker) setSym(opts.ticker);
       if (opts.strat) setStratName(opts.strat);
     }
+    const targetRoute = designRouteFor(nextPage, { ticker: nextSymbol, strat: nextStrategy });
+    const currentRoute = typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : pathname;
+    if (targetRoute && targetRoute !== currentRoute) router.push(targetRoute);
     // resetHistory: caller wants this transition to be the new root of the
     // back-stack (e.g. landing in the app from auth/onboarding — back from
     // Dashboard shouldn't return you to login).
@@ -10334,14 +10414,19 @@ export function AlphaDeskDesignApp({ initialPage = "dashboard", initialSymbol = 
       if (historyRef.current.length > 32) historyRef.current.shift();
     }
     isBackRef.current = false;
-    setPage(id);
-  }, [page]);
+    setPage(nextPage);
+  }, [page, pathname, router, stratName, sym]);
 
   const goBack = React.useCallback((fallback = "dashboard") => {
     isBackRef.current = true;
     const h = historyRef.current;
-    setPage(h.length ? h.pop() : fallback);
-  }, []);
+    const target = h.length ? h.pop() : fallback;
+    const nextPage = target === "research" ? "watchlists" : target;
+    const targetRoute = designRouteFor(nextPage, { ticker: sym, strat: stratName });
+    const currentRoute = typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : pathname;
+    if (targetRoute && targetRoute !== currentRoute) router.push(targetRoute);
+    setPage(nextPage);
+  }, [pathname, router, stratName, sym]);
 
   // Persist current page through tweak so deep state survives reload
   useEffect(() => { setTweak("page", page); /* eslint-disable-next-line */ }, [page]);
@@ -10349,7 +10434,8 @@ export function AlphaDeskDesignApp({ initialPage = "dashboard", initialSymbol = 
   useEffect(() => {
     setPage(initialPage || "dashboard");
     setSym(initialSymbol || "NVDA");
-  }, [initialPage, initialSymbol]);
+    setStratName(initialStrategy || "Momentum & Quality");
+  }, [initialPage, initialSymbol, initialStrategy]);
 
   // Apply accent color live
   useEffect(() => {

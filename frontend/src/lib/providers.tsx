@@ -105,7 +105,12 @@ function isDesignSurfaceRoute(pathname: string): boolean {
   ) {
     return true;
   }
-  return /^\/symbols\/[^/]+$/.test(pathname);
+  if (/^\/admin\/users\/[^/]+$/.test(pathname)) return true;
+  if (/^\/positions\/[^/]+$/.test(pathname)) return true;
+  if (/^\/symbols\/[^/]+$/.test(pathname)) return true;
+  if (/^\/strategies\/[^/]+(?:\/(?:playbook|backtest))?$/.test(pathname)) return true;
+  if (/^\/watchlists\/[^/]+$/.test(pathname)) return true;
+  return false;
 }
 
 function isDashboardRoute(pathname: string | null): boolean {

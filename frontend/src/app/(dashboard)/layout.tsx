@@ -35,6 +35,28 @@ const subscribeToHydration = (notify: () => void) => {
 const getClientSnapshot = () => true;
 const getServerSnapshot = () => false;
 
+const DESIGN_SURFACE_ROUTES = new Set([
+  "/",
+  "/alerts",
+  "/analytics",
+  "/pipeline",
+  "/reports",
+  "/risk-dashboard",
+  "/settings",
+  "/strategies",
+  "/trade",
+  "/watchlists",
+]);
+
+function isDesignSurfacePath(pathname: string | null): boolean {
+  if (!pathname) return false;
+  if (DESIGN_SURFACE_ROUTES.has(pathname)) return true;
+  if (/^\/positions\/[^/]+$/.test(pathname)) return true;
+  if (/^\/strategies\/[^/]+(?:\/(?:playbook|backtest))?$/.test(pathname)) return true;
+  if (/^\/watchlists\/[^/]+$/.test(pathname)) return true;
+  return false;
+}
+
 /**
  * DashboardLayout — chrome wrapper for non-desk dashboard routes.
  *
@@ -49,19 +71,7 @@ const getServerSnapshot = () => false;
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isDeskRoute = pathname === "/";
-  const designSurfaceRoutes = new Set([
-    "/",
-    "/alerts",
-    "/analytics",
-    "/pipeline",
-    "/reports",
-    "/risk-dashboard",
-    "/settings",
-    "/strategies",
-    "/trade",
-    "/watchlists",
-  ]);
-  const isDesignSurfaceRoute = Boolean(pathname && designSurfaceRoutes.has(pathname));
+  const isDesignSurfaceRoute = isDesignSurfacePath(pathname);
 
   if (isDesignSurfaceRoute) {
     return (
