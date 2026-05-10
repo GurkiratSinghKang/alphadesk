@@ -12,6 +12,7 @@ from datetime import datetime, date, timedelta, timezone
 from enum import Enum
 from pathlib import Path as FilePath
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 
@@ -2435,6 +2436,133 @@ async def get_strategy_leaderboard(
         for p in sorted(perf.values(), key=lambda x: x["total_pnl"], reverse=True)
     ]
     return entries
+
+
+# ---------------------------------------------------------------------------
+# Contribution — per-strategy P&L breakdown for the catalog page's
+# "TODAY'S CONTRIBUTION" / "Cumulative Contribution" section.
+#
+# Distinct from /admin/leaderboard (which exposes per-trade competitive
+# detail and is admin-gated) — this returns per-strategy aggregates only,
+# safe for any authenticated user. Powers the strategies-dark.png design's
+# stacked-bar contribution view.
+# ---------------------------------------------------------------------------
+
+class StrategyContribution(BaseModel):
+    """Per-strategy P&L slice for the catalog contribution view."""
+    strategy: str
+    today_pnl: float = 0.0
+    mtd_pnl: float = 0.0
+    total_pnl: float = 0.0
+    invested: float = 0.0
+    closed_count: int = 0
+
+
+class StrategyContributionResponse(BaseModel):
+    """Aggregate + per-strategy breakdown."""
+    as_of: datetime
+    total_today: float = 0.0
+    total_mtd: float = 0.0
+    total_lifetime: float = 0.0
+    contributions: list[StrategyContribution] = []
+
+
+@router.get("/contribution", response_model=StrategyContributionResponse)
+async def get_strategy_contribution() -> StrategyContributionResponse:
+    """Per-strategy P&L contribution split into today / MTD / lifetime.
+
+    Drives the strategies catalog page's "TODAY'S CONTRIBUTION" section.
+    Read-only; computed off the closed-trade ledger so paper + live
+    strategies both show up. Open-position unrealized P&L is NOT
+    included — the design's "TODAY'S CONTRIBUTION" measures realized
+    contribution per strategy, mirroring the leaderboard's `total_pnl`.
+
+    Bucketing uses America/New_York date so a 23:55 ET → 00:30 UTC
+    fill on Friday still counts as "today" for the trader's local view
+    instead of getting bumped to Saturday.
+    """
+    from data.ingestion.trade_ledger import TradeLedger
+
+    ledger = TradeLedger()
+    et = ZoneInfo("America/New_York")
+    now_et = datetime.now(tz=et)
+    today_iso = now_et.date().isoformat()
+    month_prefix = now_et.strftime("%Y-%m")
+
+    # Walk every closed trade once and bucket by strategy. Reuses the
+    # ledger's _list_all() iterator since `get_strategy_performance`
+    # already shows the pattern (see line ~1248).
+    by_strategy: dict[str, dict[str, float | int]] = {}
+    for trade in ledger._list_all():  # type: ignore[attr-defined]
+        if trade.get("status") != "closed":
+            # Open trades carry no realized pnl — skip per the
+            # design's "what each strategy made today" framing.
+            invested = float(trade.get("entry_price", 0) or 0) * float(
+                trade.get("shares", 0) or 0
+            )
+            strat = trade.get("strategy", "unknown") or "unknown"
+            slot = by_strategy.setdefault(
+                strat,
+                {"today_pnl": 0.0, "mtd_pnl": 0.0, "total_pnl": 0.0,
+                 "invested": 0.0, "closed_count": 0},
+            )
+            slot["invested"] = float(slot["invested"]) + invested
+            continue
+
+        strat = trade.get("strategy", "unknown") or "unknown"
+        pnl = float(trade.get("pnl", 0) or 0)
+        invested = float(trade.get("entry_price", 0) or 0) * float(
+            trade.get("shares", 0) or 0
+        )
+        slot = by_strategy.setdefault(
+            strat,
+            {"today_pnl": 0.0, "mtd_pnl": 0.0, "total_pnl": 0.0,
+             "invested": 0.0, "closed_count": 0},
+        )
+        slot["total_pnl"] = float(slot["total_pnl"]) + pnl
+        slot["invested"] = float(slot["invested"]) + invested
+        slot["closed_count"] = int(slot["closed_count"]) + 1
+
+        exit_iso = _et_day_key(trade.get("exit_time"))
+        if exit_iso == today_iso:
+            slot["today_pnl"] = float(slot["today_pnl"]) + pnl
+        if exit_iso.startswith(month_prefix):
+            slot["mtd_pnl"] = float(slot["mtd_pnl"]) + pnl
+
+    contributions = [
+        StrategyContribution(
+            strategy=strat,
+            today_pnl=round(float(s["today_pnl"]), 2),
+            mtd_pnl=round(float(s["mtd_pnl"]), 2),
+            total_pnl=round(float(s["total_pnl"]), 2),
+            invested=round(float(s["invested"]), 2),
+            closed_count=int(s["closed_count"]),
+        )
+        for strat, s in by_strategy.items()
+    ]
+    contributions.sort(key=lambda c: abs(c.total_pnl), reverse=True)
+
+    return StrategyContributionResponse(
+        as_of=datetime.now(tz=timezone.utc),
+        total_today=round(sum(c.today_pnl for c in contributions), 2),
+        total_mtd=round(sum(c.mtd_pnl for c in contributions), 2),
+        total_lifetime=round(sum(c.total_pnl for c in contributions), 2),
+        contributions=contributions,
+    )
+
+
+# Helper — reuse the ET day key from risk.py without importing the route
+# module (avoids circular import on app boot). Mirrors the same logic.
+def _et_day_key(value: Any) -> str:
+    if not value:
+        return date.today().isoformat()
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+    except Exception:
+        return str(value)[:10]
 
 
 def _get_symbol_sector_map() -> dict[str, str]:
