@@ -83,39 +83,22 @@ const DASHBOARD_ROUTE_PREFIXES = [
   "/admin/users",
 ] as const;
 
-function isDesignSurfaceRoute(pathname: string): boolean {
-  if (
-    [
-      "/",
-      "/admin/control-center",
-      "/admin/users",
-      "/alerts",
-      "/analytics",
-      "/onboarding",
-      "/pipeline",
-      "/reports",
-      "/risk",
-      "/risk-dashboard",
-      "/settings",
-      "/strategies",
-      "/symbols",
-      "/trade",
-      "/watchlists",
-    ].includes(pathname)
-  ) {
-    return true;
-  }
-  if (/^\/admin\/users\/[^/]+$/.test(pathname)) return true;
-  if (/^\/positions\/[^/]+$/.test(pathname)) return true;
-  if (/^\/symbols\/[^/]+$/.test(pathname)) return true;
-  if (/^\/strategies\/[^/]+(?:\/(?:playbook|backtest))?$/.test(pathname)) return true;
-  if (/^\/watchlists\/[^/]+$/.test(pathname)) return true;
-  return false;
-}
+// 2026-05-10 (restore-wiring after Codex pass): the previous build
+// added `isDesignSurfaceRoute()` and used it to short-circuit
+// `isDashboardRoute()` so the WebSocketProvider + DataPipelineBridge
+// did not mount on the redesigned routes. That broke every WS-driven
+// feature (real-time fills, kill-switch alerts, equity flashes, the
+// PR #158 push_notification pipeline that's already live on backend).
+//
+// Removing the early-exit re-mounts the providers on all authenticated
+// routes. The dynamic imports are `ssr: false` so cost on a
+// design-surface route that doesn't consume `useWs()` is one chunk
+// fetch + an idle subscription; this restores invariants #2 (resume
+// cursors on reconnect), #3 (chart fitContent gate when the chart is
+// rewired), and the PR #158 notifications pipeline as a side-effect.
 
 function isDashboardRoute(pathname: string | null): boolean {
   if (!pathname) return false;
-  if (isDesignSurfaceRoute(pathname)) return false;
   if (DASHBOARD_ROUTE_PREFIXES.includes(pathname as (typeof DASHBOARD_ROUTE_PREFIXES)[number])) return true;
   if (pathname === "/strategies/trading-agents-research") return true;
   if (pathname === "/strategies/earnings-options-play") return true;
@@ -129,6 +112,8 @@ function isDashboardRoute(pathname: string | null): boolean {
   if (/^\/symbols\/[^/]+(\/.*)?$/.test(pathname)) return true;
   if (/^\/agents\/[^/]+(\/.*)?$/.test(pathname)) return true;
   if (/^\/positions\/[^/]+(\/.*)?$/.test(pathname)) return true;
+  if (/^\/admin\/users\/[^/]+$/.test(pathname)) return true;
+  if (/^\/watchlists\/[^/]+$/.test(pathname)) return true;
   return false;
 }
 

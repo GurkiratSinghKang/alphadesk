@@ -35,8 +35,20 @@ const subscribeToHydration = (notify: () => void) => {
 const getClientSnapshot = () => true;
 const getServerSnapshot = () => false;
 
+// 2026-05-10 (restore-wiring): pages that render the v2 design mock as
+// `<DesignSurface page="..." />` own the full viewport with their own
+// hand-rolled TopBar/StatusBar. We treat them like the flagship desk:
+// the layout still mounts the WS provider, useNotifications, banners,
+// CommandPalette, AICopilot, JarvisBar, OnboardingTour, ShortcutOverlay
+// and BottomTabBar — but does not stack a second chrome TopBar above
+// the page's own header.
+//
+// The previous build short-circuited the entire `DashboardRuntimeLayout`
+// for these routes, which silently disabled `useNotifications()`,
+// breaking the PR #158 push pipeline (fills/risk/agent → bell). Removing
+// that early-exit restores every chrome hook; the routes still get the
+// "owns the viewport" treatment via `isViewportOwningRoute`.
 const DESIGN_SURFACE_ROUTES = new Set([
-  "/",
   "/alerts",
   "/analytics",
   "/pipeline",
@@ -58,30 +70,28 @@ function isDesignSurfacePath(pathname: string | null): boolean {
 }
 
 /**
- * DashboardLayout — chrome wrapper for non-desk dashboard routes.
+ * DashboardLayout — chrome wrapper for every authenticated route.
  *
- * The flagship trading desk (`/`) brings its own 4-row `DeskLayout`
- * shell (TopBar / ContextBar / main / StatusBar) and must own the
- * viewport. For that route this layout renders the overlays only so
- * ⌘K, copilot, shortcuts and the onboarding tour still work.
+ * The flagship trading desk (`/`) and every v2 design-surface route own
+ * the full viewport with their own header / status row. For those routes
+ * this layout renders **overlays only** (CommandPalette, AICopilot,
+ * JarvisBar, ShortcutOverlay, OnboardingTour, BottomTabBar) plus the
+ * banners and the global `useNotifications()` subscription.
  *
- * For every other dashboard route (analytics, alerts, pipeline, reports,
- * settings, strategies, trade) the layout keeps the pre-F3 chrome.
+ * For every other dashboard route (admin, etc.) the layout renders the
+ * full pre-F3 chrome with TopBar.
  */
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isDeskRoute = pathname === "/";
   const isDesignSurfaceRoute = isDesignSurfacePath(pathname);
+  const isViewportOwningRoute = isDeskRoute || isDesignSurfaceRoute;
 
-  if (isDesignSurfaceRoute) {
-    return (
-      <div className="h-dvh min-h-dvh w-full overflow-hidden bg-bg">
-        {children}
-      </div>
-    );
-  }
-
-  return <DashboardRuntimeLayout isDeskRoute={isDeskRoute}>{children}</DashboardRuntimeLayout>;
+  return (
+    <DashboardRuntimeLayout isDeskRoute={isViewportOwningRoute}>
+      {children}
+    </DashboardRuntimeLayout>
+  );
 }
 
 function DashboardRuntimeLayout({

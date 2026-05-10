@@ -74,7 +74,15 @@ export default function LoginForm() {
   const [capsLock, setCapsLock] = useState(false);
   const [totpRequired, setTotpRequired] = useState(false);
   const [totpCode, setTotpCode] = useState("");
-  const [passwordMode, setPasswordMode] = useState(false);
+  // 2026-05-10 (restore-wiring): default to passwordMode=true so the
+  // password field renders on first paint. The previous default
+  // (`false`) showed an "Email me a magic link" CTA backed by a
+  // backend that doesn't implement magic-link auth (B.4 is not yet
+  // wired). Clicking the button silently advanced to passwordMode,
+  // which left users wondering if anything happened. Until B.4 ships
+  // we keep the editorial "Operator login." hero + security-key
+  // affordances but lead with the working credential flow.
+  const [passwordMode, setPasswordMode] = useState(true);
   const [now, setNow] = useState<number>(() => Date.now());
   // persona-10 #5 — when api.ts hits a 401 it stashes a flag in
   // sessionStorage before redirecting here. We read + clear it on mount so
@@ -276,7 +284,7 @@ export default function LoginForm() {
             textWrap: "pretty",
           }}
         >
-          We sign you in with a magic link to your registered email. If 2FA is enabled, you&apos;ll be challenged after the link.
+          Sign in with your email and password. If 2FA is enabled, we&apos;ll prompt for your authenticator code on the next step.
         </p>
       </header>
 

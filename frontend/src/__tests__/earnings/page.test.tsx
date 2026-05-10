@@ -12,7 +12,11 @@ describe("Earnings Options Play route", () => {
     const { container } = render(<EarningsOptionsPlayPage />);
 
     expect(container.querySelector('[data-design-surface="playbook"]')).not.toBeNull();
-    expect(container.querySelector(".h-dvh.w-full.bg-bg")).not.toBeNull();
+    // 2026-05-10 sizing fix: DesignSurface now uses `h-full` instead of
+    // `h-dvh` so it can size against the parent flex container (which
+    // re-mounts the dashboard chrome around the design surface). Update
+    // the selector to match.
+    expect(container.querySelector(".h-full.w-full.bg-bg")).not.toBeNull();
     expect(container.textContent).not.toMatch(/earnings calendar/i);
   });
 
