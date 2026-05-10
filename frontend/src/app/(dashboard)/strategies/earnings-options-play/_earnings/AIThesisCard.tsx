@@ -67,6 +67,12 @@ export interface AIThesisCardProps {
 
 const LEGACY_UNSUPPORTED_PLAYS = new Set(["short call", "short strangle"]);
 
+function modelDisplayName(value: string | null | undefined) {
+  const text = value?.trim();
+  if (!text) return "AI model";
+  return /claude|anthropic/i.test(text) ? "AI model" : text;
+}
+
 export default function AIThesisCard({ structured, full, running, error = null, onRunFull, symbol, showRunControls = true, showResearchLink = false }: AIThesisCardProps) {
   const researchLink = showResearchLink && symbol ? (
     <a
@@ -133,7 +139,7 @@ export default function AIThesisCard({ structured, full, running, error = null, 
         <p className="t-label u-brand">◇ RESEARCH · STRUCTURED THESIS</p>
         <div className="flex items-center gap-2">
           {researchLink}
-          <span className="t-meta">{structured.model}</span>
+          <span className="t-meta">{modelDisplayName(structured.model)}</span>
         </div>
       </div>
       <div className="mt-2 flex items-center justify-between">

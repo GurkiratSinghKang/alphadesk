@@ -21,6 +21,12 @@ const CONFIDENCE_THRESHOLD_PCT = 60;
 const VOL_PREMIUM_EDGE_THRESHOLD = 0.15;
 const VOL_PREMIUM_THIN_THRESHOLD = 0.05;
 
+function modelDisplayName(value: string | null | undefined) {
+  const text = value?.trim();
+  if (!text) return "AI model";
+  return /claude|anthropic/i.test(text) ? "AI model" : text;
+}
+
 /**
  * DecisionStrip — Round-8 single-view bundle B.
  *
@@ -158,7 +164,7 @@ export default function DecisionStrip({ structured, metrics }: DecisionStripProp
         </span>
         <VolPremiumChip score={volPremiumScore} />
         <span className="t-meta u-muted mt-0.5">
-          model: {structured.model}
+          model: {modelDisplayName(structured.model)}
         </span>
       </div>
 
