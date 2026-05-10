@@ -7,12 +7,10 @@ import {
   Buildings,
   ChartBar,
   ChartLineUp,
-  FileText,
   Gauge,
   List,
   MagnifyingGlass,
   Robot,
-  ShieldCheck,
   Target,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
@@ -29,7 +27,6 @@ import NotificationBell from "./NotificationBell";
 // v2-plan §2.1 — global agent activity drawer trigger. Sibling to the
 // notification bell; opens the slide-over agent feed.
 import AgentBell from "./AgentBell";
-import { ThemeToggle } from "./ThemeToggle";
 import StatusPills from "./StatusPills";
 import PaperLiveToggle from "@/components/composites/PaperLiveToggle";
 // Round-11 / W-1 (P0): WorkspaceSelector was a placebo — selecting
@@ -61,9 +58,7 @@ export function TopBar() {
   const isPipeline = pathname === "/pipeline";
   const isAnalytics = pathname === "/analytics";
   const isAlerts = pathname === "/alerts";
-  const isReports = pathname === "/reports";
   const isSymbols = pathname?.startsWith("/symbols") ?? false;
-  const isAdmin = pathname?.startsWith("/admin/control-center") ?? false;
   // Wave 29 persona-1: mobile users were losing access to /strategies once
   // they left the desk — the non-desk TopBar had no Strategies entry so
   // there was no route back to the listing (Wave 27 is adding it). Add
@@ -72,14 +67,12 @@ export function TopBar() {
 
   const navItems = [
     { path: "/", label: "Dashboard", icon: Gauge, active: isHome },
-    { path: "/symbols", label: "Symbols", icon: Buildings, active: isSymbols },
-    { path: "/strategies", label: "Strategies", icon: Target, active: isStrategies },
+    { path: "/symbols", label: "Research", icon: Buildings, active: isSymbols },
     { path: "/trade", label: "Trade", icon: ChartBar, active: isTrade },
+    { path: "/strategies", label: "Strategies", icon: Target, active: isStrategies },
+    { path: "/pipeline", label: "Pipeline", icon: Robot, active: isPipeline },
     { path: "/analytics", label: "Analytics", icon: ChartLineUp, active: isAnalytics },
     { path: "/alerts", label: "Alerts", icon: Bell, active: isAlerts },
-    { path: "/pipeline", label: "Pipeline", icon: Robot, active: isPipeline },
-    { path: "/reports", label: "Reports", icon: FileText, active: isReports },
-    { path: "/admin/control-center", label: "Admin", icon: ShieldCheck, active: isAdmin },
   ];
 
   return (
@@ -180,7 +173,6 @@ export function TopBar() {
          * viewport so the chrome doesn't crowd; emergencies on mobile
          * route through /strategies/{id} per-strategy switches. */}
         <HaltTradingButton className="hidden sm:inline-flex" />
-        <ThemeToggle className="hidden h-11 w-11 sm:inline-flex sm:h-8 sm:w-8" />
         <AgentBell />
         <NotificationBell />
         <ProfileMenu />

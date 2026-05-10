@@ -384,7 +384,7 @@ const COMPONENT_NODES: MindNode[] = [
     width: 430,
     height: 148,
     minZoom: 0,
-    statusLabel: "Claude assisted",
+    statusLabel: "AI assisted",
     health: "Provider dependent",
     tone: "watch",
     metric: "Agents, prompts, TradingAgents",
@@ -395,7 +395,7 @@ const COMPONENT_NODES: MindNode[] = [
     writes: ["research run records", "artifact files", "analysis responses"],
     controls: ["TradingAgents run start", "Agent chat", "Strategy refine"],
     files: ["backend/agents", "backend/services/tradingagents_research.py", "backend/tools/tradingagents"],
-    connectedTo: ["analysis-agents", "claude-prompts", "tradingagents-runtime", "pii-scrubber"],
+    connectedTo: ["analysis-agents", "ai-prompts", "tradingagents-runtime", "pii-scrubber"],
   },
   {
     id: "external-rails",
@@ -767,7 +767,7 @@ const COMPONENT_NODES: MindNode[] = [
     tone: "healthy",
     metric: "/healthz, /readyz-full",
     description:
-      "Cheap and deep health probes report process, database, Redis, FMP, Anthropic, cert, and disk readiness.",
+      "Cheap and deep health probes report process, database, Redis, FMP, AI-provider, cert, and disk readiness.",
     backlog: "Frontend admin map does not yet consume the deep readiness payload.",
     reads: ["database", "Redis", "provider pings", "disk and cert checks"],
     writes: ["HTTP health payloads"],
@@ -1080,7 +1080,7 @@ const COMPONENT_NODES: MindNode[] = [
     statusLabel: "Loading key status",
     health: "Admin only",
     tone: "active",
-    metric: "Anthropic, FMP, Alpaca, OpenAI, Polygon",
+    metric: "AI provider, FMP, Alpaca, OpenAI, Polygon",
     description:
       "Encrypted runtime key rotation for provider credentials that should not require redeploying the backend.",
     backlog: "Key health should connect to provider-specific readiness probes.",
@@ -1455,7 +1455,7 @@ const COMPONENT_NODES: MindNode[] = [
     minZoom: 0.78,
     parentId: "ai-plane",
     statusLabel: "Technical, fundamental, sentiment",
-    health: "Claude optional",
+    health: "AI optional",
     tone: "healthy",
     metric: "/analysis/analyze",
     description:
@@ -1464,11 +1464,11 @@ const COMPONENT_NODES: MindNode[] = [
     reads: ["market data", "fundamentals", "news", "options"],
     writes: ["analysis response", "agent status"],
     files: ["backend/agents", "backend/api/routes/analysis.py"],
-    connectedTo: ["pii-scrubber", "claude-prompts"],
+    connectedTo: ["pii-scrubber", "ai-prompts"],
   },
   {
-    id: "claude-prompts",
-    label: "Claude prompts",
+    id: "ai-prompts",
+    label: "AI prompts",
     domain: "ai",
     kind: "ai",
     level: 2,
@@ -1483,7 +1483,7 @@ const COMPONENT_NODES: MindNode[] = [
     tone: "watch",
     metric: "CLI primary, API fallback",
     description:
-      "Claude client and prompt services create research narratives and strategy analysis while scrubbing sensitive data first.",
+      "AI client and prompt services create research narratives and strategy analysis while scrubbing sensitive data first.",
     backlog: "Provider health needs to connect back to key status and runtime errors.",
     reads: ["ANTHROPIC_API_KEY", "prompt context", "symbol data"],
     writes: ["agent output", "logs"],

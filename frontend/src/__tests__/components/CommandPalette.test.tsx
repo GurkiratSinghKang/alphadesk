@@ -148,11 +148,11 @@ describe('CommandPalette', () => {
     expect(screen.getByText('Navigation')).toBeDefined();
   });
 
-  it('offers symbols and admin pages from page navigation', async () => {
+  it('offers research and admin pages from page navigation', async () => {
     useUIStore.setState({ commandPaletteOpen: true });
     const { CommandPalette } = await import('@/components/layout/CommandPalette');
     render(<CommandPalette />);
-    expect(screen.getByText('Go to Symbols')).toBeDefined();
+    expect(screen.getByText('Go to Research')).toBeDefined();
     expect(screen.getByText('Go to Admin control center')).toBeDefined();
   });
 

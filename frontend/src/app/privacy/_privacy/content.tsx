@@ -52,14 +52,14 @@ export const PRIVACY_CLAUSES: StaticClause[] = [
           connected brokerage accounts.
         </EditorialBullet>
         <EditorialBullet>
-          To provide AI-powered analysis using Anthropic&rsquo;s Claude API.
-          Market data and strategy parameters may be sent to Anthropic for
+          To provide AI-powered analysis using configured AI services.
+          Market data and strategy parameters may be sent to the configured provider for
           analysis. Every prompt is automatically scrubbed before
           transmission: usernames, client order IDs, broker order IDs, email
           addresses, and IP addresses are replaced with tokens such as{" "}
           <code>&lt;USER&gt;</code>, <code>&lt;ORDER_ID&gt;</code>, and{" "}
           <code>&lt;IP&gt;</code>. Where available we additionally rely on
-          Anthropic&rsquo;s zero-retention Enterprise plan so prompts and
+          the provider&rsquo;s zero-retention Enterprise plan so prompts and
           responses are not used for model training and are not retained
           beyond the live inference window.
         </EditorialBullet>
@@ -115,11 +115,11 @@ export const PRIVACY_CLAUSES: StaticClause[] = [
             .
           </EditorialBullet>
           <EditorialBullet>
-            <strong className="text-fg">Anthropic (Claude).</strong> AI
+            <strong className="text-fg">AI provider.</strong> AI
             analysis services. Prompts are PII-scrubbed before transmission
             (see section 02). Subject to{" "}
             <ExternalA href="https://www.anthropic.com/privacy">
-              Anthropic&rsquo;s privacy policy
+              the provider&rsquo;s privacy policy
             </ExternalA>
             .
           </EditorialBullet>

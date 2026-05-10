@@ -374,7 +374,7 @@ export function SymbolsDirectoryClient() {
             <span className="font-display italic text-primary">alpha</span>
             <span>AlphaDesk</span>
           </Link>
-          <nav className="flex flex-wrap items-center gap-2" aria-label="Symbols directory navigation">
+          <nav className="flex flex-wrap items-center gap-2" aria-label="Research directory navigation">
             <Link
               href="/"
               className="inline-flex min-h-10 items-center gap-2 rounded-sm border border-border bg-bg-elev-1 px-3 text-label font-medium text-fg-muted transition-colors hover:border-primary/50 hover:text-fg active:scale-[0.98]"
@@ -399,7 +399,7 @@ export function SymbolsDirectoryClient() {
           <div className="border-b border-border px-4 py-4 sm:px-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div className="max-w-3xl space-y-2">
-                <p className="t-label u-brand">SYMBOLS</p>
+                <p className="t-label u-brand">RESEARCH</p>
                 <h1 className="text-h2 font-semibold text-fg">Find a market, then open its ticker page</h1>
                 <p className="max-w-2xl text-body-sm text-fg-muted">
                   Browse top companies by default, search any ticker when you need it, and jump into the dedicated ticker workspace with one selection.
@@ -470,7 +470,7 @@ export function SymbolsDirectoryClient() {
                 </p>
               </div>
               <span className="rounded-sm border border-border-hair bg-bg-elev-1 px-2 py-1 t-mono text-label text-fg-muted">
-                {visibleCompanies.length} symbols
+                {visibleCompanies.length} markets
               </span>
             </div>
 

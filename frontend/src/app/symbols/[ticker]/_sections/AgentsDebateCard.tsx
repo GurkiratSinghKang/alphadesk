@@ -358,7 +358,7 @@ export function AgentsDebateCard({ symbol, isETF }: AgentsDebateCardProps) {
       ) : (
         <p data-slot="empty" className="mt-4 t-mono text-label u-muted">
           No debate run for {symbol} yet. Click &quot;Run debate&quot; to start one. Each run takes
-          ~30s and uses Anthropic credits.
+          ~30s and uses AI provider credits.
         </p>
       )}
     </section>

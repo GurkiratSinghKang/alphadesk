@@ -23,7 +23,7 @@ export const ABOUT_CLAUSES: StaticClause[] = [
         systematic strategy library, real-time market analysis, and an
         AI-authored research layer in a single desk. It is a software
         tool that connects to your brokerage account (currently Alpaca
-        Markets) and your AI provider (currently Anthropic Claude) — we route your
+        Markets) and your configured AI provider — we route your
         orders to your broker and your prompts to your model. We do not
         hold client funds and we do not take custody of your account.
       </EditorialP>

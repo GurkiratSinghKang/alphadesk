@@ -137,7 +137,7 @@ export const RISK_CLAUSES: StaticClause[] = [
     body: (
       <>
         <EditorialP>
-          AlphaDesk uses Anthropic&rsquo;s Claude AI to generate market
+          AlphaDesk uses AI systems to generate market
           analysis, trade ideas, and strategy recommendations. You should
           understand that:
         </EditorialP>

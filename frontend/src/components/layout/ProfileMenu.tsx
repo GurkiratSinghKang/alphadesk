@@ -1,19 +1,21 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { Settings, Keyboard, LogOut, FileText } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  FileText,
+  GearSix,
+  Keyboard,
+  ShieldCheck,
+  SignOut,
+  UsersThree,
+} from "@phosphor-icons/react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import DestructiveConfirmModal from "@/components/destructive/DestructiveConfirmModal";
 import { useDestructiveAction } from "@/components/destructive/useDestructiveAction";
-import { useUIStore } from "@/stores/ui";
 import { usePreferencesStore, type ThemePreference } from "@/stores/preferences";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { formatCurrency, cn } from "@/lib/utils";
-import { useToast } from "@/hooks/useToast";
 import { env } from "@/env";
 import { clearPersistedStores } from "@/lib/auth/clearPersistedStores";
 
@@ -38,15 +40,10 @@ function decodeJwtSub(): string | null {
 
 export function ProfileMenu() {
   const router = useRouter();
-  const { tradingMode, setTradingMode } = useUIStore();
   const theme = usePreferencesStore((s) => s.display.theme);
   const setDisplayPref = usePreferencesStore((s) => s.setDisplayPref);
   const summary = usePortfolioStore((s) => s.summary);
-  const { toast } = useToast();
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [modeConfirmOpen, setModeConfirmOpen] = useState(false);
   const destructive = useDestructiveAction();
-  const pathname = usePathname();
 
   // Resolve display name from JWT once per mount — HttpOnly cookies are not
   // readable, so this is best-effort and falls back to "Account".
@@ -62,27 +59,6 @@ export function ProfileMenu() {
     const trimmed = (displayName || "A").trim();
     return trimmed.charAt(0).toUpperCase() || "A";
   }, [displayName]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setSettingsOpen(false);
-      setModeConfirmOpen(false);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [pathname]);
-
-  // Wave 29 persona-1 #7: clicking Live used to flip local Zustand state
-  // and toast "contact admin" — the audit called this "misleading at best".
-  // There's no /auth/switch-mode endpoint, so Live click now opens an
-  // honest education dialog (option C) and never flips state. Paper click
-  // is always safe (returning to sim).
-  const handleLiveClick = () => {
-    setModeConfirmOpen(true);
-  };
-
-  const handlePaperClick = () => {
-    setTradingMode("paper");
-  };
 
   async function executeLogout() {
     // Use the absolute API base so cross-origin deployments hit the real
@@ -126,19 +102,6 @@ export function ProfileMenu() {
     });
   }
 
-  // Wave 29 persona-1 #7 (option C) / chrome-batch-D P1-09: the dialog
-  // is the live-mode confirmation flow, so the button reads "Confirm
-  // and continue". It closes the dialog without flipping state — no
-  // /auth/switch-mode endpoint exists, so we never pretend to have
-  // switched. The toast reinforces the admin ask.
-  async function handleConfirmLive() {
-    setModeConfirmOpen(false);
-    toast({
-      type: "info",
-      message: "Contact admin to enable live trading on your account.",
-    });
-  }
-
   return (
     <>
       <DropdownMenu>
@@ -154,85 +117,45 @@ export function ProfileMenu() {
             </div>
           </div>
           <DropdownMenuSeparator />
+          <div className="px-3 py-1 text-label uppercase tracking-wider text-muted-foreground">Account</div>
+          <DropdownMenuItem onClick={() => router.push("/settings")}><GearSix className="mr-2 h-3.5 w-3.5" />Settings</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push("/reports")}><FileText className="mr-2 h-3.5 w-3.5" />Reports & tax</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))}><Keyboard className="mr-2 h-3.5 w-3.5" />Keyboard shortcuts</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <div className="px-3 py-1 text-label uppercase tracking-wider text-muted-foreground">Administration</div>
+          <DropdownMenuItem onClick={() => router.push("/admin/control-center")}><ShieldCheck className="mr-2 h-3.5 w-3.5" />Control center</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push("/admin/users")}><UsersThree className="mr-2 h-3.5 w-3.5" />Users & access</DropdownMenuItem>
+          <DropdownMenuSeparator />
           <div className="px-3 py-1.5">
-            <p className="text-label uppercase tracking-wider text-muted-foreground mb-1.5">Trading Mode</p>
-            <div role="radiogroup" aria-label="Trading mode" className="flex gap-1.5">
-              <button role="radio" aria-checked={tradingMode === "paper"} onClick={handlePaperClick} className={cn("rounded px-2.5 py-1 text-label font-medium transition-colors", tradingMode === "paper" ? "bg-[var(--profit)]/15 text-[var(--profit)] ring-1 ring-[var(--profit)]/30" : "bg-[var(--panel)] text-muted-foreground")}>Paper</button>
-              <button role="radio" aria-checked={tradingMode === "live"} onClick={handleLiveClick} className={cn("rounded px-2.5 py-1 text-label font-medium transition-colors", tradingMode === "live" ? "bg-[var(--loss)]/15 text-[var(--loss)] ring-1 ring-[var(--loss)]/30" : "bg-[var(--panel)] text-muted-foreground")}>Live</button>
+            <p className="mb-1.5 text-label uppercase tracking-wider text-muted-foreground">Theme</p>
+            <div
+              role="radiogroup"
+              aria-label="Theme preference"
+              className="grid grid-cols-3 gap-1 rounded-sm border border-border bg-bg p-1"
+            >
+              {(["dark", "light", "system"] as const).map((opt: ThemePreference) => (
+                <button
+                  key={opt}
+                  type="button"
+                  role="radio"
+                  aria-checked={theme === opt}
+                  onClick={() => setDisplayPref("theme", opt)}
+                  className={cn(
+                    "min-h-8 rounded-xs px-2 text-label font-medium capitalize transition-colors",
+                    theme === opt
+                      ? "bg-primary/15 text-primary ring-1 ring-primary/25"
+                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                  )}
+                >
+                  {opt}
+                </button>
+              ))}
             </div>
           </div>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => router.push("/reports")}><FileText className="mr-2 h-3.5 w-3.5" />Reports & Export</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setSettingsOpen(true)}><Settings className="mr-2 h-3.5 w-3.5" />Settings</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))}><Keyboard className="mr-2 h-3.5 w-3.5" />Keyboard Shortcuts</DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleLogout}><LogOut className="mr-2 h-3.5 w-3.5" />Logout</DropdownMenuItem>
+          <DropdownMenuItem onClick={handleLogout}><SignOut className="mr-2 h-3.5 w-3.5" />Sign out</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <SheetContent side="right" className="bg-[var(--bg-card)] border-border">
-          <SheetHeader><SheetTitle>Settings</SheetTitle><SheetDescription>Configure your trading environment.</SheetDescription></SheetHeader>
-          <div className="space-y-6 px-4 py-6">
-            {/* Theme section */}
-            <div className="space-y-2">
-              <h3 className="text-eyebrow font-bold uppercase tracking-wider text-foreground">Appearance</h3>
-              <div className="rounded-lg border border-border bg-[var(--panel)] p-3">
-                <div
-                  role="radiogroup"
-                  aria-label="Theme preference"
-                  className="grid grid-cols-3 gap-1 rounded-md border border-border bg-bg p-1"
-                >
-                  {(["dark", "light", "system"] as const).map((opt: ThemePreference) => (
-                    <button
-                      key={opt}
-                      type="button"
-                      role="radio"
-                      aria-checked={theme === opt}
-                      onClick={() => setDisplayPref("theme", opt)}
-                      className={cn(
-                        "min-h-9 rounded-sm px-2 text-label font-medium capitalize transition-colors",
-                        theme === opt
-                          ? "bg-primary/15 text-primary ring-1 ring-primary/25"
-                          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-                      )}
-                    >
-                      {opt}
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-2 text-label leading-snug text-muted-foreground">
-                  Light mode uses the tuned porcelain palette; System follows your OS.
-                </p>
-              </div>
-            </div>
-            {/* Other settings placeholder */}
-            <div className="space-y-2">
-              <h3 className="text-eyebrow font-bold uppercase tracking-wider text-foreground">Configuration</h3>
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <Settings className="h-6 w-6 text-muted-foreground/40 mb-2" />
-                <p className="text-label text-muted-foreground">Broker API keys and additional preferences are configured in the full Settings page.</p>
-              </div>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      <Dialog open={modeConfirmOpen} onOpenChange={setModeConfirmOpen}>
-        <DialogContent className="bg-[var(--bg-card)] border-border">
-          <DialogHeader>
-            <DialogTitle>Live trading requires admin enablement</DialogTitle>
-            <DialogDescription>
-              Live trading requires broker API keys configured on the server.
-              Contact your admin to provision credentials — this toggle
-              cannot enable live trading on its own.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button onClick={handleConfirmLive} className="text-label">Confirm and continue</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       {destructive.pending && (
         <DestructiveConfirmModal
           open={true}

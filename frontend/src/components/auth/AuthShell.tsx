@@ -66,12 +66,11 @@ export function AuthShell({
     "--auth-primary-deep": "var(--brand-dim)",
     "--auth-primary-deeper": "var(--brand-dim)",
     "--auth-primary-soft": "var(--brand-tint)",
-    gridTemplateColumns: "1fr 1.05fr",
   } as React.CSSProperties;
 
   return (
     <div
-      className="fixed inset-0 z-[100] grid overflow-hidden bg-bg"
+      className="fixed inset-0 z-[100] grid grid-cols-1 overflow-auto bg-bg lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:overflow-hidden"
       style={darkAuthTokens}
     >
       <AuthBrandPane brand={brand} />
@@ -103,12 +102,12 @@ function AuthBrandPane({ brand }: { brand?: AuthShellProps["brand"] }) {
 
   return (
     <aside
-      className="flex flex-col overflow-auto border-r border-border"
-      style={{ background: "var(--ink-100)", padding: "32px 44px 28px" }}
+      className="flex flex-col overflow-visible border-b border-border lg:overflow-auto lg:border-b-0 lg:border-r"
+      style={{ background: "var(--ink-100)", padding: "clamp(24px, 5vw, 32px) clamp(22px, 6vw, 44px) 28px" }}
     >
       <div className="flex items-center gap-2.5">
         <div
-          className="flex h-[30px] w-[30px] items-center justify-center rounded-full text-[16px] font-semibold italic"
+          className="flex h-[30px] w-[30px] items-center justify-center rounded-full text-numeric-md font-semibold italic"
           style={{
             background: "var(--brand)",
             color: "var(--ink-050)",
@@ -118,7 +117,7 @@ function AuthBrandPane({ brand }: { brand?: AuthShellProps["brand"] }) {
           α
         </div>
         <div
-          className="text-[19px] italic"
+          className="text-numeric-lg italic"
           style={{
             fontFamily: "var(--font-display)",
             color: "var(--ink-1000)",
@@ -141,7 +140,7 @@ function AuthBrandPane({ brand }: { brand?: AuthShellProps["brand"] }) {
           style={{
             fontFamily: "var(--font-display)",
             color: "var(--ink-1000)",
-            fontSize: 56,
+            fontSize: "clamp(42px, 12vw, 56px)",
             fontWeight: 400,
             letterSpacing: "-0.03em",
             lineHeight: 0.98,
@@ -167,7 +166,7 @@ function AuthBrandPane({ brand }: { brand?: AuthShellProps["brand"] }) {
         {card && <div className="mt-8">{card}</div>}
       </div>
 
-      <div className="mt-6 flex items-center justify-between">
+      <div className="mt-6 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
         <span
           className="t-mono"
           style={{ fontSize: 10, color: "var(--fg-hint)", letterSpacing: "0.06em" }}
@@ -341,7 +340,7 @@ function AuthFormPane({
   footerRight?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col overflow-auto" style={{ padding: "32px 60px" }}>
+    <div className="flex flex-col overflow-visible lg:overflow-auto" style={{ padding: "clamp(24px, 5vw, 32px) clamp(22px, 7vw, 60px)" }}>
       <header className="flex items-center justify-end gap-3.5">
         <span
           className="t-mono"
@@ -370,7 +369,7 @@ function AuthFormPane({
       </div>
 
       <footer
-        className="mt-6 flex items-center justify-between"
+        className="mt-6 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center"
         style={{ minHeight: 24 }}
       >
         <span

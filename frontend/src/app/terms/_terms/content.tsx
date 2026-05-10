@@ -17,7 +17,7 @@ export const TERMS_CLAUSES: StaticClause[] = [
           AlphaDesk is an AI-powered trading terminal that provides market
           analysis, strategy management, and trade execution capabilities. The
           platform integrates with third-party brokerage services (currently
-          Alpaca Markets) and AI services (Anthropic Claude) to deliver its
+          Alpaca Markets) and configured AI services to deliver its
           functionality.
         </EditorialP>
         <div className="mt-3">

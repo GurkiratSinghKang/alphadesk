@@ -40,7 +40,7 @@ import { cn } from "@/lib/utils";
  */
 const PLACEHOLDER_HINTS = [
   "halt trades on NVDA",
-  "rotate Anthropic key",
+  "rotate AI provider key",
   "pause research agent",
   "show failing pipeline stages",
   "deploy frontend to staging",

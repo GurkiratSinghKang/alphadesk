@@ -62,7 +62,7 @@ const TIERS: PricingTier[] = [
     features: [
       "Live trading · multi-broker",
       "All strategies · per-tenant override",
-      "BYO Anthropic key OR pooled AI · 1000 runs / day",
+      "BYO AI provider key OR pooled AI · 1000 runs / day",
       "Unlimited watchlists · public sharing",
       "Reports · daily + AI summary + 8949 export",
       "Slack + email + push alerts",
@@ -155,7 +155,7 @@ export default function PricingPage() {
             </div>
             <div>
               <dt className="font-semibold text-fg">What happens to my key if I downgrade?</dt>
-              <dd className="text-fg-dim mt-1 leading-relaxed">Pro&apos;s BYO Anthropic key is encrypted at rest. On downgrade we delete the encrypted blob within 24h; the spend cap reverts to the pooled key for your tier.</dd>
+              <dd className="text-fg-dim mt-1 leading-relaxed">Pro&apos;s BYO AI provider key is encrypted at rest. On downgrade we delete the encrypted blob within 24h; the spend cap reverts to the pooled key for your tier.</dd>
             </div>
             <div>
               <dt className="font-semibold text-fg">Are tax reports CPA-ready?</dt>

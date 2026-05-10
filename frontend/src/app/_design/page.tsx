@@ -84,7 +84,7 @@ const SWATCHES: Array<{ name: string; bg: string; text: string }> = [
 const TABLE_ROWS = [
   { sym: "NVDA", side: "Long", qty: 250, entry: 128.41, pnl: 1602, strat: "Momentum & Quality" },
   { sym: "INTC", side: "Short", qty: 120, entry: 32.4, pnl: 151, strat: "Pairs · Sector" },
-  { sym: "UNH", side: "Long", qty: 40, entry: 588.2, pnl: -258, strat: "Claude Alpha" },
+  { sym: "UNH", side: "Long", qty: 40, entry: 588.2, pnl: -258, strat: "AI Alpha" },
   { sym: "SPY", side: "Long", qty: 50, entry: 478.22, pnl: 234, strat: "Regime Adaptive" },
 ];
 
@@ -109,14 +109,14 @@ const RAIL_ITEMS: StrategyRailItem[] = [
   { id: "pead", name: "PEAD", subtitle: "Post-earnings drift", status: "active", returnPct: 0.62, indexLabel: "03" },
   { id: "mr", name: "Mean Reversion", subtitle: "Short-horizon · 1–3 day", status: "paused", returnPct: null, indexLabel: "04" },
   { id: "pairs", name: "Pairs · Sector", subtitle: "Market-neutral", status: "active", returnPct: 0.41, indexLabel: "05" },
-  { id: "claude", name: "Claude Alpha", subtitle: "AI opportunistic", status: "active", returnPct: -1.18, indexLabel: "06" },
+  { id: "ai", name: "AI Alpha", subtitle: "AI opportunistic", status: "active", returnPct: -1.18, indexLabel: "06" },
 ];
 
 const POSITIONS: PositionRow[] = [
   { id: "1", symbol: "NVDA", quantity: 250, entryPrice: 128.41, strategyName: "Momentum & Quality", progress: 0.72, pnl: 1602, pnlPct: 5.0 },
   { id: "2", symbol: "SPY", quantity: 50, entryPrice: 478.22, strategyName: "Regime Adaptive", progress: 0.48, pnl: 234, pnlPct: 1.0 },
   { id: "3", symbol: "XOM", quantity: 180, entryPrice: 116.4, strategyName: "PEAD", progress: 0.22, pnl: 291, pnlPct: 1.4 },
-  { id: "4", symbol: "UNH", quantity: 40, entryPrice: 588.2, strategyName: "Claude Alpha", progress: 0.38, pnl: -258, pnlPct: -1.1 },
+  { id: "4", symbol: "UNH", quantity: 40, entryPrice: 588.2, strategyName: "AI Alpha", progress: 0.38, pnl: -258, pnlPct: -1.1 },
   { id: "5", symbol: "JPM", quantity: 120, entryPrice: 186.5, strategyName: "Pairs · Sector", progress: 0.56, pnl: 412, pnlPct: 1.8 },
 ];
 
@@ -136,7 +136,7 @@ const MEMO: AIMemo = {
 const STATUS_PILLS: StatusPill[] = [
   { label: "Alpaca paper · connected", tone: "profit" },
   { label: "Market · open · 1h 28m to close", tone: "profit" },
-  { label: "Claude · healthy · p50 180ms", tone: "muted" },
+  { label: "AI · healthy · p50 180ms", tone: "muted" },
   { label: "Last tick 0.04s", tone: "muted" },
 ];
 
@@ -379,7 +379,7 @@ export default function DesignPreviewPage() {
             </Card>
             <Card leftAccent="loss">
               <CardHeader>
-                <CardTitle>Claude Alpha</CardTitle>
+                <CardTitle>AI Alpha</CardTitle>
                 <Eyebrow as="div" className="text-fg-muted">
                   Strategy 06 · AI opp.
                 </Eyebrow>
@@ -645,7 +645,7 @@ export default function DesignPreviewPage() {
                   href="#strategy/momentum-quality"
                 />
                 <StrategyCard
-                  name="Claude Alpha"
+                  name="AI Alpha"
                   subtitle="Strategy 06 · AI opp."
                   returnPct={-1.18}
                   isLoss
@@ -653,7 +653,7 @@ export default function DesignPreviewPage() {
                   winRatePct={48}
                   invested="$6.4K"
                   sparkline={SPARK_DOWN}
-                  href="#strategy/claude-alpha"
+                  href="#strategy/ai-alpha"
                 />
               </div>
             </div>
@@ -671,9 +671,9 @@ export default function DesignPreviewPage() {
               </div>
             </div>
 
-            {/* ClaudeStamp */}
+            {/* AI stamp */}
             <div>
-              <Eyebrow as="div" className="mb-3">ClaudeStamp</Eyebrow>
+              <Eyebrow as="div" className="mb-3">AI stamp</Eyebrow>
               <div className="rounded-md border border-border p-4 bg-bg-card flex flex-col gap-3">
                 <ClaudeStamp
                   model="Haiku 4.5"

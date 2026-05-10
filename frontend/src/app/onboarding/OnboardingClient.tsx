@@ -33,7 +33,7 @@ const STEPS: Step[] = [
   { id: "broker",     ordinal: "02", title: "Connect broker",   caption: "Paper-only by default" },
   { id: "strategies", ordinal: "03", title: "Pick strategies",  caption: "Multi-select cards" },
   { id: "risk",       ordinal: "04", title: "Set risk limits",  caption: "Capital + daily-budget" },
-  { id: "ai",         ordinal: "05", title: "AI access",        caption: "BYO Anthropic key (optional)" },
+  { id: "ai",         ordinal: "05", title: "AI access",        caption: "BYO AI provider key (optional)" },
   { id: "ready",      ordinal: "06", title: "Ready",            caption: "What happens at next open" },
 ];
 
@@ -354,7 +354,7 @@ export default function OnboardingClient() {
           {activeStep === "ai" && (
             <div className="space-y-4">
               <p className="text-body text-fg-dim leading-relaxed">
-                AlphaDesk uses Anthropic Claude for agent intelligence.
+                AlphaDesk uses AI services for agent intelligence.
                 You can either use the operator&apos;s pooled key (default,
                 spend-capped per tier) OR bring your own.
               </p>
@@ -362,7 +362,7 @@ export default function OnboardingClient() {
                 <p className="t-label">Bring your own key (optional)</p>
                 <input
                   type="text"
-                  placeholder="sk-ant-…"
+                  placeholder="provider-key-…"
                   className="w-full rounded-sm border border-border bg-bg-elev-2 px-3 py-2 text-body font-mono text-fg-muted placeholder:text-fg-hint"
                 />
                 <p className="text-eyebrow uppercase tracking-[0.08em] text-fg-muted">

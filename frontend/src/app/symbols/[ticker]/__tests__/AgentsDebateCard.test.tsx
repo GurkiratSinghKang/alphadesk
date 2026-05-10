@@ -83,7 +83,7 @@ describe("AgentsDebateCard", () => {
     expect(getByTestId("agents-debate-card").getAttribute("id")).toBe("agents");
     const empty = container.querySelector('[data-slot="empty"]') as HTMLElement;
     expect(empty.textContent).toContain("No debate run for NVDA yet");
-    expect(empty.textContent).toContain("Anthropic credits");
+    expect(empty.textContent).toContain("AI provider credits");
   });
 
   it("renders the run display when a cached succeeded run exists", async () => {

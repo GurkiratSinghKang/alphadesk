@@ -35,11 +35,12 @@ const POPULAR_SYMBOLS = [
 
 const PAGES = [
   { path: "/", label: "Dashboard", icon: Gauge },
-  { path: "/symbols", label: "Symbols", icon: Buildings },
+  { path: "/symbols", label: "Research", icon: Buildings },
   { path: "/trade", label: "Trade", icon: ChartBar },
+  { path: "/strategies", label: "Strategies", icon: Target },
+  { path: "/pipeline", label: "Pipeline", icon: Robot },
   { path: "/analytics", label: "Analytics", icon: ChartLineUp },
   { path: "/alerts", label: "Alerts", icon: Bell },
-  { path: "/pipeline", label: "Pipeline", icon: Robot },
   { path: "/reports", label: "Reports", icon: FileText },
   { path: "/admin/control-center", label: "Admin control center", icon: ShieldCheck },
   { path: "/docs", label: "Documentation", icon: FileText },

@@ -24,7 +24,7 @@ export default function RiskMemoAIStrip() {
         <header className="flex items-center justify-between gap-3">
           <AgentChip archetype="risk" status="running" size="lg" />
           <span className="text-eyebrow uppercase tracking-[0.08em] text-fg-muted">
-            claude-opus-4-7-1m · 1.4s · just now
+            ai-research-4.7 · 1.4s · just now
           </span>
         </header>
         <p className="font-display italic text-h3 text-fg leading-relaxed">
