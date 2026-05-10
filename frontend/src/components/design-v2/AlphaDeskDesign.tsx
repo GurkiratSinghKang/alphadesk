@@ -14,6 +14,12 @@ import { usePathname, useRouter } from "next/navigation";
 // already subscribes to the store, so paper-mode treatment is
 // consistent across the app.
 import { useUIStore } from "@/stores/ui";
+// 2026-05-10 (chart wiring): swap the design's hand-rolled SVG HeroChart
+// for the real lightweight-charts engine via a thin wrapper. The mock
+// HeroChart definition stays in this file (still used as a synchronous
+// fallback by `_OldChartPanel` reference code below); the live Trade +
+// Symbol routes consume `HeroChartWired` instead.
+import HeroChartWired from "./_wired/HeroChartWired";
 
 const TWEAK_DEFAULTS = {
   page: "dashboard",
@@ -2154,7 +2160,11 @@ const TickerPage = ({ tweaks, sym, onTrade, onPickTicker, onBack }) => {
         <>
           <div style={{ display: "grid", gridTemplateColumns: layout === "ai-first" ? "1fr 1.4fr" : "1.6fr 1fr", borderBottom: "1px solid var(--border)", background: "var(--border)", gap: 1 }}>
             <div style={{ background: "var(--bg)", padding: "20px 28px 24px" }}>
-              <ChartPanel t={t} large />
+              {/* 2026-05-10 (chart wiring): forward the URL-derived `sym`
+               * (set via initialSymbol from `/symbols/[ticker]`) into
+               * ChartPanel so HeroChartWired fetches the right bars
+               * instead of always defaulting to NVDA via MOCK_TICKER. */}
+              <ChartPanel t={t} large symbol={sym} />
             </div>
             <div style={{ background: "var(--bg)", padding: "20px 28px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
               <AIStrip heading="AI · Thesis" time="08:14">
@@ -2267,7 +2277,7 @@ function Cell({ label, v, sub }) {
 
 // ─── chart ────────────────────────────────────────────────────────────────
 
-function ChartPanel({ t, large }) {
+function ChartPanel({ t, large, symbol }) {
   const [range, setRange] = useState("3M");
   const [chartMode, setChartMode] = useState("line");
   const [overlays, setOverlays] = useState({
@@ -2281,13 +2291,21 @@ function ChartPanel({ t, large }) {
     earnings: false, exDiv: false,
     avgPrice: false,
   });
+  // 2026-05-10 (chart wiring): symbol resolution prefers an explicit
+  // prop (e.g. from `/symbols/[ticker]` URL), falls through to the
+  // ticker mock for legacy callsites. The toolbar's `range`,
+  // `chartMode`, `overlays` state stays here for the design's controls;
+  // HeroChartWired only consumes `range` (it builds candle/SMA/etc.
+  // overlays through ChartPane's own indicator menu — preserving the
+  // `chart-template:default` localStorage layout users may have saved).
+  const sym = symbol || t?.sym || "SPY";
   return (
     <div>
       <div style={{ paddingBottom: 14, marginBottom: 14, borderBottom: "1px solid var(--border-hair)" }}>
         <ChartToolbar range={range} setRange={setRange} chartMode={chartMode} setChartMode={setChartMode} overlays={overlays} setOverlays={setOverlays} />
       </div>
       <div style={{ position: "relative", width: "100%", height: 360, display: "flex" }}>
-        <HeroChart t={t} range={range} chartMode={chartMode} overlays={overlays} limitPx={t.px + 0.5} stopPx={t.px - 5} side="buy" />
+        <HeroChartWired symbol={sym} range={range} />
       </div>
     </div>
   );
@@ -2994,7 +3012,13 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
           <TradeHeader t={t} />
           <ChartToolbar range={range} setRange={setRange} chartMode={chartMode} setChartMode={setChartMode} overlays={overlays} setOverlays={setOverlays} />
           <div style={{ flex: 1, minHeight: 320, display: "flex" }}>
-            <HeroChart t={t} range={range} chartMode={chartMode} overlays={overlays} limitPx={limitPx} stopPx={stopPx} side={side} />
+            {/* 2026-05-10 (chart wiring): live OHLCV from /api/v1/market/bars
+             * via the real lightweight-charts engine, replacing the design's
+             * hand-rolled SVG. ChartPane owns its own indicators + drawing
+             * tools menu; the design's toolbar `chartMode` + `overlays`
+             * state still drives the local controls but no longer feeds the
+             * mock SVG. Range chips stay wired through `range`. */}
+            <HeroChartWired symbol={sym || t?.sym || "SPY"} range={range} />
           </div>
           <VolumeRail t={t} />
         </section>
