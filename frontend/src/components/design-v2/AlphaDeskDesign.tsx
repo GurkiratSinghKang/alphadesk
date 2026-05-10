@@ -376,6 +376,18 @@ const __LAYOUT_GUARD_STYLE = `
     white-space: nowrap;
   }
 
+  [data-ad-main] [style*="font-size: 8px"],
+  [data-ad-main] [style*="font-size: 8.5px"],
+  [data-ad-main] [style*="font-size: 9px"],
+  [data-ad-main] [style*="font-size: 9.5px"],
+  [data-ad-topbar] [style*="font-size: 8px"],
+  [data-ad-topbar] [style*="font-size: 8.5px"],
+  [data-ad-topbar] [style*="font-size: 9px"],
+  [data-ad-topbar] [style*="font-size: 9.5px"] {
+    font-size: 10.5px !important;
+    line-height: 1.35 !important;
+  }
+
   @media (max-width: 1200px) {
     [data-ad-search] {
       display: none !important;
@@ -490,12 +502,18 @@ const __LAYOUT_GUARD_STYLE = `
       overflow: auto !important;
     }
 
-    [data-ad-main] [style*="font-size: 8"],
-    [data-ad-main] [style*="font-size: 9"],
-    [data-ad-main] [style*="font-size: 10"],
-    [data-ad-topbar] [style*="font-size: 8"],
-    [data-ad-topbar] [style*="font-size: 9"],
-    [data-ad-topbar] [style*="font-size: 10"] {
+    [data-ad-main] [style*="font-size: 8px"],
+    [data-ad-main] [style*="font-size: 8.5px"],
+    [data-ad-main] [style*="font-size: 9px"],
+    [data-ad-main] [style*="font-size: 9.5px"],
+    [data-ad-main] [style*="font-size: 10px"],
+    [data-ad-main] [style*="font-size: 10.5px"],
+    [data-ad-topbar] [style*="font-size: 8px"],
+    [data-ad-topbar] [style*="font-size: 8.5px"],
+    [data-ad-topbar] [style*="font-size: 9px"],
+    [data-ad-topbar] [style*="font-size: 9.5px"],
+    [data-ad-topbar] [style*="font-size: 10px"],
+    [data-ad-topbar] [style*="font-size: 10.5px"] {
       font-size: 11px !important;
       line-height: 1.35 !important;
     }
