@@ -10,10 +10,54 @@ import { MOCK_WATCHLISTS, type Watchlist, type WatchlistRow } from "@/lib/mocks"
 import {
   addWatchlistItem,
   createWatchlistV2,
+  getEnrichedWatchlist,
   getWatchlistsV2,
+  type EnrichedWatchlistItem,
+  type EnrichedWatchlistResponse,
   type WatchlistV2,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+
+// v2 backend wiring — convert a live `WatchlistV2` shell into the
+// frontend's `Watchlist` shape (without rows; rows come from the
+// enriched fetch). Lets the existing rendering code stay shape-stable.
+function watchlistV2ToMockShape(wl: WatchlistV2, rows: WatchlistRow[] = []): Watchlist {
+  return {
+    id: `live-${wl.id}`,
+    name: wl.name,
+    kind: wl.kind,
+    share: wl.share_mode,
+    rows,
+    ownerLabel:
+      wl.kind === "auto_strategy"
+        ? `auto · ${wl.auto_source_strategy ?? "rules"}`
+        : wl.kind === "auto_earnings"
+          ? "auto · earnings"
+          : "you",
+  };
+}
+
+// Convert an enriched backend item to the frontend's WatchlistRow.
+// Missing slots (fundScore, strats, reason, earningsInDays, preMktPct)
+// fill with neutral defaults so the existing table render code keeps
+// working without per-cell defensive checks.
+function enrichedToRow(it: EnrichedWatchlistItem): WatchlistRow {
+  return {
+    symbol: it.symbol,
+    name: it.name ?? it.symbol,
+    px: it.px ?? 0,
+    pctDay: it.pct_day ?? 0,
+    vol: it.vol ?? "—",
+    techScore: it.tech_score ?? 0,
+    fundScore: 0,
+    signal: it.signal ?? "neutral",
+    strats: [],
+    reason: it.note ?? "",
+    earningsInDays: undefined,
+    preMktPct: undefined,
+    held: it.held,
+  };
+}
 
 /**
  * Phase 1.8 — first-class Watchlists page per v2-plan §1.8.
@@ -34,9 +78,94 @@ type WatchlistFilter =
   | "held";
 
 export default function WatchlistsClient() {
-  const [activeId, setActiveId] = React.useState<string>(MOCK_WATCHLISTS[0].id);
+  // v2 backend wiring — primary data source is the live API
+  // (`/api/v1/watchlists` + `/api/v1/watchlists/{id}/enriched`). We
+  // fall back to MOCK_WATCHLISTS only when the user has zero live
+  // lists and no enriched response — this keeps first-time-user UX
+  // populated without fabricating data when the API works fine.
+  const [liveLists, setLiveLists] = React.useState<Watchlist[] | null>(null);
+  const [enrichedRows, setEnrichedRows] = React.useState<Record<string, WatchlistRow[]>>({});
+  const [refetchTick, setRefetchTick] = React.useState(0);
+
+  // Hydrate the lists shell once (and after a refetch tick).
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const v2 = await getWatchlistsV2();
+        if (cancelled) return;
+        if (v2.length > 0) {
+          setLiveLists(v2.map((w) => watchlistV2ToMockShape(w)));
+        } else {
+          // Empty state — no live lists. Fall back to mock so the page
+          // renders demo content for first-time users.
+          setLiveLists(null);
+        }
+      } catch {
+        // API unreachable — fall back to mock.
+        setLiveLists(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [refetchTick]);
+
+  const lists: Watchlist[] = liveLists ?? MOCK_WATCHLISTS;
+  const [activeId, setActiveId] = React.useState<string>(lists[0].id);
   const [filter, setFilter] = React.useState<WatchlistFilter>("all");
-  const active = MOCK_WATCHLISTS.find((w) => w.id === activeId) ?? MOCK_WATCHLISTS[0];
+
+  // When the lists pivot from mock → live (or vice versa), reset
+  // activeId to the first list of the current source.
+  React.useEffect(() => {
+    if (!lists.find((w) => w.id === activeId)) {
+      setActiveId(lists[0].id);
+    }
+  }, [lists, activeId]);
+
+  // Hydrate enriched rows for live lists on demand.
+  React.useEffect(() => {
+    if (!liveLists) return;
+    let cancelled = false;
+    (async () => {
+      const updates: Record<string, WatchlistRow[]> = {};
+      for (const wl of liveLists) {
+        // ID format: "live-{N}". Skip if already cached.
+        if (enrichedRows[wl.id] != null) continue;
+        const numId = Number(wl.id.replace(/^live-/, ""));
+        if (!Number.isFinite(numId)) continue;
+        try {
+          const enriched: EnrichedWatchlistResponse = await getEnrichedWatchlist(numId);
+          if (cancelled) return;
+          updates[wl.id] = enriched.items.map(enrichedToRow);
+        } catch {
+          // per-list failure — leave empty so the table renders the
+          // "no rows yet" state instead of silently merging stale
+          // mock data.
+          updates[wl.id] = [];
+        }
+      }
+      if (Object.keys(updates).length > 0 && !cancelled) {
+        setEnrichedRows((prev) => ({ ...prev, ...updates }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [liveLists, enrichedRows]);
+
+  // Build the rendered list view — when the active list is live, swap
+  // its mock rows for the enriched response (or empty array).
+  const enrichedLists: Watchlist[] = React.useMemo(() => {
+    if (!liveLists) return MOCK_WATCHLISTS;
+    return liveLists.map((wl) => ({
+      ...wl,
+      rows: enrichedRows[wl.id] ?? [],
+    }));
+  }, [liveLists, enrichedRows]);
+
+  const renderedLists = enrichedLists;
+  const active = renderedLists.find((w) => w.id === activeId) ?? renderedLists[0];
 
   // v2 watchlists polish — filter predicates extracted so the chip
   // group can show live counts ("All 7", "Movers 3", "Held 1") next
@@ -79,12 +208,13 @@ export default function WatchlistsClient() {
   }, [active.rows]);
 
   const stats = React.useMemo(() => {
-    const totalNames = MOCK_WATCHLISTS.reduce((acc, wl) => acc + wl.rows.length, 0);
-    const withSignal = MOCK_WATCHLISTS.reduce(
+    const source = renderedLists;
+    const totalNames = source.reduce((acc, wl) => acc + wl.rows.length, 0);
+    const withSignal = source.reduce(
       (acc, wl) => acc + wl.rows.filter((r) => r.signal !== "neutral" && r.signal !== "hold").length,
       0,
     );
-    const earnings7d = MOCK_WATCHLISTS.reduce(
+    const earnings7d = source.reduce(
       (acc, wl) =>
         acc +
         wl.rows.filter(
@@ -92,12 +222,12 @@ export default function WatchlistsClient() {
         ).length,
       0,
     );
-    const held = MOCK_WATCHLISTS.reduce(
+    const held = source.reduce(
       (acc, wl) => acc + wl.rows.filter((r) => r.held).length,
       0,
     );
     return { totalNames, withSignal, earnings7d, held };
-  }, []);
+  }, [renderedLists]);
 
   // Top movers / laggards / signals firing — distinctive hero row from the
   // design's watchlists.jsx. Computed off the active list so it stays in
@@ -149,7 +279,7 @@ export default function WatchlistsClient() {
               maxWidth: 700,
             }}
           >
-            {MOCK_WATCHLISTS.length} lists · {stats.totalNames} unique symbols.
+            {renderedLists.length} list{renderedLists.length === 1 ? "" : "s"} · {stats.totalNames} unique symbols.
             Lists feed strategies — strategies hunt only inside their assigned
             bench.
           </p>
@@ -189,7 +319,7 @@ export default function WatchlistsClient() {
         <aside className="space-y-3">
           <Section eyebrow="LISTS" title="Your lists" rule={false}>
             <ol className="rounded-md border border-border-hair bg-bg-elev-1 divide-y divide-border-hair">
-              {MOCK_WATCHLISTS.map((wl) => (
+              {renderedLists.map((wl) => (
                 <li key={wl.id}>
                   <button
                     type="button"
@@ -231,7 +361,21 @@ export default function WatchlistsClient() {
             <p className="font-display italic text-label leading-snug text-fg-muted mb-2">
               Append a symbol to <span className="text-fg">{active.name}</span>.
             </p>
-            <QuickAddForm activeListName={active.name} />
+            <QuickAddForm
+              activeListName={active.name}
+              activeListId={active.id.startsWith("live-") ? Number(active.id.replace(/^live-/, "")) : null}
+              onAdded={() => {
+                // Refetch the active list's enriched rows so the
+                // freshly-appended symbol appears in the table without
+                // a full page reload.
+                setEnrichedRows((prev) => {
+                  const next = { ...prev };
+                  delete next[active.id];
+                  return next;
+                });
+                setRefetchTick((t) => t + 1);
+              }}
+            />
           </section>
         </aside>
 
@@ -338,7 +482,15 @@ export default function WatchlistsClient() {
 // pensive-kirch's B.3 backend (PR #105) + my contribution endpoint
 // follow-up. Falls back to the system-notify event when the backend
 // is unreachable so the form has visible feedback either way.
-function QuickAddForm({ activeListName }: { activeListName: string }) {
+function QuickAddForm({
+  activeListName,
+  activeListId,
+  onAdded,
+}: {
+  activeListName: string;
+  activeListId: number | null;
+  onAdded?: () => void;
+}) {
   const [submitting, setSubmitting] = React.useState(false);
   const [feedback, setFeedback] = React.useState<{ tone: "ok" | "err" | null; msg: string }>({
     tone: null,
@@ -350,27 +502,37 @@ function QuickAddForm({ activeListName }: { activeListName: string }) {
       setSubmitting(true);
       setFeedback({ tone: null, msg: "" });
       try {
-        // Look up live watchlists; create one if the user has none.
-        let lists: WatchlistV2[] = [];
-        try {
-          lists = await getWatchlistsV2();
-        } catch {
-          lists = [];
+        let targetId = activeListId;
+        let targetName = activeListName;
+
+        if (targetId == null) {
+          // The active list isn't a live one (mock fallback). Look up
+          // or mint a live default list for the append.
+          let lists: WatchlistV2[] = [];
+          try {
+            lists = await getWatchlistsV2();
+          } catch {
+            lists = [];
+          }
+          if (lists[0]) {
+            targetId = lists[0].id;
+            targetName = lists[0].name;
+          } else {
+            // First-time wiring — mint a default "My core" list so the
+            // append has somewhere to land.
+            const created = await createWatchlistV2({
+              name: activeListName || "My core",
+              kind: "manual",
+            });
+            targetId = created.id;
+            targetName = created.name;
+          }
         }
-        let target = lists[0];
-        if (!target) {
-          // First-time wiring — mint a default "My core" list so the
-          // append has somewhere to land. The backend endpoint is
-          // idempotent on (username, name) collisions per the v2 spec.
-          target = await createWatchlistV2({
-            name: activeListName || "My core",
-            kind: "manual",
-          });
-        }
-        await addWatchlistItem(target.id, sym);
+
+        await addWatchlistItem(targetId, sym);
         setFeedback({
           tone: "ok",
-          msg: `Added ${sym} to ${target.name}`,
+          msg: `Added ${sym} to ${targetName}`,
         });
         if (typeof window !== "undefined") {
           window.dispatchEvent(
@@ -378,11 +540,12 @@ function QuickAddForm({ activeListName }: { activeListName: string }) {
               detail: {
                 kind: "info",
                 title: `Added ${sym}`,
-                message: `Appended to ${target.name}.`,
+                message: `Appended to ${targetName}.`,
               },
             }),
           );
         }
+        onAdded?.();
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Add failed";
         setFeedback({ tone: "err", msg });
@@ -390,7 +553,7 @@ function QuickAddForm({ activeListName }: { activeListName: string }) {
         setSubmitting(false);
       }
     },
-    [activeListName],
+    [activeListId, activeListName, onAdded],
   );
 
   return (
