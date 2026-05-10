@@ -3683,6 +3683,7 @@ if (typeof window !== "undefined") window.TickerPage = TickerPage;
 const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
   const live = useDesignLiveData();
   const t = useLiveTicker(sym);
+  const isNarrow = useIsNarrowViewport(900);
   const [asset, setAsset] = useState("stock");
   const [side, setSide] = useState("buy");
   const [qty, setQty] = useState(1);
@@ -3713,6 +3714,12 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
     if (t.px > 0) setLimitPx(t.px);
   }, [t.sym, t.px]);
 
+  useEffect(() => {
+    if (!isNarrow) return;
+    setLeftCollapsed(true);
+    setRightCollapsed(true);
+  }, [isNarrow]);
+
   const isOption = asset !== "stock";
   const notional = isOption ? contracts * 284 : qty * limitPx;
   const stopPx = limitPx * (1 - stopPct / 100);
@@ -3721,23 +3728,31 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: "var(--border)" }}>
-      <MetricRibbon t={t} />
-      <div style={{ display: "grid", gridTemplateColumns: `30px 1fr ${rightCollapsed ? "36px" : "380px"}`, gap: 1, flex: 1, minHeight: 0, position: "relative" }}>
-        {/* LEFT — slim rail (always 30px); expanded panel overlays chart */}
-        <aside style={{ background: "var(--bg)", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 14, gap: 10 }}>
+      <MetricRibbon t={t} compact={isNarrow} />
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: isNarrow
+          ? "minmax(0, 1fr)"
+          : `${leftCollapsed ? "30px" : "30px 260px"} minmax(0, 1fr) ${rightCollapsed ? "36px" : "380px"}`,
+        gap: 1,
+        flex: 1,
+        minHeight: 0,
+        position: "relative"
+      }}>
+        {/* LEFT — slim rail plus optional book column. The panel is in-flow so it never covers the chart. */}
+        {!isNarrow && <aside style={{ background: "var(--bg)", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 14, gap: 10 }}>
           <a onClick={() => setLeftCollapsed(c => !c)} title={leftCollapsed ? "Open book" : "Collapse"}
              style={{ fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--fg-muted)", cursor: "default", writingMode: "vertical-rl", transform: "rotate(180deg)", padding: "10px 0" }}>
             {leftCollapsed ? "▸" : "◂"} &nbsp; {isOption ? "Options book" : "Order book · L2"}
           </a>
-        </aside>
-        {!leftCollapsed && (
+        </aside>}
+        {!isNarrow && !leftCollapsed && (
           <aside style={{
-            position: "absolute", top: 0, bottom: 0, left: 31, width: 260, zIndex: 20,
+            minWidth: 0,
             background: "var(--pill-bg)",
             backdropFilter: "blur(14px) saturate(140%)",
             WebkitBackdropFilter: "blur(14px) saturate(140%)",
             borderRight: "1px solid var(--border)",
-            boxShadow: "var(--shadow-2)",
             overflow: "auto", display: "flex", flexDirection: "column"
           }}>
             <div style={{ position: "sticky", top: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "var(--pill-bg)", borderBottom: "1px solid var(--border-hair)", backdropFilter: "blur(8px)" }}>
@@ -3750,7 +3765,7 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
         )}
 
         {/* CENTER — chart hero */}
-        <section style={{ background: "var(--bg)", padding: "18px 24px 20px", display: "flex", flexDirection: "column", gap: 12, minHeight: 0, overflow: "hidden" }}>
+        <section style={{ background: "var(--bg)", padding: isNarrow ? "14px 14px 18px" : "18px 24px 20px", display: "flex", flexDirection: "column", gap: 12, minHeight: 0, minWidth: 0, overflow: "hidden" }}>
           <TradeHeader t={t} />
           <ChartToolbar range={range} setRange={setRange} chartMode={chartMode} setChartMode={setChartMode} overlays={overlays} setOverlays={setOverlays} />
           <div style={{ flex: 1, minHeight: 320, display: "flex" }}>
@@ -3766,7 +3781,7 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
         </section>
 
         {/* RIGHT — collapsible, pushes (in-grid) */}
-        {rightCollapsed ? (
+        {!isNarrow && (rightCollapsed ? (
           <aside style={{ background: "var(--bg-elev-1)", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 14, gap: 10 }}>
             <a onClick={() => setRightCollapsed(false)} title="Open stage order"
                style={{ fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--fg-muted)", cursor: "default", writingMode: "vertical-rl", padding: "10px 0" }}>
@@ -3793,15 +3808,27 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
           </button>
           <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)", textAlign: "center", marginTop: -8 }}>Reviewed against regime + risk policy</div>
         </aside>
-        )}
+        ))}
       </div>
     </div>
   );
 };
 
+function useIsNarrowViewport(width = 900) {
+  const [isNarrow, setIsNarrow] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia(`(max-width: ${width}px)`);
+    const update = () => setIsNarrow(query.matches);
+    update();
+    query.addEventListener?.("change", update);
+    return () => query.removeEventListener?.("change", update);
+  }, [width]);
+  return isNarrow;
+}
+
 // ─── metric ribbon ───────────────────────────────────────────────────────────
 
-function MetricRibbon({ t }) {
+function MetricRibbon({ t, compact = false }) {
   const name = t.name && t.name !== t.sym ? t.name : "";
   const bidAsk = t.bid > 0 && t.ask > 0
     ? <><span style={{ color: "var(--ice-500)" }}>{t.bid.toFixed(2)}</span> <span style={{ color: "var(--fg-hint)", margin: "0 4px" }}>×</span><span style={{ color: "var(--gold-300)" }}>{t.ask.toFixed(2)}</span></>
@@ -3817,9 +3844,15 @@ function MetricRibbon({ t }) {
     { label: "Earnings", value: t.earningsIn == null ? <>—</> : <>{t.earningsIn}d</> },
   ];
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1.1fr repeat(7, 1fr)", background: "var(--ink-100)", borderBottom: "1px solid var(--border)" }}>
+    <div style={{
+      display: compact ? "flex" : "grid",
+      gridTemplateColumns: compact ? undefined : "1.1fr repeat(7, 1fr)",
+      overflowX: compact ? "auto" : "visible",
+      background: "var(--ink-100)",
+      borderBottom: "1px solid var(--border)"
+    }}>
       {cells.map((c, i) => (
-        <div key={i} style={{ padding: "10px 14px", borderRight: i < cells.length - 1 ? "1px solid var(--border-hair)" : "0", display: "flex", flexDirection: "column", gap: 3 }}>
+        <div key={i} style={{ padding: compact ? "10px 12px" : "10px 14px", minWidth: compact ? (i === 0 ? 160 : 128) : 0, borderRight: i < cells.length - 1 ? "1px solid var(--border-hair)" : "0", display: "flex", flexDirection: "column", gap: 3 }}>
           <span className="t-label" style={{ fontSize: 8.5 }}>{c.label}</span>
           <span style={{ fontFamily: c.big ? "var(--font-display)" : "var(--font-mono)", fontStyle: c.big ? "italic" : "normal", fontSize: c.big ? 16 : 13, color: "var(--ink-900)" }}>{c.value}</span>
         </div>
