@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import StatusBanner from "@/components/composites/StatusBanner";
+import RiskEngineIndicator from "./_components/RiskEngineIndicator";
 
 // Dashboard layout's useNotifications() requires <WebSocketProvider>,
 // which is ssr:false. Skip static prerender.
@@ -52,28 +53,10 @@ export default function RiskDashboardPage() {
           >
             RISK · PORTFOLIO SURFACE
           </p>
-          {/* v2 polish — "Risk engine · 24s ago · Recompute" indicator
-           * matches risk-dark.png top-right corner. The status dot is
-           * solid green when the engine refreshed within the last 60s
-           * (matches the page's 30s polling cadence). The button is
-           * disabled until backend B.X exposes a manual recompute hook;
-           * surfacing it now communicates the design intent to traders
-           * who expect a kick-the-tires control after intraday spikes. */}
-          <div className="flex items-center gap-3 shrink-0">
-            <span className="flex items-center gap-1.5 font-mono text-eyebrow uppercase tracking-[0.08em] text-fg-muted">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-profit" aria-hidden />
-              Risk engine
-              <span className="text-fg-muted/70">· 24s ago</span>
-            </span>
-            <button
-              type="button"
-              disabled
-              title="Manual recompute lights up via the Phase 1.1 follow-up backend (POST /api/v1/risk/recompute)"
-              className="rounded-sm border border-border bg-bg-elev-2 px-2.5 py-1 font-mono text-eyebrow font-semibold uppercase tracking-[0.08em] text-fg-muted opacity-60 cursor-not-allowed"
-            >
-              Recompute
-            </button>
-          </div>
+          {/* v2 polish — "Risk engine · last update · Recompute" indicator
+           * matches risk-dark.png top-right. Client component handles
+           * the live timestamp + POST /api/v1/risk/recompute call. */}
+          <RiskEngineIndicator />
         </div>
         <h2
           className="m-0 mt-3 italic"
