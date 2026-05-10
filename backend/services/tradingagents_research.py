@@ -872,6 +872,37 @@ async def _execute_tradingagents_run(username: str, run_id: str) -> None:
     except Exception:
         logger.debug("TradingAgents reusable research persistence failed", exc_info=True)
 
+    # Push a real-time notification for terminal-state transitions so the bell
+    # + alerts feed light up the moment a TradingAgents run lands.
+    try:
+        from api.routes.v2_notifications import push_notification
+
+        symbol = str(record.get("symbol") or "").upper() or "?"
+        provider = str(record.get("provider") or "").lower() or "ai"
+        terminal_status = record.get("status")
+        if terminal_status == "succeeded":
+            await push_notification(
+                username=username,
+                type="agent",
+                title=f"TradingAgents · {symbol}",
+                body=f"Research run for {symbol} completed via {provider}.",
+                severity="info",
+                link=f"/symbols/{symbol}",
+            )
+        elif terminal_status == "failed":
+            err = record.get("error") or {}
+            err_msg = str(err.get("message") or "Run failed").strip() or "Run failed"
+            await push_notification(
+                username=username,
+                type="agent",
+                title=f"TradingAgents · {symbol} failed",
+                body=err_msg[:240],
+                severity="error",
+                link=f"/symbols/{symbol}",
+            )
+    except Exception:
+        logger.debug("TradingAgents push_notification failed", exc_info=True)
+
 
 async def _heartbeat_tradingagents_run(username: str, run_id: str, stop: asyncio.Event) -> None:
     while True:

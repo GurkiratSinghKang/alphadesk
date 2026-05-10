@@ -514,8 +514,30 @@ export function getStrategyContribution() {
 // (Risk hero, top-right corner) calls this when an operator wants a
 // fresh number after an intraday spike. Body is identical shape to
 // GET /api/v1/risk/dashboard.
+export interface RiskDashboardResponse {
+  portfolio_beta: number | null;
+  sharpe_ratio: number;
+  sortino_ratio: number;
+  current_drawdown_pct: number;
+  max_drawdown_pct: number;
+  var_95: number | null;
+  var_99: number | null;
+  total_portfolio_value: number;
+  total_invested: number;
+  daily_pnl: number;
+  weekly_pnl: number;
+  monthly_pnl: number;
+  position_count: number;
+  as_of: string;
+  estimated?: boolean;
+}
+
+export function getRiskDashboard() {
+  return apiFetch<RiskDashboardResponse>(`/api/v1/risk/dashboard`);
+}
+
 export function recomputeRiskDashboard() {
-  return apiFetch<unknown>(`/api/v1/risk/recompute`, { method: "POST" });
+  return apiFetch<RiskDashboardResponse>(`/api/v1/risk/recompute`, { method: "POST" });
 }
 
 export interface StrategyTrade {
