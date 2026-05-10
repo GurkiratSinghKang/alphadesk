@@ -446,36 +446,21 @@ export default function EarningsOptionsPlayPage() {
     [calendar?.earnings, candidateDecisions],
   );
 
-  const actions = (
-    <span
-      role="status"
-      aria-live="polite"
-      className="t-meta tabular-nums text-[color:var(--fg-muted)]"
-    >
-      {calendar
-        ? `${calendar.earnings.length} earnings · sorted by ${SORT_LABELS[filters.sort ?? "date"]}${
-            decisionCounts.total > 0
-              ? ` · ${decisionCounts.saved} saved · ${decisionCounts.order} marked for order review`
-              : ""
-          }`
-        : "Loading…"}
-    </span>
-  );
-
   // CLUSTER A (1): prefer the backend-rendered windowLabel when present
   // — it accounts for weekends, month rollovers, holidays, and the NY
   // market date in a way the front-end title shouldn't reverse-engineer.
   // Falls back to the static "this/next" label when the field is absent
   // (older backends or test fixtures that don't thread it).
-  const title = calendar?.windowLabel
-    ? `${titleForWindow(filters.window)} · ${calendar.windowLabel}`
-    : titleForWindow(filters.window);
+  const headlineTitle = titleForWindow(filters.window);
+  const headlineWindowLabel = calendar?.windowLabel ?? null;
+  const sortLabel = SORT_LABELS[filters.sort ?? "date"];
 
   return (
     <DashboardPageLayout
       eyebrow="EARNINGS · OPTIONS PLAY"
-      title={title}
-      actions={actions}
+      title={headlineWindowLabel ? `${headlineTitle} · ${headlineWindowLabel}` : headlineTitle}
+      pageLabel="Earnings options play"
+      hideHeader
       className="max-w-[1840px] 2xl:max-w-[1980px] lg:box-border lg:h-[calc(100dvh-74px)] lg:overflow-hidden"
     >
       {/* Round-8 / AX-05: skip-to-detail link for keyboard users so a
@@ -489,9 +474,27 @@ export default function EarningsOptionsPlayPage() {
         Skip to detail panel
       </a>
 
+      {/* v2 design language — editorial italic-Newsreader hero matching
+          the voice established across /strategies, /reports, /watchlists,
+          /alerts, /analytics, /pipeline, /settings, /risk-dashboard. The
+          previous DashboardPageLayout chrome stacked the same band but in
+          sans + uppercase; the v2 hero replaces it (`hideHeader` above)
+          and folds the live status row into a single right-aligned chip. */}
+      <EOPV2Hero
+        eyebrow="EARNINGS · OPTIONS PLAY"
+        title={headlineTitle}
+        windowLabel={headlineWindowLabel}
+        loading={!calendar}
+        candidateCount={calendar?.earnings.length ?? null}
+        savedCount={decisionCounts.saved}
+        markedCount={decisionCounts.order}
+        sortLabel={sortLabel}
+      />
+
       {/* Round-8 / NV-01: dismissible "what is this strategy?" intro
           for first-time users. Persisted in localStorage so power
-          users only see it once. */}
+          users only see it once. v2 redesign — italic editorial
+          callout instead of the sans gradient banner. */}
       <StrategyIntroCard />
 
       <FiltersBar
@@ -595,25 +598,50 @@ function StrategyIntroCard() {
   return (
     <aside
       data-slot="earnings-intro"
-      className="relative overflow-hidden rounded-md border border-[color:var(--border)] bg-[linear-gradient(135deg,color-mix(in_oklab,var(--bg-card)_91%,var(--brand)_9%),var(--bg-elev-1))] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_18px_46px_-38px_rgba(0,0,0,0.72)] md:px-4"
+      className="relative overflow-hidden rounded-md border border-border-hair"
+      style={{
+        background: "var(--bg-elev-1)",
+        borderLeft: "2px solid color-mix(in oklab, var(--brand) 38%, transparent)",
+      }}
     >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,var(--brand),transparent)] opacity-70"
-      />
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(420px,0.72fr)_auto] lg:items-center">
+      <div className="grid gap-3 px-4 py-3.5 lg:grid-cols-[minmax(0,1fr)_minmax(440px,0.78fr)_auto] lg:items-center md:px-5">
         <div>
-          <p className="t-label text-[color:var(--brand)]">Event volatility command deck</p>
-          <h2 className="mt-1 font-sans text-body font-semibold leading-tight tracking-tight text-[color:var(--fg)] md:text-h3">
+          <p
+            className="t-eyebrow-italic"
+            style={{ color: "var(--brand)", letterSpacing: "0.2em", margin: 0 }}
+          >
+            EVENT · VOLATILITY · COMMAND DECK
+          </p>
+          <h3
+            className="m-0 mt-2 italic"
+            style={{
+              fontFamily: "var(--font-display)",
+              color: "var(--ink-1000)",
+              fontSize: 19,
+              fontWeight: 400,
+              letterSpacing: "-0.015em",
+              lineHeight: 1.2,
+            }}
+          >
             Ranked earnings setups with explicit data confidence.
-          </h2>
-          <p className="mt-1 max-w-[82ch] font-sans text-body-sm leading-snug text-[color:var(--fg-muted)]">
-            Score is a 0-100 setup-quality composite across IV regime, ATM premium yield,
-            implied move versus history, AI confidence, and event timing. Sparse inputs are
-            labeled before they affect the ranking.
+          </h3>
+          <p
+            className="italic"
+            style={{
+              marginTop: 6,
+              fontFamily: "var(--font-display)",
+              fontSize: 13.5,
+              color: "var(--fg-muted)",
+              lineHeight: 1.55,
+              maxWidth: "78ch",
+            }}
+          >
+            Score is a 0-100 composite across IV regime, ATM premium yield,
+            implied move vs history, AI confidence, and event timing. Sparse
+            inputs are labeled before they affect the ranking.
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-[color:var(--border)] bg-[color:var(--border)] sm:grid-cols-4 lg:grid-cols-2">
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border-hair bg-border-hair sm:grid-cols-4 lg:grid-cols-2">
           <IntroStat label="Risk frame" value="Defined loss" />
           <IntroStat label="Vol gate" value="IV vs history" />
           <IntroStat label="Primary sort" value="Score" />
@@ -625,7 +653,7 @@ function StrategyIntroCard() {
             safeSetItem(INTRO_DISMISS_KEY, "1");
             window.dispatchEvent(new Event(INTRO_DISMISS_EVENT));
           }}
-          className="min-h-9 rounded-sm border border-[color:var(--border)] bg-[color:var(--bg-card)] px-3 font-sans text-label text-fg-muted transition-colors hover:border-primary hover:text-primary active:scale-[0.98] lg:self-start"
+          className="min-h-9 rounded-sm border border-border-hair bg-bg-card px-3 font-sans text-label text-fg-muted transition-colors hover:border-primary hover:text-primary active:scale-[0.98] lg:self-start"
         >
           Dismiss
         </button>
@@ -636,12 +664,130 @@ function StrategyIntroCard() {
 
 function IntroStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-[color:var(--bg-card)] px-3 py-2.5">
-      <p className="t-label text-[color:var(--fg-muted)]">{label}</p>
-      <p className="mt-1 font-mono text-body-sm font-semibold tabular-nums text-[color:var(--fg)]">
+    <div className="bg-bg-card px-3 py-2.5">
+      <p
+        className="t-eyebrow-italic"
+        style={{ color: "var(--gold-300)", letterSpacing: "0.16em", margin: 0 }}
+      >
+        {label.toUpperCase()}
+      </p>
+      <p className="mt-1 t-mono tabular-nums text-fg" style={{ fontSize: 13.5 }}>
         {value}
       </p>
     </div>
+  );
+}
+
+/**
+ * v2 phase — editorial italic-Newsreader hero matching the voice
+ * established across the rest of the dashboard. Right-aligned status
+ * chip carries the live calendar count + sort + decision tally so the
+ * page never loses operator context while the user filters or reviews.
+ */
+function EOPV2Hero({
+  eyebrow,
+  title,
+  windowLabel,
+  loading,
+  candidateCount,
+  savedCount,
+  markedCount,
+  sortLabel,
+}: {
+  eyebrow: string;
+  title: string;
+  windowLabel: string | null;
+  loading: boolean;
+  candidateCount: number | null;
+  savedCount: number;
+  markedCount: number;
+  sortLabel: string;
+}) {
+  const decisionTally =
+    savedCount > 0 || markedCount > 0
+      ? `${savedCount} saved · ${markedCount} order-review`
+      : null;
+  return (
+    <header
+      className="relative overflow-hidden rounded-md border border-border-hair p-4 md:px-5 md:py-4"
+      style={{
+        background: "var(--bg-elev-1)",
+        borderLeft: "2px solid var(--brand)",
+      }}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p
+            className="t-eyebrow-italic"
+            style={{ color: "var(--brand)", letterSpacing: "0.2em", margin: 0 }}
+          >
+            {eyebrow}
+            {windowLabel ? <span style={{ color: "var(--gold-300)" }}> · {windowLabel}</span> : null}
+          </p>
+          {/* h1 (not h2) because DashboardPageLayout above is mounted with
+              hideHeader=true, so this is the page's primary landmark
+              heading. The other v2 dashboard pages keep h2 here because
+              they're nested under a chrome <h1>; here we own the h1. */}
+          <h1
+            className="m-0 mt-2.5 italic"
+            style={{
+              fontFamily: "var(--font-display)",
+              color: "var(--ink-1000)",
+              // 28px matches the editorial-quiet hero scale used across
+              // /strategies/[id]/playbook + /backtest + the rest of v2.
+              fontSize: 28,
+              fontWeight: 400,
+              letterSpacing: "-0.02em",
+              lineHeight: 1.1,
+              textWrap: "balance",
+            }}
+          >
+            {title}.
+          </h1>
+          <p
+            className="italic"
+            style={{
+              marginTop: 10,
+              fontFamily: "var(--font-display)",
+              fontSize: 14.5,
+              color: "var(--fg-muted)",
+              lineHeight: 1.55,
+              maxWidth: 720,
+            }}
+          >
+            Defined-risk option structures around earnings prints. Calendar
+            ranks setups by implied-move regime, premium yield, and AI
+            confidence — pick a name, drop into a capped-loss trade.
+          </p>
+        </div>
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex flex-col items-end gap-1 t-eyebrow-italic"
+          style={{ letterSpacing: "0.12em", color: "var(--fg-muted)" }}
+        >
+          {loading ? (
+            <span style={{ color: "var(--fg-muted)" }}>Loading…</span>
+          ) : (
+            <>
+              <span className="inline-flex items-center gap-2">
+                <span
+                  className="t-mono tabular-nums"
+                  style={{ fontSize: 16, color: "var(--ink-1000)", letterSpacing: 0 }}
+                >
+                  {candidateCount ?? 0}
+                </span>
+                <span style={{ color: "var(--fg-muted)" }}>EARNINGS</span>
+              </span>
+              <span style={{ color: "var(--gold-300)" }}>SORTED · {sortLabel.toUpperCase()}</span>
+              {decisionTally ? (
+                <span style={{ color: "var(--fg-muted)" }}>{decisionTally.toUpperCase()}</span>
+              ) : null}
+            </>
+          )}
+        </div>
+      </div>
+    </header>
   );
 }
 
