@@ -217,6 +217,15 @@ class KillSwitch:
                     reason=f"dd {dd:.2%} <= threshold {threshold:.2%}",
                 )
             )
+            _spawn_kill_switch_notification(
+                layer=1,
+                strategy=strategy,
+                title=f"Strategy disabled: {strategy}",
+                body=(
+                    f"Layer 1 — drawdown {dd:.1%} below "
+                    f"{threshold:.1%} threshold."
+                ),
+            )
         return Decision(
             enabled=False,
             layer=1,
@@ -268,6 +277,15 @@ class KillSwitch:
                     threshold=threshold,
                     reason=f"daily PnL {ratio:.2%} <= threshold {threshold:.2%}",
                 )
+            )
+            _spawn_kill_switch_notification(
+                layer=2,
+                strategy=strategy,
+                title=f"Strategy disabled: {strategy}",
+                body=(
+                    f"Layer 2 — daily realized P&L {ratio:.1%} of "
+                    f"alloc cap below {threshold:.1%} threshold."
+                ),
             )
         return Decision(
             enabled=False,
@@ -569,6 +587,53 @@ class PostgresDisabledEventsRepo:
         _run_async_from_sync(self.resolve_async(event_id, resolved_by))
 
 
+def _spawn_kill_switch_notification(
+    *,
+    layer: int,
+    strategy: str,
+    title: str,
+    body: str,
+) -> None:
+    """Fire-and-forget push_notification spawn for Layer 1/2 auto-disables.
+
+    The kill-switch checks (`check_layer1_drawdown`, `check_layer2_daily_pnl`)
+    run from sync code paths. We schedule the async push as a task on
+    the running event loop when one exists; fall through silently when
+    called from a fully-sync context (CLI scripts, unit tests).
+    """
+    import asyncio
+    import logging
+
+    async def _push() -> None:
+        try:
+            from api.routes.v2_notifications import push_notification
+
+            await push_notification(
+                username="default",
+                type="risk",
+                title=title,
+                body=body,
+                severity="error",
+                link="/risk-dashboard",
+            )
+        except Exception:
+            logging.getLogger(__name__).debug(
+                "kill-switch Layer-%d push_notification raised", layer,
+                exc_info=True,
+            )
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_push())
+    except RuntimeError:
+        # No running loop — caller is fully sync (CLI, tests). Skip
+        # silently; the disable itself has already been recorded so
+        # the next poll-driven UI refresh will pick up the state.
+        logging.getLogger(__name__).debug(
+            "kill-switch Layer-%d notification skipped (no event loop)", layer,
+        )
+
+
 def _fire_layer3_alert(strategy: str, actor: str, reason: str) -> None:
     """Fan out a Layer-3 manual-disable alert via the oncall dispatcher.
 
@@ -610,6 +675,26 @@ def _fire_layer3_alert(strategy: str, actor: str, reason: str) -> None:
             import logging as _logging
             _logging.getLogger(__name__).error(
                 "Layer-3 fire_alert raised", exc_info=True
+            )
+
+        # v2 backend (PR #158) — also push into the operator's
+        # bell + alerts feed so the Risk-event surfaces in the UI
+        # in real-time. Best-effort; pub/sub failure is silent.
+        try:
+            from api.routes.v2_notifications import push_notification
+
+            await push_notification(
+                username=actor,
+                type="risk",
+                title=f"Strategy disabled: {strategy}",
+                body=f"Manual kill-switch fired by {actor}. {reason}",
+                severity="error",
+                link="/risk-dashboard",
+            )
+        except Exception:
+            import logging as _logging
+            _logging.getLogger(__name__).debug(
+                "Layer-3 push_notification raised", exc_info=True
             )
 
     try:

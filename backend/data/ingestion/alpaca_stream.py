@@ -768,6 +768,64 @@ async def _run_trade_updates_stream() -> None:
                             exc_info=True,
                         )
 
+                    # v2 backend (PR #158) — fan a server-side
+                    # notification into the operator's bell + alerts
+                    # feed for the lifecycle events that matter at
+                    # human latency. Skips intra-fill noise like
+                    # `new`, `done_for_day`, `replaced`, etc.
+                    if event in {"fill", "partial_fill", "rejected", "canceled"}:
+                        try:
+                            from api.routes.v2_notifications import push_notification
+
+                            sym = payload.get("symbol") or "—"
+                            side = (payload.get("side") or "").upper()
+                            qty = payload.get("filled_qty") or payload.get("qty") or 0
+                            price = payload.get("fill_price")
+                            if event == "fill" or event == "partial_fill":
+                                title = (
+                                    f"{sym} {side} "
+                                    f"{event.replace('_', ' ')}"
+                                ).strip()
+                                body_parts = []
+                                if qty:
+                                    body_parts.append(
+                                        f"{int(float(qty))} sh"
+                                        if float(qty).is_integer()
+                                        else f"{float(qty):.2f} sh"
+                                    )
+                                if price is not None:
+                                    body_parts.append(f"@ ${float(price):.2f}")
+                                body = " ".join(body_parts) or "Order filled."
+                                severity = "info"
+                            elif event == "rejected":
+                                title = f"{sym} {side} rejected"
+                                body = (
+                                    payload.get("reject_reason")
+                                    or "Broker rejected the order."
+                                )
+                                severity = "warning"
+                            else:  # canceled
+                                title = f"{sym} {side} canceled"
+                                body = "Order canceled."
+                                severity = "info"
+
+                            await push_notification(
+                                username=user_id,
+                                type="fill",
+                                title=title,
+                                body=body,
+                                severity=severity,
+                                link=f"/trade?symbol={sym}",
+                            )
+                        except Exception:
+                            # Notification failure must not crash the
+                            # stream — fills are already in Redis.
+                            logger.debug(
+                                "push_notification failed for fill %s",
+                                payload.get("order_id"),
+                                exc_info=True,
+                            )
+
         except asyncio.CancelledError:
             break
         except Exception:

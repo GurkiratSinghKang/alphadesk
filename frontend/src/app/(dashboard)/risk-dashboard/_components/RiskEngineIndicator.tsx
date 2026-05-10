@@ -2,27 +2,47 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { recomputeRiskDashboard } from "@/lib/api";
+import { getRiskDashboard, recomputeRiskDashboard } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 /**
  * Top-right Risk hero indicator + Recompute button per risk-dark.png.
  *
  * Renders a "● Risk engine · {Ns} ago" status pill alongside a
- * Recompute button. The button POSTs /api/v1/risk/recompute (added in
- * the same backend PR as this component); the response shape is
- * RiskDashboard but we don't propagate it here — the existing
- * dashboard polling at the page level picks up the freshened numbers
- * within a tick.
+ * Recompute button. The pill ages off the server-supplied `as_of`
+ * timestamp on the dashboard response (PR #158) — not the time the
+ * tab was opened — so an operator landing on the page sees the true
+ * staleness of the underlying compute.
  *
- * Live timestamp ticks every second so the operator sees the staleness
- * grow visually instead of staring at a frozen "—".
+ * The button POSTs /api/v1/risk/recompute and resets the elapsed
+ * clock from the response's `as_of`. A second-resolution tick keeps
+ * the visible "{Ns} ago" alive.
  */
 export default function RiskEngineIndicator() {
+  // Initialize to client time so the first paint shows "0s ago"
+  // instead of an empty pill; the as_of fetch below corrects it
+  // within ~100ms.
   const [lastComputedMs, setLastComputedMs] = useState<number>(() => Date.now());
   const [tick, setTick] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Hydrate the timestamp from the server's `as_of` on mount.
+  useEffect(() => {
+    let cancelled = false;
+    getRiskDashboard()
+      .then((data) => {
+        if (cancelled) return;
+        const ts = Date.parse(data.as_of);
+        if (Number.isFinite(ts)) setLastComputedMs(ts);
+      })
+      .catch(() => {
+        // Silent — keep the client-side fallback.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Tick the elapsed-seconds display every second.
   useEffect(() => {
@@ -49,8 +69,9 @@ export default function RiskEngineIndicator() {
     setSubmitting(true);
     setError(null);
     try {
-      await recomputeRiskDashboard();
-      setLastComputedMs(Date.now());
+      const res = await recomputeRiskDashboard();
+      const ts = Date.parse(res.as_of);
+      setLastComputedMs(Number.isFinite(ts) ? ts : Date.now());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Recompute failed");
     } finally {
