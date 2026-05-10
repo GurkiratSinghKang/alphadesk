@@ -180,7 +180,35 @@ export function useNotifications() {
     // (persona-r P27/P43). The subscribe call is idempotent — safe to call on
     // every mount.
     subscribe("trade_updates");
+    // v2 backend (PR #157) — server-side notification fan-out. Backend
+    // publishes here whenever a notification row is inserted via
+    // `push_notification()`. The handler below pushes the payload into
+    // the local store so the bell + alerts feed update instantly.
+    subscribe("notifications");
   }, [subscribe]);
+
+  // ─── Server-side notification push (v2 backend) ──────────────
+  useEffect(() => {
+    const unsub = onMessage("notifications", (msg) => {
+      const data = (msg.data ?? {}) as {
+        id?: number;
+        type?: string;
+        title?: string;
+        body?: string;
+        link?: string | null;
+      };
+      if (!data.title || !data.type) return;
+      pushRef.current({
+        category: data.type as NotificationCategory,
+        title: data.title,
+        detail: data.body ?? "",
+        icon: undefined,
+      });
+    });
+    return unsub;
+    // onMessage is stable across renders — capture once per mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onMessage]);
 
   // ─── Trade fills (portfolio channel) ─────────────────────────
   useEffect(() => {

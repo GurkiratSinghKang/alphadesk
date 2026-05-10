@@ -58,6 +58,14 @@ CHANNEL_BARS = "bars"
 # frontend subscribe just to trading events without receiving every
 # portfolio snapshot refresh on the portfolio channel (persona-r P27/P43).
 CHANNEL_TRADE_UPDATES = "trade_updates"
+# v2 backend (PR #157) — server-side notification fan-out. Published
+# whenever a notification is inserted into the v2 `notification`
+# table; the frontend `useNotifications` hook listens here to push
+# the new entry into the local Zustand store immediately, instead
+# of waiting for the next /api/v1/notifications hydration tick.
+# Per-user routing handled via `_user_id` hint on the payload (same
+# pattern as CHANNEL_TRADE_UPDATES).
+CHANNEL_NOTIFICATIONS = "notifications"
 
 ALL_CHANNELS = [
     CHANNEL_QUOTES,
@@ -66,6 +74,7 @@ ALL_CHANNELS = [
     CHANNEL_AGENTS,
     CHANNEL_BARS,
     CHANNEL_TRADE_UPDATES,
+    CHANNEL_NOTIFICATIONS,
 ]
 
 

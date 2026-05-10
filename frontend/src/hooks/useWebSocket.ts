@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { env } from "@/env";
 import { fetchPortfolioData } from "@/hooks/useDataPipeline";
 
-type WsChannel = "quotes" | "portfolio" | "alerts" | "agents" | "bars" | "trade_updates";
+type WsChannel = "quotes" | "portfolio" | "alerts" | "agents" | "bars" | "trade_updates" | "notifications";
 
 // Wave C (persona 74 P0 #1): channels that the backend backs with a Redis
 // Stream. For these, we track the ``last_id`` we've seen in memory and
