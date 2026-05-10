@@ -44,7 +44,7 @@ const ROUTES: Route[] = [
 async function settle(page: Page, ms: number) {
   await page.waitForTimeout(ms);
   await page.addStyleTag({
-    content: `*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;caret-color:transparent!important}`,
+    content: `*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;caret-color:transparent!important}[data-testid="onboarding-tour"],[data-testid="onboarding-tour-backdrop"]{display:none!important}`,
   });
 }
 
@@ -53,16 +53,17 @@ for (const route of ROUTES) {
     // Two SEPARATE contexts — live and design have nothing to share, and
     // running them concurrently in one context starves the dev server when
     // the design's babel-in-the-browser kicks off mid-compile.
+    // CSS-only tour suppression in `settle()`. Playwright's
+    // addInitScript triggers an "Invalid or unexpected token" runtime
+    // error in Next 16 RSC mode that kills client-side hydration on
+    // /trade and the dashboard root.
     const liveCtx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-    await liveCtx.addInitScript(() => {
-      try {
-        localStorage.setItem("alphadesk-tour-complete", "1");
-        localStorage.setItem("alphadesk.onboarding_dismissed", "true");
-      } catch { /* private mode */ }
-    });
     const liveTab = await liveCtx.newPage();
     await liveTab.goto(`http://localhost:3000${route.live}`, { waitUntil: "domcontentloaded" });
     await settle(liveTab, route.liveSettleMs ?? 4000);
+    // Sacrificial first screenshot — see pages.spec.ts gotoAndWait.
+    await liveTab.screenshot({ fullPage: false });
+    await liveTab.waitForTimeout(300);
     const liveBuf = await liveTab.screenshot({ fullPage: false });
     await liveCtx.close();
 
