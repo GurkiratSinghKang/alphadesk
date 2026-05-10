@@ -354,6 +354,18 @@ function EditorialStagedReview({ run }: { run: PipelineRun | null }) {
               : "No candidates awaiting review right now."}
           </h2>
         </div>
+        {/* v2 polish — "N candidates · top X% of universe" caption per
+         * pipeline-dark.png. The S&P 1500 + ADRs universe ~= 1800 names
+         * after liquidity filter (per the funnel's caption above), so
+         * we use that as the denominator until the backend exposes a
+         * canonical pre-screen universe count. */}
+        {candidates.length > 0 ? (
+          <p className="font-mono text-eyebrow uppercase tracking-[0.08em] text-fg-muted shrink-0 self-end">
+            {candidates.length} candidate{candidates.length === 1 ? "" : "s"}
+            {" · top "}
+            {((candidates.length / 1800) * 100).toFixed(2)}% of universe
+          </p>
+        ) : null}
       </header>
 
       {candidates.length === 0 ? (
