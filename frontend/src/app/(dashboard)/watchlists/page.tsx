@@ -1,15 +1,5 @@
-import type { Metadata } from "next";
+import DesignSurface from "@/components/design-v2/DesignSurface";
 
-import WatchlistsClient from "./WatchlistsClient";
-
-export const metadata: Metadata = {
-  title: "Watchlists — AlphaDesk",
-  description:
-    "Multiple named lists, custom columns, per-strategy auto-populated lists, sharing.",
-};
-
-export const dynamic = "force-dynamic";
-
-export default function WatchlistsPage() {
-  return <WatchlistsClient />;
+export default function Page() {
+  return <DesignSurface page="watchlists" />;
 }

@@ -288,7 +288,7 @@
      EmptyState titles, AIStrip body all consume `--font-display` and
      therefore render Newsreader italic. Geist remains the body UI face
      via `--font-ui`; Geist Mono remains numerics via `--font-mono`. */
-  --font-ui: var(--font-geist);
+  --font-ui: var(--font-inter-tight);
   --font-display: var(--font-newsreader);
 
   /* Type scale — editorial. Larger jumps than typical web.

@@ -49,7 +49,38 @@ const getServerSnapshot = () => false;
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isDeskRoute = pathname === "/";
+  const designSurfaceRoutes = new Set([
+    "/",
+    "/alerts",
+    "/analytics",
+    "/pipeline",
+    "/reports",
+    "/risk-dashboard",
+    "/settings",
+    "/strategies",
+    "/trade",
+    "/watchlists",
+  ]);
+  const isDesignSurfaceRoute = Boolean(pathname && designSurfaceRoutes.has(pathname));
 
+  if (isDesignSurfaceRoute) {
+    return (
+      <div className="h-dvh min-h-dvh w-full overflow-hidden bg-bg">
+        {children}
+      </div>
+    );
+  }
+
+  return <DashboardRuntimeLayout isDeskRoute={isDeskRoute}>{children}</DashboardRuntimeLayout>;
+}
+
+function DashboardRuntimeLayout({
+  children,
+  isDeskRoute,
+}: {
+  children: ReactNode;
+  isDeskRoute: boolean;
+}) {
   const queryClient = useQueryClient();
   const { overlayOpen, setOverlayOpen } = useKeyboardShortcuts();
   const { toast } = useToast();
@@ -61,7 +92,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   // dismiss decision survives a full reload, but the banner will
   // re-resurrect itself if a fresh issue fires more than
   // BANNER_REAPPEAR_AFTER_MS after the dismiss.
-  const [bannerDismissedAt, setBannerDismissedAt] = useState<number | null>(null);
+  const [bannerDismissedAt, setBannerDismissedAt] = useState<number | null>(() => {
+    if (typeof window === "undefined") return null;
+    return readDismissedAt();
+  });
   const allApiIssues = useMemo(
     () =>
       Object.values(apiIssues)
@@ -107,12 +141,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     // queries the user isn't looking at.
     void queryClient.refetchQueries({ type: "active" });
   }, [queryClient]);
-  // EOP-AUDIT 2026-05-06 / B1.21: hydrate dismissed-at on mount. We do
-  // this in an effect rather than the initial useState because reading
-  // localStorage during initial render breaks SSR-streaming.
-  useEffect(() => {
-    setBannerDismissedAt(readDismissedAt());
-  }, []);
   // Mount the notification producer exactly once at the dashboard root.
   // It subscribes to WS channels (portfolio, alerts) and global custom
   // events (alphadesk:pipeline-status, alphadesk:system-notify) and

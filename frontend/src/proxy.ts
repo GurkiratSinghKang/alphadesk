@@ -18,18 +18,25 @@ const KNOWN_DASHBOARD_ROUTES: readonly string[] = [
   "/analytics",
   "/alerts",
   "/admin/control-center",
+  "/admin/users",
   "/pipeline",
   "/reports",
+  "/risk",
+  "/risk-dashboard",
   "/settings",
   "/strategies",
+  "/symbols",
   "/trade",
+  "/watchlists",
 ];
 
 function isKnownDashboardRoute(pathname: string): boolean {
   if (KNOWN_DASHBOARD_ROUTES.includes(pathname)) return true;
   if (pathname === "/strategies/trading-agents-research") return true;
   if (pathname === "/strategies/earnings-options-play") return true;
-  return /^\/strategies\/[^/]+$/.test(pathname);
+  if (/^\/symbols\/[^/]+$/.test(pathname)) return true;
+  if (/^\/strategies\/[^/]+$/.test(pathname)) return true;
+  return false;
 }
 
 /**
@@ -102,12 +109,6 @@ export async function proxy(request: NextRequest) {
   const isPublicPage = [
     "/privacy",
     "/terms",
-    // v2 redesign — /risk moved to /legal/risk; the legacy slug is still
-    // listed so the 301 redirect from next.config.ts fires before the
-    // proxy decides to bounce unauthenticated users to /login. Without
-    // this entry, a public visitor hitting /risk would be redirected
-    // to /login first and lose the deep link.
-    "/risk",
     "/legal/risk",
     "/docs",
     "/request-access",

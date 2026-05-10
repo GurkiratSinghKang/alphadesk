@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Newsreader } from "next/font/google";
+import { Inter_Tight, JetBrains_Mono, Newsreader } from "next/font/google";
 import { Providers } from "@/lib/providers";
 import WebVitalsReporter from "@/components/layout/WebVitalsReporter";
 import ServiceWorkerRegistrar from "@/components/layout/ServiceWorkerRegistrar";
@@ -30,16 +30,18 @@ export const viewport: Viewport = {
 // on first paint. Collapse to a single `geist` invocation that exposes
 // `--font-geist` and update design-tokens.css to point both `--font-ui`
 // and `--font-display` slots at the single variable.
-const geist = Geist({
-  variable: "--font-geist",
+const interTight = Inter_Tight({
+  variable: "--font-inter-tight",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
   display: "swap",
   fallback: ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
 });
 
-const geistMono = Geist_Mono({
+const jetbrainsMono = JetBrains_Mono({
   variable: "--font-mono",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600"],
   display: "swap",
   fallback: ["SF Mono", "Menlo", "monospace"],
 });
@@ -129,7 +131,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`dark ${geist.variable} ${geistMono.variable} ${newsreader.variable} h-full antialiased`}
+      className={`dark ${interTight.variable} ${jetbrainsMono.variable} ${newsreader.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>

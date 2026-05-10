@@ -339,6 +339,8 @@ function AuthFormPane({
   footerLeft?: ReactNode;
   footerRight?: ReactNode;
 }) {
+  const useDesignFooter = footerLeft === undefined && footerRight === undefined;
+
   return (
     <div className="flex flex-col overflow-visible lg:overflow-auto" style={{ padding: "clamp(24px, 5vw, 32px) clamp(22px, 7vw, 60px)" }}>
       <header className="flex items-center justify-end gap-3.5">
@@ -372,18 +374,50 @@ function AuthFormPane({
         className="mt-6 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center"
         style={{ minHeight: 24 }}
       >
-        <span
-          className="t-mono"
-          style={{ fontSize: 9.5, color: "var(--fg-hint)", letterSpacing: "0.05em" }}
-        >
-          {footerLeft ?? "AlphaDesk · v2"}
-        </span>
-        <span
-          className="t-mono"
-          style={{ fontSize: 9.5, color: "var(--fg-hint)", letterSpacing: "0.05em" }}
-        >
-          {footerRight ?? "Sign-ins are logged with IP and device fingerprint."}
-        </span>
+        {useDesignFooter ? (
+          <>
+            <div className="flex flex-wrap gap-1.5">
+              {["signin", "magic-sent", "twofa", "recovery", "pending", "rejected", "locked"].map((state) => (
+                <span
+                  key={state}
+                  className="t-mono rounded-[2px]"
+                  style={{
+                    fontSize: 9,
+                    padding: "3px 7px",
+                    background: state === "signin" ? "var(--bg-elev-2)" : "transparent",
+                    border: state === "signin" ? "1px solid var(--border-strong)" : "1px solid var(--border)",
+                    color: state === "signin" ? "var(--ink-1000)" : "var(--fg-muted)",
+                    letterSpacing: "0.05em",
+                    fontWeight: state === "signin" ? 600 : 400,
+                  }}
+                >
+                  {state}
+                </span>
+              ))}
+            </div>
+            <span
+              className="t-mono"
+              style={{ fontSize: 9.5, color: "var(--fg-hint)", letterSpacing: "0.05em" }}
+            >
+              DEMO · STATE PICKER
+            </span>
+          </>
+        ) : (
+          <>
+            <span
+              className="t-mono"
+              style={{ fontSize: 9.5, color: "var(--fg-hint)", letterSpacing: "0.05em" }}
+            >
+              {footerLeft}
+            </span>
+            <span
+              className="t-mono"
+              style={{ fontSize: 9.5, color: "var(--fg-hint)", letterSpacing: "0.05em" }}
+            >
+              {footerRight}
+            </span>
+          </>
+        )}
       </footer>
     </div>
   );

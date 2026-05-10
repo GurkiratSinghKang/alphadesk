@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import DesignSurface from "@/components/design-v2/DesignSurface";
 
-export default function LegacyRiskPage() {
-  redirect("/legal/risk");
+export default function Page() {
+  return <DesignSurface page="risk" />;
 }

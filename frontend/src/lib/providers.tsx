@@ -72,15 +72,45 @@ const DASHBOARD_ROUTE_PREFIXES = [
   "/pipeline",
   "/positions",
   "/reports",
+  "/risk",
   "/risk-dashboard",
   "/settings",
   "/strategies",
+  "/symbols",
   "/trade",
   "/watchlists",
+  "/admin/control-center",
+  "/admin/users",
 ] as const;
+
+function isDesignSurfaceRoute(pathname: string): boolean {
+  if (
+    [
+      "/",
+      "/admin/control-center",
+      "/admin/users",
+      "/alerts",
+      "/analytics",
+      "/onboarding",
+      "/pipeline",
+      "/reports",
+      "/risk",
+      "/risk-dashboard",
+      "/settings",
+      "/strategies",
+      "/symbols",
+      "/trade",
+      "/watchlists",
+    ].includes(pathname)
+  ) {
+    return true;
+  }
+  return /^\/symbols\/[^/]+$/.test(pathname);
+}
 
 function isDashboardRoute(pathname: string | null): boolean {
   if (!pathname) return false;
+  if (isDesignSurfaceRoute(pathname)) return false;
   if (DASHBOARD_ROUTE_PREFIXES.includes(pathname as (typeof DASHBOARD_ROUTE_PREFIXES)[number])) return true;
   if (pathname === "/strategies/trading-agents-research") return true;
   if (pathname === "/strategies/earnings-options-play") return true;

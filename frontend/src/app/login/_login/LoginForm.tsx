@@ -30,7 +30,6 @@ const LOCKOUT_THRESHOLD = 5; // failures that trigger the lockout
 const authInputClass =
   "h-12 rounded-[3px] border border-[var(--auth-border)] bg-[var(--bg-elev-1)] px-4 font-mono text-body text-[var(--auth-fg)] placeholder:text-[var(--auth-fg-soft)] focus-visible:border-[var(--auth-primary)] focus-visible:shadow-[0_0_0_4px_rgba(201,166,107,0.18)]";
 const authLabelClass = "font-sans text-body-sm font-medium text-[var(--auth-fg)]";
-const authMutedClass = "font-sans text-body-sm leading-relaxed text-[var(--auth-fg-muted)]";
 
 function readFailures(): number[] {
   if (typeof window === "undefined") return [];
@@ -82,6 +81,7 @@ export default function LoginForm() {
   const [capsLock, setCapsLock] = useState(false);
   const [totpRequired, setTotpRequired] = useState(false);
   const [totpCode, setTotpCode] = useState("");
+  const [passwordMode, setPasswordMode] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
   // persona-10 #5 — when api.ts hits a 401 it stashes a flag in
   // sessionStorage before redirecting here. We read + clear it on mount so
@@ -161,6 +161,10 @@ export default function LoginForm() {
     async (e: React.FormEvent) => {
       e.preventDefault();
       if (locked) return;
+      if (!passwordMode && !password) {
+        setPasswordMode(true);
+        return;
+      }
       setError("");
       setLoading(true);
 
@@ -240,11 +244,11 @@ export default function LoginForm() {
         setLoading(false);
       }
     },
-    [failures, locked, password, totpCode, totpRequired, username]
+    [failures, locked, password, passwordMode, totpCode, totpRequired, username]
   );
 
   const failCount = pruneFailures(failures, now).length;
-  const disabled = loading || !username || !password || (totpRequired && !totpCode.trim()) || locked;
+  const disabled = loading || !username || (passwordMode && !password) || (totpRequired && !totpCode.trim()) || locked;
 
   return (
     <form
@@ -299,7 +303,7 @@ export default function LoginForm() {
             textWrap: "pretty",
           }}
         >
-          Pick up your research, AI reviews, and trade plans where you left them.
+          We ping you with a magic link to your registered email. If 2FA is enabled, you&apos;ll be challenged after the link.
         </p>
       </div>
 
@@ -315,7 +319,7 @@ export default function LoginForm() {
 
       <div className="flex flex-col gap-2">
         <label htmlFor="login-username" className={authLabelClass}>
-          Username
+          Email
         </label>
         {/* Audit A-F11 (2026-05-05): the form rejected empty submission via
          * the disabled-button trick (button is disabled until both fields
@@ -333,7 +337,7 @@ export default function LoginForm() {
             setTotpRequired(false);
             setTotpCode("");
           }}
-          placeholder="email or desk handle"
+          placeholder="you@firm.com"
           autoComplete="username"
           required
           aria-required="true"
@@ -341,6 +345,7 @@ export default function LoginForm() {
         />
       </div>
 
+      {passwordMode && (
       <div className="flex flex-col gap-2">
         <label htmlFor="login-password" className={authLabelClass}>
           Password
@@ -359,8 +364,8 @@ export default function LoginForm() {
             onKeyUp={handlePasswordKey}
             placeholder="your password"
             autoComplete="current-password"
-            required
-            aria-required="true"
+            required={passwordMode}
+            aria-required={passwordMode}
             className={`${authInputClass} pr-12`}
             aria-invalid={error ? true : undefined}
           />
@@ -395,6 +400,7 @@ export default function LoginForm() {
           Forgot password?
         </Link>
       </div>
+      )}
 
       {totpRequired && (
         <div className="flex flex-col gap-2">
@@ -469,14 +475,38 @@ export default function LoginForm() {
         {loading && (
           <CircleNotch className="mr-2 h-4 w-4 animate-spin" aria-hidden weight="regular" />
         )}
-        {totpRequired ? "Verify code" : "Sign in"}
+        {totpRequired ? "Verify code" : passwordMode ? "Sign in" : "Email me a magic link"}
         {!loading && (
           <ArrowRight className="ml-2 h-4 w-4" aria-hidden weight="regular" />
         )}
       </Button>
 
+      {!passwordMode && (
+        <div className="flex flex-col gap-2 border-t border-[var(--auth-border)] pt-3">
+          <div className="font-mono text-eyebrow uppercase tracking-[0.16em] text-[var(--auth-fg-soft)]">
+            Or use a security key
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setPasswordMode(true)}
+              className="h-10 rounded-[3px] border border-[var(--auth-border)] bg-[var(--bg-elev-1)] font-sans text-body-sm text-[var(--auth-fg-muted)] transition-colors hover:border-[var(--auth-primary)] hover:text-[var(--auth-fg)]"
+            >
+              YubiKey · Touch ID
+            </button>
+            <button
+              type="button"
+              onClick={() => setPasswordMode(true)}
+              className="h-10 rounded-[3px] border border-[var(--auth-border)] bg-[var(--bg-elev-1)] font-sans text-body-sm text-[var(--auth-fg-muted)] transition-colors hover:border-[var(--auth-primary)] hover:text-[var(--auth-fg)]"
+            >
+              Authenticator code
+            </button>
+          </div>
+        </div>
+      )}
+
       <p className="mt-1 text-center font-sans text-body-sm text-[var(--auth-fg-muted)]">
-        No account?{" "}
+        New here?{" "}
         <Link
           href="/request-access"
           className="font-medium text-[var(--auth-primary)] underline decoration-[var(--auth-primary-soft)] underline-offset-4 transition-colors hover:text-[var(--auth-primary-deeper)]"
