@@ -425,6 +425,67 @@ async def get_enriched_watchlist(
     except Exception:
         pass
 
+    # Tech-score lookup — bounded async wrapper around the sync
+    # AlpacaBarProvider. Computes a 0-100 score from RSI(14) + EMA +
+    # MACD per symbol via the existing `_technical_score` helper.
+    # Per-symbol failures are non-fatal — row falls back to null.
+    tech_by_symbol: dict[str, int] = {}
+    try:
+        from api.routes.analysis import _compute_technicals, _technical_score
+        from data.providers.alpaca import AlpacaBarProvider
+        from datetime import date as _date, timedelta as _timedelta
+        import asyncio
+        import contextlib
+
+        end = _date.today()
+        start = end - _timedelta(days=120)
+
+        with contextlib.closing(AlpacaBarProvider()) as provider:
+            def _score_one_sync(sym: str) -> int | None:
+                try:
+                    df = provider.bars(symbols=[sym], start=start, end=end, tf="1D")
+                    if df is None or df.empty:
+                        return None
+                    # AlpacaBarProvider returns a multi-symbol DataFrame.
+                    # Filter to this symbol if a `symbol` column exists.
+                    if "symbol" in df.columns:
+                        df = df[df["symbol"].str.upper() == sym]
+                    if df.empty or len(df) < 15:
+                        return None
+                    bars_dicts = [
+                        {
+                            "open": float(row.get("open", 0) or 0),
+                            "high": float(row.get("high", 0) or 0),
+                            "low": float(row.get("low", 0) or 0),
+                            "close": float(row.get("close", 0) or 0),
+                            "volume": float(row.get("volume", 0) or 0),
+                        }
+                        for _, row in df.iterrows()
+                    ]
+                    if len(bars_dicts) < 15:
+                        return None
+                    tech = _compute_technicals(bars_dicts)
+                    score, _ = _technical_score(tech)
+                    return max(0, min(100, int(round((score + 100) / 2))))
+                except Exception:
+                    return None
+
+            # Run the sync per-symbol fetch in a thread pool so we
+            # don't block the event loop on N upstream calls.
+            loop = asyncio.get_event_loop()
+            symbols = [it.symbol.upper() for it in items]
+            scores = await asyncio.gather(
+                *[loop.run_in_executor(None, _score_one_sync, s) for s in symbols],
+                return_exceptions=False,
+            )
+            for sym, score in zip(symbols, scores):
+                if score is not None:
+                    tech_by_symbol[sym] = score
+    except Exception:
+        # Provider missing creds, import error, or batch failure —
+        # skip silently; cells stay null and the frontend renders "—".
+        pass
+
     # Quote feed — call the shared snapshot resolver per symbol.
     # Bounded to the symbols on this list (typically 5-50) so the
     # extra calls stay in budget. Polygon → Alpaca → demo waterfall
@@ -484,7 +545,7 @@ async def get_enriched_watchlist(
                 px=px,
                 pct_day=pct_day,
                 vol=vol,
-                tech_score=None,   # placeholder — factor-score endpoint follow-up
+                tech_score=tech_by_symbol.get(sym),  # 0-100 derived from RSI/EMA
                 signal=signal_by_symbol.get(sym),  # from latest pipeline run
                 held=sym in held_set,
                 note=it.note,
