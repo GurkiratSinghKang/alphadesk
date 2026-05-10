@@ -14,7 +14,7 @@ Endpoints:
 from __future__ import annotations
 
 import secrets
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -389,18 +389,67 @@ async def get_enriched_watchlist(
     except Exception:
         pass
 
+    # Quote feed — call the shared snapshot resolver per symbol.
+    # Bounded to the symbols on this list (typically 5-50) so the
+    # extra calls stay in budget. Polygon → Alpaca → demo waterfall
+    # is handled inside _fetch_snapshot_impl.
+    snapshot_by_symbol: dict[str, Any] = {}
+    try:
+        from api.routes.market import _fetch_snapshot_impl
+        for it in items:
+            sym = it.symbol.upper()
+            try:
+                snap = await _fetch_snapshot_impl(sym)
+                snapshot_by_symbol[sym] = snap
+            except Exception:
+                # Per-symbol failures are non-fatal — the row just
+                # renders px/pct_day as null on the frontend.
+                continue
+    except Exception:
+        # Whole-feed unavailable — every row falls back to bare data.
+        pass
+
+    def _format_volume(n: float | int | None) -> str | None:
+        if n is None or n == 0:
+            return None
+        n_int = int(n)
+        if n_int >= 1_000_000_000:
+            return f"{n_int / 1_000_000_000:.1f}B"
+        if n_int >= 1_000_000:
+            return f"{n_int / 1_000_000:.1f}M"
+        if n_int >= 1_000:
+            return f"{n_int / 1_000:.1f}K"
+        return str(n_int)
+
     enriched: list[EnrichedItem] = []
     for it in items:
         sym = it.symbol.upper()
+        snap = snapshot_by_symbol.get(sym)
+        px: float | None = None
+        pct_day: float | None = None
+        vol: str | None = None
+        if snap is not None:
+            try:
+                px = float(snap.day_bar.close) if snap.day_bar else None
+            except Exception:
+                px = None
+            try:
+                pct_day = float(snap.change_pct) if snap.change_pct is not None else None
+            except Exception:
+                pct_day = None
+            try:
+                vol = _format_volume(snap.day_bar.volume) if snap.day_bar else None
+            except Exception:
+                vol = None
         enriched.append(
             EnrichedItem(
                 symbol=sym,
                 name=name_by_symbol.get(sym),
-                px=None,           # placeholder — quote feed wiring is a follow-up
-                pct_day=None,
-                vol=None,
-                tech_score=None,
-                signal=None,
+                px=px,
+                pct_day=pct_day,
+                vol=vol,
+                tech_score=None,   # placeholder — needs a factor-score endpoint
+                signal=None,       # placeholder — needs pipeline-signal-by-symbol lookup
                 held=sym in held_set,
                 note=it.note,
                 position=int(it.position or 0),
