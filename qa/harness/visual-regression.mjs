@@ -54,7 +54,7 @@ const CASES = [
   { name: "help-earnings-desktop", path: "/help/earnings-data", viewport: "desktop-1440" },
   { name: "privacy-desktop", path: "/privacy", viewport: "desktop-1440" },
   { name: "terms-desktop", path: "/terms", viewport: "desktop-1440" },
-  { name: "risk-desktop", path: "/risk", viewport: "desktop-1440" },
+  { name: "risk-desktop", path: "/risk", viewport: "desktop-1440", requiresAuth: true },
   // Symbols ticker research page — full equity (NVDA) + ETF degraded (SPY).
   // T12: baseline before any v1 work; SPY locks the ETF degraded variant
   // (UI-SPEC §5) which is currently the only end-to-end ETF render check.
@@ -242,19 +242,42 @@ async function maybeLogin(context, base) {
   }
 
   const page = await context.newPage();
+  const clickSubmit = async () => {
+    await page.locator("button[type=submit]").first().waitFor({ state: "visible", timeout: 10_000 });
+    await page.waitForFunction(
+      () => {
+        const button = document.querySelector("button[type=submit]");
+        return button instanceof HTMLButtonElement && !button.disabled;
+      },
+      null,
+      { timeout: 10_000 },
+    );
+    await page.locator("button[type=submit]").first().click({ timeout: 10_000 });
+  };
   try {
     await page.goto(`${base}/login`, { waitUntil: "domcontentloaded", timeout: 30_000 });
-    await page.locator("#login-username").fill(user, { timeout: 5_000 });
+    await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => {});
+    const usernameInput = page.locator("#login-username");
+    await usernameInput.waitFor({ state: "visible", timeout: 10_000 });
+    await usernameInput.fill(user, { timeout: 5_000 });
+    await usernameInput.evaluate((input) => {
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
     const passwordInput = page.locator("#login-password");
     const passwordVisible = await passwordInput.isVisible().catch(() => false);
     if (!passwordVisible) {
-      await page.locator("button[type=submit]").click({ timeout: 5_000 });
+      await clickSubmit();
       await passwordInput.waitFor({ state: "visible", timeout: 5_000 });
     }
     await passwordInput.fill(pass, { timeout: 5_000 });
+    await passwordInput.evaluate((input) => {
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
     await Promise.all([
       page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 15_000 }).catch(() => {}),
-      page.locator("button[type=submit]").click(),
+      clickSubmit(),
     ]);
 
     const session = await context.request.get(`${base}/api/v1/auth/session`, { timeout: 10_000 }).catch(() => null);
@@ -943,13 +966,12 @@ async function main() {
   await ensureDir(DIFF_DIR);
 
   const browser = await chromium.launch({ headless: args.headless });
-  const context = await browser.newContext({
+  const contextOptions = {
     colorScheme: "dark",
     deviceScaleFactor: 1,
     ignoreHTTPSErrors: true,
-  });
-
-  await context.addInitScript(() => {
+  };
+  const contextInitScript = () => {
     const fixedNow = Date.parse("2026-05-01T14:30:00-04:00");
     const RealDate = Date;
     class FixedDate extends RealDate {
@@ -964,7 +986,12 @@ async function main() {
     Math.random = () => 0.42;
     window.localStorage?.setItem("alphadesk-tour-complete", "1");
     window.localStorage?.setItem("alphadesk.onboarding_dismissed", "true");
-  });
+  };
+
+  const context = await browser.newContext(contextOptions);
+  await context.addInitScript(contextInitScript);
+  const publicContext = await browser.newContext(contextOptions);
+  await publicContext.addInitScript(contextInitScript);
 
   const authState = await maybeLogin(context, args.base);
 
@@ -983,7 +1010,8 @@ async function main() {
       }
 
       const viewport = VIEWPORTS[item.viewport];
-      const page = await context.newPage();
+      const pageContext = item.requiresAuth ? context : publicContext;
+      const page = await pageContext.newPage();
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
 
       const current = path.join(CURRENT_DIR, `${item.name}.png`);
