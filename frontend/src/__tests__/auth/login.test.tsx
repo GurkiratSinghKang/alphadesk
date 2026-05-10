@@ -23,13 +23,13 @@ beforeEach(() => {
 describe('Login Page', () => {
   it('renders email input field', () => {
     render(<LoginPage />);
-    const emailInput = screen.getByLabelText('Email');
+    const emailInput = screen.getByLabelText(/email/i);
     expect(emailInput).toBeDefined();
   });
 
   it('keeps the password challenge out of the initial magic-link state', () => {
     render(<LoginPage />);
-    expect(screen.queryByLabelText('Password')).toBeNull();
+    expect(screen.queryByLabelText(/password/i)).toBeNull();
   });
 
   it('renders submit button', () => {
@@ -57,28 +57,28 @@ describe('Login Page', () => {
 
   it('email input has the design placeholder', () => {
     render(<LoginPage />);
-    const input = screen.getByLabelText('Email') as HTMLInputElement;
+    const input = screen.getByLabelText(/email/i) as HTMLInputElement;
     expect(input.placeholder).toBe('you@firm.com');
   });
 
   it('reveals password fallback after choosing a credential path', () => {
     render(<LoginPage />);
     fireEvent.click(screen.getByText('Authenticator code'));
-    const input = screen.getByLabelText('Password') as HTMLInputElement;
+    const input = screen.getByLabelText(/^password$/i) as HTMLInputElement;
     expect(input.placeholder).toBeTruthy();
   });
 
   it('password fallback input has type password', () => {
     render(<LoginPage />);
     fireEvent.click(screen.getByText('Authenticator code'));
-    const passwordInput = screen.getByLabelText('Password') as HTMLInputElement;
+    const passwordInput = screen.getByLabelText(/^password$/i) as HTMLInputElement;
     expect(passwordInput.type).toBe('password');
   });
 
   it('has proper initial form labels and security-key affordances', () => {
     render(<LoginPage />);
-    expect(screen.getByText('Email')).toBeDefined();
-    expect(screen.getByText('Or use a security key')).toBeDefined();
+    expect(screen.getByText('EMAIL')).toBeDefined();
+    expect(screen.getByText(/Or use a security key/i)).toBeDefined();
     expect(screen.getByText('YubiKey · Touch ID')).toBeDefined();
     expect(screen.getByText('Authenticator code')).toBeDefined();
   });

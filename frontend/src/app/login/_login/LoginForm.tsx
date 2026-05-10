@@ -29,7 +29,7 @@ const LOCKOUT_WINDOW_MS = 10 * 60 * 1000; // 10 min rolling window
 const LOCKOUT_THRESHOLD = 5; // failures that trigger the lockout
 const authInputClass =
   "h-12 rounded-[3px] border border-[var(--auth-border)] bg-[var(--bg-elev-1)] px-4 font-mono text-body text-[var(--auth-fg)] placeholder:text-[var(--auth-fg-soft)] focus-visible:border-[var(--auth-primary)] focus-visible:shadow-[0_0_0_4px_rgba(201,166,107,0.18)]";
-const authLabelClass = "font-sans text-body-sm font-medium text-[var(--auth-fg)]";
+const authLabelClass = "t-eyebrow-italic text-[9.5px] tracking-[0.16em] text-[var(--fg-muted)]";
 
 function readFailures(): number[] {
   if (typeof window === "undefined") return [];
@@ -64,13 +64,6 @@ function formatRemaining(ms: number): string {
   return `${m}m ${String(s).padStart(2, "0")}s`;
 }
 
-// P2-26: localStorage marker that says "this browser has signed in to
-// AlphaDesk before". Set on every successful sign-in (alongside the
-// existing session-expired and run-tour-after-login flags). Used to
-// conditionally render "Welcome back" vs "Sign in to AlphaDesk" so a
-// brand-new visitor doesn't see "back" implying they've been here.
-const PRIOR_SESSION_KEY = "alphadesk.has_prior_session";
-
 export default function LoginForm() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -87,11 +80,6 @@ export default function LoginForm() {
   // sessionStorage before redirecting here. We read + clear it on mount so
   // the banner appears once per expired session (not on every visit).
   const [sessionExpired, setSessionExpired] = useState(false);
-  // P2-26: track whether this browser has signed in before so the eyebrow
-  // can read "Welcome back" vs "Sign in to AlphaDesk" appropriately.
-  // Defaults to false on SSR so the markup is deterministic; the effect
-  // below reads localStorage post-hydration and corrects the eyebrow.
-  const [hasPriorSession, setHasPriorSession] = useState(false);
 
   // Rehydrate failure log from localStorage on mount — client-only.
   useEffect(() => {
@@ -103,17 +91,6 @@ export default function LoginForm() {
       }
     } catch {
       // private mode / storage disabled — banner stays hidden, login still works
-    }
-    // P2-26: peek at localStorage to decide whether to greet the user
-    // with "Welcome back" or "Sign in to AlphaDesk". Wrap in try/catch so
-    // private-mode browsers (which throw on storage access) silently fall
-    // back to the new-visitor copy.
-    try {
-      if (window.localStorage.getItem(PRIOR_SESSION_KEY) === "1") {
-        setHasPriorSession(true);
-      }
-    } catch {
-      // ignore — defaults to "Sign in to AlphaDesk"
     }
   }, []);
 
@@ -210,10 +187,6 @@ export default function LoginForm() {
         try {
           sessionStorage.removeItem("alphadesk.session_expired");
           sessionStorage.setItem("alphadesk.run-tour-after-login", "1");
-          // P2-26: persist a "prior session" marker so the next visit to
-          // /login can render "Welcome back" instead of greeting the
-          // returning user as a stranger.
-          window.localStorage.setItem(PRIOR_SESSION_KEY, "1");
         } catch {
           // ignore
         }
@@ -253,7 +226,7 @@ export default function LoginForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col gap-5"
+      className="flex flex-col"
       aria-describedby={error ? "login-error" : undefined}
     >
       {/*
@@ -271,12 +244,12 @@ export default function LoginForm() {
         </p>
       </noscript>
 
-      <div className="border-b border-[var(--auth-border)] pb-5">
+      <header style={{ marginBottom: 24 }}>
         <p
           className="t-eyebrow-italic"
           style={{ color: "var(--brand)", letterSpacing: "0.2em" }}
         >
-          {hasPriorSession ? "WELCOME BACK" : "SIGN IN"}
+          SIGN IN
         </p>
         <h2
           className="m-0 mt-2.5 italic"
@@ -303,15 +276,15 @@ export default function LoginForm() {
             textWrap: "pretty",
           }}
         >
-          We ping you with a magic link to your registered email. If 2FA is enabled, you&apos;ll be challenged after the link.
+          We sign you in with a magic link to your registered email. If 2FA is enabled, you&apos;ll be challenged after the link.
         </p>
-      </div>
+      </header>
 
       {sessionExpired && (
         <div
           role="status"
           aria-live="polite"
-          className="rounded-[8px] border border-[var(--auth-primary)]/[0.24] bg-[var(--auth-bg-tint)] px-3 py-2 font-sans text-body-sm text-[var(--auth-primary-deep)]"
+          className="mb-5 rounded-[3px] border border-[var(--auth-primary)]/[0.24] bg-[var(--auth-bg-tint)] px-3 py-2 font-sans text-body-sm text-[var(--auth-primary-deep)]"
         >
           Your session expired. Please sign in again.
         </div>
@@ -319,7 +292,7 @@ export default function LoginForm() {
 
       <div className="flex flex-col gap-2">
         <label htmlFor="login-username" className={authLabelClass}>
-          Email
+          EMAIL
         </label>
         {/* Audit A-F11 (2026-05-05): the form rejected empty submission via
          * the disabled-button trick (button is disabled until both fields
@@ -346,9 +319,9 @@ export default function LoginForm() {
       </div>
 
       {passwordMode && (
-      <div className="flex flex-col gap-2">
+      <div className="mt-5 flex flex-col gap-2">
         <label htmlFor="login-password" className={authLabelClass}>
-          Password
+          PASSWORD
         </label>
         <div className="relative">
           <Input
@@ -403,9 +376,9 @@ export default function LoginForm() {
       )}
 
       {totpRequired && (
-        <div className="flex flex-col gap-2">
+        <div className="mt-5 flex flex-col gap-2">
           <label htmlFor="login-totp" className={authLabelClass}>
-            Authenticator code
+            AUTHENTICATOR CODE
           </label>
           <Input
             id="login-totp"
@@ -427,7 +400,7 @@ export default function LoginForm() {
           id="login-error"
           role="alert"
           aria-live="assertive"
-          className="inline-flex items-start gap-2 rounded-[8px] border border-[var(--auth-loss)]/[0.26] bg-[var(--auth-loss-soft)] px-3 py-2 font-sans text-body-sm leading-snug text-[var(--auth-loss-deep)]"
+          className="mt-5 inline-flex items-start gap-2 rounded-[3px] border border-[var(--auth-loss)]/[0.26] bg-[var(--auth-loss-soft)] px-3 py-2 font-sans text-body-sm leading-snug text-[var(--auth-loss-deep)]"
         >
           <WarningCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden weight="regular" />
           {error}
@@ -435,7 +408,7 @@ export default function LoginForm() {
       )}
 
       {locked && (
-        <div className="flex flex-col gap-2">
+        <div className="mt-5 flex flex-col gap-2">
           <p
             role="alert"
             aria-live="assertive"
@@ -455,7 +428,7 @@ export default function LoginForm() {
       )}
 
       {!locked && failCount >= 3 && (
-        <p className="font-sans text-label text-[var(--auth-loss-deep)]">
+        <p className="mt-5 font-sans text-label text-[var(--auth-loss-deep)]">
           {LOCKOUT_THRESHOLD - failCount} attempt{LOCKOUT_THRESHOLD - failCount === 1 ? "" : "s"} left before lockout.
         </p>
       )}
@@ -464,7 +437,7 @@ export default function LoginForm() {
         type="submit"
         size="lg"
         variant="primary"
-        className="mt-1 h-12 w-full rounded-[3px] font-sans text-body font-medium disabled:opacity-60"
+        className="mt-4 h-[47px] w-full rounded-[3px] font-sans text-body font-medium disabled:opacity-60"
         style={{
           background: "var(--brand)",
           color: "var(--ink-050)",
@@ -482,22 +455,29 @@ export default function LoginForm() {
       </Button>
 
       {!passwordMode && (
-        <div className="flex flex-col gap-2 border-t border-[var(--auth-border)] pt-3">
-          <div className="font-mono text-eyebrow uppercase tracking-[0.16em] text-[var(--auth-fg-soft)]">
-            Or use a security key
+        <div
+          className="mt-5 rounded-[3px]"
+          style={{
+            padding: "12px 14px",
+            background: "var(--ink-100)",
+            border: "1px solid var(--border-hair)",
+          }}
+        >
+          <div className="t-eyebrow-italic text-[9px] tracking-[0.16em] text-[var(--fg-hint)]">
+            OR USE A SECURITY KEY
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="mt-2 grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() => setPasswordMode(true)}
-              className="h-10 rounded-[3px] border border-[var(--auth-border)] bg-[var(--bg-elev-1)] font-sans text-body-sm text-[var(--auth-fg-muted)] transition-colors hover:border-[var(--auth-primary)] hover:text-[var(--auth-fg)]"
+              className="h-9 rounded-[3px] border border-[var(--border-strong)] bg-[var(--bg-elev-1)] font-sans text-[12.5px] text-[var(--ink-1000)] transition-colors hover:border-[var(--auth-primary)] hover:text-[var(--auth-fg)]"
             >
               YubiKey · Touch ID
             </button>
             <button
               type="button"
               onClick={() => setPasswordMode(true)}
-              className="h-10 rounded-[3px] border border-[var(--auth-border)] bg-[var(--bg-elev-1)] font-sans text-body-sm text-[var(--auth-fg-muted)] transition-colors hover:border-[var(--auth-primary)] hover:text-[var(--auth-fg)]"
+              className="h-9 rounded-[3px] border border-[var(--border-strong)] bg-[var(--bg-elev-1)] font-sans text-[12.5px] text-[var(--ink-1000)] transition-colors hover:border-[var(--auth-primary)] hover:text-[var(--auth-fg)]"
             >
               Authenticator code
             </button>
@@ -505,15 +485,14 @@ export default function LoginForm() {
         </div>
       )}
 
-      <p className="mt-1 text-center font-sans text-body-sm text-[var(--auth-fg-muted)]">
-        New here?{" "}
-        <Link
-          href="/request-access"
-          className="font-medium text-[var(--auth-primary)] underline decoration-[var(--auth-primary-soft)] underline-offset-4 transition-colors hover:text-[var(--auth-primary-deeper)]"
+      {!passwordMode && (
+        <div
+          className="t-mono mt-4"
+          style={{ fontSize: 10.5, color: "var(--fg-hint)", letterSpacing: "0.04em", lineHeight: 1.6 }}
         >
-          Request access
-        </Link>
-      </p>
+          Sign-ins are logged with IP and device fingerprint. We&apos;ll flag a session you don&apos;t recognize.
+        </div>
+      )}
     </form>
   );
 }
