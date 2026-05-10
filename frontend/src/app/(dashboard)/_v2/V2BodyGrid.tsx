@@ -842,18 +842,22 @@ function SectionHeader({
         >
           {eyebrow}
         </span>
-        <span
-          className="italic"
+        {/* Semantic h2 instead of span — matches design's `h2.t-h2` and
+          * gives screen readers + heading-hierarchy crawlers something
+          * to anchor on. Visual is identical (22px Newsreader italic). */}
+        <h2
+          className="italic m-0"
           style={{
             fontFamily: "var(--font-display)",
             fontSize: 22,
+            fontWeight: 400,
             color: "var(--ink-1000)",
             letterSpacing: "-0.015em",
             lineHeight: 1.1,
           }}
         >
           {title}
-        </span>
+        </h2>
       </div>
       {right && <div>{right}</div>}
     </div>
