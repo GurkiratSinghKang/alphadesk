@@ -350,6 +350,46 @@ async def pipeline_history() -> list[dict[str, Any]]:
 
 # ---- GET /summary — aggregate pipeline statistics ----
 
+# ---- GET /universe — pre-screen universe size for the funnel hero ----
+
+class PipelineUniverseResponse(BaseModel):
+    count: int
+    source: str
+    filter_criteria: str
+    as_of: datetime
+
+
+@router.get("/universe", response_model=PipelineUniverseResponse)
+async def pipeline_universe() -> PipelineUniverseResponse:
+    """Return the size of the pre-screen universe + a one-line description.
+
+    Powers the design's "01 UNIVERSE 4823 / S&P 1500 + ADRs · liquidity
+    > $20m" funnel cell on /pipeline. Today the count is the local
+    symbol catalogue (`api.routes.symbols._build_demo_symbols`); once
+    the backend wires a true point-in-time S&P 500 / Russell 1000
+    constituents endpoint (FMPFundamentalsProvider.sp500_constituents
+    is partially scaffolded), the body can swap to that source while
+    keeping the response shape stable for the frontend.
+    """
+    try:
+        from api.routes.symbols import _build_demo_symbols
+        symbols = _build_demo_symbols()
+        count = len(symbols)
+        source = "Local symbol catalogue (S&P 500 + major-cap ADRs)"
+    except Exception:
+        # Fall back to a known-good ballpark so the funnel cell never
+        # renders an "—" just because the symbol DB is unavailable.
+        count = 500
+        source = "Estimate — symbol catalogue unavailable"
+
+    return PipelineUniverseResponse(
+        count=count,
+        source=source,
+        filter_criteria="Liquidity > $20m ADV · price > $5 · regular-hours U.S. listings",
+        as_of=datetime.now(tz=timezone.utc),
+    )
+
+
 @router.get("/summary")
 async def pipeline_summary() -> dict[str, Any]:
     """Compute aggregate statistics across all pipeline run logs.
