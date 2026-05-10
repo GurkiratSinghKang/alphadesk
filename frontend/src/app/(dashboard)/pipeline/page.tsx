@@ -53,7 +53,9 @@ import {
   getPipelineHistory,
   getPipelineRun,
   getPipelinePositions,
+  getPipelineStaged,
   getPipelineUniverse,
+  type StagedCandidatesResponse,
   getPositions,
   getRiskMonitorState,
   setRiskMonitorState,
@@ -332,15 +334,34 @@ function EditorialPipelineFunnel({
 
 // v2 phase 1.x — staged-review section matching pipeline-dark.png.
 // Renders the candidate cards awaiting operator stage/skip decisions.
-// Pulls from the live signals array; falls back to an honest empty
-// state when no run has produced candidates today.
+// v2 backend wiring — prefers the structured `/api/v1/pipeline/staged`
+// endpoint when reachable; falls back to the loose `run.signals` shape
+// when the endpoint is unreachable so the section never blanks.
 function EditorialStagedReview({ run }: { run: PipelineRun | null }) {
+  const [structured, setStructured] = useState<StagedCandidatesResponse | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getPipelineStaged()
+      .then((data) => {
+        if (!cancelled) setStructured(data);
+      })
+      .catch(() => {
+        // Silent — fall through to the legacy run.signals proxy below.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const signalsArr = Array.isArray(run?.signals) ? run!.signals : [];
   const orders = run?.ordersPlaced?.length ?? 0;
   // Show only candidates that haven't been routed to orders yet (rough
   // proxy for "awaiting your review"). When the backend ships explicit
   // staged status, swap this filter for the canonical field.
-  const candidates = signalsArr.slice(0, Math.max(0, signalsArr.length - orders));
+  const legacyCandidates = signalsArr.slice(0, Math.max(0, signalsArr.length - orders));
+  // Prefer the structured endpoint's candidates when available — they
+  // come pre-shaped with symbol, strategy, conviction, rationale, etc.
+  const candidates = structured?.candidates ?? legacyCandidates;
 
   type SignalShape = {
     symbol?: string;

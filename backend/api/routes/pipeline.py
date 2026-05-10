@@ -515,6 +515,128 @@ async def pipeline_summary() -> dict[str, Any]:
     }
 
 
+# ---- GET /staged — structured staged candidates from latest run ----
+
+class StagedCandidate(BaseModel):
+    symbol: str
+    strategy: str | None = None
+    signal: str | None = None
+    conviction: float | None = None
+    entry_price: float | None = None
+    stop_loss: float | None = None
+    take_profit: float | None = None
+    rationale: str | None = None
+    timestamp: str | None = None
+
+
+class StagedCandidatesResponse(BaseModel):
+    run_date: str | None
+    universe_estimate: int | None
+    candidates: list[StagedCandidate] = []
+
+
+@router.get("/staged", response_model=StagedCandidatesResponse)
+async def pipeline_staged_candidates() -> StagedCandidatesResponse:
+    """Return structured staged candidates from the most recent pipeline run.
+
+    Powers the design's "STAGED · AWAITING YOUR REVIEW" 2x2 grid on
+    /pipeline. Reads the most recent run JSON from `pipeline_logs/`,
+    walks the loose-shaped `signals` array (or `strategies.{id}.trades`
+    for the multi-strategy format), and returns a structured shape the
+    frontend can render without per-row defensive parsing.
+
+    Empty `candidates` is a valid response — the design's empty state
+    explains the desk has nothing pending review.
+    """
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_files = sorted(LOG_DIR.glob("????-??-??.json"), reverse=True)
+    if not log_files:
+        return StagedCandidatesResponse(run_date=None, universe_estimate=None)
+
+    latest = log_files[0]
+    try:
+        data = json.loads(latest.read_text(encoding="utf-8"))
+    except Exception:
+        logger.warning("Failed to read latest pipeline log %s", latest.name, exc_info=True)
+        return StagedCandidatesResponse(run_date=None, universe_estimate=None)
+
+    run_date = data.get("date") or latest.stem
+    candidates: list[StagedCandidate] = []
+
+    def _coerce(record: dict[str, Any], strategy_hint: str | None = None) -> StagedCandidate | None:
+        symbol = record.get("symbol") or record.get("ticker")
+        if not symbol:
+            return None
+        signal_block = record.get("signal") if isinstance(record.get("signal"), dict) else {}
+        return StagedCandidate(
+            symbol=str(symbol).upper(),
+            strategy=strategy_hint or record.get("strategy"),
+            signal=record.get("signal_type")
+                or record.get("side")
+                or (signal_block.get("type") if isinstance(signal_block, dict) else None)
+                or "PENDING",
+            conviction=_safe_float(
+                record.get("conviction")
+                or record.get("score")
+                or record.get("confidence")
+            ),
+            entry_price=_safe_float(record.get("entry_price") or signal_block.get("entry_price")),
+            stop_loss=_safe_float(record.get("stop_loss") or signal_block.get("stop_loss")),
+            take_profit=_safe_float(record.get("take_profit") or signal_block.get("take_profit")),
+            rationale=record.get("rationale") or record.get("reason") or record.get("note"),
+            timestamp=record.get("timestamp"),
+        )
+
+    # Format A: top-level `signals` list (legacy single-strategy logs).
+    for sig in data.get("signals", []):
+        if isinstance(sig, dict):
+            c = _coerce(sig)
+            if c is not None:
+                candidates.append(c)
+
+    # Format B: `strategies.{id}.trades` multi-strategy logs.
+    for strat_id, strat_data in data.get("strategies", {}).items():
+        if not isinstance(strat_data, dict):
+            continue
+        for trade in strat_data.get("trades", []) or []:
+            if not isinstance(trade, dict):
+                continue
+            # Only include trades that haven't been routed to orders yet
+            # ("approved" but not "placed"). The design's "awaiting your
+            # review" semantic excludes already-filled orders.
+            if trade.get("placed") or trade.get("order_id"):
+                continue
+            c = _coerce(trade, strategy_hint=strat_id)
+            if c is not None:
+                candidates.append(c)
+
+    # Universe size hint (best-effort) — read from the same source the
+    # /pipeline/universe endpoint uses so the section header can render
+    # "{N} candidates · top X% of universe" without a second fetch.
+    universe_estimate: int | None = None
+    try:
+        from api.routes.symbols import _build_demo_symbols
+        universe_estimate = len(_build_demo_symbols())
+    except Exception:
+        pass
+
+    return StagedCandidatesResponse(
+        run_date=run_date,
+        universe_estimate=universe_estimate,
+        candidates=candidates,
+    )
+
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        if value is None:
+            return None
+        f = float(value)
+        return f if f != 0 or value == 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
 # ---- GET /history/{date} — specific day log ----
 
 @router.get("/history/{date}")
