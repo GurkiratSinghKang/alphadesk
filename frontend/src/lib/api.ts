@@ -3116,6 +3116,20 @@ export function removeWatchlistItem(watchlistId: number, symbol: string) {
   });
 }
 
+// v2 backend (PR #146 follow-up) — reconciliation state for the
+// design's "Reconciled with Alpaca · 09:14 today" indicator on the
+// Reports page hero.
+export interface ReconciliationStateResponse {
+  last_reconciled_at: string | null;
+  open_issue_count: number;
+  primary_provider: string | null;
+  is_clean: boolean;
+}
+
+export function getReconciliationState() {
+  return apiFetch<ReconciliationStateResponse>('/api/v1/broker/reconciliation/state');
+}
+
 export async function getPipelineRun(date: string): Promise<PipelineRun> {
   const raw = await apiFetch<Record<string, unknown>>(`/api/v1/pipeline/history/${date}`);
   return mapPipelineRun(raw);

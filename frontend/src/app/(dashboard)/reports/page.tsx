@@ -25,8 +25,10 @@ import TaxLotsSection from "./_v2/TaxLotsSection";
 import {
   getPortfolioSummary,
   getPositions,
+  getReconciliationState,
   getTradeHistory,
   getStrategies,
+  type ReconciliationStateResponse,
   type TradeHistoryEntry,
 } from "@/lib/api";
 import { usePortfolioStore } from "@/stores/portfolio";
@@ -1430,6 +1432,71 @@ function TaxReport({ trades, taxYear }: { trades: TradeHistoryEntry[]; taxYear: 
 
 // ─── Main Page ─────────────────────────────────────────────
 
+// v2 polish — "Reconciled with Alpaca · 09:14 today" indicator per
+// reports-dark.png hero top-right. Reads live state from
+// /api/v1/broker/reconciliation/state. Status dot reflects
+// is_clean (green) vs open issues (amber).
+function ReconciliationIndicator() {
+  const [state, setState] = useState<ReconciliationStateResponse | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getReconciliationState()
+      .then((data) => {
+        if (!cancelled) setState(data);
+      })
+      .catch(() => {
+        // Silent — the indicator just won't render. Reports works
+        // without it (the indicator is a chrome polish, not core data).
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!state) return null;
+
+  const ts = state.last_reconciled_at ? new Date(state.last_reconciled_at) : null;
+  const stamp = ts
+    ? (() => {
+        const today = new Date();
+        const sameDay = ts.toDateString() === today.toDateString();
+        if (sameDay) {
+          return `${ts.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })} today`;
+        }
+        return ts.toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+      })()
+    : "never";
+  const provider = state.primary_provider
+    ? state.primary_provider[0].toUpperCase() + state.primary_provider.slice(1)
+    : "broker";
+  const verb = state.is_clean ? "Reconciled with" : "Drift vs";
+
+  return (
+    <p
+      className="font-mono text-eyebrow uppercase tracking-[0.08em] text-fg-muted shrink-0 flex items-center gap-1.5"
+      style={{ margin: 0 }}
+    >
+      <span
+        className={cn(
+          "inline-block h-1.5 w-1.5 rounded-full",
+          state.is_clean ? "bg-profit" : "bg-amber",
+        )}
+        aria-hidden
+      />
+      {verb} {provider} · {stamp}
+      {!state.is_clean && state.open_issue_count > 0 ? (
+        <span className="text-amber"> · {state.open_issue_count} open</span>
+      ) : null}
+    </p>
+  );
+}
+
 export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
@@ -1804,12 +1871,18 @@ export default function ReportsPage() {
             borderLeft: "2px solid var(--brand)",
           }}
         >
-          <p
-            className="t-eyebrow-italic"
-            style={{ color: "var(--brand)", letterSpacing: "0.2em", margin: 0 }}
-          >
-            REPORTS · YOUR RECEIPTS
-          </p>
+          <div className="flex items-start justify-between gap-4">
+            <p
+              className="t-eyebrow-italic"
+              style={{ color: "var(--brand)", letterSpacing: "0.2em", margin: 0 }}
+            >
+              REPORTS · YOUR RECEIPTS
+            </p>
+            {/* v2 polish — "Reconciled with Alpaca · 09:14 today"
+             * indicator per reports-dark.png top-right corner. Live
+             * data from /api/v1/broker/reconciliation/state. */}
+            <ReconciliationIndicator />
+          </div>
           <h2
             className="m-0 mt-3 italic"
             style={{

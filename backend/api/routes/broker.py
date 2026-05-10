@@ -201,6 +201,72 @@ async def list_reconciliation_issues(
     return [_issue_to_dict(row) for row in rows]
 
 
+class ReconciliationState(BaseModel):
+    last_reconciled_at: datetime | None = None
+    open_issue_count: int = 0
+    primary_provider: str | None = None
+    is_clean: bool = True
+
+
+@router.get("/reconciliation/state", response_model=ReconciliationState)
+async def get_reconciliation_state(
+    username: str = Depends(require_auth),
+) -> ReconciliationState:
+    """Compact reconciliation state for the design's "Reconciled with
+    Alpaca · 09:14 today" indicator.
+
+    Returns the timestamp of the most recent ReconciliationIssue (proxy
+    for "last reconciliation activity") + the open-issue count + the
+    user's primary broker provider. `is_clean` is True when there are
+    zero open issues — meaning the most recent reconciliation found
+    no drift between local trade ledger and broker positions.
+    """
+    from core.config import settings
+    if settings.SKIP_DB_INIT:
+        return ReconciliationState()
+    from core.database import _get_session_factory
+    from data.storage.models import ReconciliationIssue, BrokerConnection
+
+    factory = _get_session_factory()
+    async with factory() as db:
+        # Most recent reconciliation activity (any status).
+        latest_q = (
+            select(ReconciliationIssue.detected_at)
+            .where(ReconciliationIssue.username == username)
+            .order_by(ReconciliationIssue.detected_at.desc())
+            .limit(1)
+        )
+        latest_row = (await db.execute(latest_q)).first()
+        last_reconciled_at = latest_row[0] if latest_row else None
+
+        # Open-issue count.
+        open_q = (
+            select(ReconciliationIssue)
+            .where(
+                ReconciliationIssue.username == username,
+                ReconciliationIssue.status == "open",
+            )
+        )
+        open_count = len((await db.execute(open_q)).scalars().all())
+
+        # Primary provider — first connection on the user.
+        primary_q = (
+            select(BrokerConnection.provider)
+            .where(BrokerConnection.username == username)
+            .order_by(BrokerConnection.created_at.asc())
+            .limit(1)
+        )
+        primary_row = (await db.execute(primary_q)).first()
+        primary_provider = primary_row[0] if primary_row else None
+
+    return ReconciliationState(
+        last_reconciled_at=last_reconciled_at,
+        open_issue_count=open_count,
+        primary_provider=primary_provider,
+        is_clean=open_count == 0,
+    )
+
+
 @router.post("/reconciliation/run")
 async def run_reconciliation_now(username: str = Depends(require_auth)) -> dict[str, int]:
     # Tighter cap on reconciliation than on credential writes — each call
