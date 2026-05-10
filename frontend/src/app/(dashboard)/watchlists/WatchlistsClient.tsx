@@ -7,6 +7,12 @@ import Section from "@/components/composites/Section";
 import Stat from "@/components/primitives/Stat";
 import EmptyState from "@/components/primitives/EmptyState";
 import { MOCK_WATCHLISTS, type Watchlist, type WatchlistRow } from "@/lib/mocks";
+import {
+  addWatchlistItem,
+  createWatchlistV2,
+  getWatchlistsV2,
+  type WatchlistV2,
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 /**
@@ -225,44 +231,7 @@ export default function WatchlistsClient() {
             <p className="font-display italic text-label leading-snug text-fg-muted mb-2">
               Append a symbol to <span className="text-fg">{active.name}</span>.
             </p>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const input = e.currentTarget.elements.namedItem("symbol") as HTMLInputElement;
-                const sym = input?.value.trim().toUpperCase();
-                if (!sym) return;
-                // Phase 1.8 follow-up — backend B.3 wires the append. For
-                // now toast a confirmation so the form has visible feedback.
-                if (typeof window !== "undefined") {
-                  window.dispatchEvent(
-                    new CustomEvent("alphadesk:system-notify", {
-                      detail: {
-                        kind: "info",
-                        title: `Quick add — ${sym}`,
-                        message: `Append to ${active.name} lights up once backend B.3 (watchlists v2) ships.`,
-                      },
-                    }),
-                  );
-                }
-                input.value = "";
-              }}
-              className="flex items-center gap-1.5"
-            >
-              <input
-                type="text"
-                name="symbol"
-                placeholder="NVDA"
-                aria-label="Symbol ticker"
-                maxLength={10}
-                className="flex-1 rounded-sm border border-border bg-bg px-2 py-1 font-mono text-label uppercase text-fg placeholder:text-fg-muted/60 focus-visible:outline-none focus-visible:border-brand"
-              />
-              <button
-                type="submit"
-                className="rounded-sm border border-brand/60 bg-tint-brand-1 text-brand px-2.5 py-1 font-mono text-eyebrow font-semibold uppercase tracking-[0.08em] hover:bg-brand hover:text-brand-on transition-colors"
-              >
-                Add
-              </button>
-            </form>
+            <QuickAddForm activeListName={active.name} />
           </section>
         </aside>
 
@@ -362,6 +331,110 @@ export default function WatchlistsClient() {
         </Section>
       </div>
     </main>
+  );
+}
+
+// v2 polish — QUICK ADD form wired to live `/api/v1/watchlists` per
+// pensive-kirch's B.3 backend (PR #105) + my contribution endpoint
+// follow-up. Falls back to the system-notify event when the backend
+// is unreachable so the form has visible feedback either way.
+function QuickAddForm({ activeListName }: { activeListName: string }) {
+  const [submitting, setSubmitting] = React.useState(false);
+  const [feedback, setFeedback] = React.useState<{ tone: "ok" | "err" | null; msg: string }>({
+    tone: null,
+    msg: "",
+  });
+
+  const submit = React.useCallback(
+    async (sym: string) => {
+      setSubmitting(true);
+      setFeedback({ tone: null, msg: "" });
+      try {
+        // Look up live watchlists; create one if the user has none.
+        let lists: WatchlistV2[] = [];
+        try {
+          lists = await getWatchlistsV2();
+        } catch {
+          lists = [];
+        }
+        let target = lists[0];
+        if (!target) {
+          // First-time wiring — mint a default "My core" list so the
+          // append has somewhere to land. The backend endpoint is
+          // idempotent on (username, name) collisions per the v2 spec.
+          target = await createWatchlistV2({
+            name: activeListName || "My core",
+            kind: "manual",
+          });
+        }
+        await addWatchlistItem(target.id, sym);
+        setFeedback({
+          tone: "ok",
+          msg: `Added ${sym} to ${target.name}`,
+        });
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("alphadesk:system-notify", {
+              detail: {
+                kind: "info",
+                title: `Added ${sym}`,
+                message: `Appended to ${target.name}.`,
+              },
+            }),
+          );
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Add failed";
+        setFeedback({ tone: "err", msg });
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [activeListName],
+  );
+
+  return (
+    <div className="space-y-1.5">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const input = e.currentTarget.elements.namedItem("symbol") as HTMLInputElement;
+          const sym = input?.value.trim().toUpperCase();
+          if (!sym || submitting) return;
+          void submit(sym).then(() => {
+            input.value = "";
+          });
+        }}
+        className="flex items-center gap-1.5"
+      >
+        <input
+          type="text"
+          name="symbol"
+          placeholder="NVDA"
+          aria-label="Symbol ticker"
+          maxLength={10}
+          disabled={submitting}
+          className="flex-1 rounded-sm border border-border bg-bg px-2 py-1 font-mono text-label uppercase text-fg placeholder:text-fg-muted/60 focus-visible:outline-none focus-visible:border-brand disabled:opacity-60"
+        />
+        <button
+          type="submit"
+          disabled={submitting}
+          className="rounded-sm border border-brand/60 bg-tint-brand-1 text-brand px-2.5 py-1 font-mono text-eyebrow font-semibold uppercase tracking-[0.08em] hover:bg-brand hover:text-brand-on transition-colors disabled:opacity-60 disabled:cursor-wait"
+        >
+          {submitting ? "..." : "Add"}
+        </button>
+      </form>
+      {feedback.tone ? (
+        <p
+          className={cn(
+            "font-mono text-eyebrow uppercase tracking-[0.06em]",
+            feedback.tone === "ok" ? "text-profit" : "text-loss",
+          )}
+        >
+          {feedback.msg}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
