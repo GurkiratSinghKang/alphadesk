@@ -5942,24 +5942,35 @@ const AnalyticsPage = () => {
 
 const AlertsPage = () => {
   const [filter, setFilter] = useState("all");
+  const live = useDesignLiveData();
 
-  const all = [
-    { tone: "up",      kind: "trade",   ts: "Today 11:14",  text: "NVDA filled · 250 @ 134.82 · M&Q strategy.", group: "today" },
-    { tone: "up",      kind: "signal",  ts: "Today 10:42",  text: "AMD pivot break triggered · regime fit 0.78 · candidate staged.", group: "today" },
-    { tone: "neutral", kind: "news",    ts: "Today 09:08",  text: "Fed minutes due 14:00 · 4 names in book have rate sensitivity.", group: "today" },
-    { tone: "down",    kind: "risk",    ts: "Today 08:30",  text: "Daily risk-budget at 62% used · approaching cap.", group: "today" },
-    { tone: "neutral", kind: "trade",   ts: "Yest 16:01",   text: "Daily P&L close: +$1,840 · within strategy expectations.", group: "yesterday" },
-    { tone: "down",    kind: "trade",   ts: "Yest 14:22",   text: "TSLA broke −2% intraday stop on Pairs · Sector. Closed automatically.", group: "yesterday" },
-    { tone: "up",      kind: "signal",  ts: "Yest 09:35",   text: "PEAD signal triggered for XOM after better-than-est earnings.", group: "yesterday" },
-    { tone: "neutral", kind: "news",    ts: "Mon 16:00",    text: "Weekly summary ready · click to read briefing.", group: "week" },
-    { tone: "neutral", kind: "risk",    ts: "Mon 11:42",    text: "Position concentration in NVDA reaching 12.9% — cap is 15%.", group: "week" },
-  ];
+  const notificationRows = (live.notifications || []).map((n) => ({
+    tone: n.read ? "neutral" : "up",
+    kind: n.type || "notification",
+    ts: formatLiveDate(n.ts),
+    text: [n.title, n.body].filter(Boolean).join(" · ") || "Backend notification",
+    group: "today",
+  }));
+  const orderRows = (live.orders || []).slice(0, 8).map((o) => ({
+    tone: String(o.status || "").toLowerCase().includes("fill") ? "up" : "neutral",
+    kind: "trade",
+    ts: formatLiveDate(o.submitted_at || o.filled_at || o.created_at),
+    text: `${orderSymbol(o)} ${o.status || "order"} · ${orderLegSummary(o)}${o.strategy ? ` · ${o.strategy}` : ""}`,
+    group: "today",
+  }));
+  const newsRows = (live.marketNews || []).slice(0, 6).map((n) => ({
+    tone: n.sentiment === "bearish" ? "down" : n.sentiment === "bullish" ? "up" : "neutral",
+    kind: "news",
+    ts: formatLiveDate(n.published_at || n.datetime || n.created_at),
+    text: n.title || n.headline || "Backend market news",
+    group: "today",
+  }));
+  const all = [...notificationRows, ...orderRows, ...newsRows];
 
   const kinds = [
     { id: "all",    label: "All" },
     { id: "trade",  label: "Trades" },
-    { id: "signal", label: "Signals" },
-    { id: "risk",   label: "Risk" },
+    { id: "notification", label: "Notifications" },
     { id: "news",   label: "News & macro" },
   ];
 
@@ -5976,6 +5987,9 @@ const AlertsPage = () => {
         <div style={{ paddingBottom: 18, borderBottom: "1px solid var(--border-hair)" }}>
           <div className="t-label">Alerts</div>
           <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 44, color: "var(--ink-1000)", letterSpacing: "-0.025em", lineHeight: 1, marginTop: 6 }}>Things that need you</div>
+          <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14 }}>
+            Live notification stream, recent broker orders, and market news. Empty backend channels stay empty instead of using design filler.
+          </div>
         </div>
 
         {/* filter chips */}
@@ -6015,40 +6029,45 @@ const AlertsPage = () => {
             </div>
           );
         })}
+        {filtered.length === 0 && (
+          <div style={{ marginTop: 26, padding: "34px 20px", border: "1px solid var(--border)", background: "var(--ink-100)", borderRadius: 4 }}>
+            <div className="t-label">Backend stream empty</div>
+            <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 20, color: "var(--ink-1000)" }}>No alerts returned for this filter.</div>
+            <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--fg-muted)" }}>Notifications endpoint: {(live.notifications || []).length} · orders endpoint: {(live.orders || []).length} · news endpoint: {(live.marketNews || []).length}</div>
+          </div>
+        )}
       </section>
 
       {/* alert rules sidebar */}
       <aside style={{ background: "var(--bg)", overflow: "auto", padding: "24px 22px 60px" }}>
-        <div className="t-label">Active rules</div>
-        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 22, color: "var(--ink-1000)", letterSpacing: "-0.02em", lineHeight: 1.05, marginTop: 6 }}>What you're listening for</div>
-
-        <div style={{ marginTop: 20 }}>
-          {[
-            { name: "Daily risk budget", crit: "Notify when ≥ 60% used", on: true },
-            { name: "Position concentration", crit: "Notify when any name ≥ 12%", on: true },
-            { name: "Strategy stop hit", crit: "Always notify", on: true },
-            { name: "PEAD signals", crit: "Active for current book", on: true },
-            { name: "Macro events", crit: "FOMC, CPI, NFP", on: true },
-            { name: "Sector rotation", crit: "Notify on regime shift", on: false },
-          ].map((r, i) => (
-            <div key={i} style={{ padding: "12px 0", borderBottom: "1px solid var(--border-hair)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <span style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--ink-1000)", fontWeight: 500 }}>{r.name}</span>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "var(--font-ui)", fontSize: 10, color: r.on ? "var(--up-500)" : "var(--fg-hint)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
-                  <StatusDot tone={r.on ? "up" : "off"} size={4} />
-                  {r.on ? "On" : "Off"}
-                </span>
-              </div>
-              <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)", marginTop: 2 }}>{r.crit}</div>
-            </div>
-          ))}
+        <div className="t-label">Rules backend</div>
+        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 22, color: "var(--ink-1000)", letterSpacing: "-0.02em", lineHeight: 1.05, marginTop: 6 }}>No fake rule state</div>
+        <div style={{ marginTop: 18, padding: 16, border: "1px solid var(--border)", background: "var(--ink-100)", borderRadius: 4, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13.5, color: "var(--fg-muted)", lineHeight: 1.55 }}>
+          The redesign no longer invents active alert rules. Add a rules endpoint and this rail can list operator-managed subscriptions; for now it only shows live event streams from existing backend endpoints.
         </div>
-
-        <button style={{ width: "100%", marginTop: 20, padding: "10px 14px", fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", background: "var(--brand)", color: "var(--brand-on)", border: 0, borderRadius: 3, cursor: "default" }}>＋ Add rule</button>
       </aside>
     </div>
   );
 };
+
+function formatLiveDate(value) {
+  if (!value) return "Live";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value).slice(0, 16);
+  return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function orderSymbol(order) {
+  const leg = Array.isArray(order?.legs) ? order.legs[0] : null;
+  return String(order?.symbol || leg?.symbol || "Order").toUpperCase();
+}
+
+function orderLegSummary(order) {
+  if (Array.isArray(order?.legs) && order.legs.length) {
+    return order.legs.map((l) => `${l.side || ""} ${l.quantity || l.qty || ""} ${l.symbol || ""}`).join(" / ").trim();
+  }
+  return `${order?.side || ""} ${order?.quantity || order?.qty || ""}`.trim() || "broker order";
+}
 
 // ─── shared style ────────────────────────────────────────────────────────────
 
@@ -7068,33 +7087,74 @@ const STRATEGY_ATTRIB = [
 ];
 
 const ReportsPage = ({ tweaks, onNav }) => {
-  const [year, setYear] = useState("2025");
-  const [period, setPeriod] = useState("ytd");
-  const [tab, setTab] = useState("realized"); // realized | lots | wash | strategy | docs
-
-  // totals
-  const realized = REALIZED;
-  const grossGains = realized.filter(r => r.gain > 0).reduce((a,r) => a + r.gain, 0);
-  const grossLoss  = realized.filter(r => r.gain < 0).reduce((a,r) => a + r.gain, 0);
-  const net        = grossGains + grossLoss;
-  const stGain     = realized.filter(r => r.term === "st").reduce((a,r) => a + r.gain, 0);
-  const ltGain     = realized.filter(r => r.term === "lt").reduce((a,r) => a + r.gain, 0);
-  const washCount  = realized.filter(r => r.wash).length;
-  const openUnreal = OPEN_LOTS.reduce((a,l) => a + l.unreal, 0);
+  const live = useDesignLiveData();
+  const orders = (live.orders || []).slice(0, 50);
+  const positions = live.positions || [];
+  const filled = orders.filter((o) => String(o.status || "").toLowerCase().includes("fill"));
+  const open = orders.filter((o) => !String(o.status || "").toLowerCase().includes("fill"));
+  const equity = asFiniteNumber(live.portfolio?.equity, null);
+  const cash = asFiniteNumber(live.portfolio?.cash, null);
 
   return (
     <div style={{ padding: "20px 24px 60px", maxWidth: 1640, margin: "0 auto" }}>
-      <RPHeader />
-      <RPPeriodBar year={year} setYear={setYear} period={period} setPeriod={setPeriod} />
-      <RPMetrics net={net} grossGains={grossGains} grossLoss={grossLoss} stGain={stGain} ltGain={ltGain} washCount={washCount} openUnreal={openUnreal} count={realized.length} />
-      <RPDisclaimer />
-      <RPTabs tab={tab} setTab={setTab} counts={{ realized: realized.length, lots: OPEN_LOTS.length, wash: WASH_SALES.length, strategy: STRATEGY_ATTRIB.length, docs: DOCUMENTS.length }} />
-      <div style={{ marginTop: 12 }}>
-        {tab === "realized" && <RPRealized rows={realized} onNav={onNav} />}
-        {tab === "lots"     && <RPLots     rows={OPEN_LOTS} onNav={onNav} />}
-        {tab === "wash"     && <RPWash     rows={WASH_SALES} />}
-        {tab === "strategy" && <RPStrategy rows={STRATEGY_ATTRIB} onNav={onNav} />}
-        {tab === "docs"     && <RPDocs     rows={DOCUMENTS} />}
+      <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 14px", borderBottom: "1px solid var(--border-hair)", marginBottom: 16 }}>
+        <div>
+          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>REPORTS / BROKER ACTIVITY</div>
+          <h1 style={{ margin: "6px 0 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 32, fontWeight: 400, letterSpacing: "-0.02em" }}>Reports & tax</h1>
+          <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, maxWidth: 760 }}>
+            Live account, position, and order data. Tax-lot and realized-P&amp;L endpoints are not exposed yet, so the page no longer invents tax figures.
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+          <StatusDot tone={live.error ? "down" : "up"} size={6} />
+          <span>{live.error ? "Backend error" : "Reconciled with backend"} · {formatLiveDate(live.refreshedAt)}</span>
+        </div>
+      </header>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 0, background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: "16px 18px", marginBottom: 14 }}>
+        {[
+          { label: "ACCOUNT EQUITY", value: equity == null ? "—" : fmtMoney(equity, { dec: 2 }), sub: live.portfolio?.source || "portfolio summary" },
+          { label: "CASH", value: cash == null ? "—" : fmtMoney(cash, { dec: 2 }), sub: "portfolio summary" },
+          { label: "POSITIONS", value: String(positions.length), sub: "/api/v1/trades/positions" },
+          { label: "ORDERS", value: String(orders.length), sub: "/api/v1/trades/orders" },
+          { label: "FILLED", value: String(filled.length), sub: "broker statuses" },
+          { label: "OPEN / OTHER", value: String(open.length), sub: "working or pending" },
+        ].map((c, i) => (
+          <div key={c.label} style={{ borderRight: i < 5 ? "1px solid var(--border-hair)" : "none", paddingRight: 14, paddingLeft: i === 0 ? 0 : 14 }}>
+            <div className="t-label" style={{ color: "var(--fg-hint)" }}>{c.label}</div>
+            <div className="t-mono" style={{ fontSize: 20, color: "var(--ink-1000)", marginTop: 4, fontWeight: 500, letterSpacing: "-0.01em" }}>{c.value}</div>
+            <div style={{ marginTop: 3, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-muted)" }}>{c.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ background: "rgba(201,166,107,0.08)", border: "1px solid var(--gold-300)", borderLeft: "2px solid var(--gold-500)", borderRadius: 4, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "baseline", gap: 12 }}>
+        <span className="t-mono" style={{ fontSize: 10.5, color: "var(--gold-500)", padding: "2px 7px", border: "1px solid var(--gold-500)", borderRadius: 2, letterSpacing: "0.05em", fontWeight: 600 }}>BACKEND ONLY</span>
+        <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg)", lineHeight: 1.5 }}>
+          Realized P&amp;L, wash-sale, and tax-document widgets are intentionally hidden until dedicated backend endpoints exist. This table is the broker order feed, not a tax statement.
+        </span>
+      </div>
+
+      <div style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, overflow: "hidden" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "90px 130px 1fr 120px 140px 120px 140px", padding: "10px 14px", borderBottom: "1px solid var(--border)", background: "var(--bg-elev-1)", gap: 10, alignItems: "center" }}>
+          {["SYMBOL", "STATUS", "ORDER", "STRATEGY", "SUBMITTED", "AVG FILL", "NOTES"].map(h => (
+            <span key={h} className="t-label" style={{ color: "var(--fg-hint)" }}>{h}</span>
+          ))}
+        </div>
+        {orders.length === 0 && (
+          <div style={{ padding: "30px 18px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 15 }}>No broker orders returned by the backend.</div>
+        )}
+        {orders.map((o, i) => (
+          <div key={o.id || i} onClick={() => onNav("ticker", { ticker: orderSymbol(o) })} style={{ display: "grid", gridTemplateColumns: "90px 130px 1fr 120px 140px 120px 140px", padding: "10px 14px", borderBottom: "1px solid var(--border-hair)", background: i % 2 === 1 ? "var(--bg-elev-1)" : "transparent", gap: 10, alignItems: "center", cursor: "default" }}>
+            <span className="t-mono" style={{ fontSize: 13, color: "var(--ink-1000)", fontWeight: 500 }}>{orderSymbol(o)}</span>
+            <Chip tone={String(o.status || "").toLowerCase().includes("fill") ? "up" : "muted"}>{o.status || "order"}</Chip>
+            <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: "var(--fg)" }}>{orderLegSummary(o)}</span>
+            <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)" }}>{o.strategy || o.combo_type || "broker"}</span>
+            <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-muted)" }}>{formatLiveDate(o.submitted_at || o.filled_at || o.created_at)}</span>
+            <span className="t-mono" style={{ fontSize: 11.5, color: "var(--ink-1000)" }}>{asFiniteNumber(o.avg_fill_price, null) == null ? "—" : `$${Number(o.avg_fill_price).toFixed(2)}`}</span>
+            <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)" }}>{o.notes || o.route_intent || "backend order"}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -9272,20 +9332,96 @@ if (typeof window !== "undefined") Object.assign(window, { AuthPage });
 // sector exposure · beta + correlation · concentration limits · AI memo
 
 const RiskPage = ({ tweaks, onNav, onPickTicker }) => {
+  const live = useDesignLiveData();
+  const equity = asFiniteNumber(live.portfolio?.equity, 0) || 0;
+  const cash = asFiniteNumber(live.portfolio?.cash, 0) || 0;
+  const positions = live.positions || [];
+  const rows = positions.map((p) => {
+    const symbol = String(p.symbol || p.sym || "").toUpperCase();
+    const qty = asFiniteNumber(p.quantity ?? p.qty, 0) || 0;
+    const px = asFiniteNumber(p.current_price ?? p.extended_price ?? p.price, null);
+    const marketValue = asFiniteNumber(p.market_value ?? p.extended_market_value, null) ?? (px == null ? 0 : qty * px);
+    const pnl = asFiniteNumber(p.unrealized_pnl ?? p.unrealized_pl, null);
+    const pnlPct = asFiniteNumber(p.unrealized_pnl_pct ?? p.unrealized_plpc, null);
+    return { symbol, qty, px, marketValue, pnl, pnlPct, weight: equity > 0 ? (Math.abs(marketValue) / equity) * 100 : 0, strategy: p.strategy || p.asset_class || "position" };
+  }).sort((a, b) => Math.abs(b.marketValue) - Math.abs(a.marketValue));
+  const gross = rows.reduce((a, r) => a + Math.abs(r.marketValue), 0);
+  const top = rows[0];
   return (
     <div style={{ padding: "20px 24px 40px", maxWidth: 1640, margin: "0 auto" }}>
-      <RiskHeader />
-      <RiskHero />
-      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 16, marginBottom: 16 }}>
-        <RiskScenarios />
-        <RiskBudgetCard />
+      <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 14px", borderBottom: "1px solid var(--border-hair)", marginBottom: 18 }}>
+        <div>
+          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>RISK / LIVE PORTFOLIO</div>
+          <h1 style={{ margin: "6px 0 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 32, fontWeight: 400, letterSpacing: "-0.02em" }}>What can hurt us today</h1>
+          <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14 }}>
+            Live account and position exposure. VaR, stress scenarios, and correlation are hidden until a risk-engine endpoint exists.
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+          <StatusDot tone={live.error ? "down" : "up"} size={6} />
+          <span>{live.error ? "Backend error" : "Backend positions"} · {formatLiveDate(live.refreshedAt)}</span>
+        </div>
+      </header>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 1, background: "var(--border)", border: "1px solid var(--border)", borderRadius: 4, marginBottom: 16 }}>
+        {[
+          { label: "ACCOUNT EQUITY", val: fmtMoney(equity, { dec: 2 }), sub: live.portfolio?.source || "portfolio summary" },
+          { label: "CASH", val: fmtMoney(cash, { dec: 2 }), sub: "available cash" },
+          { label: "GROSS EXPOSURE", val: fmtMoney(gross, { dec: 0 }), sub: equity > 0 ? `${(gross / equity).toFixed(2)}× equity` : "positions endpoint" },
+          { label: "POSITIONS", val: String(rows.length), sub: "/api/v1/trades/positions" },
+          { label: "TOP WEIGHT", val: top ? `${top.symbol} ${top.weight.toFixed(1)}%` : "—", sub: top ? fmtMoney(top.marketValue, { dec: 0 }) : "no positions" },
+        ].map((m, i) => (
+          <div key={i} style={{ padding: "16px 18px", background: "var(--ink-100)", borderRadius: 4, position: "relative" }}>
+            <div className="t-label" style={{ color: "var(--fg-hint)" }}>{m.label}</div>
+            <div className="t-mono" style={{ marginTop: 6, fontSize: 24, color: "var(--ink-1000)", fontWeight: 500 }}>{m.val}</div>
+            <div className="t-body-sm" style={{ marginTop: 2, color: "var(--fg-muted)", fontFamily: "var(--font-display)", fontStyle: "italic" }}>{m.sub}</div>
+          </div>
+        ))}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-        <RiskExposure />
-        <RiskCorrelation />
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: 16, marginBottom: 16 }}>
+        <div style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: 18 }}>
+          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>CONCENTRATION</div>
+          <h2 className="t-h3" style={{ margin: "2px 0 14px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>Live exposure by name</h2>
+          <div style={{ display: "grid", gap: 8 }}>
+            {rows.length === 0 && <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14 }}>No live positions returned by the backend.</div>}
+            {rows.map((r) => (
+              <div key={r.symbol} onClick={() => onPickTicker?.(r.symbol)} style={{ display: "grid", gridTemplateColumns: "100px 1fr 100px 100px", gap: 14, alignItems: "center", cursor: "default" }}>
+                <div>
+                  <div className="t-mono" style={{ color: "var(--ink-1000)", fontSize: 13, fontWeight: 600 }}>{r.symbol}</div>
+                  <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-muted)" }}>{r.strategy}</div>
+                </div>
+                <div style={{ position: "relative", height: 18, background: "var(--bg-elev-1)", borderRadius: 2 }}>
+                  <div style={{ width: `${Math.min(100, r.weight)}%`, height: "100%", background: r.weight > 20 ? "var(--down-500)" : r.weight > 10 ? "var(--gold-300)" : "var(--brand)", opacity: 0.85, borderRadius: 1 }} />
+                </div>
+                <div className="t-mono" style={{ color: "var(--ink-1000)", textAlign: "right", fontSize: 12 }}>{r.weight.toFixed(2)}%</div>
+                <div className="t-mono" style={{ color: r.pnl == null || r.pnl >= 0 ? "var(--up-500)" : "var(--down-500)", textAlign: "right", fontSize: 12 }}>{r.pnl == null ? "—" : fmtMoney(r.pnl, { sign: true, dec: 0 })}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: 18 }}>
+          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>RISK ENGINE</div>
+          <h2 className="t-h3" style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>Model state</h2>
+          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, lineHeight: 1.55 }}>
+            No live VaR/stress/correlation endpoint is currently exposed to the frontend. This page now refuses to fabricate those figures; it shows only real account and position data until the backend publishes model output.
+          </div>
+          <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
+            {[
+              ["Portfolio source", live.portfolio?.source || "backend"],
+              ["Demo mode", live.portfolio?.is_demo ? "yes" : "no"],
+              ["Open orders", String((live.orders || []).length)],
+              ["Regime", live.regime?.regime?.label || live.regime?.regime || "—"],
+            ].map(([k, v]) => (
+              <div key={k} style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--border-hair)", paddingTop: 8 }}>
+                <span className="t-label" style={{ color: "var(--fg-hint)" }}>{k}</span>
+                <span className="t-mono" style={{ color: "var(--ink-1000)", fontSize: 12 }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
-      <RiskConcentration onPickTicker={onPickTicker} />
-      <RiskAIMemo />
     </div>
   );
 };
@@ -10116,158 +10252,66 @@ if (typeof window !== "undefined") Object.assign(window, { BacktestPage });
 //   trade · pipeline · ai · risk · features · providers · deploy · audit tail.
 
 const AdminPage = ({ tweaks, onNav }) => {
-  const [controls, setControls] = useState(MOCK_CONTROLS);
-  const [activeSec, setActiveSec] = useState("map");
-  const [find, setFind] = useState("");
-  const [cmdOpen, setCmdOpen] = useState(false);
-  const [cmd, setCmd] = useState("");
-  const [parsed, setParsed] = useState(null);
-  const [selectedNode, setSelectedNode] = useState("pipe");
-  const [danger, setDanger] = useState(null);
-  const [sections, setSections] = useState(MOCK_DASHBOARD_SECTIONS);
-
-  // ⌘⇧J opens command bar
-  useEffect(() => {
-    const onKey = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "j") {
-        e.preventDefault(); setCmdOpen(o => !o);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  const setControlValue = (id, v) => {
-    setControls(cs => cs.map(c => c.id === id ? { ...c, value: v, lastBy: "operator", lastAt: "just now" } : c));
-  };
-
-  const sections_ = [
-    { id: "map", label: "Master map", count: null, dot: "watch" },
-    { id: "keys", label: "Backend keys", count: 6, dot: "crit" },
-    { id: "layout", label: "Dashboard layout", count: null },
-    { id: "trade", label: "Trade", count: 5 },
-    { id: "pipeline", label: "Pipeline", count: 5 },
-    { id: "ai", label: "AI", count: 6 },
-    { id: "risk", label: "Risk gates", count: 6 },
-    { id: "features", label: "Feature flags", count: 5 },
-    { id: "providers", label: "Provider rails", count: 5, dot: "crit" },
-    { id: "deploy", label: "Deploy rail", count: 5 },
-    { id: "audit", label: "Audit tail", count: null },
+  const live = useDesignLiveData();
+  const modules = [
+    { name: "API proxy", value: live.error ? "error" : "online", tone: live.error ? "down" : "up", caption: live.error || "Frontend API calls authenticated and responding." },
+    { name: "Portfolio", value: live.portfolio ? "connected" : "empty", tone: live.portfolio ? "up" : "warn", caption: live.portfolio?.source ? `source ${live.portfolio.source}` : "No portfolio payload returned." },
+    { name: "Positions", value: `${(live.positions || []).length}`, tone: "up", caption: "/api/v1/trades/positions" },
+    { name: "Orders", value: `${(live.orders || []).length}`, tone: "up", caption: "/api/v1/trades/orders" },
+    { name: "Strategies", value: `${(live.strategies || []).length}`, tone: "up", caption: "/api/v1/strategies" },
+    { name: "Watchlists", value: `${(live.watchlists || []).length}`, tone: "up", caption: "enriched list count" },
+    { name: "Quotes", value: `${Object.keys(live.quotes || {}).length}`, tone: "up", caption: "live quote cache" },
+    { name: "Notifications", value: `${(live.notifications || []).length}`, tone: "up", caption: "/api/v1/notifications" },
   ];
 
-  // Filter helper for "Find control"
-  const findFilter = (c) => !find || (c.name + " " + c.desc + " " + c.id).toLowerCase().includes(find.toLowerCase());
-  const byCat = (cat) => controls.filter(c => c.category === cat).filter(findFilter);
-
-  // Parse natural-language command (very simple mock)
-  const parseCommand = (s) => {
-    if (!s) return null;
-    const ql = s.toLowerCase();
-    let match = null;
-    if (ql.includes("halt") && ql.includes("nvda")) match = { id: "halt-trades", action: "ON · scope NVDA", section: "trade" };
-    else if (ql.includes("halt")) match = { id: "halt-trades", action: "ON · global", section: "trade" };
-    else if (ql.includes("rotate") && ql.includes("anthropic")) match = { id: "key-anthropic", action: "rotate key", section: "keys" };
-    else if (ql.includes("pause") && ql.includes("research")) match = { id: "ai-research", action: "OFF", section: "ai" };
-    else if (ql.includes("pause") && ql.includes("pipeline")) match = { id: "pipeline-enrich", action: "OFF", section: "pipeline" };
-    else if (ql.includes("deploy") && ql.includes("staging")) match = { id: "deploy-fe-stg", action: "dispatch", section: "deploy" };
-    else {
-      // fuzzy fallback
-      const found = controls.find(c => (c.name + c.desc).toLowerCase().includes(ql));
-      if (found) match = { id: found.id, action: "review", section: found.category.toLowerCase() };
-    }
-    return match;
-  };
-
   return (
-    <div data-screen-label="Admin · Control Center" style={{ height: "100%", display: "grid", gridTemplateRows: "auto 1fr", overflow: "hidden" }}>
-      {/* Identity band + command bar */}
-      <AdminTop cmdOpen={cmdOpen} setCmdOpen={setCmdOpen} cmd={cmd} setCmd={(v) => { setCmd(v); setParsed(parseCommand(v)); }} parsed={parsed}
-        onConfirm={() => { if (parsed) { setControlValue(parsed.id, parsed.id.startsWith("halt") ? true : controls.find(c=>c.id===parsed.id)?.value); setActiveSec(parsed.section || "map"); setCmdOpen(false); setCmd(""); setParsed(null); } }} />
-
-      {/* Body: sub-rail + scrolling content */}
-      <div style={{ display: "grid", gridTemplateColumns: "210px 1fr", overflow: "hidden", borderTop: "1px solid var(--border)" }}>
-        <AdminSubRail items={sections_} active={activeSec} onPick={(id) => { setActiveSec(id); document.getElementById("admin-sec-" + id)?.scrollIntoView?.({ behavior: "smooth", block: "start" }); }} find={find} setFind={setFind} />
-
-        <div style={{ overflow: "auto", padding: "0 0 80px" }} onScroll={(e) => {
-          // update active section based on scroll position
-          const container = e.currentTarget;
-          let cur = "map";
-          for (const s of sections_) {
-            const el = document.getElementById("admin-sec-" + s.id);
-            if (el && el.offsetTop - container.scrollTop < 80) cur = s.id;
-          }
-          setActiveSec(cur);
-        }}>
-          <div id="admin-sec-map">
-            <MasterMap selectedNode={selectedNode} setSelectedNode={setSelectedNode} />
-          </div>
-
-          <div id="admin-sec-keys">
-            <AdminSection eyebrow="ADMIN · KEYS" title="Backend keys" sub="API keys are encrypted at rest. The UI never reads plaintext after submit.">
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-                {byCat("Keys").map(c => <KeyModule key={c.id} c={c} onSave={(v) => setControlValue(c.id, "••••••••••")} />)}
-              </div>
-            </AdminSection>
-          </div>
-
-          <div id="admin-sec-layout">
-            <AdminSection eyebrow="ADMIN · LAYOUT" title="Dashboard layout composer" sub="Toggle and reorder sections globally — operator owns layout per user.">
-              <LayoutComposer sections={sections} setSections={setSections} />
-            </AdminSection>
-          </div>
-
-          <div id="admin-sec-trade">
-            <AdminSection eyebrow="ADMIN · RUNTIME · TRADE" title="Trade controls" sub="Halt, scope, rate-limit. Every change audit-logged.">
-              <ModuleGrid items={byCat("Trade")} onChange={setControlValue} onDanger={(c) => setDanger(c)} />
-            </AdminSection>
-          </div>
-
-          <div id="admin-sec-pipeline">
-            <AdminSection eyebrow="ADMIN · RUNTIME · PIPELINE" title="Pipeline · per stage" sub="Each stage independently pausable. Queue depth and last-run shown inline.">
-              <ModuleGrid items={byCat("Pipeline")} onChange={setControlValue} />
-            </AdminSection>
-          </div>
-
-          <div id="admin-sec-ai">
-            <AdminSection eyebrow="ADMIN · RUNTIME · AI" title="AI agents · per archetype" sub="Pause archetype, cap spend, watch costs.">
-              <ModuleGrid items={byCat("AI")} onChange={setControlValue} onDanger={(c) => setDanger(c)} />
-            </AdminSection>
-          </div>
-
-          <div id="admin-sec-risk">
-            <AdminSection eyebrow="ADMIN · RUNTIME · RISK" title="Risk gates" sub="Six independent gates. Any breach halts the offending strategy.">
-              <ModuleGrid items={byCat("Risk")} onChange={setControlValue} />
-            </AdminSection>
-          </div>
-
-          <div id="admin-sec-features">
-            <AdminSection eyebrow="ADMIN · FLAGS" title="Feature flags" sub="Per-feature kill switch. Changes propagate within 30s.">
-              <ModuleGrid items={byCat("Features")} onChange={setControlValue} />
-            </AdminSection>
-          </div>
-
-          <div id="admin-sec-providers">
-            <AdminSection eyebrow="ADMIN · PROVIDERS" title="Provider rails" sub="Per-provider enable/disable + retry. A disabled rail degrades dependent features.">
-              <ModuleGrid items={byCat("Providers")} onChange={setControlValue} />
-            </AdminSection>
-          </div>
-
-          <div id="admin-sec-deploy">
-            <AdminSection eyebrow="ADMIN · DEPLOY" title="Deploy dispatch" sub="Per-env, per-service. Prod requires a tagged ref.">
-              <ModuleGrid items={byCat("Deploy")} onChange={setControlValue} onDanger={(c) => setDanger(c)} />
-            </AdminSection>
-          </div>
-
-          <div id="admin-sec-audit">
-            <AdminSection eyebrow="ADMIN · AUDIT" title="Recent admin writes" sub={<span>Last 10 of <span className="t-mono">142,883</span>. <a style={{ color: "var(--brand)" }}>Open full log →</a></span>}>
-              <AuditTail rows={MOCK_AUDIT_LOG} />
-            </AdminSection>
-          </div>
+    <div data-screen-label="Admin · Control Center" style={{ height: "100%", overflow: "auto", padding: "20px 28px 80px" }}>
+      <header style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 24, marginBottom: 20, paddingBottom: 16, borderBottom: "1px solid var(--border-hair)" }}>
+        <div>
+          <div className="t-label">ADMIN · CONTROL CENTER</div>
+          <h1 style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 36, color: "var(--ink-1000)", letterSpacing: "-0.025em", lineHeight: 1.05, margin: "6px 0 4px" }}>Application control center</h1>
+          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--fg-dim)", maxWidth: 720 }}>Read-only live backend health. Runtime controls, key rotation, audit trails, and deploy dispatch stay hidden until real admin APIs exist.</div>
         </div>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 11px 5px 9px", border: `1px solid ${live.error ? "rgba(224,120,86,0.45)" : "rgba(168,208,77,0.45)"}`, background: live.error ? "rgba(224,120,86,0.08)" : "rgba(168,208,77,0.08)", borderRadius: 999 }}>
+          <StatusDot tone={live.error ? "down" : "up"} size={6} glow />
+          <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: live.error ? "var(--down-500)" : "var(--up-500)" }}>{live.error ? "NEEDS ATTENTION" : "LIVE BACKEND"}</span>
+        </div>
+      </header>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1, background: "var(--border)", border: "1px solid var(--border)", marginBottom: 18 }}>
+        {modules.map((m) => (
+          <div key={m.name} style={{ background: m.tone === "down" ? "rgba(224,120,86,0.06)" : "var(--ink-100)", padding: "16px 18px", minHeight: 120, position: "relative" }}>
+            <div style={{ position: "absolute", top: 12, right: 12 }}><StatusDot tone={m.tone} size={6} glow={m.tone !== "up"} /></div>
+            <div className="t-label">{m.name}</div>
+            <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 24, color: "var(--ink-1000)", letterSpacing: "-0.02em", lineHeight: 1.05, marginTop: 8 }}>{m.value}</div>
+            <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-dim)", lineHeight: 1.35, marginTop: 8 }}>{m.caption}</div>
+          </div>
+        ))}
       </div>
 
-      {danger && <DangerConfirm open onCancel={() => setDanger(null)} onConfirm={() => { setControlValue(danger.id, !danger.value); setDanger(null); }}
-        title={danger.name} body={danger.desc + " — this is a destructive action and will be audit-logged."} />}
+      <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 18 }}>
+        <AdminSection eyebrow="ADMIN · LIVE FEEDS" title="Backend endpoints" sub="The control center now reflects existing APIs instead of a mock architecture graph.">
+          <div style={{ display: "grid", gap: 10 }}>
+            {[
+              ["/api/v1/portfolio/summary", live.portfolio ? "responding" : "empty"],
+              ["/api/v1/trades/positions", `${(live.positions || []).length} positions`],
+              ["/api/v1/trades/orders", `${(live.orders || []).length} orders`],
+              ["/api/v1/strategies", `${(live.strategies || []).length} strategies`],
+              ["/api/v1/notifications", `${(live.notifications || []).length} notifications`],
+            ].map(([k, v]) => (
+              <div key={k} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 16, padding: "10px 0", borderBottom: "1px solid var(--border-hair)" }}>
+                <span className="t-mono" style={{ color: "var(--fg-muted)", fontSize: 12 }}>{k}</span>
+                <span className="t-mono" style={{ color: "var(--ink-1000)", fontSize: 12 }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        </AdminSection>
+        <AdminSection eyebrow="ADMIN · WRITE SURFACES" title="Disabled until backed" sub="No mock command parser, fake key state, or pretend deploy rail is exposed in production UI.">
+          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--fg-muted)", lineHeight: 1.6 }}>
+            This route is intentionally read-only. Add signed admin endpoints for feature flags, provider keys, risk gates, deploy dispatch, and audit logs, and the controls can be reintroduced without design placeholders.
+          </div>
+        </AdminSection>
+      </div>
     </div>
   );
 };
