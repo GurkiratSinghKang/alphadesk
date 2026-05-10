@@ -245,7 +245,13 @@ async function maybeLogin(context, base) {
   try {
     await page.goto(`${base}/login`, { waitUntil: "domcontentloaded", timeout: 30_000 });
     await page.locator("#login-username").fill(user, { timeout: 5_000 });
-    await page.locator("#login-password").fill(pass, { timeout: 5_000 });
+    const passwordInput = page.locator("#login-password");
+    const passwordVisible = await passwordInput.isVisible().catch(() => false);
+    if (!passwordVisible) {
+      await page.locator("button[type=submit]").click({ timeout: 5_000 });
+      await passwordInput.waitFor({ state: "visible", timeout: 5_000 });
+    }
+    await passwordInput.fill(pass, { timeout: 5_000 });
     await Promise.all([
       page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 15_000 }).catch(() => {}),
       page.locator("button[type=submit]").click(),
