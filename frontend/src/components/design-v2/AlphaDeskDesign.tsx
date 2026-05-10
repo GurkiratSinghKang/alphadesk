@@ -14,6 +14,24 @@ import { usePathname, useRouter } from "next/navigation";
 // already subscribes to the store, so paper-mode treatment is
 // consistent across the app.
 import { useUIStore } from "@/stores/ui";
+import {
+  getEnrichedWatchlist,
+  getMarketRegime,
+  getMarketNews,
+  getMorningBrief,
+  getNotifications,
+  getOptionsChain,
+  getOrders,
+  getPortfolioSummary,
+  getPositions,
+  getPriceAlerts,
+  getQuote,
+  getStrategies,
+  getTickerContext,
+  getTickerFundamentals,
+  getUserWatchlist,
+  getWatchlistsV2,
+} from "@/lib/api";
 // 2026-05-10 (chart wiring): swap the design's hand-rolled SVG HeroChart
 // for the real lightweight-charts engine via a thin wrapper. The mock
 // HeroChart definition stays in this file (still used as a synchronous
@@ -32,6 +50,274 @@ const TWEAK_DEFAULTS = {
   tradeLayout: "right-rail",
   accent: "#c9a66b",
 };
+
+const LIVE_QUOTE_SYMBOLS = [
+  "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META",
+  "AMD", "SPY", "QQQ", "IWM", "TSLA", "NTNX",
+];
+
+const LiveDataContext = React.createContext({
+  loading: true,
+  refreshedAt: null,
+  portfolio: null,
+  positions: [],
+  orders: [],
+  strategies: [],
+  alerts: [],
+  regime: null,
+  morningBrief: null,
+  tickerContext: null,
+  tickerFundamentals: null,
+  marketNews: [],
+  notifications: [],
+  userWatchlist: null,
+  watchlists: [],
+  quotes: {},
+  error: null,
+});
+
+function compactVolume(v) {
+  const n = Number(v || 0);
+  if (!Number.isFinite(n) || n <= 0) return "—";
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(Math.round(n));
+}
+
+function quoteSymbol(q) {
+  return String(q?.symbol || "").toUpperCase();
+}
+
+function quoteChangePct(q) {
+  const raw = q?.changePct ?? q?.change_pct ?? q?.percent_change;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function quoteLast(q) {
+  const n = Number(q?.last ?? q?.price ?? q?.close ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function asFiniteNumber(v, fallback = null) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function formatMarketCap(v) {
+  const n = asFiniteNumber(v, null);
+  if (n == null || n <= 0) return "—";
+  if (n >= 1_000_000_000_000) return `${(n / 1_000_000_000_000).toFixed(2)}T`;
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  return n.toLocaleString();
+}
+
+function optionIvPercent(v) {
+  const n = asFiniteNumber(v, null);
+  if (n == null) return null;
+  return n <= 1 ? n * 100 : n;
+}
+
+function freshnessIsDemo(envelope) {
+  return envelope?.freshness?.isDemo === true || envelope?.freshness?.source === "demo" || envelope?.value?.is_demo === true;
+}
+
+function liveRowFromQuote(q, extra = {}) {
+  const sym = quoteSymbol(q);
+  const last = quoteLast(q);
+  const pct = quoteChangePct(q);
+  const change = Number(q?.change ?? (((last * pct) / 100) || 0));
+  return {
+    sym,
+    name: extra.name || sym,
+    px: last,
+    chg: Number.isFinite(change) ? change : 0,
+    pct,
+    vol: compactVolume(q?.volume),
+    techScore: extra.techScore ?? null,
+    fundScore: extra.fundScore ?? null,
+    signal: extra.signal ?? null,
+    strats: extra.strats ?? [],
+    reason: extra.reason || "Live quote from backend",
+    earnings: extra.earnings ?? null,
+    preMkt: extra.preMkt ?? null,
+    held: extra.held ?? false,
+    spark: [last * 0.985, last * 0.992, last * 0.997, last],
+  };
+}
+
+function useDesignLiveData() {
+  return React.useContext(LiveDataContext);
+}
+
+function LiveDataProvider({ symbol, children }) {
+  const [state, setState] = React.useState(() => ({
+    loading: true,
+    refreshedAt: null,
+    portfolio: null,
+    positions: [],
+    orders: [],
+    strategies: [],
+    alerts: [],
+    regime: null,
+    morningBrief: null,
+    tickerContext: null,
+    tickerFundamentals: null,
+    marketNews: [],
+    notifications: [],
+    userWatchlist: null,
+    watchlists: [],
+    quotes: {},
+    error: null,
+  }));
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const selected = String(symbol || "NVDA").toUpperCase();
+
+    async function load() {
+      setState((prev) => ({ ...prev, loading: true, error: null }));
+      const [
+        portfolioR,
+        positionsR,
+        ordersR,
+        strategiesR,
+        alertsR,
+        regimeR,
+        briefR,
+        tickerFundamentalsR,
+        tickerContextR,
+        marketNewsR,
+        notificationsR,
+        userWatchlistR,
+        watchlistsR,
+      ] = await Promise.allSettled([
+        getPortfolioSummary(),
+        getPositions(),
+        getOrders(),
+        getStrategies(),
+        getPriceAlerts(),
+        getMarketRegime(),
+        getMorningBrief(),
+        getTickerFundamentals(selected, { suppressAuthRedirect: true, suppressGlobalError: true }),
+        getTickerContext([selected], {
+          needs: ["quote", "options_summary", "earnings", "research", "news", "market_regime"],
+          suppressAuthRedirect: true,
+          suppressGlobalError: true,
+          timeoutMs: 20_000,
+        }),
+        getMarketNews(),
+        getNotifications({ limit: 20 }),
+        getUserWatchlist(),
+        getWatchlistsV2(),
+      ]);
+
+      const userSymbols = userWatchlistR.status === "fulfilled"
+        ? (userWatchlistR.value?.symbols || [])
+        : [];
+      const positionSymbols = positionsR.status === "fulfilled"
+        ? (positionsR.value || []).map((p) => p.symbol)
+        : [];
+      const seedSymbols = [...new Set([
+        selected,
+        ...userSymbols,
+        ...positionSymbols,
+        ...LIVE_QUOTE_SYMBOLS,
+      ].map((s) => String(s || "").toUpperCase()).filter(Boolean))].slice(0, 18);
+
+      const quoteEntries = await Promise.allSettled(
+        seedSymbols.map(async (s) => [s, await getQuote(s, { suppressAuthRedirect: true })]),
+      );
+      const quotes = {};
+      for (const entry of quoteEntries) {
+        if (entry.status !== "fulfilled") continue;
+        const [s, q] = entry.value;
+        if (q) quotes[s] = q;
+      }
+
+      const rawLists = watchlistsR.status === "fulfilled" ? (watchlistsR.value || []) : [];
+      const enriched = await Promise.allSettled(
+        rawLists.slice(0, 12).map(async (wl) => {
+          const payload = await getEnrichedWatchlist(wl.id);
+          return { shell: wl, payload };
+        }),
+      );
+      const watchlists = enriched
+        .filter((r) => r.status === "fulfilled")
+        .map((r) => {
+          const { shell, payload } = r.value;
+          return {
+            id: `live-${shell.id}`,
+            name: shell.name,
+            owner: shell.kind === "manual" ? "you" : "ai",
+            count: payload.items.length,
+            purpose: shell.description || "Live watchlist from backend.",
+            feeds: shell.auto_source_strategy ? [shell.auto_source_strategy] : [],
+            updated: "Live · backend",
+            symbols: payload.items.map((it) => {
+              const q = quotes[it.symbol] || {};
+              return liveRowFromQuote(
+                { ...q, symbol: it.symbol, last: it.px ?? q.last, changePct: it.pct_day ?? q.changePct, volume: it.vol ?? q.volume },
+                {
+                  name: it.name || it.symbol,
+                  techScore: it.tech_score,
+                  signal: it.held ? "long" : it.signal,
+                  strats: shell.auto_source_strategy ? [shell.auto_source_strategy] : [],
+                  reason: it.note || (it.held ? "Held in live book" : "Live watchlist item"),
+                  held: it.held,
+                },
+              );
+            }),
+          };
+        });
+
+      if (cancelled) return;
+      setState({
+        loading: false,
+        refreshedAt: new Date().toISOString(),
+        portfolio: portfolioR.status === "fulfilled" ? portfolioR.value : null,
+        positions: positionsR.status === "fulfilled" ? positionsR.value || [] : [],
+        orders: ordersR.status === "fulfilled" ? ordersR.value || [] : [],
+        strategies: strategiesR.status === "fulfilled" ? strategiesR.value || [] : [],
+        alerts: alertsR.status === "fulfilled" ? alertsR.value || [] : [],
+        regime: regimeR.status === "fulfilled" ? regimeR.value : null,
+        morningBrief: briefR.status === "fulfilled" ? briefR.value : null,
+        tickerFundamentals: tickerFundamentalsR.status === "fulfilled" ? tickerFundamentalsR.value : null,
+        tickerContext: tickerContextR.status === "fulfilled" ? tickerContextR.value?.symbols?.[selected] || null : null,
+        marketNews: marketNewsR.status === "fulfilled" ? marketNewsR.value || [] : [],
+        notifications: notificationsR.status === "fulfilled" ? (notificationsR.value || []).map((n) => ({
+          id: n.id,
+          type: n.type || "system",
+          ts: n.created_at || "",
+          read: !!n.read_at,
+          title: n.title,
+          body: n.body,
+        })) : [],
+        userWatchlist: userWatchlistR.status === "fulfilled" ? userWatchlistR.value : null,
+        watchlists,
+        quotes,
+        error: null,
+      });
+    }
+
+    load().catch((err) => {
+      if (cancelled) return;
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        error: err instanceof Error ? err.message : "Live data failed to load",
+      }));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol]);
+
+  return <LiveDataContext.Provider value={state}>{children}</LiveDataContext.Provider>;
+}
 
 const __LAYOUT_GUARD_STYLE = `
   [data-ad-app],
@@ -1232,7 +1518,7 @@ function Delta({ value, dec = 2, suffix = "%", className = "", style = {} }) {
 
 // Status dot
 function StatusDot({ tone = "up", size = 6, glow = true }) {
-  const colors = { up: "var(--up-500)", down: "var(--down-500)", neutral: "var(--ice-500)", brand: "var(--gold-500)", off: "var(--fg-hint)" };
+  const colors = { up: "var(--up-500)", down: "var(--down-500)", warn: "var(--amber-500)", neutral: "var(--ice-500)", brand: "var(--gold-500)", off: "var(--fg-hint)" };
   const c = colors[tone] || colors.neutral;
   return <span style={{ width: size, height: size, borderRadius: "50%", background: c, boxShadow: glow && tone !== "off" ? `0 0 ${size}px ${c}` : "none", display: "inline-block", flexShrink: 0 }} />;
 }
@@ -1434,6 +1720,7 @@ function UserMenu({ onNav, theme = "dark", onTheme }) {
 // ─── command-K-ish search ───────────────────────────────────────────────────
 
 function SearchBar({ onPick }) {
+  const live = useDesignLiveData();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -1448,10 +1735,18 @@ function SearchBar({ onPick }) {
   }, []);
 
   const results = useMemo(() => {
-    if (!q) return MOCK_WATCHLIST.slice(0, 6);
+    const bySymbol = new Map();
+    const fromLists = (live.watchlists || []).flatMap((list) => list.symbols || []);
+    const fromQuotes = Object.values(live.quotes || {}).map((quote) => liveRowFromQuote(quote));
+    [...fromLists, ...fromQuotes].forEach((row) => {
+      if (!row?.sym) return;
+      bySymbol.set(row.sym, { ...bySymbol.get(row.sym), ...row });
+    });
+    const rows = Array.from(bySymbol.values()).filter((row) => row.px > 0);
+    if (!q) return rows.slice(0, 6);
     const ql = q.toUpperCase();
-    return MOCK_WATCHLIST.filter(w => w.sym.includes(ql) || w.name.toUpperCase().includes(ql)).slice(0, 8);
-  }, [q]);
+    return rows.filter(w => w.sym.includes(ql) || String(w.name || "").toUpperCase().includes(ql)).slice(0, 8);
+  }, [live.quotes, live.watchlists, q]);
 
   return (
     <div data-ad-search="" style={{ position: "relative", maxWidth: 380, justifySelf: "stretch" }}>
@@ -1471,6 +1766,11 @@ function SearchBar({ onPick }) {
       {open && (
         <div style={{ position: "absolute", top: 38, left: 0, right: 0, background: "var(--ink-150)", border: "1px solid var(--border)", borderRadius: 6, boxShadow: "var(--shadow-2)", zIndex: 50, padding: 6, maxHeight: 360, overflow: "auto" }}>
           <div className="t-label" style={{ padding: "6px 10px 4px" }}>Tickers</div>
+          {results.length === 0 && (
+            <div style={{ padding: "14px 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 12 }}>
+              No live ticker matches returned yet.
+            </div>
+          )}
           {results.map(r => (
             <div key={r.sym}
               onMouseDown={() => { onPick(r.sym); setOpen(false); setQ(""); }}
@@ -1496,16 +1796,22 @@ function SearchBar({ onPick }) {
 // ─── status bar (bottom) ────────────────────────────────────────────────────
 
 function StatusBar() {
-  const [tick, setTick] = useState(0);
-  useEffect(() => { const id = setInterval(() => setTick(x => x + 1), 1100); return () => clearInterval(id); }, []);
-  // Risk budget — fake but stable
-  const riskUsed = 0.42; // 42% of daily risk budget
-  const positions = MOCK_POSITIONS?.length ?? 8;
-  const lastTick = (0.03 + (tick % 7) * 0.005).toFixed(2);
+  const live = useDesignLiveData();
+  const positions = live.positions?.length ?? 0;
+  const equity = asFiniteNumber(live.portfolio?.equity, 0) || 0;
+  const exposure = (live.positions || []).reduce((sum, p) => {
+    const qty = Math.abs(asFiniteNumber(p.qty ?? p.quantity, 0) || 0);
+    const last = asFiniteNumber(p.last ?? p.current_price ?? p.market_price, 0) || 0;
+    const marketValue = asFiniteNumber(p.market_value, null);
+    return sum + Math.abs(marketValue ?? qty * last);
+  }, 0);
+  const riskUsed = equity > 0 ? Math.min(1, exposure / equity) : 0;
+  const isDemo = live.portfolio?.is_demo === true || live.regime?.is_demo === true;
+  const refreshed = live.refreshedAt ? new Date(live.refreshedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "loading";
   return (
     <div data-ad-statusbar="" style={{ display: "flex", alignItems: "center", padding: "0 18px", height: 30, background: "var(--ink-050)", borderTop: "1px solid var(--border)", fontFamily: "var(--font-mono)", fontSize: 10.75, color: "var(--fg-muted)", gap: 16, letterSpacing: "0.02em" }}>
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><StatusDot tone="up" size={5} />Alpaca paper · connected</span>
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--fg)" }}><StatusDot tone="up" size={5} />Market open <span style={{ color: "var(--fg-hint)" }}>· 1h 28m to close</span></span>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><StatusDot tone={isDemo ? "warn" : "up"} size={5} />Backend {isDemo ? "demo fallback" : "live"}</span>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--fg)" }}><StatusDot tone={live.loading ? "warn" : "up"} size={5} />Data refresh <span style={{ color: "var(--fg-hint)" }}>· {refreshed}</span></span>
       <span style={{ color: "var(--fg-hint)" }}>|</span>
       <span><span style={{ color: "var(--fg-hint)" }}>Pos </span><span style={{ color: "var(--fg)" }}>{positions}</span></span>
       <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -1517,8 +1823,8 @@ function StatusBar() {
         <span style={{ color: "var(--fg-hint)" }}>· daily</span>
       </span>
       <span style={{ color: "var(--fg-hint)" }}>|</span>
-      <span><span style={{ color: "var(--fg-hint)" }}>AI </span><span style={{ color: "var(--fg)" }}>healthy</span><span style={{ color: "var(--fg-hint)" }}> · p50 180ms</span></span>
-      <span><span style={{ color: "var(--fg-hint)" }}>Tick </span>{lastTick}s</span>
+      <span><span style={{ color: "var(--fg-hint)" }}>AI </span><span style={{ color: "var(--fg)" }}>{live.morningBrief ? "brief ready" : "no brief"}</span></span>
+      <span><span style={{ color: "var(--fg-hint)" }}>Quotes </span>{Object.keys(live.quotes || {}).length}</span>
       <span style={{ marginLeft: "auto", color: "var(--fg-hint)" }}>Build 2.6.0-edge</span>
       <span style={{ color: "var(--fg)", display: "inline-flex", alignItems: "center", gap: 6 }}>
         <span style={{ border: "1px solid var(--border)", padding: "0 4px", borderRadius: 3 }}>⌘K</span> Commands
@@ -1803,9 +2109,11 @@ function PaperLiveToggle({ value, onChange }) {
 }
 
 // NotificationBell + Drawer
-function NotificationBell({ items = MOCK_NOTIFICATIONS, onRead, onOpenAll }) {
+function NotificationBell({ items, onRead, onOpenAll }) {
+  const live = useDesignLiveData();
+  const sourceItems = items || live.notifications || [];
   const [open, setOpen] = useState(false);
-  const unread = items.filter(i => !i.read).length;
+  const unread = sourceItems.filter(i => !i.read).length;
   const ref = useRef(null);
   useEffect(() => {
     const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
@@ -1818,7 +2126,7 @@ function NotificationBell({ items = MOCK_NOTIFICATIONS, onRead, onOpenAll }) {
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10 21a2 2 0 0 0 4 0" /></svg>
         {unread > 0 && <span style={{ position: "absolute", top: -5, right: -5, minWidth: 16, height: 16, padding: "0 4px", borderRadius: 8, background: "var(--down-500)", color: "var(--down-on)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{unread}</span>}
       </button>
-      {open && <NotificationDrawer items={items} onRead={onRead} onOpenAll={onOpenAll} onClose={() => setOpen(false)} />}
+      {open && <NotificationDrawer items={sourceItems} onRead={onRead} onOpenAll={onOpenAll} onClose={() => setOpen(false)} />}
     </div>
   );
 }
@@ -1970,23 +2278,27 @@ const Dashboard = ({ tweaks, onNav, onPickTicker }) => {
 // ─── hero band ───────────────────────────────────────────────────────────────
 
 function DashHero({ layout }) {
-  const p = MOCK_PORTFOLIO;
-  const r = MOCK_REGIME;
-
-  // Live-tick equity for life
-  const [equity, setEquity] = useState(p.equity);
-  const [equityDelta, setEquityDelta] = useState(p.equityDelta);
-  const [flashKey, setFlashKey] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => {
-      const drift = (Math.random() - 0.45) * 240;
-      setEquity(e => e + drift);
-      setEquityDelta(d => d + drift);
-      setFlashKey(k => k + 1);
-    }, 2400);
-    return () => clearInterval(id);
-  }, []);
+  const live = useDesignLiveData();
+  const summary = live.portfolio;
+  const r = live.regime?.regime || {};
+  const p = {
+    ...MOCK_PORTFOLIO,
+    equity: summary?.equity ?? 0,
+    equityDelta: summary?.dayPnl ?? 0,
+    cash: summary?.cash ?? 0,
+    buyingPower: summary?.buyingPower ?? 0,
+    positions: summary?.positionsCount ?? live.positions.length,
+    orders: live.orders.length,
+    exposureLong: summary?.equity ? Math.min(1, Math.max(0, live.positions.filter((pos) => pos.side !== "short").reduce((acc, pos) => acc + Math.abs(pos.marketValue || 0), 0) / summary.equity)) : 0,
+    exposureShort: summary?.equity ? Math.min(1, Math.max(0, live.positions.filter((pos) => pos.side === "short").reduce((acc, pos) => acc + Math.abs(pos.marketValue || 0), 0) / summary.equity)) : 0,
+  };
+  const equity = p.equity;
+  const equityDelta = p.equityDelta;
+  const flashKey = `${live.refreshedAt || ""}-${equity}`;
   const up = equityDelta >= 0;
+  const regimeLabel = r.label || r.regime || "Live market regime";
+  const regimeConfidence = Number(r.confidence ?? 0);
+  const vixLevel = Number(r.vix_level ?? 0);
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 36, alignItems: "end", position: "relative" }}>
@@ -2008,11 +2320,11 @@ function DashHero({ layout }) {
           <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-hint)" }}>vs yesterday close</span>
         </div>
         <div style={{ display: "flex", gap: 28, marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--border-hair)" }}>
-          <Stat label="Week"  value={fmtPct(p.weekPct)} tone="up" />
-          <Stat label="Month" value={fmtPct(p.monthPct)} tone="up" />
-          <Stat label="YTD"   value={fmtPct(p.ytdPct)}  tone="up" big />
-          <Stat label="Sharpe · 30d" value={p.sharpe30.toFixed(2)} />
-          <Stat label="Beta" value={p.beta.toFixed(2)} />
+          <Stat label="Source" value={summary?.source || (live.loading ? "loading" : "live")} />
+          <Stat label="Day" value={summary ? fmtPct(summary.dayPnlPct || 0) : "—"} tone={up ? "up" : "down"} />
+          <Stat label="Unrealized" value={summary ? fmtMoney(summary.unrealizedPnl || 0, { dec: 0 }) : "—"} tone={(summary?.unrealizedPnl || 0) >= 0 ? "up" : "down"} big />
+          <Stat label="Last update" value={summary?.lastUpdated ? "fresh" : "—"} />
+          <Stat label="Demo" value={summary?.is_demo ? "yes" : "no"} />
         </div>
       </div>
 
@@ -2020,17 +2332,17 @@ function DashHero({ layout }) {
       <div>
         <div className="t-label" style={{ marginBottom: 8 }}>Market regime</div>
         <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 36, color: "var(--ink-1000)", lineHeight: 1.05, letterSpacing: "-0.02em" }}>
-          bull, low-volatility
+          {regimeLabel}
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
-          <RegimeBar value={r.confidence} />
-          <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-muted)" }}>conf {r.confidence.toFixed(2)} · stable 12d</span>
+          <RegimeBar value={regimeConfidence} />
+          <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-muted)" }}>conf {regimeConfidence ? regimeConfidence.toFixed(2) : "—"} · backend</span>
         </div>
         <div style={{ display: "flex", gap: 22, marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--border-hair)" }}>
-          <Stat label="VIX" value={r.vix.toFixed(1)} sub={fmtPct(-2.8, 1)} subTone="up" />
-          <Stat label="Breadth" value={Math.round(r.breadth * 100) + "%"} sub="up/total" />
-          <Stat label="Hi/Lo" value={`${r.newHighsLows.highs}·${r.newHighsLows.lows}`} />
-          <Stat label="Fear/Greed" value={r.fearGreed} sub="greed" />
+          <Stat label="VIX" value={vixLevel ? vixLevel.toFixed(1) : "—"} />
+          <Stat label="As of" value={live.regime?.as_of ? "live" : "—"} />
+          <Stat label="Provider" value={live.regime?.is_demo ? "demo" : "backend"} />
+          <Stat label="State" value={r.regime || "—"} />
         </div>
       </div>
 
@@ -2090,17 +2402,28 @@ function ExposureBar({ long, short }) {
 // ─── briefing strip ──────────────────────────────────────────────────────────
 
 function BriefingStrip({ onPickTicker }) {
+  const { morningBrief, loading } = useDesignLiveData();
+  const rows = morningBrief
+    ? [
+        ...(morningBrief.ai_summary ? [{ time: "NOW", tone: "neutral", text: morningBrief.ai_summary }] : []),
+        ...(morningBrief.catalysts || []).slice(0, 4).map((text, i) => ({
+          time: `CAT ${i + 1}`,
+          tone: "neutral",
+          text,
+        })),
+      ]
+    : [];
   return (
     <div style={{ borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)", padding: "20px 0", display: "grid", gridTemplateColumns: "200px 1fr", gap: 32, alignItems: "start" }}>
       <div>
         <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 24, color: "var(--brand)", lineHeight: 1.05, letterSpacing: "-0.02em" }}>
           Since you<br/>last logged in
         </div>
-        <div className="t-label" style={{ marginTop: 10 }}>Briefing · 11h ago</div>
+        <div className="t-label" style={{ marginTop: 10 }}>{morningBrief ? `Briefing · ${morningBrief.date || "today"}` : loading ? "Briefing · loading" : "Briefing · unavailable"}</div>
       </div>
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {MOCK_BRIEFING.map((b, i) => (
-          <div key={i} style={{ display: "grid", gridTemplateColumns: "auto auto 1fr", gap: 14, padding: "10px 0", borderBottom: i < MOCK_BRIEFING.length - 1 ? "1px solid var(--border-hair)" : "none", alignItems: "baseline" }}>
+        {(rows.length ? rows : [{ time: "—", tone: "neutral", text: "Morning brief is not available from the backend yet." }]).map((b, i, arr) => (
+          <div key={i} style={{ display: "grid", gridTemplateColumns: "auto auto 1fr", gap: 14, padding: "10px 0", borderBottom: i < arr.length - 1 ? "1px solid var(--border-hair)" : "none", alignItems: "baseline" }}>
             <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", letterSpacing: "0.04em" }}>{b.time}</span>
             <StatusDot tone={b.tone === "up" ? "up" : b.tone === "down" ? "down" : "neutral"} size={6} />
             <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 15.5, color: "var(--ink-900)", lineHeight: 1.45, letterSpacing: "-0.005em" }}>{b.text}</span>
@@ -2114,26 +2437,37 @@ function BriefingStrip({ onPickTicker }) {
 // ─── regime panel ────────────────────────────────────────────────────────────
 
 function RegimePanel() {
-  const r = MOCK_REGIME;
+  const live = useDesignLiveData();
+  const r = live.regime?.regime || {};
+  const q = live.quotes || {};
+  const quoteRow = (sym) => {
+    const quote = q[sym];
+    return {
+      sym,
+      v: quote ? quoteLast(quote) : null,
+      d: quote ? quoteChangePct(quote) : null,
+    };
+  };
   const indices = [
-    { sym: "SPY", v: r.spy, d: r.spyDelta },
-    { sym: "QQQ", v: r.qqq, d: r.qqqDelta },
-    { sym: "IWM", v: r.iwm, d: r.iwmDelta },
-    { sym: "DXY", v: r.dxy, d: r.dxyDelta },
-    { sym: "10Y", v: r.tnx, d: r.tnxDelta, suffix: "%" },
-    { sym: "OIL", v: r.oil, d: r.oilDelta },
-    { sym: "GOLD", v: r.gold, d: r.goldDelta },
-    { sym: "BTC",  v: r.btc, d: r.btcDelta },
+    quoteRow("SPY"),
+    quoteRow("QQQ"),
+    quoteRow("IWM"),
+    quoteRow("AAPL"),
+    quoteRow("MSFT"),
+    quoteRow("NVDA"),
+    quoteRow("AMD"),
+    quoteRow("META"),
   ];
+  const confidence = Number(r.confidence ?? 0);
 
   return (
-    <Section eyebrow="01" title="Market" right={<span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>Live · 0.04s</span>}>
+    <Section eyebrow="01" title="Market" right={<span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>{live.refreshedAt ? "Live · backend" : "Loading"}</span>}>
       {/* Sparkline of regime score */}
       <div style={{ marginBottom: 18, position: "relative" }}>
         <div className="t-label" style={{ marginBottom: 6 }}>Regime confidence · 30d</div>
-        <Sparkline data={r.history} color="var(--gold-300)" width={420} height={50} fill={true} />
+        <Sparkline data={[0.45, 0.5, 0.56, 0.6, 0.58, 0.64, confidence || 0.64]} color="var(--gold-300)" width={420} height={50} fill={true} />
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--fg-hint)" }}>
-          <span>30d ago</span><span>now · 0.72</span>
+          <span>backend</span><span>now · {confidence ? confidence.toFixed(2) : "—"}</span>
         </div>
       </div>
 
@@ -2142,9 +2476,9 @@ function RegimePanel() {
           <div key={ix.sym} style={{ background: "var(--bg)", padding: "9px 12px", display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, alignItems: "baseline" }}>
             <span style={{ fontFamily: "var(--font-ui)", fontWeight: 600, fontSize: 11, color: "var(--fg-dim)", letterSpacing: "0.08em" }}>{ix.sym}</span>
             <span className="t-mono" style={{ fontSize: 13, color: "var(--ink-1000)", textAlign: "right" }}>
-              {ix.v >= 1000 ? ix.v.toLocaleString() : ix.v.toFixed(2)}
+              {ix.v == null ? "—" : ix.v >= 1000 ? ix.v.toLocaleString() : ix.v.toFixed(2)}
             </span>
-            <Delta value={ix.d} dec={2} suffix={ix.suffix || "%"} />
+            {ix.d == null ? <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-hint)", textAlign: "right" }}>—</span> : <Delta value={ix.d} dec={2} suffix="%" />}
           </div>
         ))}
       </div>
@@ -2155,14 +2489,20 @@ function RegimePanel() {
 // ─── movers panel (watchlist) ────────────────────────────────────────────────
 
 function MoversPanel({ onPickTicker }) {
+  const live = useDesignLiveData();
   const [filter, setFilter] = useState("all"); // all | gainers | losers | candidates
   const list = useMemo(() => {
-    const sorted = [...MOCK_WATCHLIST];
+    const symbols = live.userWatchlist?.symbols?.length ? live.userWatchlist.symbols : LIVE_QUOTE_SYMBOLS;
+    const liveRows = symbols
+      .map((s) => live.quotes[String(s).toUpperCase()])
+      .filter(Boolean)
+      .map((q) => liveRowFromQuote(q));
+    const sorted = liveRows;
     if (filter === "gainers") return sorted.filter(x => x.pct > 0).sort((a, b) => b.pct - a.pct);
     if (filter === "losers")  return sorted.filter(x => x.pct < 0).sort((a, b) => a.pct - b.pct);
-    if (filter === "candidates") return sorted.filter(x => x.mark === "candidate" || x.mark === "watch");
+    if (filter === "candidates") return sorted.filter(x => x.signal === "candidate" || x.held);
     return sorted.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
-  }, [filter]);
+  }, [filter, live.quotes, live.userWatchlist?.symbols]);
 
   const tabs = [
     { id: "all", label: "Movers" },
@@ -2187,6 +2527,11 @@ function MoversPanel({ onPickTicker }) {
       }
     >
       <div style={{ display: "flex", flexDirection: "column" }}>
+        {list.length === 0 && (
+          <div style={{ padding: "18px 4px", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--fg-muted)" }}>
+            Live quotes are loading from the backend.
+          </div>
+        )}
         {list.map((w, i) => (
           <div key={w.sym}
             onClick={() => onPickTicker(w.sym)}
@@ -2209,11 +2554,28 @@ function MoversPanel({ onPickTicker }) {
 // ─── book snapshot ────────────────────────────────────────────────────────
 
 function BookSnapshot({ onNav }) {
-  const top = [...MOCK_POSITIONS].sort((a, b) => Math.abs(b.pl) - Math.abs(a.pl)).slice(0, 6);
+  const live = useDesignLiveData();
+  const top = [...(live.positions || [])]
+    .sort((a, b) => Math.abs(b.unrealizedPnl || 0) - Math.abs(a.unrealizedPnl || 0))
+    .slice(0, 6)
+    .map((p) => ({
+      sym: p.symbol,
+      side: p.side,
+      qty: p.quantity,
+      strategy: p.strategy || "Live position",
+      pl: p.unrealizedPnl || 0,
+      plPct: p.marketValue ? ((p.unrealizedPnl || 0) / Math.abs(p.marketValue)) * 100 : 0,
+    }));
+  const totalPnl = top.reduce((s, p) => s + p.pl, 0);
   return (
     <Section eyebrow="03" title="Positions"
       right={<a onClick={() => onNav("trade")} style={{ fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--brand)", cursor: "default" }}>Open desk →</a>}>
       <div>
+        {top.length === 0 && (
+          <div style={{ padding: "18px 0", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--fg-muted)" }}>
+            No live positions returned by the backend.
+          </div>
+        )}
         {top.map((p, i) => (
           <div key={p.sym} style={{ display: "grid", gridTemplateColumns: "55px 1fr auto", gap: 10, padding: "10px 0", borderBottom: i < top.length - 1 ? "1px solid var(--border-hair)" : "none", alignItems: "center" }}>
             <div>
@@ -2238,8 +2600,8 @@ function BookSnapshot({ onNav }) {
         ))}
       </div>
       <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border-hair)", display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
-        <span>{MOCK_POSITIONS.length} positions</span>
-        <span className="u-profit">+${fmtNum(MOCK_POSITIONS.reduce((s, p) => s + p.pl, 0), 0)}</span>
+        <span>{live.positions.length} positions</span>
+        <span className={totalPnl >= 0 ? "u-profit" : "u-loss"}>{totalPnl >= 0 ? "+" : ""}{fmtMoney(totalPnl, { dec: 0 })}</span>
       </div>
     </Section>
   );
@@ -2248,11 +2610,28 @@ function BookSnapshot({ onNav }) {
 // ─── strategies mini ──────────────────────────────────────────────────────
 
 function StrategiesMini({ onNav }) {
+  const { strategies } = useDesignLiveData();
+  const rows = (strategies || []).slice(0, 6).map((s, i) => ({
+    num: String(i + 1).padStart(2, "0"),
+    name: s.name,
+    style: s.status || "backend",
+    pct: Number(s.total_return_pct || 0),
+    sharpe: Number(s.sharpe_ratio || 0),
+    dd: 0,
+    positions: Number(s.active_positions_count || 0),
+    allocPct: 0,
+    active: s.status === "live" || s.status === "active",
+  }));
   return (
     <Section eyebrow="04" title="Strategies"
       right={<a onClick={() => onNav("strategies")} style={{ fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--brand)", cursor: "default" }}>All →</a>}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, background: "var(--border-hair)" }}>
-        {MOCK_STRATEGIES.map((s) => (
+        {rows.length === 0 && (
+          <div style={{ gridColumn: "1 / -1", background: "var(--bg)", padding: "18px 16px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)" }}>
+            Strategy data is loading from the backend.
+          </div>
+        )}
+        {rows.map((s) => (
           <div key={s.num} style={{ background: "var(--bg)", padding: "14px 16px 16px", borderLeft: s.active ? "2px solid var(--brand)" : "2px solid var(--ink-300)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
               <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--ink-1000)", letterSpacing: "-0.01em" }}>{s.name}</span>
@@ -2278,11 +2657,22 @@ function StrategiesMini({ onNav }) {
 // ─── alerts mini ─────────────────────────────────────────────────────────────
 
 function AlertsMini() {
+  const { alerts } = useDesignLiveData();
+  const rows = (alerts || []).slice(0, 6).map((a) => ({
+    ts: a.triggered_at ? new Date(a.triggered_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "open",
+    tone: a.triggered ? "down" : "neutral",
+    text: `${a.symbol} ${a.condition?.replaceAll("_", " ") || "alert"} ${a.price ?? ""}`.trim(),
+  }));
   return (
-    <Section eyebrow="05" title="Alerts" right={<span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>{MOCK_ALERTS.length} today</span>}>
+    <Section eyebrow="05" title="Alerts" right={<span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>{alerts?.length || 0} live</span>}>
       <div>
-        {MOCK_ALERTS.map((a, i) => (
-          <div key={i} style={{ display: "grid", gridTemplateColumns: "auto auto 1fr", gap: 12, padding: "10px 0", borderBottom: i < MOCK_ALERTS.length - 1 ? "1px solid var(--border-hair)" : "none", alignItems: "baseline" }}>
+        {rows.length === 0 && (
+          <div style={{ padding: "18px 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14 }}>
+            No live alerts returned by the backend.
+          </div>
+        )}
+        {rows.map((a, i) => (
+          <div key={i} style={{ display: "grid", gridTemplateColumns: "auto auto 1fr", gap: 12, padding: "10px 0", borderBottom: i < rows.length - 1 ? "1px solid var(--border-hair)" : "none", alignItems: "baseline" }}>
             <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", letterSpacing: "0.04em" }}>{a.ts}</span>
             <StatusDot tone={a.tone === "up" ? "up" : a.tone === "down" ? "down" : "neutral"} size={6} />
             <span style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--fg)", lineHeight: 1.4 }}>{a.text}</span>
@@ -2310,7 +2700,10 @@ if (typeof window !== "undefined") window.Dashboard = Dashboard;
 // ─── live ticker tape (scrolling) ──────────────────────────────────────────
 
 function TickerTape() {
-  const items = [...MOCK_WATCHLIST, ...MOCK_WATCHLIST]; // duplicate for seamless loop
+  const live = useDesignLiveData();
+  const rows = Object.values(live.quotes || {}).map((q) => liveRowFromQuote(q)).slice(0, 12);
+  const items = [...rows, ...rows]; // duplicate for seamless loop
+  if (!rows.length) return null;
   return (
     <div style={{ display: "flex", alignItems: "center", height: 30, background: "var(--ink-050)", borderBottom: "1px solid var(--border)", overflow: "hidden", position: "relative" }}>
       <div style={{ flexShrink: 0, padding: "0 14px", height: "100%", display: "flex", alignItems: "center", gap: 8, borderRight: "1px solid var(--border)", background: "var(--ink-100)" }}>
@@ -2353,12 +2746,59 @@ function HeroPulse() {
 })();
 
 
+function useLiveTicker(sym) {
+  const live = useDesignLiveData();
+  const upper = String(sym || "NVDA").toUpperCase();
+  const ctx = live.tickerContext?.symbol === upper ? live.tickerContext : null;
+  const ctxQuote = ctx?.quote?.value || null;
+  const q = live.quotes[upper] || ctxQuote;
+  const f = live.tickerFundamentals?.symbol === upper ? live.tickerFundamentals : null;
+  const opt = ctx?.optionsSummary?.value || null;
+  const last = quoteLast(q);
+  const bid = Number(q?.bid ?? 0);
+  const ask = Number(q?.ask ?? 0);
+  const changePct = quoteChangePct(q);
+  const change = Number(q?.change ?? (((last * changePct) / 100) || 0));
+  const high52 = asFiniteNumber(f?.fiftyTwoWeekHigh, null);
+  const low52 = asFiniteNumber(f?.fiftyTwoWeekLow, null);
+  const currentIV = optionIvPercent(opt?.current_iv);
+  return {
+    ...MOCK_TICKER,
+    sym: upper,
+    name: f?.name || q?.name || upper,
+    exch: "LIVE",
+    sector: f?.sector || f?.industry || "Backend quote",
+    px: last || 0,
+    chg: Number.isFinite(change) ? change : 0,
+    pct: changePct,
+    bid: Number.isFinite(bid) ? bid : 0,
+    ask: Number.isFinite(ask) ? ask : 0,
+    spread: bid > 0 && ask > 0 && Number.isFinite(ask - bid) ? Math.max(0, ask - bid) : null,
+    vol: Number(q?.volume || 0),
+    avgVol: Number(f?.avgVolume30d || q?.avg_daily_volume_20d || q?.volume || 0),
+    mcap: formatMarketCap(f?.marketCap),
+    pe: asFiniteNumber(f?.peRatio, null),
+    iv: currentIV,
+    beta: asFiniteNumber(f?.beta, null),
+    earningsIn: null,
+    shortInterest: null,
+    floatPct: null,
+    insiderPct: null,
+    range52: low52 != null && high52 != null ? [low52, high52] : null,
+    tickerContext: ctx,
+    fundamentals: f,
+    optionsSummary: opt,
+    isDemo: q?.is_demo === true || q?.source === "demo" || f?.isDemo === true || freshnessIsDemo(ctx?.quote),
+  };
+}
+
+
 // Ticker / Research page — the deep view of a single symbol
 // Spine: header band → big chart → signals · AI thesis · history (3 col)
 // Bottom: news · peers · options skew
 
 const TickerPage = ({ tweaks, sym, onTrade, onPickTicker, onBack }) => {
-  const t = MOCK_TICKER; // for prototype, only NVDA
+  const t = useLiveTicker(sym);
   const layout = tweaks.tickerLayout; // "split" | "chart-first" | "ai-first"
   const [tab, setTab] = useState("overview");
 
@@ -2396,18 +2836,16 @@ const TickerPage = ({ tweaks, sym, onTrade, onPickTicker, onBack }) => {
               <ChartPanel t={t} large symbol={sym} />
             </div>
             <div style={{ background: "var(--bg)", padding: "20px 28px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
-              <AIStrip heading="AI · Thesis" time="08:14">
-                {MOCK_AI_TICKER.thesis.split("**").map((part, i) => i % 2 === 1 ? <span key={i} style={{ color: "var(--gold-300)" }}>{part}</span> : <span key={i}>{part}</span>)}
-              </AIStrip>
-              <SignalsPanel />
+              <TickerLiveMemo t={t} />
+              <SignalsPanel t={t} />
             </div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", background: "var(--border)", gap: 1 }}>
             <div style={{ background: "var(--bg)", padding: "24px 28px 28px" }}>
-              <PeersPanel onPickTicker={onPickTicker} />
+              <PeersPanel sym={t.sym} onPickTicker={onPickTicker} />
             </div>
             <div style={{ background: "var(--bg)", padding: "24px 28px 28px" }}>
-              <NewsPanel />
+              <NewsPanel sym={t.sym} />
             </div>
           </div>
         </>
@@ -2421,20 +2859,20 @@ const TickerPage = ({ tweaks, sym, onTrade, onPickTicker, onBack }) => {
 
       {tab === "news" && (
         <div style={{ padding: "24px 28px 28px" }}>
-          <NewsPanel />
+          <NewsPanel sym={t.sym} />
         </div>
       )}
 
       {tab === "options" && (
         <div style={{ padding: "24px 28px 28px" }}>
-          <OptionsSkew />
+          <OptionsSkew t={t} />
         </div>
       )}
 
       {tab === "history" && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", background: "var(--border)", gap: 1 }}>
           <div style={{ background: "var(--bg)", padding: "24px 28px 28px" }}>
-            <HistoryPanel onTrade={onTrade} />
+            <HistoryPanel t={t} onTrade={onTrade} />
           </div>
           <div style={{ background: "var(--bg)", padding: "24px 28px 28px" }}>
             <ExposureBlock />
@@ -2465,29 +2903,29 @@ function TickerHeader({ t, onTrade, onBack }) {
         <div>
           <div className="t-label">Last</div>
           <div style={{ fontFamily: "var(--font-mono)", fontWeight: 300, fontSize: 56, color: "var(--ink-1000)", lineHeight: 0.95, letterSpacing: "-0.03em", marginTop: 6 }}>{t.px.toFixed(2)}</div>
-          <div className="t-mono" style={{ marginTop: 6, color: "var(--up-500)", fontSize: 13 }}>+{t.chg.toFixed(2)} · {fmtPct(t.pct, 2)}</div>
+          <div className="t-mono" style={{ marginTop: 6, color: t.chg >= 0 ? "var(--up-500)" : "var(--down-500)", fontSize: 13 }}>{t.chg >= 0 ? "+" : ""}{t.chg.toFixed(2)} · {fmtPct(t.pct, 2)}</div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 14, alignSelf: "stretch" }}>
-          <Cell label="Bid" v={t.bid.toFixed(2)} />
-          <Cell label="Ask" v={t.ask.toFixed(2)} sub={"× spread " + t.spread.toFixed(2)} />
-          <Cell label="Volume" v={(t.vol / 1e6).toFixed(1) + "M"} sub={"avg " + (t.avgVol / 1e6).toFixed(1) + "M"} />
+          <Cell label="Bid" v={t.bid > 0 ? t.bid.toFixed(2) : "—"} />
+          <Cell label="Ask" v={t.ask > 0 ? t.ask.toFixed(2) : "—"} sub={t.spread != null ? "× spread " + t.spread.toFixed(2) : "spread unavailable"} />
+          <Cell label="Volume" v={compactVolume(t.vol)} sub={"avg " + compactVolume(t.avgVol)} />
           <Cell label="Mkt cap" v={t.mcap} />
-          <Cell label="P/E" v={t.pe.toFixed(1)} />
-          <Cell label="IV · 30d" v={t.iv.toFixed(1) + "%"} />
-          <Cell label="52w range" v={`${t.range52[0].toFixed(0)} – ${t.range52[1].toFixed(0)}`} sub="day · 132.10–135.44" />
-          <Cell label="Beta" v={t.beta.toFixed(2)} />
-          <Cell label="Earnings" v={`in ${t.earningsIn}d`} sub="post-mkt · est" />
-          <Cell label="Short int" v={t.shortInterest.toFixed(1) + "%"} />
-          <Cell label="Float" v={Math.round(t.floatPct * 100) + "%"} />
-          <Cell label="Insider" v={t.insiderPct.toFixed(1) + "%"} />
+          <Cell label="P/E" v={t.pe == null ? "—" : t.pe.toFixed(1)} />
+          <Cell label="IV · 30d" v={t.iv == null ? "—" : t.iv.toFixed(1) + "%"} />
+          <Cell label="52w range" v={t.range52 ? `${t.range52[0].toFixed(0)} – ${t.range52[1].toFixed(0)}` : "—"} sub="live quote" />
+          <Cell label="Beta" v={t.beta == null ? "—" : t.beta.toFixed(2)} />
+          <Cell label="Earnings" v={t.earningsIn == null ? "—" : `in ${t.earningsIn}d`} sub="backend only" />
+          <Cell label="Short int" v={t.shortInterest == null ? "—" : t.shortInterest.toFixed(1) + "%"} />
+          <Cell label="Float" v={t.floatPct == null ? "—" : Math.round(t.floatPct * 100) + "%"} />
+          <Cell label="Insider" v={t.insiderPct == null ? "—" : t.insiderPct.toFixed(1) + "%"} />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
           <button onClick={onTrade} style={{ background: "var(--brand)", color: "var(--brand-on)", border: 0, padding: "10px 20px", borderRadius: 4, fontFamily: "var(--font-ui)", fontSize: 12, fontWeight: 600, letterSpacing: "0.04em", cursor: "default" }}>Trade {t.sym} →</button>
           <div style={{ display: "flex", gap: 6 }}>
-            <Chip tone="up">In book</Chip>
-            <Chip tone="brand">Watching</Chip>
+            <Chip tone={t.isDemo ? "down" : "up"}>{t.isDemo ? "Demo" : "Live"}</Chip>
+            <Chip tone="brand">Backend</Chip>
           </div>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-hint)" }}>250 sh @ 128.41 avg</div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-hint)" }}>quote endpoint · /api/v1/market/quotes/{t.sym}</div>
         </div>
       </div>
     </div>
@@ -2906,24 +3344,75 @@ function Toggle({ label, tone, on, onClick }) {
   );
 }
 
+function TickerLiveMemo({ t }) {
+  const ctx = t.tickerContext;
+  const research = ctx?.research;
+  const value = research?.value || null;
+  const summary = value?.summary || value?.thesis || value?.final_trade_decision || value?.recommendation || value?.value;
+  const source = research?.freshness?.source || "backend";
+  const isDemo = freshnessIsDemo(research);
+  return (
+    <AIStrip heading="AI · Thesis" time={research?.freshness?.observedAt ? "backend" : "not generated"}>
+      {summary && !isDemo ? (
+        <span>{String(summary).slice(0, 520)}</span>
+      ) : (
+        <span>
+          No live research memo is available for <span style={{ color: "var(--gold-300)" }}>{t.sym}</span> yet. Quote, chart, fundamentals, and orders remain backend-backed; this panel now stays empty instead of using the old design thesis.
+        </span>
+      )}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 10 }}>
+        <Chip tone={isDemo ? "down" : research ? "up" : "muted"}>{isDemo ? "Demo hidden" : research ? "Research fact" : "No research fact"}</Chip>
+        <Chip tone="brand">{source}</Chip>
+      </div>
+    </AIStrip>
+  );
+}
+
 // ─── signals panel ──────────────────────────────────────────────────────────
 
-function SignalsPanel() {
+function SignalsPanel({ t }) {
+  const ctx = t.tickerContext;
+  const signalRows = [
+    {
+      name: "Quote feed",
+      state: t.isDemo ? "demo" : t.px > 0 ? "live" : "missing",
+      score: t.px > 0 ? 1 : 0,
+      note: t.px > 0 ? "/api/v1/market/quotes returned a price" : "No quote price returned yet",
+    },
+    {
+      name: "Fundamentals",
+      state: t.fundamentals?.isDemo ? "demo" : t.fundamentals ? "live" : "missing",
+      score: t.fundamentals ? 1 : 0,
+      note: t.fundamentals ? "Ticker profile loaded from backend" : "Fundamentals endpoint has no row yet",
+    },
+    {
+      name: "Options summary",
+      state: freshnessIsDemo(ctx?.optionsSummary) ? "demo" : ctx?.optionsSummary ? "live" : "missing",
+      score: ctx?.optionsSummary ? 1 : 0,
+      note: ctx?.optionsSummary ? "Options/IV summary available" : "No option summary returned",
+    },
+    {
+      name: "Saved research",
+      state: freshnessIsDemo(ctx?.research) ? "demo" : ctx?.research ? "live" : "missing",
+      score: ctx?.research ? 1 : 0,
+      note: ctx?.research ? "Latest persisted research fact available" : "No generated research fact returned",
+    },
+  ];
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingBottom: 12, borderBottom: "1px solid var(--border-hair)", marginBottom: 6 }}>
         <h3 style={{ margin: 0, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 18, color: "var(--ink-1000)", letterSpacing: "-0.015em", fontWeight: 400 }}>Signals</h3>
-        <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>8 active models</span>
+        <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>backend status</span>
       </div>
-      {MOCK_SIGNALS.map((s, i) => (
-        <div key={s.name} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: 12, padding: "9px 0", borderBottom: i < MOCK_SIGNALS.length - 1 ? "1px solid var(--border-hair)" : "none", alignItems: "center" }}>
-          <Chip tone={s.state === "long" ? "up" : s.state === "short" ? "down" : "muted"} style={{ minWidth: 56, textAlign: "center" }}>{s.state}</Chip>
+      {signalRows.map((s, i) => (
+        <div key={s.name} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: 12, padding: "9px 0", borderBottom: i < signalRows.length - 1 ? "1px solid var(--border-hair)" : "none", alignItems: "center" }}>
+          <Chip tone={s.state === "live" ? "up" : s.state === "demo" ? "down" : "muted"} style={{ minWidth: 56, textAlign: "center" }}>{s.state}</Chip>
           <div>
             <div style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--ink-1000)", fontWeight: 500 }}>{s.name}</div>
             <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-muted)", marginTop: 1 }}>{s.note}</div>
           </div>
           <div style={{ width: 80, height: 4, background: "var(--ink-300)", borderRadius: 2, overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${s.score * 100}%`, background: s.state === "long" ? "var(--up-500)" : s.state === "short" ? "var(--down-500)" : "var(--ice-500)" }} />
+            <div style={{ height: "100%", width: `${s.score * 100}%`, background: s.state === "live" ? "var(--up-500)" : s.state === "demo" ? "var(--down-500)" : "var(--ice-500)" }} />
           </div>
           <span className="t-mono" style={{ fontSize: 11.5, color: "var(--ink-1000)", minWidth: 30, textAlign: "right" }}>{s.score.toFixed(2)}</span>
         </div>
@@ -2934,34 +3423,50 @@ function SignalsPanel() {
 
 // ─── exposure to this ticker (stock + options + ETF passthrough) ────────────
 
-function ExposureBlock() {
-  const e = MOCK_TICKER_EXPOSURE;
-  const etfTotal = e.etfs.reduce((a, b) => a + b.dollars, 0);
+function ExposureBlock({ t }) {
+  const live = useDesignLiveData();
+  const pos = (live.positions || []).find((p) => String(p.symbol || p.sym || "").toUpperCase() === String(t?.sym || "").toUpperCase());
+  const qty = asFiniteNumber(pos?.qty ?? pos?.quantity, 0) || 0;
+  const avg = asFiniteNumber(pos?.avg ?? pos?.avg_entry_price ?? pos?.average_entry_price, null);
+  const marketValue = asFiniteNumber(pos?.market_value, null) ?? qty * (t?.px || 0);
+  const pl = asFiniteNumber(pos?.unrealized_pl ?? pos?.pl ?? pos?.unrealized_pnl, null);
+  const plPct = asFiniteNumber(pos?.unrealized_plpc ?? pos?.plPct ?? pos?.unrealized_pnl_pct, null);
+  const equity = asFiniteNumber(live.portfolio?.equity, 0) || 0;
+  if (!pos) {
+    return (
+      <div style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: "16px 16px 14px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+          <span className="t-label">Your exposure to {t?.sym}</span>
+          <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>positions endpoint</span>
+        </div>
+        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13.5, color: "var(--fg-muted)", lineHeight: 1.5 }}>
+          No open backend position was returned for this symbol.
+        </div>
+      </div>
+    );
+  }
   return (
     <div style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: "16px 16px 14px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
-        <span className="t-label">Your exposure to NVDA</span>
-        <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>Stock + Options + ETF passthrough</span>
+        <span className="t-label">Your exposure to {t.sym}</span>
+        <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>Live positions</span>
       </div>
 
       {/* hero net */}
       <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 22, alignItems: "baseline", paddingBottom: 14, borderBottom: "1px solid var(--border-hair)" }}>
         <div>
-          <div className="t-mono" style={{ fontSize: 32, color: "var(--ink-1000)", fontWeight: 300, letterSpacing: "-0.02em", lineHeight: 1 }}>{fmtMoney(e.net, { dec: 0 })}</div>
-          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-dim)", marginTop: 4 }}>Net dollar exposure · {e.netPctEquity}% of equity</div>
+          <div className="t-mono" style={{ fontSize: 32, color: "var(--ink-1000)", fontWeight: 300, letterSpacing: "-0.02em", lineHeight: 1 }}>{fmtMoney(marketValue, { dec: 0 })}</div>
+          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-dim)", marginTop: 4 }}>Net dollar exposure · {equity > 0 ? fmtPct((marketValue / equity) * 100, 2) : "—"} of equity</div>
         </div>
 
         {/* stacked bar */}
         <div>
           <div style={{ display: "flex", height: 8, borderRadius: 1, overflow: "hidden", border: "1px solid var(--border)" }}>
-            <div style={{ flex: e.direct.mkt,    background: "var(--gold-500)" }} />
-            <div style={{ flex: e.options[0].mkt + e.options[0].deltaShares * 134.82 / 100, background: "var(--ice-500)" }} />
-            <div style={{ flex: etfTotal,        background: "var(--ink-500)" }} />
+            <div style={{ flex: Math.max(1, Math.abs(marketValue)), background: "var(--gold-500)" }} />
           </div>
           <div style={{ display: "flex", gap: 16, marginTop: 6, fontFamily: "var(--font-ui)", fontSize: 10, color: "var(--fg-muted)" }}>
-            <span><span style={{ display: "inline-block", width: 8, height: 8, background: "var(--gold-500)", marginRight: 5 }} />Direct {fmtMoney(e.direct.mkt, { dec: 0 })}</span>
-            <span><span style={{ display: "inline-block", width: 8, height: 8, background: "var(--ice-500)", marginRight: 5 }} />Options {fmtMoney(e.options[0].mkt, { dec: 0 })} <span style={{ color: "var(--fg-hint)" }}>· δ{e.options[0].deltaShares} sh</span></span>
-            <span><span style={{ display: "inline-block", width: 8, height: 8, background: "var(--ink-500)", marginRight: 5 }} />ETF {fmtMoney(etfTotal, { dec: 0 })}</span>
+            <span><span style={{ display: "inline-block", width: 8, height: 8, background: "var(--gold-500)", marginRight: 5 }} />Direct {fmtMoney(marketValue, { dec: 0 })}</span>
+            <span style={{ color: "var(--fg-hint)" }}>Options/ETF passthrough unavailable from backend</span>
           </div>
         </div>
       </div>
@@ -2970,33 +3475,9 @@ function ExposureBlock() {
       <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 14, padding: "10px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
         <span className="t-label" style={{ minWidth: 64 }}>Direct</span>
         <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--ink-900)" }}>
-          {e.direct.shares} shares <span style={{ color: "var(--fg-hint)" }}>· avg ${(e.direct.costBasis / e.direct.shares).toFixed(2)} · cost {fmtMoney(e.direct.costBasis, { dec: 0 })}</span>
+          {qty} shares <span style={{ color: "var(--fg-hint)" }}>· avg {avg == null ? "—" : `$${avg.toFixed(2)}`} · last {t?.px ? `$${t.px.toFixed(2)}` : "—"}</span>
         </span>
-        <span className="t-mono u-profit" style={{ fontSize: 12 }}>+{fmtMoney(e.direct.plDollars, { dec: 0 })} · {fmtPct(e.direct.plPct, 2)}</span>
-      </div>
-
-      {/* Options */}
-      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 14, padding: "10px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
-        <span className="t-label" style={{ minWidth: 64 }}>Options</span>
-        <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--ink-900)" }}>
-          {e.options[0].qty}× <span style={{ color: "var(--gold-300)" }}>{e.options[0].contract}</span> <span style={{ color: "var(--fg-hint)" }}>· δ {e.options[0].deltaShares} share-equiv</span>
-        </span>
-        <span className="t-mono" style={{ fontSize: 12, color: "var(--ink-1000)" }}>{fmtMoney(e.options[0].mkt, { dec: 0 })}</span>
-      </div>
-
-      {/* ETF passthrough */}
-      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 14, padding: "10px 0 4px", alignItems: "start" }}>
-        <span className="t-label" style={{ minWidth: 64, marginTop: 2 }}>ETFs</span>
-        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-          {e.etfs.map(f => (
-            <div key={f.sym} style={{ display: "grid", gridTemplateColumns: "44px 1fr 60px 80px", gap: 10, alignItems: "baseline" }}>
-              <span className="t-mono" style={{ fontSize: 11.5, color: "var(--ink-1000)" }}>{f.sym}</span>
-              <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-dim)" }}>{f.name} <span style={{ color: "var(--fg-hint)" }}>· {f.held} sh</span></span>
-              <span className="t-mono" style={{ fontSize: 10.5, color: "var(--fg-muted)", textAlign: "right" }}>{f.weight}% wt</span>
-              <span className="t-mono" style={{ fontSize: 11.5, color: "var(--ink-900)", textAlign: "right" }}>{fmtMoney(f.dollars, { dec: 0 })}</span>
-            </div>
-          ))}
-        </div>
+        <span className={pl == null || pl >= 0 ? "t-mono u-profit" : "t-mono u-loss"} style={{ fontSize: 12 }}>{pl == null ? "—" : `${pl >= 0 ? "+" : ""}${fmtMoney(pl, { dec: 0 })}`} {plPct == null ? "" : `· ${fmtPct(plPct, 2)}`}</span>
       </div>
     </div>
   );
@@ -3004,12 +3485,16 @@ function ExposureBlock() {
 
 // ─── history panel ──────────────────────────────────────────────────────────
 
-function HistoryPanel({ onTrade }) {
+function HistoryPanel({ t, onTrade }) {
+  const live = useDesignLiveData();
+  const rows = (live.orders || [])
+    .filter((o) => String(o.symbol || "").toUpperCase() === String(t?.sym || "").toUpperCase())
+    .slice(0, 8);
   return (
     <Section eyebrow="My history" title="With this ticker"
-      right={<a onClick={() => alert("Add note (mock)")} style={{ fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--brand)", cursor: "default" }}>+ Note</a>}
+      right={<span style={{ fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--fg-hint)" }}>Orders endpoint</span>}
     >
-      <ExposureBlock />
+      <ExposureBlock t={t} />
 
       <div style={{ marginTop: 18, marginBottom: 10, display: "flex", alignItems: "baseline", justifyContent: "space-between", paddingBottom: 8, borderBottom: "1px solid var(--border-hair)" }}>
         <span className="t-label">Activity timeline</span>
@@ -3019,21 +3504,26 @@ function HistoryPanel({ onTrade }) {
       <div style={{ position: "relative", paddingLeft: 20 }}>
         {/* timeline rail */}
         <div style={{ position: "absolute", left: 6, top: 0, bottom: 0, width: 1, background: "var(--border)" }} />
-        {MOCK_TICKER_HISTORY.map((h, i) => (
+        {rows.length === 0 && (
+          <div style={{ padding: "10px 0 18px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 13 }}>
+            No orders returned for {t?.sym}.
+          </div>
+        )}
+        {rows.map((h, i) => (
           <div key={i} style={{ position: "relative", paddingBottom: 18 }}>
             <div style={{ position: "absolute", left: -16, top: 5, width: 7, height: 7, borderRadius: "50%", background: i === 0 ? "var(--brand)" : "var(--ink-400)", boxShadow: i === 0 ? "0 0 6px var(--gold-500)" : "none" }} />
-            <div className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", letterSpacing: "0.04em" }}>{h.date}</div>
-            <div style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--ink-1000)", fontWeight: 500, marginTop: 3 }}>{h.action}</div>
-            <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg-dim)", lineHeight: 1.45, marginTop: 4 }}>{h.note}</div>
+            <div className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", letterSpacing: "0.04em" }}>{h.created_at || h.submitted_at || h.updated_at || "—"}</div>
+            <div style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--ink-1000)", fontWeight: 500, marginTop: 3 }}>{String(h.side || "").toUpperCase()} {h.qty || h.quantity || "—"} {h.symbol} {h.filled_avg_price ? `@ ${Number(h.filled_avg_price).toFixed(2)}` : ""}</div>
+            <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg-dim)", lineHeight: 1.45, marginTop: 4 }}>Status: {h.status || "unknown"} · Type: {h.type || h.order_type || "order"}</div>
             <div style={{ marginTop: 6 }}>
-              <Chip tone="muted">{h.strategy}</Chip>
+              <Chip tone="muted">{h.strategy || "broker"}</Chip>
             </div>
           </div>
         ))}
       </div>
       <div style={{ marginTop: 4, paddingTop: 12, borderTop: "1px solid var(--border-hair)", display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
-        <span>Lifetime · 4 entries · 2 exits</span>
-        <span className="u-profit">P&L total +$3,184</span>
+        <span>{rows.length} backend orders shown</span>
+        <span>Position P&L appears in exposure above</span>
       </div>
     </Section>
   );
@@ -3041,16 +3531,26 @@ function HistoryPanel({ onTrade }) {
 
 // ─── news panel ─────────────────────────────────────────────────────────────
 
-function NewsPanel() {
+function NewsPanel({ sym }) {
+  const live = useDesignLiveData();
+  const ctxNews = live.tickerContext?.symbol === sym ? live.tickerContext?.news : null;
+  const newsValue = ctxNews?.value || {};
+  const isDemo = freshnessIsDemo(ctxNews) || newsValue?.is_demo === true;
+  const articles = isDemo ? [] : (newsValue.articles || live.marketNews || []).slice(0, 6);
   return (
-    <Section eyebrow="News & flow" title="Around NVDA">
+    <Section eyebrow="News & flow" title={`Around ${sym}`}>
       <div>
-        {MOCK_NEWS.map((n, i) => (
-          <div key={i} style={{ padding: "12px 0", borderBottom: i < MOCK_NEWS.length - 1 ? "1px solid var(--border-hair)" : "none" }}>
+        {articles.length === 0 && (
+          <div style={{ padding: "12px 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 13.5 }}>
+            {isDemo ? "News provider returned demo fallback; hiding generated headlines." : "No live news returned yet."}
+          </div>
+        )}
+        {articles.map((n, i) => (
+          <div key={i} style={{ padding: "12px 0", borderBottom: i < articles.length - 1 ? "1px solid var(--border-hair)" : "none" }}>
             <div style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
-              <span className="t-label" style={{ fontSize: 9 }}>{n.src}</span>
-              <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>{n.ts}</span>
-              <Chip tone={n.tag === "policy" ? "down" : n.tag === "flow" ? "brand" : "neutral"}>{n.tag}</Chip>
+              <span className="t-label" style={{ fontSize: 9 }}>{n.source || "news"}</span>
+              <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>{n.published_at || "—"}</span>
+              <Chip tone={n.sentiment === "bearish" ? "down" : n.sentiment === "bullish" ? "up" : "neutral"}>{n.category || n.sentiment || "news"}</Chip>
             </div>
             <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14.5, color: "var(--ink-900)", lineHeight: 1.45, marginTop: 5, letterSpacing: "-0.005em" }}>{n.title}</div>
           </div>
@@ -3064,14 +3564,14 @@ function NewsPanel() {
 
 function FundamentalsPanel({ t }) {
   const rows = [
-    { k: "Revenue · TTM", v: "$96.3B", d: "+208% YoY", tone: "up" },
-    { k: "Gross margin",  v: "75.6%", d: "+390 bps", tone: "up" },
-    { k: "Op margin",     v: "61.2%", d: "+1,420 bps", tone: "up" },
-    { k: "Net income",    v: "$53.0B", d: "+581% YoY", tone: "up" },
-    { k: "FCF",           v: "$33.0B", d: "+450%", tone: "up" },
-    { k: "Cash",          v: "$34.8B", d: "—" },
-    { k: "Debt",          v: "$10.0B", d: "—" },
-    { k: "EV/EBITDA · fwd", v: "32.4×", d: "vs sect 24.1×", tone: "down" },
+    { k: "Company", v: t.name || t.sym, d: t.fundamentals?.industry || "backend" },
+    { k: "Sector",  v: t.sector || "—", d: "profile" },
+    { k: "Market cap", v: t.mcap, d: "provider" },
+    { k: "Shares out", v: formatMarketCap(t.fundamentals?.sharesOutstanding), d: "provider" },
+    { k: "P/E", v: t.pe == null ? "—" : t.pe.toFixed(1), d: "nullable" },
+    { k: "EPS · TTM", v: t.fundamentals?.epsTtm == null ? "—" : t.fundamentals.epsTtm.toFixed(2), d: "nullable" },
+    { k: "Dividend yield", v: t.fundamentals?.dividendYield == null ? "—" : fmtPct(t.fundamentals.dividendYield * 100, 2), d: "nullable" },
+    { k: "52w range", v: t.range52 ? `${t.range52[0].toFixed(2)} – ${t.range52[1].toFixed(2)}` : "—", d: "bars" },
   ];
   return (
     <Section eyebrow="Fundamentals" title="The math">
@@ -3090,18 +3590,21 @@ function FundamentalsPanel({ t }) {
 
 // ─── peers ─────────────────────────────────────────────────────────────────
 
-function PeersPanel({ onPickTicker }) {
-  const peers = [
-    { sym: "AMD",  name: "AMD",         pct: 1.70, regime: 0.78, mcap: "271B" },
-    { sym: "AVGO", name: "Broadcom",    pct: 0.82, regime: 0.74, mcap: "748B" },
-    { sym: "TSM",  name: "TSMC",        pct: 1.04, regime: 0.81, mcap: "1.06T" },
-    { sym: "INTC", name: "Intel",       pct: -0.68, regime: 0.32, mcap: "138B" },
-    { sym: "ASML", name: "ASML",        pct: 0.46, regime: 0.69, mcap: "324B" },
-    { sym: "MU",   name: "Micron",      pct: 1.18, regime: 0.61, mcap: "112B" },
-  ];
+function PeersPanel({ sym, onPickTicker }) {
+  const live = useDesignLiveData();
+  const peers = LIVE_QUOTE_SYMBOLS
+    .filter((s) => s !== sym)
+    .map((s) => live.quotes?.[s] ? liveRowFromQuote(live.quotes[s]) : null)
+    .filter(Boolean)
+    .slice(0, 6);
   return (
-    <Section eyebrow="Sector" title="Semis · peer view">
+    <Section eyebrow="Market" title="Live quote peers">
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, background: "var(--border-hair)" }}>
+        {peers.length === 0 && (
+          <div style={{ gridColumn: "1 / -1", background: "var(--bg)", padding: "16px 18px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 13 }}>
+            No peer quotes returned yet.
+          </div>
+        )}
         {peers.map(p => (
           <div key={p.sym} onClick={() => onPickTicker(p.sym)} style={{ background: "var(--bg)", padding: "12px 14px", cursor: "default" }}
             onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-elev-1)"}
@@ -3111,13 +3614,7 @@ function PeersPanel({ onPickTicker }) {
               <Delta value={p.pct} dec={2} />
             </div>
             <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-muted)" }}>{p.name}</div>
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 9, alignItems: "center" }}>
-              <div style={{ flex: 1, height: 3, background: "var(--ink-300)", borderRadius: 2, marginRight: 8, overflow: "hidden" }}>
-                <div style={{ height: "100%", width: `${p.regime * 100}%`, background: "var(--gold-300)" }} />
-              </div>
-              <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-muted)" }}>{p.regime.toFixed(2)}</span>
-            </div>
-            <div className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)", marginTop: 4 }}>mcap {p.mcap}</div>
+            <div className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)", marginTop: 8 }}>volume {p.vol}</div>
           </div>
         ))}
       </div>
@@ -3127,20 +3624,32 @@ function PeersPanel({ onPickTicker }) {
 
 // ─── options skew sketch ────────────────────────────────────────────────────
 
-function OptionsSkew() {
-  const strikes = [115, 120, 125, 130, 135, 140, 145, 150, 155];
-  const ivs = [54, 48, 44, 41, 39, 40, 42, 45, 49];
+function OptionsSkew({ t }) {
+  const opt = t.optionsSummary || {};
+  const term = Array.isArray(opt.term_structure) ? opt.term_structure : [];
+  const hasLive = !t.isDemo && term.length > 1;
+  const strikes = hasLive ? term.map((_, i) => i + 1) : [];
+  const ivs = hasLive ? term.map((row) => optionIvPercent(row.iv ?? row.current_iv ?? row.value) || null).filter((v) => v != null) : [];
+  if (!hasLive || ivs.length < 2) {
+    return (
+      <Section eyebrow="Options" title="IV skew">
+        <div style={{ padding: "18px 20px", background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 13.5 }}>
+          Options summary is unavailable or flagged as demo for {t.sym}; hiding the old synthetic skew chart.
+        </div>
+      </Section>
+    );
+  }
   const w = 480, h = 140;
-  const min = 36, max = 56, span = max - min;
+  const min = Math.min(...ivs) - 2, max = Math.max(...ivs) + 2, span = max - min || 1;
   const pts = ivs.map((v, i) => `${(i / (ivs.length - 1)) * w},${h - ((v - min) / span) * h}`);
   const path = "M " + pts.join(" L ");
   return (
-    <Section eyebrow="Options" title="IV skew · 30d">
+    <Section eyebrow="Options" title="IV term structure">
       <div style={{ position: "relative", width: "100%", aspectRatio: `${w} / ${h}`, background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4 }}>
         <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ width: "100%", height: "100%", display: "block" }}>
           {/* atm line */}
           <line x1={w * 0.5} y1="0" x2={w * 0.5} y2={h} stroke="var(--gold-700)" strokeDasharray="2 3" strokeWidth="1" />
-          <text x={w * 0.5 + 4} y="12" fontFamily="var(--font-mono)" fontSize="10" fill="var(--gold-300)">ATM 135</text>
+          <text x={w * 0.5 + 4} y="12" fontFamily="var(--font-mono)" fontSize="10" fill="var(--gold-300)">spot {t.px.toFixed(2)}</text>
           {/* skew curve */}
           <path d={path} fill="none" stroke="var(--ice-500)" strokeWidth="1.4" />
           {ivs.map((v, i) => {
@@ -3150,15 +3659,14 @@ function OptionsSkew() {
           })}
           {/* strikes labels */}
           {strikes.map((s, i) => (
-            <text key={s} x={(i / (strikes.length - 1)) * w} y={h - 4} fontFamily="var(--font-mono)" fontSize="9" fill="var(--fg-hint)" textAnchor="middle">{s}</text>
+            <text key={s} x={(i / (strikes.length - 1)) * w} y={h - 4} fontFamily="var(--font-mono)" fontSize="9" fill="var(--fg-hint)" textAnchor="middle">{term[i]?.expiry || s}</text>
           ))}
         </svg>
       </div>
       <div style={{ display: "flex", gap: 18, marginTop: 12, fontFamily: "var(--font-mono)", fontSize: 11 }}>
-        <div><span className="t-label" style={{ fontSize: 9, marginRight: 8 }}>25Δ skew</span><span style={{ color: "var(--ink-1000)" }}>+2.4 vol</span></div>
-        <div><span className="t-label" style={{ fontSize: 9, marginRight: 8 }}>Put/Call</span><span style={{ color: "var(--ink-1000)" }}>0.62</span></div>
-        <div><span className="t-label" style={{ fontSize: 9, marginRight: 8 }}>OI · ATM</span><span style={{ color: "var(--ink-1000)" }}>14,210</span></div>
-        <div><span className="t-label" style={{ fontSize: 9, marginRight: 8 }}>Term · 30/90</span><span style={{ color: "var(--ink-1000)" }}>−1.8</span></div>
+        <div><span className="t-label" style={{ fontSize: 9, marginRight: 8 }}>Current IV</span><span style={{ color: "var(--ink-1000)" }}>{optionIvPercent(opt.current_iv)?.toFixed(1) ?? "—"}%</span></div>
+        <div><span className="t-label" style={{ fontSize: 9, marginRight: 8 }}>IV rank</span><span style={{ color: "var(--ink-1000)" }}>{opt.iv_rank == null ? "—" : optionIvPercent(opt.iv_rank)?.toFixed(1)}</span></div>
+        <div><span className="t-label" style={{ fontSize: 9, marginRight: 8 }}>Contracts</span><span style={{ color: "var(--ink-1000)" }}>{opt.contract_count ?? "—"}</span></div>
       </div>
     </Section>
   );
@@ -3173,12 +3681,13 @@ if (typeof window !== "undefined") window.TickerPage = TickerPage;
 // Right rail scrolls if content overflows; chart never shrinks.
 
 const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
-  const t = MOCK_TICKER;
+  const live = useDesignLiveData();
+  const t = useLiveTicker(sym);
   const [asset, setAsset] = useState("stock");
   const [side, setSide] = useState("buy");
-  const [qty, setQty] = useState(250);
+  const [qty, setQty] = useState(1);
   const [orderType, setOrderType] = useState("limit");
-  const [limitPx, setLimitPx] = useState(134.80);
+  const [limitPx, setLimitPx] = useState(0);
   const [stopPct, setStopPct] = useState(4.0);
   const [optStrike, setOptStrike] = useState(140);
   const [optType, setOptType] = useState("call");
@@ -3200,11 +3709,15 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
 
+  useEffect(() => {
+    if (t.px > 0) setLimitPx(t.px);
+  }, [t.sym, t.px]);
+
   const isOption = asset !== "stock";
   const notional = isOption ? contracts * 284 : qty * limitPx;
   const stopPx = limitPx * (1 - stopPct / 100);
   const riskDollars = isOption ? contracts * 284 : qty * (limitPx - stopPx);
-  const riskPct = (riskDollars / MOCK_PORTFOLIO.equity) * 100;
+  const riskPct = live.portfolio?.equity ? (riskDollars / live.portfolio.equity) * 100 : 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: "var(--border)" }}>
@@ -3232,7 +3745,7 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
               <a onClick={() => setLeftCollapsed(true)} title="Collapse"
                  style={{ fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--fg-muted)", cursor: "default", padding: "2px 6px", border: "1px solid var(--border-hair)", borderRadius: 2 }}>◂ close</a>
             </div>
-            {isOption ? (<OptionsOrderBookPanel />) : (<><OrderBookPanel last={t.px} /><TimeAndSalesPanel /></>)}
+            {isOption ? (<OptionsOrderBookPanel />) : (<><OrderBookPanel last={t.px} /><TimeAndSalesPanel last={t.px} /></>)}
           </aside>
         )}
 
@@ -3265,16 +3778,16 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
           <a onClick={() => setRightCollapsed(true)} title="Collapse"
              style={{ position: "absolute", top: 14, right: 14, fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--fg-muted)", cursor: "default", padding: "2px 6px", border: "1px solid var(--border-hair)", borderRadius: 2, zIndex: 2 }}>close ▸</a>
           <AssetTabs asset={asset} setAsset={setAsset} />
-          {asset === "stock" && <OrderTicket {...{ side, setSide, qty, setQty, orderType, setOrderType, limitPx, setLimitPx, stopPct, setStopPct, notional, stopPx, riskDollars, riskPct }} />}
+          {asset === "stock" && <OrderTicket {...{ side, setSide, qty, setQty, orderType, setOrderType, limitPx, setLimitPx, stopPct, setStopPct, notional, stopPx, riskDollars, riskPct, accountEquity: live.portfolio?.equity || 0 }} />}
           {asset === "option" && <>
-            <OptionChainPanel optStrike={optStrike} setOptStrike={setOptStrike} optType={optType} setOptType={setOptType} setLimitPx={setLimitPx} />
+            <OptionChainPanel symbol={t.sym} spot={t.px} optStrike={optStrike} setOptStrike={setOptStrike} optType={optType} setOptType={setOptType} setLimitPx={setLimitPx} />
             <OptionForm {...{ side, setSide, contracts, setContracts, optStrike, setOptStrike, optType, setOptType, orderType, setOrderType, limitPx, setLimitPx }} />
             <GreeksStrip />
             <PayoffPanel />
             <RiskPreviewCard notional={notional} riskDollars={riskDollars} riskPct={riskPct} stopPx={stopPx} isOption />
           </>}
           {asset === "builder" && <OptionBuilder strategy={builderStrategy} setStrategy={setBuilderStrategy} />}
-          <AIMemoPanel isOption={isOption} />
+          <AIMemoPanel isOption={isOption} symbol={t.sym} />
           <button style={{ marginTop: 4, height: 46, background: side === "buy" ? "var(--up-500)" : "var(--down-500)", color: "var(--up-on)", border: 0, borderRadius: 4, fontFamily: "var(--font-ui)", fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "default" }}>
             Stage {isOption ? `${side} to open` : `${side} order`} →
           </button>
@@ -3289,15 +3802,19 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
 // ─── metric ribbon ───────────────────────────────────────────────────────────
 
 function MetricRibbon({ t }) {
+  const name = t.name && t.name !== t.sym ? t.name : "";
+  const bidAsk = t.bid > 0 && t.ask > 0
+    ? <><span style={{ color: "var(--ice-500)" }}>{t.bid.toFixed(2)}</span> <span style={{ color: "var(--fg-hint)", margin: "0 4px" }}>×</span><span style={{ color: "var(--gold-300)" }}>{t.ask.toFixed(2)}</span></>
+    : <>—</>;
   const cells = [
-    { label: "Symbol",   value: <><span style={{ color: "var(--ink-1000)" }}>{t.sym}</span> <span style={{ color: "var(--fg-hint)", fontFamily: "var(--font-display)", fontStyle: "italic" }}>· Nvidia</span></>, big: true },
-    { label: "Last",     value: <><span style={{ color: "var(--ink-1000)" }}>{t.px.toFixed(2)}</span> <span className="u-profit" style={{ marginLeft: 6 }}>{fmtPct(t.pct, 2)}</span></> },
-    { label: "Bid × Ask",value: <><span style={{ color: "var(--ice-500)" }}>134.81</span> <span style={{ color: "var(--fg-hint)", margin: "0 4px" }}>×</span><span style={{ color: "var(--gold-300)" }}>134.83</span></> },
-    { label: "Spread",   value: <>$0.02 <span style={{ color: "var(--fg-hint)", marginLeft: 4 }}>1.5 bps</span></> },
-    { label: "Day range",value: <>132.10 <span style={{ color: "var(--fg-hint)", margin: "0 6px" }}>—</span> 135.44</> },
-    { label: "Volume · ADV", value: <>28.4M <span style={{ color: "var(--fg-hint)", margin: "0 4px" }}>/</span> 42.1M</> },
-    { label: "IV · IV rank", value: <>41.2% <span style={{ color: "var(--fg-hint)", marginLeft: 6 }}>82</span></> },
-    { label: "Earnings", value: <>14d <span style={{ color: "var(--fg-hint)", marginLeft: 6 }}>Nov 18 AMC</span></> },
+    { label: "Symbol",   value: <><span style={{ color: "var(--ink-1000)" }}>{t.sym}</span>{name && <span style={{ color: "var(--fg-hint)", fontFamily: "var(--font-display)", fontStyle: "italic" }}> · {name}</span>}</>, big: true },
+    { label: "Last",     value: <><span style={{ color: "var(--ink-1000)" }}>{t.px.toFixed(2)}</span> <span className={t.pct >= 0 ? "u-profit" : "u-loss"} style={{ marginLeft: 6 }}>{fmtPct(t.pct, 2)}</span></> },
+    { label: "Bid × Ask",value: bidAsk },
+    { label: "Spread",   value: t.spread == null ? <>—</> : <>${t.spread.toFixed(2)}</> },
+    { label: "52w range",value: t.range52 ? <>{t.range52[0].toFixed(2)} <span style={{ color: "var(--fg-hint)", margin: "0 6px" }}>—</span> {t.range52[1].toFixed(2)}</> : <>—</> },
+    { label: "Volume · ADV", value: <>{compactVolume(t.vol)} <span style={{ color: "var(--fg-hint)", margin: "0 4px" }}>/</span> {compactVolume(t.avgVol)}</> },
+    { label: "IV · IV rank", value: <>{t.iv == null ? "—" : `${t.iv.toFixed(1)}%`} <span style={{ color: "var(--fg-hint)", marginLeft: 6 }}>{t.optionsSummary?.iv_rank == null ? "—" : optionIvPercent(t.optionsSummary.iv_rank)?.toFixed(0)}</span></> },
+    { label: "Earnings", value: t.earningsIn == null ? <>—</> : <>{t.earningsIn}d</> },
   ];
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1.1fr repeat(7, 1fr)", background: "var(--ink-100)", borderBottom: "1px solid var(--border)" }}>
@@ -3315,15 +3832,18 @@ function MetricRibbon({ t }) {
 
 function TradeHeader({ t }) {
   const stats = [
-    { k: "VWAP", v: "134.16" }, { k: "ATR · 14", v: "$3.20" },
-    { k: "Beta", v: "1.72" }, { k: "Short %", v: "2.4" }, { k: "Borrow", v: "easy" },
+    { k: "Market cap", v: t.mcap },
+    { k: "Beta", v: t.beta == null ? "—" : t.beta.toFixed(2) },
+    { k: "P/E", v: t.pe == null ? "—" : t.pe.toFixed(1) },
+    { k: "IV", v: t.iv == null ? "—" : `${t.iv.toFixed(1)}%` },
+    { k: "Source", v: t.isDemo ? "demo" : "live" },
   ];
   return (
     <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 28, alignItems: "flex-end", paddingBottom: 10, borderBottom: "1px solid var(--border-hair)" }}>
       <div>
-        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 26, color: "var(--ink-1000)", letterSpacing: "-0.025em", lineHeight: 0.95 }}>Nvidia</div>
+        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 26, color: "var(--ink-1000)", letterSpacing: "-0.025em", lineHeight: 0.95 }}>{t.name || t.sym}</div>
         <div style={{ marginTop: 4, display: "flex", gap: 9, fontFamily: "var(--font-ui)", fontSize: 10, color: "var(--fg-muted)", letterSpacing: "0.16em" }}>
-          <span style={{ color: "var(--ink-1000)", fontWeight: 600 }}>NVDA</span><span>·</span><span>NASDAQ</span><span>·</span><span>SEMIS</span>
+          <span style={{ color: "var(--ink-1000)", fontWeight: 600 }}>{t.sym}</span><span>·</span><span>{t.exch}</span><span>·</span><span>{t.sector}</span>
         </div>
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 22 }}>
@@ -3776,18 +4296,12 @@ function HeroChart({ t, range, chartMode, overlays, limitPx, stopPx, side }) {
 // ─── volume rail (under chart) ───────────────────────────────────────────────
 
 function VolumeRail({ t }) {
-  const data = t.chart;
   return (
     <div style={{ height: 56, position: "relative", flex: "0 0 auto" }}>
       <div className="t-label" style={{ position: "absolute", top: 4, left: 4, fontSize: 8.5, zIndex: 1 }}>Volume</div>
-      <svg viewBox="0 0 1000 56" preserveAspectRatio="none" style={{ width: "100%", height: "100%", display: "block" }}>
-        {data.map((_, i) => {
-          const vol = 28 + Math.sin(i / 5) * 14 + Math.abs(Math.sin(i * 1.3)) * 8;
-          const bh = vol / 50 * 56;
-          const up = i % 3 !== 0;
-          return <rect key={i} x={i * (1000 / data.length)} y={56 - bh} width={1000 / data.length - 1} height={bh} fill={up ? "var(--up-500)" : "var(--down-500)"} opacity={i > 70 ? 0.7 : 0.45} />;
-        })}
-      </svg>
+      <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "flex-end", borderTop: "1px solid var(--border-hair)", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+        Latest quote volume <span style={{ color: "var(--ink-1000)", marginLeft: 8 }}>{compactVolume(t.vol)}</span>
+      </div>
     </div>
   );
 }
@@ -3958,7 +4472,7 @@ function OrderTicket(p) {
           {[100, 250, 500].map(n => (
             <button key={n} onClick={() => p.setQty(n)} style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "5px 0", color: "var(--fg-muted)", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderRadius: 2, cursor: "default" }}>{n}</button>
           ))}
-          <button onClick={() => p.setQty(Math.max(1, Math.floor(MOCK_PORTFOLIO.equity * 0.005 / Math.max(0.01, p.limitPx - p.stopPx))))} style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "5px 0", color: "var(--brand)", background: "var(--brand-tint)", border: "1px solid rgba(201,166,107,0.35)", borderRadius: 2, cursor: "default" }}>0.5% R</button>
+          <button onClick={() => p.setQty(Math.max(1, Math.floor((p.accountEquity || 0) * 0.005 / Math.max(0.01, p.limitPx - p.stopPx))))} style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "5px 0", color: "var(--brand)", background: "var(--brand-tint)", border: "1px solid rgba(201,166,107,0.35)", borderRadius: 2, cursor: "default" }}>0.5% R</button>
         </div>
       </div>
       <RiskPreviewCard notional={p.notional} riskDollars={p.riskDollars} riskPct={p.riskPct} stopPx={p.stopPx} />
@@ -3979,10 +4493,9 @@ function RiskPreviewCard({ notional, riskDollars, riskPct, stopPx, isOption }) {
       <RiskRow label="Reward target" v="+8.0%" tone="up" />
       <RiskRow label="R:R" v="2.0×" />
       <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border-hair)", display: "flex", flexDirection: "column", gap: 5 }}>
-        <Check ok label="Risk under 1% account cap" />
-        <Check ok label="Regime fit · 0.82 (bull / low-vol)" />
-        <Check ok label="Sector exposure · semis 18% → 19% (cap 25%)" />
-        <Check warn label="Earnings inside hold window (14d)" />
+        <Check ok={riskPct <= 1} warn={riskPct > 1 && riskPct <= 2} label={riskPct <= 1 ? "Risk under 1% account cap" : "Risk above 1% account cap"} />
+        <Check ok label="Quote and position data loaded from backend" />
+        <Check warn label="Strategy policy checks unavailable in this design panel" />
       </div>
     </div>
   );
@@ -4007,37 +4520,64 @@ function Check({ ok, warn, label }) {
 
 // ─── option chain ────────────────────────────────────────────────────────────
 
-function OptionChainPanel({ optStrike, setOptStrike, optType, setOptType, setLimitPx }) {
-  const [expiry, setExpiry] = useState("Nov 21");
-  const expiries = ["Nov 21 · 14d", "Dec 19 · 42d", "Jan 16 · 70d"];
-  const spot = 134.82;
-  // strikes around spot
-  const strikes = [125, 130, 132, 134, 135, 137, 140, 142, 145, 150];
-  // synthesized chain rows
-  const rows = strikes.map(k => {
-    const callItm = spot > k;
-    const putItm  = spot < k;
-    const callMid = Math.max(0.05, spot - k + 4 + (k % 5 === 0 ? 0.6 : 0)).toFixed(2);
-    const putMid  = Math.max(0.05, k - spot + 4 + (k % 5 === 0 ? 0.6 : 0)).toFixed(2);
-    const callDelta = Math.max(0.02, Math.min(0.98, 0.5 + (spot - k) * 0.06)).toFixed(2);
-    const putDelta  = (-(1 - +callDelta)).toFixed(2);
-    const iv = (38 + Math.abs(k - spot) * 0.4).toFixed(1);
-    const oi = Math.round(800 + Math.abs(k - 135) * 240 + (k % 5 === 0 ? 1200 : 0));
-    return { k, callItm, putItm, callMid, putMid, callDelta, putDelta, iv, oi };
+function OptionChainPanel({ symbol, spot, optStrike, setOptStrike, optType, setOptType, setLimitPx }) {
+  const [expiry, setExpiry] = useState("");
+  const [chain, setChain] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    getOptionsChain(symbol)
+      .then((next) => {
+        if (cancelled) return;
+        setChain(next);
+        setExpiry((cur) => cur || next?.expirations?.[0] || "");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setChain(null);
+        setError(err?.message || "Options chain unavailable");
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [symbol]);
+
+  const expiries = chain?.expirations || [];
+  const activeExpiry = expiry || expiries[0] || "";
+  const calls = (chain?.calls || []).filter((c) => !activeExpiry || c.expiry === activeExpiry);
+  const puts = (chain?.puts || []).filter((p) => !activeExpiry || p.expiry === activeExpiry);
+  const strikeSet = new Set([...calls, ...puts].map((r) => r.strike).filter((n) => Number.isFinite(n)));
+  const liveSpot = asFiniteNumber(chain?.spotPrice, null) ?? spot ?? 0;
+  const strikes = Array.from(strikeSet).sort((a, b) => Math.abs(a - liveSpot) - Math.abs(b - liveSpot)).slice(0, 12).sort((a, b) => a - b);
+  const rows = strikes.map((k) => {
+    const call = calls.find((c) => c.strike === k);
+    const put = puts.find((p) => p.strike === k);
+    const mid = (leg) => {
+      if (!leg) return null;
+      const bid = asFiniteNumber(leg.bid, 0) || 0;
+      const ask = asFiniteNumber(leg.ask, 0) || 0;
+      if (bid > 0 && ask > 0) return (bid + ask) / 2;
+      return asFiniteNumber(leg.last, null);
+    };
+    return { k, call, put, callMid: mid(call), putMid: mid(put) };
   });
-  const selectRow = (k, side) => {
-    setOptStrike(k);
+  const selectRow = (r, side) => {
+    const mid = side === "call" ? r.callMid : r.putMid;
+    if (mid == null) return;
+    setOptStrike(r.k);
     setOptType(side);
-    setLimitPx(+(side === "call"
-      ? Math.max(0.05, spot - k + 4 + (k % 5 === 0 ? 0.6 : 0))
-      : Math.max(0.05, k - spot + 4 + (k % 5 === 0 ? 0.6 : 0))).toFixed(2));
+    setLimitPx(+mid.toFixed(2));
   };
   return (
     <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 4 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "10px 12px 8px", borderBottom: "1px solid var(--border-hair)" }}>
         <span className="t-label">Option chain</span>
-        <select value={expiry} onChange={(e) => setExpiry(e.target.value)} style={{ background: "var(--ink-100)", border: "1px solid var(--border-hair)", color: "var(--ink-1000)", fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "2px 6px", borderRadius: 2, outline: "none" }}>
-          {expiries.map(x => <option key={x}>{x}</option>)}
+        <select value={activeExpiry} onChange={(e) => setExpiry(e.target.value)} style={{ background: "var(--ink-100)", border: "1px solid var(--border-hair)", color: "var(--ink-1000)", fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "2px 6px", borderRadius: 2, outline: "none" }}>
+          {expiries.length === 0 && <option value="">No expiry</option>}
+          {expiries.map(x => <option key={x} value={x}>{x}</option>)}
         </select>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 0.7fr 1fr 1fr 1fr", padding: "5px 10px", fontFamily: "var(--font-ui)", fontSize: 8.5, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--fg-hint)", borderBottom: "1px solid var(--border-hair)" }}>
@@ -4046,10 +4586,15 @@ function OptionChainPanel({ optStrike, setOptStrike, optType, setOptType, setLim
         <span>OI</span><span style={{ textAlign: "right" }}>Mid</span><span style={{ textAlign: "right" }}>Δ</span>
       </div>
       <div style={{ maxHeight: 220, overflow: "auto" }}>
-        {rows.map(r => {
+        {(loading || error || chain?.isDemo || rows.length === 0) && (
+          <div style={{ padding: "18px 12px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 12.5, lineHeight: 1.45 }}>
+            {loading ? "Loading live options chain..." : chain?.isDemo ? "Options provider returned demo fallback; hiding generated chain rows." : error || "No option contracts returned for this expiry."}
+          </div>
+        )}
+        {!chain?.isDemo && rows.map(r => {
           const callSel = optStrike === r.k && optType === "call";
           const putSel  = optStrike === r.k && optType === "put";
-          const atTheMoney = Math.abs(r.k - spot) < 1;
+          const atTheMoney = Math.abs(r.k - liveSpot) < Math.max(1, liveSpot * 0.005);
           return (
             <div key={r.k} style={{
               display: "grid", gridTemplateColumns: "1fr 1fr 1fr 0.7fr 1fr 1fr 1fr",
@@ -4058,22 +4603,22 @@ function OptionChainPanel({ optStrike, setOptStrike, optType, setOptType, setLim
               background: atTheMoney ? "var(--ink-100)" : "transparent",
             }}>
               {/* CALL side */}
-              <a onClick={() => selectRow(r.k, "call")} style={{ color: r.callItm ? "var(--up-500)" : "var(--fg-dim)", cursor: "default", padding: "2px 0", background: callSel ? "var(--tint-up-2)" : "transparent", paddingLeft: callSel ? 4 : 0 }}>{r.callDelta}</a>
-              <a onClick={() => selectRow(r.k, "call")} style={{ color: "var(--ink-1000)", textAlign: "right", cursor: "default", background: callSel ? "var(--tint-up-2)" : "transparent" }}>{r.callMid}</a>
-              <a onClick={() => selectRow(r.k, "call")} style={{ color: "var(--fg-hint)", textAlign: "right", cursor: "default", background: callSel ? "var(--tint-up-2)" : "transparent", paddingRight: callSel ? 4 : 0 }}>{r.oi >= 1000 ? (r.oi / 1000).toFixed(1) + "k" : r.oi}</a>
+              <a onClick={() => selectRow(r, "call")} style={{ color: r.call?.delta != null ? "var(--up-500)" : "var(--fg-dim)", cursor: "default", padding: "2px 0", background: callSel ? "var(--tint-up-2)" : "transparent", paddingLeft: callSel ? 4 : 0 }}>{r.call?.delta == null ? "—" : r.call.delta.toFixed(2)}</a>
+              <a onClick={() => selectRow(r, "call")} style={{ color: "var(--ink-1000)", textAlign: "right", cursor: "default", background: callSel ? "var(--tint-up-2)" : "transparent" }}>{r.callMid == null ? "—" : r.callMid.toFixed(2)}</a>
+              <a onClick={() => selectRow(r, "call")} style={{ color: "var(--fg-hint)", textAlign: "right", cursor: "default", background: callSel ? "var(--tint-up-2)" : "transparent", paddingRight: callSel ? 4 : 0 }}>{compactVolume(r.call?.oi)}</a>
               {/* strike */}
               <span style={{ textAlign: "center", color: atTheMoney ? "var(--gold-300)" : "var(--ink-900)", fontWeight: atTheMoney ? 600 : 400 }}>{r.k}</span>
               {/* PUT side */}
-              <a onClick={() => selectRow(r.k, "put")} style={{ color: "var(--fg-hint)", cursor: "default", paddingLeft: putSel ? 4 : 0, background: putSel ? "var(--tint-down-2)" : "transparent" }}>{r.oi >= 1000 ? (r.oi / 1000).toFixed(1) + "k" : r.oi}</a>
-              <a onClick={() => selectRow(r.k, "put")} style={{ color: "var(--ink-1000)", textAlign: "right", cursor: "default", background: putSel ? "var(--tint-down-2)" : "transparent" }}>{r.putMid}</a>
-              <a onClick={() => selectRow(r.k, "put")} style={{ color: r.putItm ? "var(--down-500)" : "var(--fg-dim)", textAlign: "right", cursor: "default", background: putSel ? "var(--tint-down-2)" : "transparent", paddingRight: putSel ? 4 : 0 }}>{r.putDelta}</a>
+              <a onClick={() => selectRow(r, "put")} style={{ color: "var(--fg-hint)", cursor: "default", paddingLeft: putSel ? 4 : 0, background: putSel ? "var(--tint-down-2)" : "transparent" }}>{compactVolume(r.put?.oi)}</a>
+              <a onClick={() => selectRow(r, "put")} style={{ color: "var(--ink-1000)", textAlign: "right", cursor: "default", background: putSel ? "var(--tint-down-2)" : "transparent" }}>{r.putMid == null ? "—" : r.putMid.toFixed(2)}</a>
+              <a onClick={() => selectRow(r, "put")} style={{ color: r.put?.delta != null ? "var(--down-500)" : "var(--fg-dim)", textAlign: "right", cursor: "default", background: putSel ? "var(--tint-down-2)" : "transparent", paddingRight: putSel ? 4 : 0 }}>{r.put?.delta == null ? "—" : r.put.delta.toFixed(2)}</a>
             </div>
           );
         })}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 0.7fr 1fr", padding: "6px 10px", fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--fg-hint)", borderTop: "1px solid var(--border-hair)" }}>
         <span style={{ color: "var(--up-500)" }}>Calls</span>
-        <span style={{ textAlign: "center", color: "var(--fg-muted)", fontFamily: "var(--font-mono)", fontSize: 9.5, letterSpacing: 0, textTransform: "none" }}>spot {spot.toFixed(2)}</span>
+        <span style={{ textAlign: "center", color: "var(--fg-muted)", fontFamily: "var(--font-mono)", fontSize: 9.5, letterSpacing: 0, textTransform: "none" }}>spot {liveSpot ? liveSpot.toFixed(2) : "—"}</span>
         <span style={{ textAlign: "right", color: "var(--down-500)" }}>Puts</span>
       </div>
     </div>
@@ -4105,7 +4650,7 @@ function OptionForm(p) {
       </Field>
       <Field label="Contracts">
         <input value={p.contracts} onChange={(e) => p.setContracts(+e.target.value || 0)} style={inputStyle} />
-        <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", marginLeft: 8, alignSelf: "center" }}>mid 2.84 · IV 41%</span>
+        <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", marginLeft: 8, alignSelf: "center" }}>limit {p.limitPx.toFixed(2)}</span>
       </Field>
       <Field label="Order · limit">
         <select value={p.orderType} onChange={(e) => p.setOrderType(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
@@ -4128,91 +4673,38 @@ const optTypeBtn = (on) => ({
 // ─── options order book ──────────────────────────────────────────────────────
 
 function OptionsOrderBookPanel() {
-  const [tab, setTab] = useState("calls");
-  const expiry = "Nov 21 · 14d";
-  // synth book around ATM strikes
-  const callRows = [
-    { k: 130, bid: 5.45, ask: 5.55, bidSz: 142, askSz: 88,  vol: 4210, oi: 18400, iv: 38.4 },
-    { k: 132, bid: 3.95, ask: 4.05, bidSz: 96,  askSz: 124, vol: 6840, oi: 12300, iv: 39.1 },
-    { k: 134, bid: 2.78, ask: 2.86, bidSz: 215, askSz: 188, vol: 11240, oi: 22800, iv: 40.2 },
-    { k: 135, bid: 2.32, ask: 2.40, bidSz: 320, askSz: 260, vol: 18420, oi: 31200, iv: 40.8 },
-    { k: 137, bid: 1.48, ask: 1.55, bidSz: 188, askSz: 232, vol: 9820, oi: 16400, iv: 41.6 },
-    { k: 140, bid: 0.78, ask: 0.84, bidSz: 412, askSz: 528, vol: 24210, oi: 42800, iv: 42.4 },
-    { k: 142, bid: 0.42, ask: 0.46, bidSz: 124, askSz: 96,  vol: 6840, oi: 11200, iv: 43.1 },
-    { k: 145, bid: 0.18, ask: 0.22, bidSz: 88,  askSz: 64,  vol: 3210, oi: 7400,  iv: 44.8 },
-  ];
-  const putRows = [
-    { k: 125, bid: 0.12, ask: 0.16, bidSz: 64,  askSz: 88,  vol: 1840, oi: 4200,  iv: 44.2 },
-    { k: 128, bid: 0.32, ask: 0.38, bidSz: 96,  askSz: 124, vol: 4210, oi: 8600,  iv: 42.8 },
-    { k: 130, bid: 0.62, ask: 0.68, bidSz: 188, askSz: 232, vol: 8420, oi: 14800, iv: 41.6 },
-    { k: 132, bid: 1.18, ask: 1.24, bidSz: 320, askSz: 260, vol: 12240, oi: 21400, iv: 40.4 },
-    { k: 134, bid: 1.92, ask: 2.00, bidSz: 412, askSz: 528, vol: 18820, oi: 36400, iv: 40.0 },
-    { k: 135, bid: 2.42, ask: 2.50, bidSz: 215, askSz: 188, vol: 9420, oi: 18800, iv: 39.6 },
-    { k: 137, bid: 3.62, ask: 3.72, bidSz: 142, askSz: 88,  vol: 4840, oi: 9200,  iv: 39.2 },
-    { k: 140, bid: 5.78, ask: 5.92, bidSz: 96,  askSz: 124, vol: 2210, oi: 5400,  iv: 38.8 },
-  ];
-  const rows = tab === "calls" ? callRows : putRows;
-  const maxSz = Math.max(...rows.flatMap(r => [r.bidSz, r.askSz]));
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "10px 12px 8px" }}>
-        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--ink-1000)", lineHeight: 1 }}>NVDA options</div>
-        <div className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)", marginTop: 3 }}>{expiry}</div>
+        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--ink-1000)", lineHeight: 1 }}>Options depth</div>
+        <div className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)", marginTop: 3 }}>provider unavailable</div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", padding: "0 8px", gap: 4, marginBottom: 6 }}>
-        {[{ id: "calls", l: "Calls", c: "var(--up-500)" }, { id: "puts", l: "Puts", c: "var(--down-500)" }].map(t2 => (
-          <a key={t2.id} onClick={() => setTab(t2.id)} style={{
-            textAlign: "center", padding: "6px 0", cursor: "default",
-            fontFamily: "var(--font-ui)", fontSize: 9.5, fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase",
-            color: tab === t2.id ? t2.c : "var(--fg-muted)",
-            border: "1px solid " + (tab === t2.id ? t2.c : "var(--border-hair)"),
-            background: tab === t2.id ? (t2.id === "calls" ? "var(--tint-up-1)" : "var(--tint-down-1)") : "transparent",
-            borderRadius: 2,
-          }}>{t2.l}</a>
-        ))}
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 0.7fr 0.9fr 0.9fr 0.7fr", padding: "5px 10px", fontFamily: "var(--font-ui)", fontSize: 8, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--fg-hint)", borderBottom: "1px solid var(--border-hair)" }}>
-        <span>K</span><span style={{ textAlign: "right" }}>BidSz</span><span style={{ textAlign: "right" }}>Bid×Ask</span><span style={{ textAlign: "right" }}>AskSz</span><span style={{ textAlign: "right" }}>IV</span>
-      </div>
-      <div style={{ flex: 1, overflow: "auto" }}>
-        {rows.map((r, i) => {
-          const atm = Math.abs(r.k - 134.82) < 1;
-          return (
-            <div key={i} style={{ position: "relative", display: "grid", gridTemplateColumns: "1fr 0.7fr 0.9fr 0.9fr 0.7fr", padding: "4px 10px", fontFamily: "var(--font-mono)", fontSize: 10.5, alignItems: "center", borderBottom: "1px solid var(--border-hair)", background: atm ? "var(--tint-brand-1)" : "transparent" }}>
-              <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${(r.bidSz / maxSz) * 32}%`, background: "var(--tint-up-1)" }} />
-              <span style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: `${(r.askSz / maxSz) * 32}%`, background: "var(--tint-down-1)" }} />
-              <span style={{ position: "relative", color: atm ? "var(--gold-300)" : "var(--ink-1000)", fontWeight: atm ? 600 : 400 }}>{r.k}</span>
-              <span style={{ position: "relative", color: "var(--up-500)", textAlign: "right" }}>{r.bidSz}</span>
-              <span style={{ position: "relative", color: "var(--ink-900)", textAlign: "right" }}>{r.bid.toFixed(2)} <span style={{ color: "var(--fg-hint)" }}>·</span> {r.ask.toFixed(2)}</span>
-              <span style={{ position: "relative", color: "var(--down-500)", textAlign: "right" }}>{r.askSz}</span>
-              <span style={{ position: "relative", color: "var(--fg-muted)", textAlign: "right" }}>{r.iv.toFixed(1)}</span>
-            </div>
-          );
-        })}
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderTop: "1px solid var(--border-hair)", padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>
-        <span style={{ color: "var(--fg-muted)" }}>Total Vol <span style={{ color: "var(--ink-1000)" }}>{rows.reduce((a, r) => a + r.vol, 0).toLocaleString()}</span></span>
-        <span style={{ color: "var(--fg-muted)", textAlign: "right" }}>OI <span style={{ color: "var(--ink-1000)" }}>{(rows.reduce((a, r) => a + r.oi, 0) / 1000).toFixed(0)}k</span></span>
+      <div style={{ padding: "12px", borderTop: "1px solid var(--border-hair)", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: "var(--fg-muted)", lineHeight: 1.45 }}>
+        Contract-level depth is not exposed by the current backend. The right-side option chain uses the live chain endpoint when available; this left rail stays empty instead of showing synthetic liquidity.
       </div>
     </div>
   );
 }
 
 function OrderBookPanel({ last }) {
-  const asks = [
-    { px: 134.91, sz: 3200 }, { px: 134.89, sz: 5800 }, { px: 134.87, sz: 4300 },
-    { px: 134.86, sz: 8200 }, { px: 134.85, sz: 6840 }, { px: 134.84, sz: 11200 }, { px: 134.83, sz: 9820 },
-  ];
-  const bids = [
-    { px: 134.81, sz: 12400 }, { px: 134.80, sz: 8300 }, { px: 134.79, sz: 6200 },
-    { px: 134.78, sz: 9400 }, { px: 134.76, sz: 4800 }, { px: 134.74, sz: 7100 }, { px: 134.72, sz: 3700 },
-  ];
-  const maxSz = Math.max(...asks.map(a => a.sz), ...bids.map(b => b.sz));
+  const mid = Number(last || 0);
+  if (!mid) {
+    return (
+      <div style={{ borderBottom: "1px solid var(--border)", padding: "14px" }}>
+        <h3 style={{ margin: 0, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 15, color: "var(--ink-1000)", fontWeight: 400 }}>Order book</h3>
+        <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 12.5 }}>Waiting for live quote.</div>
+      </div>
+    );
+  }
+  const tick = mid >= 100 ? 0.01 : 0.005;
+  const asks = Array.from({ length: 7 }, (_, i) => ({ px: mid + tick * (i + 1), sz: 0 }));
+  const bids = Array.from({ length: 7 }, (_, i) => ({ px: mid - tick * (i + 1), sz: 0 }));
+  const maxSz = Math.max(1, ...asks.map(a => a.sz), ...bids.map(b => b.sz));
   return (
     <div style={{ borderBottom: "1px solid var(--border)" }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "14px 14px 8px" }}>
         <h3 style={{ margin: 0, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 15, color: "var(--ink-1000)", fontWeight: 400 }}>Order book</h3>
-        <span className="t-label" style={{ fontSize: 8.5 }}>L2</span>
+        <span className="t-label" style={{ fontSize: 8.5 }}>quote fallback</span>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 1, padding: "0 10px 4px", fontFamily: "var(--font-ui)", fontSize: 8, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--fg-hint)" }}>
         <span>Bid sz</span><span style={{ textAlign: "center" }}>Price</span><span style={{ textAlign: "right" }}>Ask sz</span>
@@ -4225,7 +4717,7 @@ function OrderBookPanel({ last }) {
       </div>
       {bids.map((b, i) => <BookRow key={"b" + i} side="bid" px={b.px} sz={b.sz} maxSz={maxSz} />)}
       <div style={{ padding: "7px 10px", display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--fg-muted)", borderTop: "1px solid var(--border-hair)" }}>
-        <span>Spread $0.02</span><span>1.5 bps</span>
+        <span>Depth unavailable</span><span>displaying quote ladder</span>
       </div>
     </div>
   );
@@ -4242,18 +4734,19 @@ function BookRow({ side, px, sz, maxSz }) {
     </div>
   );
 }
-function TimeAndSalesPanel() {
-  const ticks = [
-    { ts: "14:32:08", px: 134.82, sz: 200 }, { ts: "14:32:06", px: 134.81, sz: 8400 },
-    { ts: "14:32:05", px: 134.81, sz: 300 }, { ts: "14:32:03", px: 134.81, sz: 500 },
-    { ts: "14:32:01", px: 134.81, sz: 1200 }, { ts: "14:31:56", px: 134.80, sz: 12000 },
-  ];
+function TimeAndSalesPanel({ last }) {
+  const ticks = last ? [{ ts: "live", px: last, sz: 0 }] : [];
   return (
     <div>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "12px 14px 8px" }}>
         <h3 style={{ margin: 0, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 15, color: "var(--ink-1000)", fontWeight: 400 }}>Time &amp; sales</h3>
-        <span className="t-label" style={{ fontSize: 8.5 }}>Last 8</span>
+        <span className="t-label" style={{ fontSize: 8.5 }}>quote print</span>
       </div>
+      {ticks.length === 0 && (
+        <div style={{ padding: "8px 14px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 12 }}>
+          No live tape returned.
+        </div>
+      )}
       {ticks.map((tk, i) => (
         <div key={i} style={{ display: "grid", gridTemplateColumns: "auto auto 1fr", gap: 10, padding: "4px 14px", fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--fg-dim)", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
           <span style={{ color: "var(--fg-hint)" }}>{tk.ts}</span>
@@ -4269,8 +4762,8 @@ function TimeAndSalesPanel() {
 
 function GreeksStrip() {
   const greeks = [
-    { sym: "Δ", v: "0.42" }, { sym: "Γ", v: "0.018" }, { sym: "Θ", v: "−0.094" },
-    { sym: "ν", v: "0.142" }, { sym: "ρ", v: "0.041" },
+    { sym: "D", v: "—" }, { sym: "G", v: "—" }, { sym: "T", v: "—" },
+    { sym: "V", v: "—" }, { sym: "R", v: "—" },
   ];
   return (
     <div>
@@ -4283,29 +4776,18 @@ function GreeksStrip() {
           </div>
         ))}
       </div>
+      <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-hint)" }}>Contract snapshot not selected yet.</div>
     </div>
   );
 }
 function PayoffPanel() {
-  const w = 100, h = 36, minS = 130, maxS = 160, strike = 140, premium = 2.84, contracts = 10;
-  const xs = Array.from({ length: 60 }, (_, i) => minS + (i / 59) * (maxS - minS));
-  const pnl = xs.map(s => (Math.max(0, s - strike) - premium) * 100 * contracts);
-  const pnlMin = Math.min(...pnl), pnlMax = Math.max(...pnl), pnlSpan = pnlMax - pnlMin;
-  const xToSvg = (s) => ((s - minS) / (maxS - minS)) * w;
-  const yToSvg = (p) => h - ((p - pnlMin) / pnlSpan) * h;
-  const path = "M " + xs.map((s, i) => `${xToSvg(s).toFixed(2)} ${yToSvg(pnl[i]).toFixed(2)}`).join(" L ");
-  const yZero = yToSvg(0), spot = 134.82, breakeven = strike + premium;
   return (
     <div>
       <div className="t-label" style={{ marginBottom: 8 }}>Payoff at expiry</div>
       <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 3, padding: "8px 6px 6px" }}>
-        <svg viewBox={`0 0 ${w} ${h + 4}`} preserveAspectRatio="none" style={{ width: "100%", height: 70 }}>
-          <line x1="0" x2={w} y1={yZero} y2={yZero} stroke="var(--border)" strokeWidth="0.25" strokeDasharray="0.6 0.6" />
-          <rect x="0" y={yZero} width={xToSvg(breakeven)} height={h - yZero} fill="var(--tint-down-1)" />
-          <rect x={xToSvg(breakeven)} y="0" width={w - xToSvg(breakeven)} height={yZero} fill="var(--tint-up-1)" />
-          <path d={path} fill="none" stroke="var(--gold-300)" strokeWidth="0.7" strokeLinejoin="round" />
-          <line x1={xToSvg(spot)} x2={xToSvg(spot)} y1="0" y2={h} stroke="var(--ice-500)" strokeWidth="0.3" strokeDasharray="0.6 0.8" opacity="0.6" />
-        </svg>
+        <div style={{ height: 58, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)" }}>
+          Select a live contract to calculate payoff.
+        </div>
       </div>
     </div>
   );
@@ -4313,7 +4795,7 @@ function PayoffPanel() {
 
 // ─── AI memo ─────────────────────────────────────────────────────────────────
 
-function AIMemoPanel({ isOption }) {
+function AIMemoPanel({ isOption, symbol }) {
   return (
     <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 4, padding: 12 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
@@ -4321,19 +4803,18 @@ function AIMemoPanel({ isOption }) {
           <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--gold-500)", boxShadow: "0 0 8px var(--gold-500)", animation: "pulse 2s infinite" }} />
           <span className="t-label" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>AI · Memo</span>
         </span>
-        <span className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)" }}>14:32 · 180ms</span>
+        <span className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)" }}>backend gated</span>
       </div>
       <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: "var(--ink-900)", lineHeight: 1.5 }}>
         {isOption ? (
-          <>The <span style={{ color: "var(--gold-300)" }}>$140 call 14d</span> isolates the move you want — upside into print with capped downside. IV at <span style={{ color: "var(--gold-300)" }}>82 rank</span> means you're paying up; theta bleeds $94/day.</>
+          <>No live option memo has been generated for <span style={{ color: "var(--gold-300)" }}>{symbol}</span>. Chain rows load from the backend when available; synthetic option advice is hidden.</>
         ) : (
-          <>Adding to <span style={{ color: "var(--gold-300)" }}>NVDA</span> here lines up with the Momentum &amp; Quality thesis from Oct 28. Regime fit <span style={{ color: "var(--gold-300)" }}>0.82</span>. Earnings 14d — size for the print.</>
+          <>No live trade memo has been generated for <span style={{ color: "var(--gold-300)" }}>{symbol}</span>. The ticket, quote, chart, and portfolio risk are still wired to backend data.</>
         )}
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 9 }}>
-        <Chip tone="brand">Regime fit 0.82</Chip>
-        <Chip tone="up">Risk gates pass</Chip>
-        <Chip tone="muted">Earnings 14d</Chip>
+        <Chip tone="brand">Live data</Chip>
+        <Chip tone="muted">Memo unavailable</Chip>
       </div>
     </div>
   );
@@ -5595,18 +6076,41 @@ const stageMatchesFilter = (stage, kind, f) => {
 };
 
 const StrategiesPage = ({ tweaks, onNav }) => {
+  const live = useDesignLiveData();
   const [filter, setFilter] = useState("all");
   const [group, setGroup] = useState("all"); // all | fundamental | technical | other
 
-  const filtered = STRAT_CATALOG.filter(s => stageMatchesFilter(s.stage, s.kind, filter))
+  const catalog = (live.strategies || []).map((s, i) => {
+    const paper = s.paper_only || s.live_disabled || s.status === "paper";
+    const stage = s.status === "live" || s.status === "active" ? "live" : paper ? "paper" : s.status === "research" ? "research" : "manual";
+    return {
+      id: s.id || s.slug || String(i),
+      name: s.name || s.id || `Strategy ${i + 1}`,
+      short: s.name || s.id || `Strategy ${i + 1}`,
+      group: "Other",
+      stage,
+      kind: "auto",
+      regime: s.description || "Backend strategy",
+      sharpe: asFiniteNumber(s.sharpe_ratio, null),
+      cagr: null,
+      maxDD: null,
+      win: asFiniteNumber(s.win_rate, null),
+      positions: asFiniteNumber(s.active_positions_count, 0) || 0,
+      invested: asFiniteNumber(s.invested_amount_precise ?? s.invested_amount, 0) || 0,
+      mtd: asFiniteNumber(s.total_return_pct, 0) || 0,
+      paperReason: s.live_disabled ? "Live disabled by backend" : s.paper_only ? "Paper-only by backend" : null,
+    };
+  });
+
+  const filtered = catalog.filter(s => stageMatchesFilter(s.stage, s.kind, filter))
     .filter(s => group === "all" || s.group.toLowerCase() === group);
 
   const counts = {
-    live:     STRAT_CATALOG.filter(s => s.stage === "live").length,
-    paper:    STRAT_CATALOG.filter(s => s.stage === "paper").length,
-    research: STRAT_CATALOG.filter(s => s.stage === "research").length,
-    planned:  STRAT_CATALOG.filter(s => s.stage === "planned").length,
-    total:    STRAT_CATALOG.length,
+    live:     catalog.filter(s => s.stage === "live").length,
+    paper:    catalog.filter(s => s.stage === "paper").length,
+    research: catalog.filter(s => s.stage === "research").length,
+    planned:  catalog.filter(s => s.stage === "planned").length,
+    total:    catalog.length,
   };
 
   const sections = [
@@ -5620,7 +6124,7 @@ const StrategiesPage = ({ tweaks, onNav }) => {
   return (
     <div style={{ padding: "20px 24px 60px", maxWidth: 1640, margin: "0 auto" }}>
       <SPHeader counts={counts} />
-      <SPContribution />
+      <SPContribution items={catalog} />
       <SPWorkbench filter={filter} setFilter={setFilter} group={group} setGroup={setGroup} counts={counts} />
       <div style={{ display: "grid", gap: 26, marginTop: 18 }}>
         {sections.map(sec => {
@@ -5632,8 +6136,11 @@ const StrategiesPage = ({ tweaks, onNav }) => {
           <div style={{ padding: "40px 0", textAlign: "center", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)" }}>No strategies match this filter.</div>
         )}
       </div>
-      <SPGapsMemo onNav={onNav} />
-      <SPCorrelation />
+      {catalog.length === 0 && (
+        <div style={{ padding: "28px 0", textAlign: "center", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)" }}>
+          No strategies returned by the backend.
+        </div>
+      )}
     </div>
   );
 };
@@ -5654,7 +6161,7 @@ function SPHeader({ counts }) {
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
         <StatusDot tone="up" size={6} />
-        <span>Registry · synced 2m ago</span>
+        <span>Registry · backend</span>
         <span style={{ marginLeft: 10, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 3, color: "var(--ink-1000)", background: "var(--bg-elev-1)" }}>+ New strategy</span>
       </div>
     </header>
@@ -5663,30 +6170,17 @@ function SPHeader({ counts }) {
 
 // ─── today's contribution bar ────────────────────────────────────────────
 
-function SPContribution() {
-  const live = STRAT_CATALOG.filter(s => s.stage === "live" || s.stage === "manual");
-  const total = live.reduce((a, s) => a + Math.abs(s.mtd) * (s.invested || 1), 0);
-  // synthetic intraday $ contributions
-  const pl = {
-    "momentum-quality":  +1402,
-    "pead":              +318,
-    "regime-adaptive":   +186,
-    "sector-rotation":   +94,
-    "ts-momentum":       -82,
-    "rsi2-reversal":     +212,
-    "dual-momentum":     +18,
-    "pairs-trading":     +64,
-    "manual":            -38,
-  };
-  const day = Object.values(pl).reduce((a, b) => a + b, 0);
-  const grossUp = Object.values(pl).filter(v => v > 0).reduce((a, b) => a + b, 0);
-  const grossDn = Object.values(pl).filter(v => v < 0).reduce((a, b) => a + b, 0);
+function SPContribution({ items = [] }) {
+  const liveRows = items.filter(s => s.stage === "live" || s.stage === "manual");
+  const day = liveRows.reduce((a, s) => a + (s.invested * (s.mtd / 100)), 0);
+  const grossUp = liveRows.filter(s => s.mtd > 0).reduce((a, s) => a + (s.invested * (s.mtd / 100)), 0);
+  const grossDn = liveRows.filter(s => s.mtd < 0).reduce((a, s) => a + (s.invested * (s.mtd / 100)), 0);
   return (
     <div style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: "16px 18px", marginBottom: 16 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
         <div>
           <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>TODAY'S CONTRIBUTION</div>
-          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 18, color: "var(--ink-1000)", marginTop: 2 }}>What each strategy made today</div>
+          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 18, color: "var(--ink-1000)", marginTop: 2 }}>Backend strategy contribution estimate</div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div className="t-mono" style={{ fontSize: 22, color: day >= 0 ? "var(--up-500)" : "var(--down-500)", fontWeight: 500 }}>
@@ -5697,10 +6191,11 @@ function SPContribution() {
           </div>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: `repeat(${live.length}, 1fr)`, gap: 4, alignItems: "end", height: 90 }}>
-        {live.map(s => {
-          const v = pl[s.id] || 0;
-          const max = Math.max(...Object.values(pl).map(Math.abs));
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(liveRows.length, 1)}, 1fr)`, gap: 4, alignItems: "end", height: 90 }}>
+        {liveRows.length === 0 && <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 13 }}>No live strategies returned.</div>}
+        {liveRows.map(s => {
+          const v = s.invested * (s.mtd / 100);
+          const max = Math.max(1, ...liveRows.map((row) => Math.abs(row.invested * (row.mtd / 100))));
           const h = (Math.abs(v) / max) * 100;
           return (
             <div key={s.id} style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", height: "100%", position: "relative", cursor: "default" }}>
@@ -6105,20 +6600,45 @@ const matchesWlFilter = (s, f) => {
 };
 
 const WatchlistsPage = ({ onNav }) => {
-  const [activeId, setActiveId] = useState("core");
+  const live = useDesignLiveData();
+  const liveUserSymbols = live.userWatchlist?.symbols || [];
+  const userList = liveUserSymbols.length
+    ? [{
+        id: "user-watchlist",
+        name: "My watchlist",
+        owner: "you",
+        count: liveUserSymbols.length,
+        purpose: "Symbols from your live user watchlist endpoint.",
+        feeds: [],
+        updated: "Live · /api/v1/user/watchlist",
+        symbols: liveUserSymbols
+          .map((s) => live.quotes[String(s).toUpperCase()])
+          .filter(Boolean)
+          .map((q) => liveRowFromQuote(q)),
+      }]
+    : [];
+  const lists = live.watchlists.length ? live.watchlists : userList;
+  const symbolsByList = Object.fromEntries(lists.map((l) => [l.id, l.symbols || []]));
+  const [activeId, setActiveId] = useState(lists[0]?.id || "");
   const [filter, setFilter] = useState("all");
-  const active = WL_LISTS.find(l => l.id === activeId);
-  const symbols = (WL_SYMBOLS[activeId] || []).filter(s => matchesWlFilter(s, filter));
+  useEffect(() => {
+    if (!lists.length) return;
+    if (!lists.find((l) => l.id === activeId)) setActiveId(lists[0].id);
+  }, [activeId, lists]);
+  const active = lists.find(l => l.id === activeId) || lists[0] || null;
+  const allActiveSymbols = active ? (symbolsByList[active.id] || []) : [];
+  const symbols = allActiveSymbols.filter(s => matchesWlFilter(s, filter));
+  const allSymbols = Object.values(symbolsByList).flat();
 
   return (
     <div style={{ padding: "20px 24px 60px", maxWidth: 1640, margin: "0 auto" }}>
-      <WLHeader />
-      <WLPulse />
+      <WLHeader lists={lists} loading={live.loading} />
+      <WLPulse allSymbols={allSymbols} />
       <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 16, marginTop: 16, alignItems: "start" }}>
-        <WLRail lists={WL_LISTS} activeId={activeId} setActiveId={setActiveId} />
+        <WLRail lists={lists} activeId={activeId} setActiveId={setActiveId} />
         <div style={{ display: "grid", gap: 12, minWidth: 0 }}>
           <WLActiveHeader list={active} onNav={onNav} />
-          <WLFilterBar filter={filter} setFilter={setFilter} list={active} symbols={WL_SYMBOLS[activeId] || []} />
+          <WLFilterBar filter={filter} setFilter={setFilter} list={active} symbols={allActiveSymbols} />
           <WLTable symbols={symbols} onNav={onNav} />
           <WLAIMemo list={active} />
         </div>
@@ -6129,7 +6649,8 @@ const WatchlistsPage = ({ onNav }) => {
 
 // ─── header ──────────────────────────────────────────────────────────────
 
-function WLHeader() {
+function WLHeader({ lists, loading }) {
+  const count = lists.reduce((a,l)=>a+l.count,0);
   return (
     <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 14px", borderBottom: "1px solid var(--border-hair)", marginBottom: 16 }}>
       <div>
@@ -6138,12 +6659,12 @@ function WLHeader() {
           Your bench of names
         </h1>
         <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, maxWidth: 720 }}>
-          {WL_LISTS.length} lists · {WL_LISTS.reduce((a,l)=>a+l.count,0)} unique symbols. Lists feed strategies — strategies hunt only inside their assigned bench.
+          {lists.length} live list{lists.length === 1 ? "" : "s"} · {count} unique symbols. Lists feed strategies — strategies hunt only inside their assigned bench.
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
         <StatusDot tone="up" size={6} />
-        <span>Auto-lists · refreshed 09:14</span>
+        <span>{loading ? "Loading backend lists" : "Backend lists · live"}</span>
         <span style={{ marginLeft: 10, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 3, color: "var(--ink-1000)", background: "var(--bg-elev-1)" }}>+ New list</span>
       </div>
     </header>
@@ -6152,9 +6673,9 @@ function WLHeader() {
 
 // ─── pulse band ──────────────────────────────────────────────────────────
 
-function WLPulse() {
+function WLPulse({ allSymbols }) {
   // top movers, signals firing, earnings this week
-  const all = Object.values(WL_SYMBOLS).flat();
+  const all = allSymbols || [];
   const dedupe = (arr) => {
     const seen = new Set();
     return arr.filter(s => seen.has(s.sym) ? false : (seen.add(s.sym), true));
@@ -6195,6 +6716,11 @@ function WLRail({ lists, activeId, setActiveId }) {
     <aside style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: 12, position: "sticky", top: 12 }}>
       <div className="t-label" style={{ color: "var(--fg-hint)", padding: "0 4px 8px" }}>YOUR LISTS</div>
       <div style={{ display: "grid", gap: 2 }}>
+        {lists.length === 0 && (
+          <div style={{ padding: "10px 8px", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg-muted)" }}>
+            No live watchlists returned.
+          </div>
+        )}
         {lists.map(l => {
           const active = l.id === activeId;
           return (
@@ -6375,6 +6901,14 @@ function WLRow({ s, odd, onNav }) {
 }
 
 function ScoreBlock({ val, label }) {
+  if (val == null) {
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 5px", border: "1px solid var(--border-hair)", borderRadius: 2, background: "var(--bg-elev-1)" }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--fg-hint)" }}>{label}</span>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-hint)", fontWeight: 500 }}>—</span>
+      </span>
+    );
+  }
   const tone = val >= 75 ? "var(--up-500)" : val >= 50 ? "var(--ink-1000)" : val >= 35 ? "var(--gold-300)" : "var(--down-500)";
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 5px", border: "1px solid var(--border-hair)", borderRadius: 2, background: "var(--bg-elev-1)" }}>
@@ -6388,47 +6922,20 @@ function ScoreBlock({ val, label }) {
 
 function WLAIMemo({ list }) {
   if (!list) return null;
-  const memos = {
-    core: [
-      { h: "Today's standout", body: "META is your highest-conviction candidate today — Momentum + Q has 3 confirmation signals fired. Pipeline is queuing entry, awaiting allocation slot." },
-      { h: "Watch the laggard", body: "TSLA is down 1.3% pre-market on delivery miss whispers. Already flagged AVOID after the March momentum filter. Holding the line." },
-      { h: "Quiet bench", body: "Half the list is mid-range with no signal. That's healthy — momentum is concentrated, the rest waits for its turn." },
-    ],
-    "ai-semis": [
-      { h: "Cycle intact", body: "5 of 6 names are in uptrend. The AI build cycle thesis is alive — keep the bench tight, don't over-add." },
-      { h: "ASML earnings 17 Apr", body: "PEAD will fade or follow the post-print drift; consider sizing down ahead of print if you're long." },
-      { h: "Watch AVGO", body: "Approaching breakout level (~$1850). Tech score 84 — a clean break makes it a Momentum + Q candidate." },
-    ],
-    earnings: [
-      { h: "PEAD active", body: "ASML on Apr 17 is the first big test. PEAD will trade the drift autonomously — your scaled size, not max." },
-      { h: "Pre-print sizing", body: "Three names you hold (MSFT, GOOGL, AMD) report next week. Review concentration before Friday close." },
-      { h: "Volatility expected", body: "Tesla on Apr 23 is the wildcard. Already on AVOID — PEAD won't initiate, but options screener may surface." },
-    ],
-    "rsi-dip": [
-      { h: "PFE held", body: "Entered yesterday at RSI-2 = 6. RSI now at 22 — within strategy hold band. Strategy will exit on close above 5d MA." },
-      { h: "JNJ trigger ready", body: "RSI-2 = 8, below 200d MA, low-vol regime. RSI-2 Reversal will queue entry on next pre-open scan if conditions hold." },
-      { h: "Avoid GME", body: "Not in this list — RSI-2 = 9 but above 200d MA. Mean reversion long against an extended uptrend is not the play." },
-    ],
-    "mean-rev": [
-      { h: "Strategy not live yet", body: "Mean Reversion is on the planned roadmap (Phase 2). This bench is being curated now so the model has a clean universe at launch." },
-      { h: "GME alert", body: "Z = +3.4 today — most extended in your bench. When Mean Reversion goes live, this is exactly the setup it'd short." },
-    ],
-    ipo: [],
-    shorts: [
-      { h: "Pairs Trading active", body: "TSLA / RIVN pair currently open — short TSLA, long RIVN, market-neutral. Pairs strategy manages exit." },
-      { h: "Reference only", body: "BYND and PTON are watch-only. No strategy currently shorts directly outside the pairs book." },
-    ],
-  };
-  const items = memos[list.id] || [{ h: "No notes", body: "AI hasn't generated insights for this list yet." }];
+  const items = [
+    { h: "Live list", body: `${list.count} symbols loaded from the watchlists backend.` },
+    { h: "Signals", body: list.symbols?.some((s) => s.signal) ? "Backend-enriched signal fields are present for this list." : "No backend signal annotations returned for this list." },
+    { h: "AI notes", body: "No saved AI watchlist memo endpoint is wired yet, so this panel does not invent one." },
+  ];
   return (
     <div style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderLeft: "2px solid var(--brand)", borderRadius: 4, padding: "16px 20px" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--gold-500)", boxShadow: "0 0 10px var(--gold-500)" }} />
         <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>AI · BENCH NOTES</div>
-        <span style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-hint)" }}>regenerated 09:14 · Claude</span>
+        <span style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-hint)" }}>backend status</span>
       </div>
       <h3 style={{ margin: "10px 0 12px", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 20, color: "var(--ink-1000)", fontWeight: 400 }}>
-        What's interesting on this bench today
+        What the backend returned
       </h3>
       <div style={{ display: "grid", gridTemplateColumns: items.length === 3 ? "1fr 1fr 1fr" : items.length === 2 ? "1fr 1fr" : "1fr", gap: 18 }}>
         {items.map((m, i) => (
@@ -10771,6 +11278,7 @@ export function AlphaDeskDesignApp({ initialPage = "dashboard", initialSymbol = 
   const standalone = page === "marketing" || page === "auth" || page === "onboarding" || page === "mobile";
 
   return (
+    <LiveDataProvider symbol={sym}>
     <div data-ad-app="" data-screen-label={`AlphaDesk · ${page}`} style={{ display: "grid", gridTemplateRows: standalone ? "1fr" : "auto minmax(0,1fr) auto", height: "100dvh", minHeight: 0, background: "var(--bg)", overflow: "hidden" }}>
       <LayoutGuardStyle />
       {!standalone && <TopBar page={page} onNav={onNav} onSearch={onPickTicker} regime={MOCK_REGIME.state} theme={t.theme || "dark"} onTheme={v => setTweak("theme", v)} />}
@@ -10840,6 +11348,7 @@ export function AlphaDeskDesignApp({ initialPage = "dashboard", initialSymbol = 
         </TweakSection>
       </TweaksPanel>
     </div>
+    </LiveDataProvider>
   );
 }
 
