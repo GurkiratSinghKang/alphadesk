@@ -567,10 +567,13 @@ export default function TradingAgentsResearchPage() {
           style={{
             fontFamily: "var(--font-display)",
             color: "var(--ink-1000)",
-            fontSize: 38,
+            // 28px matches design strategy-playbook.jsx + backtest hero;
+            // was 38px which competed with the page-level identity band
+            // above this section.
+            fontSize: 28,
             fontWeight: 400,
-            letterSpacing: "-0.025em",
-            lineHeight: 1.05,
+            letterSpacing: "-0.02em",
+            lineHeight: 1.1,
             textWrap: "balance",
           }}
         >

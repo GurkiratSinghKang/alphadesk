@@ -858,10 +858,12 @@ export default function StrategiesListingPage() {
             style={{
               fontFamily: "var(--font-display)",
               color: "var(--ink-1000)",
-              fontSize: 38,
+              // 24px matches design strategies.jsx; live was 38px which
+              // collided with the page-level <h1> ("Strategies").
+              fontSize: 24,
               fontWeight: 400,
-              letterSpacing: "-0.025em",
-              lineHeight: 1.05,
+              letterSpacing: "-0.02em",
+              lineHeight: 1.15,
             }}
           >
             Strategies the desk hunts with.

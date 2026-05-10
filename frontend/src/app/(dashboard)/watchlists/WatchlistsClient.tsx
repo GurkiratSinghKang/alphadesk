@@ -124,10 +124,12 @@ export default function WatchlistsClient() {
             style={{
               fontFamily: "var(--font-display)",
               color: "var(--ink-1000)",
-              fontSize: 48,
+              // 32px matches design watchlists.jsx; live was 48px which
+              // out-shouts every other page-title in the v2 system.
+              fontSize: 32,
               fontWeight: 400,
               letterSpacing: "-0.025em",
-              lineHeight: 1.0,
+              lineHeight: 1.05,
             }}
           >
             Your bench of names.

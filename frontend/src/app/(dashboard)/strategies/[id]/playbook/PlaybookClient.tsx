@@ -107,10 +107,13 @@ export default function PlaybookClient({ strategyId }: PlaybookClientProps) {
           style={{
             fontFamily: "var(--font-display)",
             color: "var(--ink-1000)",
-            fontSize: 38,
+            // 28px matches design strategy-playbook.jsx; live was 38px
+            // which made the section title compete with the page-level
+            // identity band above it.
+            fontSize: 28,
             fontWeight: 400,
-            letterSpacing: "-0.025em",
-            lineHeight: 1.05,
+            letterSpacing: "-0.02em",
+            lineHeight: 1.1,
             textWrap: "balance",
           }}
         >

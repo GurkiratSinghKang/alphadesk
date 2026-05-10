@@ -1118,10 +1118,13 @@ export default function AnalyticsPage() {
             style={{
               fontFamily: "var(--font-display)",
               color: "var(--ink-1000)",
-              fontSize: 38,
+              // 28px matches the editorial-quiet hero scale used across
+              // /strategies/[id]/playbook + /backtest. Was 38px which
+              // out-shouted the page-level identity-band eyebrow above.
+              fontSize: 28,
               fontWeight: 400,
-              letterSpacing: "-0.025em",
-              lineHeight: 1.05,
+              letterSpacing: "-0.02em",
+              lineHeight: 1.1,
               textWrap: "balance",
             }}
           >
