@@ -81,7 +81,7 @@ export const MOCK_ARCH_NODES: ArchNode[] = [
     name: "Agents",
     group: "ai",
     status: "ok",
-    caption: "Research / Signal / Risk / Exec — Claude-backed",
+    caption: "Research / Signal / Risk / Exec — AI-backed",
     reads: ["backend/agents/**"],
     operatorNote:
       "Per-agent pause + spend cap will land in B.2; Phase 0 surfaces the controls behind the existing global toggle.",
@@ -115,7 +115,7 @@ export const MOCK_ARCH_NODES: ArchNode[] = [
     name: "LLM",
     group: "external",
     status: "ok",
-    caption: "Anthropic Claude — daily spend $14.20 / $200",
+    caption: "Primary AI provider — daily spend $14.20 / $200",
     reads: ["backend/agents/claude_client.py"],
   },
   {

@@ -83,7 +83,7 @@ def _default_layout_config() -> dict[str, Any]:
 # canonical config key written to the app_config table. Only this
 # allow-list is rotatable from the UI; anything else stays env-only.
 SUPPORTED_BACKEND_KEYS: dict[str, str] = {
-    "Anthropic API key": "ANTHROPIC_API_KEY",
+    "AI provider API key": "ANTHROPIC_API_KEY",
     "FMP API key": "FMP_API_KEY",
     "Alpaca API key": "ALPACA_API_KEY",
     "Alpaca API secret": "ALPACA_API_SECRET",

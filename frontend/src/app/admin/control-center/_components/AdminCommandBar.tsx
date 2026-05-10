@@ -13,7 +13,7 @@ import { MOCK_CONTROLS, type ControlSpec } from "@/lib/mocks/controls";
  * identity band; opens via ⌘⇧J or click.
  *
  * Phase 0 behavior:
- *   - Type natural language ("halt trades on NVDA", "rotate Anthropic key")
+ *   - Type natural language ("halt trades on NVDA", "rotate AI key")
  *   - Token-overlap fuzzy match against control name + desc + envVar
  *   - Render top 5 matches with category badge + critical pill
  *   - Click result → scroll to control's category section + flash highlight
@@ -95,7 +95,7 @@ export default function AdminCommandBar() {
       >
         <MagnifyingGlass className="size-4 text-fg-muted" />
         <span className="flex-1 font-display italic text-body text-fg-muted">
-          Find a control · &ldquo;halt trades on NVDA&rdquo; · &ldquo;rotate Anthropic key&rdquo; · &ldquo;pause research&rdquo;
+          Find a control · &ldquo;halt trades on NVDA&rdquo; · &ldquo;rotate AI key&rdquo; · &ldquo;pause research&rdquo;
         </span>
         <kbd className="t-mono text-eyebrow text-fg-hint border border-border-hair rounded-sm px-1.5 py-0.5 uppercase tracking-[0.08em]">
           ⌘ ⇧ J
@@ -143,7 +143,7 @@ export default function AdminCommandBar() {
                 Type what you want to do.
               </p>
               <p className="mt-1 t-mono text-eyebrow text-fg-hint uppercase tracking-[0.08em]">
-                Anthropic key · trade halt · pipeline · ai research · risk gate · feature flag
+                AI key · trade halt · pipeline · AI research · risk gate · feature flag
               </p>
             </div>
           ) : matches.length === 0 ? (

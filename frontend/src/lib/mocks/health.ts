@@ -76,7 +76,7 @@ export const MOCK_HEALTH_TILES: HealthTile[] = [
     id: "ai-research",
     name: "AI research",
     value: "running",
-    caption: "Claude spend $14.20 / $200 daily cap (7%).",
+    caption: "AI spend $14.20 / $200 daily cap (7%).",
     tone: "ok",
     anchor: "ai-archetype-research",
   },

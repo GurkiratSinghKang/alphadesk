@@ -89,8 +89,8 @@ export const MOCK_CONTROLS: ControlSpec[] = [
   {
     id: "key-anthropic",
     category: "keys",
-    name: "Anthropic key",
-    desc: "Anthropic API key. Used by every Claude-backed agent. UI never reads plaintext after submit.",
+    name: "AI provider key",
+    desc: "Primary AI provider key. Used by research, signal, risk, and execution agents. UI never reads plaintext after submit.",
     surface: "input-secret",
     value: "**** rotated 12d ago",
     permission: "write-secret",
@@ -301,8 +301,8 @@ export const MOCK_CONTROLS: ControlSpec[] = [
   {
     id: "ai-spend-claude-daily",
     category: "ai",
-    name: "Claude daily spend cap",
-    desc: "Hard cap on Anthropic spend per day. Reset 00:00 UTC.",
+    name: "AI daily spend cap",
+    desc: "Hard cap on AI provider spend per day. Reset 00:00 UTC.",
     surface: "input-number",
     value: 200,
     unit: "USD",
@@ -421,8 +421,8 @@ export const MOCK_CONTROLS: ControlSpec[] = [
   {
     id: "data-rail-anthropic",
     category: "data",
-    name: "Anthropic rail",
-    desc: "Claude API. All Research/Signal/Risk/Exec archetypes consume.",
+    name: "AI provider rail",
+    desc: "Primary AI API. All research, signal, risk, and execution archetypes consume.",
     surface: "switch",
     value: true,
   },
