@@ -3062,6 +3062,60 @@ export function getPipelineUniverse() {
   return apiFetch<PipelineUniverseResponse>('/api/v1/pipeline/universe');
 }
 
+// v2 backend (pensive-kirch B.3) — multi-list watchlists v2.
+// Backend prefix: /api/v1/watchlists. Each list has symbol-only items
+// (no enriched price/signal data — those come from quote feeds).
+export interface WatchlistV2Item {
+  symbol: string;
+  position: number;
+  note: string | null;
+}
+
+export interface WatchlistV2 {
+  id: number;
+  name: string;
+  description: string | null;
+  kind: "manual" | "auto_strategy" | "auto_earnings";
+  auto_source_strategy: string | null;
+  column_set: string[] | null;
+  share_mode: "private" | "tenant" | "public";
+  share_token: string | null;
+  position: number;
+  items: WatchlistV2Item[];
+}
+
+export interface CreateWatchlistRequest {
+  name: string;
+  description?: string;
+  kind?: "manual" | "auto_strategy" | "auto_earnings";
+}
+
+export function getWatchlistsV2() {
+  return apiFetch<WatchlistV2[]>('/api/v1/watchlists');
+}
+
+export function createWatchlistV2(req: CreateWatchlistRequest) {
+  return apiFetch<WatchlistV2>('/api/v1/watchlists', {
+    method: "POST",
+    body: JSON.stringify(req),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export function addWatchlistItem(watchlistId: number, symbol: string, note?: string) {
+  return apiFetch<WatchlistV2Item>(`/api/v1/watchlists/${watchlistId}/items`, {
+    method: "POST",
+    body: JSON.stringify({ symbol, note }),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export function removeWatchlistItem(watchlistId: number, symbol: string) {
+  return apiFetch<void>(`/api/v1/watchlists/${watchlistId}/items/${encodeURIComponent(symbol)}`, {
+    method: "DELETE",
+  });
+}
+
 export async function getPipelineRun(date: string): Promise<PipelineRun> {
   const raw = await apiFetch<Record<string, unknown>>(`/api/v1/pipeline/history/${date}`);
   return mapPipelineRun(raw);
