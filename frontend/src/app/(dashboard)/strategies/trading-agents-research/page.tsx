@@ -36,7 +36,7 @@ import type { TickerContext, TickerFactEnvelope } from "@/types";
 const PROVIDERS = [
   { value: "", label: "System default" },
   { value: "openai", label: "OpenAI" },
-  { value: "anthropic", label: "Anthropic" },
+  { value: "anthropic", label: "Primary AI" },
   { value: "google", label: "Google" },
   { value: "openrouter", label: "OpenRouter" },
 ];
@@ -106,6 +106,21 @@ function formatRateLimit(runsPerHour: number | null | undefined) {
 function displayText(value: string | null | undefined, fallback: string) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : fallback;
+}
+
+function providerDisplayName(value: string | null | undefined, fallback = "system default") {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (normalized === "anthropic") return "primary AI";
+  return value?.trim() ?? fallback;
+}
+
+function modelRailLabel(deepModel: string | null | undefined, quickModel: string | null | undefined) {
+  const labels = [deepModel, quickModel].filter(Boolean).map((value) => {
+    const text = String(value);
+    return /claude|anthropic/i.test(text) ? "provider default" : text;
+  });
+  return labels.length ? labels.join(" / ") : "Provider defaults";
 }
 
 function stripMarkdown(value: string) {
@@ -854,7 +869,7 @@ function ResearchBrief({
   const runAnalysts = Array.isArray(run.analysts) ? run.analysts : [];
   const artifactFiles = Array.isArray(run.artifact_files) ? run.artifact_files : [];
   const runSymbol = displayText(run.symbol, "Unknown symbol");
-  const runProvider = displayText(run.provider, "system default");
+  const runProvider = providerDisplayName(run.provider);
   const sections = useMemo(() => splitMemoSections(decisionText), [decisionText]);
   const signal = extractSignal(decisionText, summary);
   const tone = signalTone(signal);
@@ -1319,13 +1334,13 @@ function RuntimePanel({
       {runtime ? (
         <>
           <div className="grid grid-cols-2 gap-2">
-            <RuntimeFact label="Provider" value={displayText(runtime.provider, "system")} good={runtime.provider_key_configured} />
+            <RuntimeFact label="Provider" value={providerDisplayName(runtime.provider, "system")} good={runtime.provider_key_configured} />
             <RuntimeFact label="Wrapper" value={runtime.script_runnable ? "found" : "missing"} good={runtime.script_runnable} />
             <RuntimeFact label="Runtime" value={runtime.bootstrap_required ? "bootstrap" : runtime.installed_ref ?? "ready"} good />
             <RuntimeFact label="Limit" value={formatRateLimit(runtime.runs_per_hour)} good={runtime.enabled} />
           </div>
           <p className="mt-3 break-words font-mono text-eyebrow leading-relaxed text-fg-hint" title={runtime.skill_home}>
-            {runtime.deep_model} / {runtime.quick_model}
+            {modelRailLabel(runtime.deep_model, runtime.quick_model)}
           </p>
           {warnings.length > 0 && (
             <ul className="mt-3 flex flex-col gap-2">

@@ -1916,6 +1916,13 @@ function timeLabel(value: string | null | undefined) {
   });
 }
 
+function providerLabel(value: string | null | undefined) {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return "AI";
+  if (normalized === "anthropic") return "primary AI";
+  return value?.trim() ?? "AI";
+}
+
 function errorMessage(err: unknown) {
   return err instanceof Error ? err.message : "Request failed";
 }
@@ -2266,7 +2273,7 @@ function buildTriageItems(snapshot: RuntimeSnapshot): TriageItem[] {
       detail: snapshot.tradingAgents
         ? snapshot.tradingAgents.bootstrap_required
           ? "Bootstrap required"
-          : `${snapshot.tradingAgents.provider} provider`
+          : `${providerLabel(snapshot.tradingAgents.provider)} provider`
         : "Checking TradingAgents",
       tone: snapshot.tradingAgents ? (snapshot.tradingAgents.ready ? "healthy" : "watch") : "active",
       nodeId: "tradingagents-runtime",

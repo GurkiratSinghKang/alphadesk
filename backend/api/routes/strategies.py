@@ -303,8 +303,8 @@ _STRATEGIES: dict[str, dict[str, Any]] = {
         "last_trade_date": "",
     },
     "claude-alpha": {
-        "name": "Claude Alpha",
-        "description": "LLM-driven equity selection (research-mode v0). The replay-cache infrastructure + scoring abstraction + risk filters are in place; the live Claude prompt path is gated until the OOS replay validates. v0 uses a deterministic fallback scorer (momentum × log-liquidity composite) — NOT alpha — so the rest of the pipeline is exercisable without per-trial LLM cost. See backend/strategies/claude_alpha/spec.md for the v1 path.",
+        "name": "AI Alpha",
+        "description": "AI-driven equity selection (research-mode v0). The replay-cache infrastructure, scoring abstraction, and risk filters are in place; the live prompt path is gated until the OOS replay validates. v0 uses a deterministic fallback scorer (momentum × log-liquidity composite), not alpha, so the rest of the pipeline is exercisable without per-trial AI cost. See backend/strategies/claude_alpha/spec.md for the v1 path.",
         # Plan C.1: backend strategy package landed; kind='research' so the
         # engine excludes from the autonomous run loop. Status reflects the
         # fact that it's registered but won't trade autonomously.
