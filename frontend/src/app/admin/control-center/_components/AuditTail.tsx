@@ -42,8 +42,8 @@ const kindToTone: Partial<Record<AuditEventKind, StatusDotTone>> = {
   live_gate_reject: "loss",
 };
 
-function relative(iso: string): string {
-  const diff = Date.now() - Date.parse(iso);
+function relative(iso: string, now: number): string {
+  const diff = now - Date.parse(iso);
   if (diff < 0) return "just now";
   const sec = Math.round(diff / 1000);
   if (sec < 60) return `${sec}s ago`;
@@ -61,6 +61,11 @@ export default function AuditTail({
   limit = 10,
 }: AuditTailProps) {
   const visible = entries.slice(0, limit);
+  const [now, setNow] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    setNow(Date.now());
+  }, []);
 
   return (
     <Section
@@ -102,7 +107,7 @@ export default function AuditTail({
             </div>
             <div className="shrink-0 flex flex-col items-end gap-0.5 text-eyebrow uppercase tracking-[0.08em] text-fg-muted">
               <span className="text-fg-dim">{entry.actor}</span>
-              <span>{relative(entry.ts)}</span>
+              {now !== null && <span>{relative(entry.ts, now)}</span>}
             </div>
           </li>
         ))}

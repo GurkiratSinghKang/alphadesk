@@ -82,11 +82,11 @@ export interface ControlModuleProps {
   className?: string;
 }
 
-function relativeFromIso(iso: string | null | undefined): string | null {
+function relativeFromIso(iso: string | null | undefined, now: number): string | null {
   if (!iso) return null;
   const ts = Date.parse(iso);
   if (!Number.isFinite(ts)) return null;
-  const diffMs = Date.now() - ts;
+  const diffMs = now - ts;
   if (diffMs < 0) return "just now";
   const sec = Math.round(diffMs / 1000);
   if (sec < 60) return `${sec}s ago`;
@@ -118,7 +118,12 @@ export default function ControlModule({
   inheritedFrom,
   className,
 }: ControlModuleProps) {
-  const relative = relativeFromIso(lastAt);
+  const [now, setNow] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    setNow(Date.now());
+  }, []);
+
+  const relative = now === null ? null : relativeFromIso(lastAt, now);
   const readOnly = permission === "read";
 
   return (
