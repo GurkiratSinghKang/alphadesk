@@ -389,6 +389,42 @@ async def get_enriched_watchlist(
     except Exception:
         pass
 
+    # Signal-by-symbol lookup — scan the most recent pipeline run for
+    # any matching candidate. Bounded by run-log size (one JSON file
+    # per day, latest only). Maps symbol → signal type ("trend+",
+    # "PEAD", "vol+", "trim", etc.) for items that triggered today.
+    signal_by_symbol: dict[str, str] = {}
+    try:
+        import json as _json
+        from pathlib import Path as _Path
+        log_dir = _Path("pipeline_logs")
+        if log_dir.exists():
+            log_files = sorted(log_dir.glob("????-??-??.json"), reverse=True)
+            if log_files:
+                data = _json.loads(log_files[0].read_text(encoding="utf-8"))
+                # Format A: top-level signals.
+                for sig in data.get("signals", []) or []:
+                    if isinstance(sig, dict):
+                        sym = sig.get("symbol")
+                        if sym:
+                            signal_by_symbol[str(sym).upper()] = (
+                                sig.get("signal_type") or sig.get("side") or "active"
+                            )
+                # Format B: per-strategy trades.
+                for _strat, sd in (data.get("strategies", {}) or {}).items():
+                    if not isinstance(sd, dict):
+                        continue
+                    for tr in sd.get("trades", []) or []:
+                        if isinstance(tr, dict):
+                            sym = tr.get("symbol")
+                            if sym:
+                                signal_by_symbol.setdefault(
+                                    str(sym).upper(),
+                                    tr.get("signal_type") or "active",
+                                )
+    except Exception:
+        pass
+
     # Quote feed — call the shared snapshot resolver per symbol.
     # Bounded to the symbols on this list (typically 5-50) so the
     # extra calls stay in budget. Polygon → Alpaca → demo waterfall
@@ -448,8 +484,8 @@ async def get_enriched_watchlist(
                 px=px,
                 pct_day=pct_day,
                 vol=vol,
-                tech_score=None,   # placeholder — needs a factor-score endpoint
-                signal=None,       # placeholder — needs pipeline-signal-by-symbol lookup
+                tech_score=None,   # placeholder — factor-score endpoint follow-up
+                signal=signal_by_symbol.get(sym),  # from latest pipeline run
                 held=sym in held_set,
                 note=it.note,
                 position=int(it.position or 0),
