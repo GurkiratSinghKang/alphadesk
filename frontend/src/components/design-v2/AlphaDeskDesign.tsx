@@ -33,6 +33,235 @@ const TWEAK_DEFAULTS = {
   accent: "#c9a66b",
 };
 
+const __LAYOUT_GUARD_STYLE = `
+  [data-ad-app],
+  [data-ad-main],
+  [data-ad-topbar],
+  [data-ad-statusbar],
+  [data-design-surface] {
+    min-width: 0;
+  }
+
+  [data-ad-app] *,
+  [data-ad-topbar] *,
+  [data-ad-main] * {
+    box-sizing: border-box;
+  }
+
+  [data-ad-nav] a,
+  [data-ad-nav] button {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    min-height: 32px;
+  }
+
+  [data-ad-topbar] button,
+  [data-ad-topbar] input,
+  [data-ad-main] button,
+  [data-ad-main] input,
+  [data-ad-main] select,
+  [data-ad-main] textarea {
+    min-height: 32px;
+    line-height: 1.35;
+  }
+
+  [data-ad-main] input[type="checkbox"] {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    margin: 0;
+    accent-color: var(--brand);
+  }
+
+  [data-ad-main] a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    line-height: 1.35;
+  }
+
+  [data-ad-main] a[style*="writing-mode"] {
+    justify-content: center;
+    min-width: 32px;
+  }
+
+  [data-ad-statusbar] span {
+    white-space: nowrap;
+  }
+
+  @media (max-width: 1200px) {
+    [data-ad-search] {
+      display: none !important;
+    }
+  }
+
+  @media (max-width: 900px) {
+    [data-ad-app] {
+      height: 100dvh !important;
+      min-height: 100dvh !important;
+      overflow: hidden !important;
+    }
+
+    [data-ad-topbar] {
+      display: flex !important;
+      align-items: center !important;
+      gap: 10px !important;
+      height: 56px !important;
+      padding: 0 12px !important;
+      overflow-x: auto !important;
+      overflow-y: hidden !important;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    [data-ad-topbar]::-webkit-scrollbar,
+    [data-ad-statusbar]::-webkit-scrollbar {
+      display: none;
+    }
+
+    [data-ad-brand] {
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      flex: 0 0 auto !important;
+      height: 100%;
+      align-items: center !important;
+      padding-right: 10px;
+      background: var(--ink-050);
+    }
+
+    [data-ad-nav] {
+      flex: 0 0 auto !important;
+      margin-left: 0 !important;
+    }
+
+    [data-ad-nav] > * {
+      flex: 0 0 auto;
+    }
+
+    [data-ad-nav] a,
+    [data-ad-nav] button {
+      min-height: 40px !important;
+      padding: 9px 12px !important;
+    }
+
+    [data-ad-mode-toggle] {
+      flex: 0 0 auto !important;
+      height: 34px !important;
+    }
+
+    [data-ad-mode-toggle] button {
+      min-height: 32px !important;
+      padding: 0 12px !important;
+      font-size: 10.5px !important;
+    }
+
+    [data-ad-icon-button],
+    [data-ad-user-menu] > button {
+      width: 36px !important;
+      height: 36px !important;
+    }
+
+    [data-ad-clock] {
+      display: none !important;
+    }
+
+    [data-ad-main] {
+      overflow: auto !important;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+
+    [data-ad-main] [data-screen-label] {
+      width: 100% !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
+    }
+
+    [data-ad-app][data-screen-label="AlphaDesk · trade"] [data-ad-main] [data-screen-label] {
+      width: 960px !important;
+      min-width: 960px !important;
+      max-width: none !important;
+    }
+
+    [data-ad-app][data-screen-label="AlphaDesk · trade"] [data-ad-main] > * {
+      width: 960px !important;
+      min-width: 960px !important;
+      max-width: none !important;
+    }
+
+    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="grid-template-columns"] {
+      grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="display: flex"] {
+      flex-wrap: wrap !important;
+      min-width: 0 !important;
+    }
+
+    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="overflow: hidden"] {
+      overflow: auto !important;
+    }
+
+    [data-ad-main] [style*="font-size: 8"],
+    [data-ad-main] [style*="font-size: 9"],
+    [data-ad-main] [style*="font-size: 10"],
+    [data-ad-topbar] [style*="font-size: 8"],
+    [data-ad-topbar] [style*="font-size: 9"],
+    [data-ad-topbar] [style*="font-size: 10"] {
+      font-size: 11px !important;
+      line-height: 1.35 !important;
+    }
+
+    [data-ad-main] button,
+    [data-ad-main] a,
+    [data-ad-main] input,
+    [data-ad-main] select,
+    [data-ad-main] textarea {
+      display: inline-flex;
+      align-items: center;
+      min-height: 40px;
+      min-width: 40px;
+    }
+
+    [data-ad-main] * {
+      overflow-wrap: anywhere;
+    }
+
+    [data-ad-statusbar] {
+      height: 34px !important;
+      gap: 14px !important;
+      padding: 0 12px !important;
+      overflow-x: auto !important;
+      overflow-y: hidden !important;
+      font-size: 10.5px !important;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+
+  @media (max-width: 640px) {
+    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="padding: 32px 28px"],
+    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="padding: 28px"],
+    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="padding: 24px"] {
+      padding: 20px 18px !important;
+    }
+
+    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="width: 720px"],
+    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="width: 560px"],
+    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="width: 540px"],
+    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="width: 520px"] {
+      width: calc(100vw - 24px) !important;
+      max-width: calc(100vw - 24px) !important;
+    }
+  }
+`;
+
+function LayoutGuardStyle() {
+  return <style dangerouslySetInnerHTML={{ __html: __LAYOUT_GUARD_STYLE }} />;
+}
+
 
 // tweaks-panel.jsx
 // Reusable Tweaks shell + form-control helpers.
@@ -1063,12 +1292,12 @@ function TopBar({ page, onNav, onSearch, regime, theme = "dark", onTheme }) {
   }, []);
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "auto auto 1fr auto auto auto auto", alignItems: "center", padding: "0 18px", height: 52, background: "var(--ink-050)", borderBottom: "1px solid var(--border)", gap: 14 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 22, color: "var(--ink-1000)", letterSpacing: "-0.02em", cursor: "default" }}>
+    <div data-ad-topbar="" style={{ display: "grid", gridTemplateColumns: "auto auto 1fr auto auto auto auto", alignItems: "center", padding: "0 18px", height: 56, background: "var(--ink-050)", borderBottom: "1px solid var(--border)", gap: 14 }}>
+      <div data-ad-brand="" style={{ display: "flex", alignItems: "baseline", gap: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 22, color: "var(--ink-1000)", letterSpacing: "-0.02em", cursor: "default" }}>
         <span style={{ color: "var(--brand)" }}>α</span>AlphaDesk
       </div>
 
-      <nav style={{ display: "flex", gap: 2, marginLeft: 18 }}>
+      <nav data-ad-nav="" style={{ display: "flex", gap: 2, marginLeft: 18 }}>
         {navs.map(n => <NavItem key={n.id} n={n} page={page} onNav={onNav} />)}
       </nav>
 
@@ -1078,7 +1307,7 @@ function TopBar({ page, onNav, onSearch, regime, theme = "dark", onTheme }) {
 
       <NotificationBell />
 
-      <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)", letterSpacing: "0.02em" }}>{clock}</div>
+      <div data-ad-clock="" style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)", letterSpacing: "0.02em" }}>{clock}</div>
 
       <UserMenu onNav={onNav} theme={theme} onTheme={onTheme} />
     </div>
@@ -1101,9 +1330,9 @@ function NavItem({ n, page, onNav }) {
   if (!n.children) {
     return (
       <a onClick={() => onNav(n.id)} style={{
-        fontFamily: "var(--font-ui)", fontSize: 12.5, color: isActive ? "var(--ink-1000)" : "var(--fg-muted)",
+        fontFamily: "var(--font-ui)", fontSize: 13, color: isActive ? "var(--ink-1000)" : "var(--fg-muted)",
         background: isActive ? "var(--bg-elev-1)" : "transparent",
-        padding: "6px 12px", borderRadius: 3, cursor: "default", letterSpacing: "0.01em", fontWeight: isActive ? 500 : 400,
+        padding: "7px 12px", borderRadius: 3, cursor: "default", letterSpacing: "0.01em", fontWeight: isActive ? 500 : 400,
         transition: "color 120ms, background 120ms"
       }}
         onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.color = "var(--fg)"; }}
@@ -1112,19 +1341,19 @@ function NavItem({ n, page, onNav }) {
     );
   }
   return (
-    <div ref={ref} style={{ position: "relative" }}>
+    <div ref={ref} data-ad-user-menu="" style={{ position: "relative" }}>
       <a onClick={() => setOpen(o => !o)} style={{
         display: "inline-flex", alignItems: "center", gap: 4,
-        fontFamily: "var(--font-ui)", fontSize: 12.5, color: isActive ? "var(--ink-1000)" : "var(--fg-muted)",
+        fontFamily: "var(--font-ui)", fontSize: 13, color: isActive ? "var(--ink-1000)" : "var(--fg-muted)",
         background: isActive ? "var(--bg-elev-1)" : "transparent",
-        padding: "6px 12px", borderRadius: 3, cursor: "default", letterSpacing: "0.01em", fontWeight: isActive ? 500 : 400,
+        padding: "7px 12px", borderRadius: 3, cursor: "default", letterSpacing: "0.01em", fontWeight: isActive ? 500 : 400,
         transition: "color 120ms, background 120ms"
       }}
         onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.color = "var(--fg)"; }}
         onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.color = "var(--fg-muted)"; }}
       >
         {n.label}
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 8.5, opacity: 0.7, transform: open ? "rotate(180deg)" : "none", transition: "transform 120ms" }}>▾</span>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, opacity: 0.7, transform: open ? "rotate(180deg)" : "none", transition: "transform 120ms" }}>▾</span>
       </a>
       {open && (
         <div style={{
@@ -1174,7 +1403,7 @@ function UserMenu({ onNav, theme = "dark", onTheme }) {
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <button onClick={() => setOpen(o => !o)}
-        style={{ width: 28, height: 28, padding: 0, borderRadius: "50%", background: "linear-gradient(135deg,var(--gold-600),var(--gold-300))", border: "1px solid var(--border-strong)", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--brand-on)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "default" }}>α</button>
+        style={{ width: 32, height: 32, padding: 0, borderRadius: "50%", background: "linear-gradient(135deg,var(--gold-600),var(--gold-300))", border: "1px solid var(--border-strong)", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 15, color: "var(--brand-on)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "default" }}>α</button>
       {open && (
         <div style={{ position: "absolute", top: 36, right: 0, width: 240, background: "var(--ink-150)", border: "1px solid var(--border)", borderRadius: 6, boxShadow: "var(--shadow-2)", zIndex: 60, padding: "4px 0" }}>
           <div style={{ padding: "10px 12px 8px" }}>
@@ -1225,8 +1454,8 @@ function SearchBar({ onPick }) {
   }, [q]);
 
   return (
-    <div style={{ position: "relative", maxWidth: 380, justifySelf: "stretch" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, height: 32, padding: "0 12px", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderRadius: 4 }}>
+    <div data-ad-search="" style={{ position: "relative", maxWidth: 380, justifySelf: "stretch" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, height: 36, padding: "0 12px", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderRadius: 4 }}>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fg-hint)" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
         <input
           ref={ref}
@@ -1235,9 +1464,9 @@ function SearchBar({ onPick }) {
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 120)}
           placeholder="Search ticker, strategy, or command…"
-          style={{ flex: 1, background: "transparent", border: 0, color: "var(--ink-1000)", fontFamily: "var(--font-ui)", fontSize: 12.5, outline: "none" }}
+          style={{ flex: 1, minWidth: 0, height: 32, background: "transparent", border: 0, color: "var(--ink-1000)", fontFamily: "var(--font-ui)", fontSize: 13, outline: "none" }}
         />
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-hint)", letterSpacing: "0.04em", border: "1px solid var(--border)", padding: "1px 5px", borderRadius: 3 }}>⌘K</span>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-hint)", letterSpacing: "0.04em", border: "1px solid var(--border)", padding: "2px 6px", borderRadius: 3 }}>⌘K</span>
       </div>
       {open && (
         <div style={{ position: "absolute", top: 38, left: 0, right: 0, background: "var(--ink-150)", border: "1px solid var(--border)", borderRadius: 6, boxShadow: "var(--shadow-2)", zIndex: 50, padding: 6, maxHeight: 360, overflow: "auto" }}>
@@ -1274,7 +1503,7 @@ function StatusBar() {
   const positions = MOCK_POSITIONS?.length ?? 8;
   const lastTick = (0.03 + (tick % 7) * 0.005).toFixed(2);
   return (
-    <div style={{ display: "flex", alignItems: "center", padding: "0 18px", height: 26, background: "var(--ink-050)", borderTop: "1px solid var(--border)", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-muted)", gap: 16, letterSpacing: "0.02em" }}>
+    <div data-ad-statusbar="" style={{ display: "flex", alignItems: "center", padding: "0 18px", height: 30, background: "var(--ink-050)", borderTop: "1px solid var(--border)", fontFamily: "var(--font-mono)", fontSize: 10.75, color: "var(--fg-muted)", gap: 16, letterSpacing: "0.02em" }}>
       <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><StatusDot tone="up" size={5} />Alpaca paper · connected</span>
       <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--fg)" }}><StatusDot tone="up" size={5} />Market open <span style={{ color: "var(--fg-hint)" }}>· 1h 28m to close</span></span>
       <span style={{ color: "var(--fg-hint)" }}>|</span>
@@ -1561,12 +1790,12 @@ function StatusBanner({ tone = "info", text, action }) {
 // PaperLiveToggle — top-bar persistent toggle
 function PaperLiveToggle({ value, onChange }) {
   return (
-    <div style={{ display: "inline-flex", border: "1px solid var(--border-strong)", borderRadius: 4, overflow: "hidden", height: 26 }}>
+    <div data-ad-mode-toggle="" style={{ display: "inline-flex", border: "1px solid var(--border-strong)", borderRadius: 4, overflow: "hidden", height: 34 }}>
       {["paper", "live"].map(v => (
         <button key={v} onClick={() => onChange(v)} style={{
-          padding: "0 10px", height: 24, background: value === v ? (v === "live" ? "var(--down-500)" : "var(--bg-elev-2)") : "transparent",
+          padding: "0 12px", height: 32, background: value === v ? (v === "live" ? "var(--down-500)" : "var(--bg-elev-2)") : "transparent",
           color: value === v ? (v === "live" ? "#1a0d09" : "var(--ink-1000)") : "var(--fg-muted)",
-          border: 0, fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "default",
+          border: 0, fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", cursor: "default",
         }}>{v}</button>
       ))}
     </div>
@@ -1585,9 +1814,9 @@ function NotificationBell({ items = MOCK_NOTIFICATIONS, onRead, onOpenAll }) {
   }, []);
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <button onClick={() => setOpen(o => !o)} style={{ position: "relative", width: 28, height: 28, background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--fg)", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "default" }}>
+      <button data-ad-icon-button="" onClick={() => setOpen(o => !o)} style={{ position: "relative", width: 32, height: 32, background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--fg)", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "default" }}>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10 21a2 2 0 0 0 4 0" /></svg>
-        {unread > 0 && <span style={{ position: "absolute", top: -4, right: -4, minWidth: 14, height: 14, padding: "0 3px", borderRadius: 7, background: "var(--down-500)", color: "var(--down-on)", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{unread}</span>}
+        {unread > 0 && <span style={{ position: "absolute", top: -5, right: -5, minWidth: 16, height: 16, padding: "0 4px", borderRadius: 8, background: "var(--down-500)", color: "var(--down-on)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{unread}</span>}
       </button>
       {open && <NotificationDrawer items={items} onRead={onRead} onOpenAll={onOpenAll} onClose={() => setOpen(false)} />}
     </div>
@@ -9731,10 +9960,10 @@ function SwitchControl({ value, onChange }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
       <button onClick={() => onChange(!on)} style={{
-        width: 38, height: 22, borderRadius: 11, border: "1px solid var(--border-strong)",
+        width: 48, height: 32, borderRadius: 16, border: "1px solid var(--border-strong)",
         background: on ? "var(--up-500)" : "var(--bg-elev-2)", position: "relative", cursor: "default", padding: 0,
       }}>
-        <span style={{ position: "absolute", top: 2, left: on ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: on ? "#0a0a0a" : "var(--fg-muted)", transition: "all 140ms" }} />
+        <span style={{ position: "absolute", top: 5, left: on ? 25 : 5, width: 20, height: 20, borderRadius: "50%", background: on ? "#0a0a0a" : "var(--fg-muted)", transition: "all 140ms" }} />
       </button>
       <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: on ? "var(--up-500)" : "var(--fg-muted)", fontWeight: 600, letterSpacing: "0.05em" }}>{on ? "ENABLED" : "DISABLED"}</span>
     </div>
@@ -9834,7 +10063,7 @@ function Pill({ text, tone }) {
 const btnPrimary = { fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 500, padding: "5px 11px", background: "var(--brand)", color: "var(--brand-on)", border: "1px solid var(--brand)", borderRadius: 3, cursor: "default" };
 const btnDanger = { fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 500, padding: "5px 11px", background: "var(--down-500)", color: "var(--down-on)", border: "1px solid var(--down-500)", borderRadius: 3, cursor: "default" };
 const btnGhost = { fontFamily: "var(--font-ui)", fontSize: 11, padding: "5px 11px", background: "var(--bg-elev-2)", color: "var(--fg)", border: "1px solid var(--border)", borderRadius: 3, cursor: "default" };
-const iconBtn = { width: 24, height: 24, background: "var(--bg-elev-2)", color: "var(--fg-muted)", border: "1px solid var(--border)", borderRadius: 3, cursor: "default", fontSize: 11 };
+const iconBtn = { width: 32, height: 32, background: "var(--bg-elev-2)", color: "var(--fg-muted)", border: "1px solid var(--border)", borderRadius: 3, cursor: "default", fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center" };
 
 if (typeof window !== "undefined") Object.assign(window, { AdminPage });
 
@@ -10542,9 +10771,10 @@ export function AlphaDeskDesignApp({ initialPage = "dashboard", initialSymbol = 
   const standalone = page === "marketing" || page === "auth" || page === "onboarding" || page === "mobile";
 
   return (
-    <div data-screen-label={`AlphaDesk · ${page}`} style={{ display: "grid", gridTemplateRows: standalone ? "1fr" : "auto 1fr auto", height: "100%", minHeight: 0, background: "var(--bg)" }}>
+    <div data-ad-app="" data-screen-label={`AlphaDesk · ${page}`} style={{ display: "grid", gridTemplateRows: standalone ? "1fr" : "auto minmax(0,1fr) auto", height: "100dvh", minHeight: 0, background: "var(--bg)", overflow: "hidden" }}>
+      <LayoutGuardStyle />
       {!standalone && <TopBar page={page} onNav={onNav} onSearch={onPickTicker} regime={MOCK_REGIME.state} theme={t.theme || "dark"} onTheme={v => setTweak("theme", v)} />}
-      <main style={{ overflow: "hidden", position: "relative" }}>
+      <main data-ad-main="" style={{ overflow: "auto", position: "relative", minWidth: 0 }}>
         {body}
       </main>
       {!standalone && <StatusBar />}

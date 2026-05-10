@@ -474,18 +474,18 @@ export default function LoginForm() {
           <div className="t-eyebrow-italic text-[9px] tracking-[0.16em] text-[var(--fg-hint)]">
             OR USE A SECURITY KEY
           </div>
-          <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <button
               type="button"
               onClick={() => setPasswordMode(true)}
-              className="h-9 rounded-[3px] border border-[var(--border-strong)] bg-[var(--bg-elev-1)] font-sans text-[12.5px] text-[var(--ink-1000)] transition-colors hover:border-[var(--auth-primary)] hover:text-[var(--auth-fg)]"
+              className="min-h-10 rounded-[3px] border border-[var(--border-strong)] bg-[var(--bg-elev-1)] px-3 py-2 font-sans text-[12.5px] text-[var(--ink-1000)] transition-colors hover:border-[var(--auth-primary)] hover:text-[var(--auth-fg)]"
             >
               YubiKey · Touch ID
             </button>
             <button
               type="button"
               onClick={() => setPasswordMode(true)}
-              className="h-9 rounded-[3px] border border-[var(--border-strong)] bg-[var(--bg-elev-1)] font-sans text-[12.5px] text-[var(--ink-1000)] transition-colors hover:border-[var(--auth-primary)] hover:text-[var(--auth-fg)]"
+              className="min-h-10 rounded-[3px] border border-[var(--border-strong)] bg-[var(--bg-elev-1)] px-3 py-2 font-sans text-[12.5px] text-[var(--ink-1000)] transition-colors hover:border-[var(--auth-primary)] hover:text-[var(--auth-fg)]"
             >
               Authenticator code
             </button>

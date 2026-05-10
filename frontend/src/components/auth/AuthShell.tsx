@@ -169,13 +169,13 @@ function AuthBrandPane({ brand }: { brand?: AuthShellProps["brand"] }) {
       <div className="mt-6 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
         <span
           className="t-mono"
-          style={{ fontSize: 10, color: "var(--fg-hint)", letterSpacing: "0.06em" }}
+          style={{ fontSize: 11, color: "var(--fg-hint)", letterSpacing: "0.06em", lineHeight: 1.4 }}
         >
           TRADING ALPHA · TRADINGALPHA.NET
         </span>
         <span
           className="t-mono"
-          style={{ fontSize: 10, color: "var(--fg-hint)", letterSpacing: "0.06em" }}
+          style={{ fontSize: 11, color: "var(--fg-hint)", letterSpacing: "0.06em", lineHeight: 1.4 }}
         >
           SYSTEM · OPERATIONAL
         </span>
@@ -206,7 +206,7 @@ function DefaultBriefingCard({ today }: { today: Date }) {
     >
       <div
         className="t-eyebrow-italic"
-        style={{ color: "var(--brand)", letterSpacing: "0.2em", fontSize: 9.5 }}
+        style={{ color: "var(--brand)", letterSpacing: "0.18em", fontSize: 10.75, lineHeight: 1.35 }}
       >
         BEFORE THE BELL · {shortDate}
       </div>
@@ -279,7 +279,7 @@ export function ApplyBrandCard() {
     >
       <div
         className="t-eyebrow-italic"
-        style={{ color: "var(--brand)", letterSpacing: "0.2em", fontSize: 9.5 }}
+        style={{ color: "var(--brand)", letterSpacing: "0.18em", fontSize: 10.75, lineHeight: 1.35 }}
       >
         AFTER YOU APPLY
       </div>
@@ -358,6 +358,7 @@ function AuthFormPane({
             color: "var(--ink-1000)",
             border: "1px solid var(--border-strong)",
             padding: "7px 14px",
+            minHeight: 40,
             fontFamily: "var(--font-ui)",
             fontSize: 12.5,
           }}
@@ -382,8 +383,9 @@ function AuthFormPane({
                   key={state}
                   className="t-mono rounded-[2px]"
                   style={{
-                    fontSize: 9,
-                    padding: "3px 7px",
+                    fontSize: 10.5,
+                    padding: "4px 8px",
+                    lineHeight: 1.25,
                     background: state === "signin" ? "var(--bg-elev-2)" : "transparent",
                     border: state === "signin" ? "1px solid var(--border-strong)" : "1px solid var(--border)",
                     color: state === "signin" ? "var(--ink-1000)" : "var(--fg-muted)",
@@ -397,7 +399,7 @@ function AuthFormPane({
             </div>
             <span
               className="t-mono"
-              style={{ fontSize: 9.5, color: "var(--fg-hint)", letterSpacing: "0.05em" }}
+              style={{ fontSize: 10.5, color: "var(--fg-hint)", letterSpacing: "0.05em", lineHeight: 1.35 }}
             >
               DEMO · STATE PICKER
             </span>
@@ -406,13 +408,13 @@ function AuthFormPane({
           <>
             <span
               className="t-mono"
-              style={{ fontSize: 9.5, color: "var(--fg-hint)", letterSpacing: "0.05em" }}
+              style={{ fontSize: 10.5, color: "var(--fg-hint)", letterSpacing: "0.05em", lineHeight: 1.35 }}
             >
               {footerLeft}
             </span>
             <span
               className="t-mono"
-              style={{ fontSize: 9.5, color: "var(--fg-hint)", letterSpacing: "0.05em" }}
+              style={{ fontSize: 10.5, color: "var(--fg-hint)", letterSpacing: "0.05em", lineHeight: 1.35 }}
             >
               {footerRight}
             </span>

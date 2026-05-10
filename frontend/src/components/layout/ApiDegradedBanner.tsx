@@ -160,7 +160,8 @@ export function ApiDegradedBanner({
           aria-expanded={expanded}
           aria-controls="api-degraded-banner-detail"
           onClick={() => setExpanded((v) => !v)}
-          className="flex min-w-0 flex-1 items-start gap-2 text-left"
+          className="flex min-w-0 flex-1 items-start gap-2 py-2 text-left"
+          style={{ minHeight: 40 }}
         >
           <span aria-hidden className="select-none font-mono">
             {expanded ? "▾" : "▸"}
@@ -186,6 +187,7 @@ export function ApiDegradedBanner({
             data-slot="api-degraded-banner-retry"
             onClick={onRetry}
             className="inline-flex min-h-8 shrink-0 items-center justify-center self-start rounded-sm border border-state-warning-border px-3 font-sans text-label font-semibold text-state-warning-fg transition-colors hover:bg-[color-mix(in_oklab,var(--state-warning-bg)_55%,var(--state-warning-border))] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-state-warning-fg sm:self-auto"
+            style={{ minHeight: 40, paddingInline: 14 }}
           >
             Retry
           </button>
@@ -193,6 +195,7 @@ export function ApiDegradedBanner({
             type="button"
             onClick={onDismiss}
             className="inline-flex min-h-8 shrink-0 items-center justify-center self-start rounded-sm border border-state-warning-border px-3 font-sans text-label font-semibold text-state-warning-fg transition-colors hover:bg-[color-mix(in_oklab,var(--state-warning-bg)_55%,var(--state-warning-border))] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-state-warning-fg sm:self-auto"
+            style={{ minHeight: 40, paddingInline: 14 }}
           >
             Dismiss
           </button>
