@@ -136,7 +136,16 @@ export default function MarketingShell({
           </div>
         </nav>
 
-        <main id="main">{children}</main>
+        {/* BUG-083 follow-up (audit 2026-05-11, M3-02): the universal
+            skip-to-content link in `app/layout.tsx` targets
+            `#main-content`. The dashboard layout's `<main>` already
+            uses that id; MarketingShell previously used `id="main"`,
+            so the skip link on /about, /contact, /pricing, /privacy,
+            /terms, /docs, /welcome, /request-access landed at the
+            body top instead of the article. Align with the canonical
+            id so the skip link resolves correctly on every public
+            route covered by MarketingShell. */}
+        <main id="main-content">{children}</main>
 
         <footer className="grid grid-cols-1 gap-10 border-t border-border pt-20 pb-10 sm:grid-cols-[2fr_1fr_1fr_1fr]">
           <div>
