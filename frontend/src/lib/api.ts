@@ -2438,6 +2438,93 @@ export async function resumeTrading(): Promise<{ halted: boolean; message: strin
   return apiFetch(`/api/v1/trades/resume`, { method: "POST" });
 }
 
+// 2026-05-11 (round 6): standalone flatten — closes every open
+// position at market WITHOUT setting the halt flag. Use when an
+// operator wants to de-risk but keep trading enabled. Admin-only.
+// Backend audit-logs the call.
+export interface FlattenAllSummary {
+  flatten_attempts: number;
+  flatten_successes: number;
+  failures?: Array<{ symbol: string; error: string }>;
+  [key: string]: unknown;
+}
+
+export async function flattenAllPositions(): Promise<{
+  message: string;
+  summary: FlattenAllSummary;
+}> {
+  return apiFetch(`/api/v1/trades/flatten_all`, { method: "POST" });
+}
+
+// ─── Strategy alloc-capital (kill-switch Layer 2) ─────────────────
+//
+// /api/v1/trades/strategy-alloc-capital exposes the per-strategy
+// notional cap Layer-2 (daily-PnL ratio) compares realized_today
+// against. Returns 4-field resolution: default, env, overlay, and
+// effective (resolved value the gate reads).
+//
+// PATCH is admin-only. Body is a {set: {name: value}, clear: [name]}
+// shape — `set` adds/updates overlays, `clear` drops them and falls
+// back to env/default.
+export interface StrategyAllocCapitalResponse {
+  default: number;
+  env: Record<string, number>;
+  overlay: Record<string, number>;
+  effective: Record<string, number>;
+}
+
+export interface StrategyAllocCapitalPatchBody {
+  set?: Record<string, number>;
+  clear?: string[];
+}
+
+export function getStrategyAllocCapital() {
+  return apiFetch<StrategyAllocCapitalResponse>(`/api/v1/trades/strategy-alloc-capital`);
+}
+
+export function patchStrategyAllocCapital(body: StrategyAllocCapitalPatchBody) {
+  return apiFetch<{ ok: boolean; overlay: Record<string, number> }>(
+    `/api/v1/trades/strategy-alloc-capital`,
+    { method: "PATCH", body: JSON.stringify(body) },
+  );
+}
+
+// ─── Strategy kill-switch thresholds (Layer 1 + Layer 2) ──────────
+//
+// Layer 1 = drawdown threshold (default -8%).
+// Layer 2 = daily-PnL ratio threshold (default -2%).
+// Both are NEGATIVE fractions; positive values are rejected with 422.
+//
+// Each layer has independent {set, clear} blocks so an admin can
+// edit Layer-1 overrides without touching Layer-2.
+export interface KillSwitchLayerThresholdSet {
+  layer1: Record<string, number>;
+  layer2: Record<string, number>;
+}
+
+export interface KillSwitchThresholdsResponse {
+  default: { layer1: number; layer2: number };
+  env: KillSwitchLayerThresholdSet;
+  overlay: KillSwitchLayerThresholdSet;
+  effective: Record<string, { layer1: number; layer2: number }>;
+}
+
+export interface KillSwitchThresholdsPatchBody {
+  layer1?: { set?: Record<string, number>; clear?: string[] };
+  layer2?: { set?: Record<string, number>; clear?: string[] };
+}
+
+export function getKillSwitchThresholds() {
+  return apiFetch<KillSwitchThresholdsResponse>(`/api/v1/trades/strategy-kill-switch-thresholds`);
+}
+
+export function patchKillSwitchThresholds(body: KillSwitchThresholdsPatchBody) {
+  return apiFetch<{ ok: boolean; overlay: KillSwitchLayerThresholdSet }>(
+    `/api/v1/trades/strategy-kill-switch-thresholds`,
+    { method: "PATCH", body: JSON.stringify(body) },
+  );
+}
+
 export async function getOrders(status?: string): Promise<Order[]> {
   const qs = status ? `?status=${status}` : "";
   const raw = await apiFetch<Record<string, unknown>[]>(`/api/v1/trades/orders${qs}`);
