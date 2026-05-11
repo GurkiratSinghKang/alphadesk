@@ -4862,7 +4862,12 @@ export async function getEarningsCalendar(
   opts?: { signal?: AbortSignal },
 ): Promise<CalendarResponse> {
   const params = new URLSearchParams();
-  if (filters.window) params.set("window", filters.window);
+  const rawWindow = filters.window as string | undefined;
+  if (rawWindow === "current" || rawWindow === "next" || rawWindow === "both") {
+    params.set("window", rawWindow);
+  } else if (typeof rawWindow === "string" && rawWindow.length > 0) {
+    params.set("window", "both");
+  }
   if (filters.minIvRank !== undefined) params.set("min_iv_rank", String(filters.minIvRank));
   // B-66: marketCap dropped — backend now unconditionally applies the
   // curated-universe filter.

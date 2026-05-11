@@ -520,6 +520,20 @@ describe('getEarningsCalendar', () => {
     const parsed = new URL(String(url), 'http://alphadesk.local');
     expect(parsed.searchParams.get('watchlist')).toBe('');
   });
+
+  it('normalizes legacy dashboard window values to the backend enum', async () => {
+    mockFetch.mockResolvedValueOnce(ok({
+      earnings: [],
+      generated_at: '2026-04-29T13:00:00Z',
+      partial: false,
+    }));
+
+    await getEarningsCalendar({ window: 'next_5_days' as never });
+
+    const [url] = mockFetch.mock.calls[0];
+    const parsed = new URL(String(url), 'http://alphadesk.local');
+    expect(parsed.searchParams.get('window')).toBe('both');
+  });
 });
 
 describe('postEarningsBacktest', () => {
