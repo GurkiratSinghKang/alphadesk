@@ -292,7 +292,7 @@ async def _get_count(key: str) -> int:
         return _inmem_count(key)
 
 
-async def _check_rate_limit(client_ip: str, username: str) -> None:
+async def _check_rate_limit(client_ip: str, username: str, req: Request | None = None) -> None:
     """Reject if this (IP, username) pair OR this IP has exceeded its failure cap.
 
     The cap counts FAILED login attempts only — this function never
@@ -307,9 +307,19 @@ async def _check_rate_limit(client_ip: str, username: str) -> None:
     request through. The in-memory counter is process-local, so a multi-worker
     deployment will permit N * cap attempts while Redis is down, which is
     still dramatically lower than unlimited.
+
+    BUG-075 (audit 2026-05-11, M5-04 / P8-06): previously this function
+    raised 429 the instant the cap was tripped, with no audit-log entry.
+    Brute-force or credential-stuffing volume during the cooldown window
+    was therefore invisible in audit_log — a regulator reviewing the
+    table couldn't see the storm at all. We now emit an
+    ``event=login result=rate_limited`` audit row BEFORE raising so the
+    full attempt volume is recorded. `_audit` already swallows its own
+    write errors so a degraded audit pipeline can't block auth.
     """
     pair_count = await _get_count(_pair_key(client_ip, username))
     if pair_count >= _RATE_LIMIT_MAX_PER_PAIR:
+        await _audit("login", user=username or "-", ip=client_ip, result="rate_limited", req=req)
         raise HTTPException(
             status_code=429,
             detail="Too many login attempts. Please try again in a few minutes.",
@@ -318,6 +328,7 @@ async def _check_rate_limit(client_ip: str, username: str) -> None:
 
     ip_count = await _get_count(_ip_key(client_ip))
     if ip_count >= _RATE_LIMIT_MAX_PER_IP:
+        await _audit("login", user=username or "-", ip=client_ip, result="rate_limited_ip", req=req)
         raise HTTPException(
             status_code=429,
             detail="Too many login attempts from this network. Please try again later.",
@@ -517,7 +528,9 @@ async def login(request: LoginRequest, req: Request):
     # (IP, username) pair so one user's typos don't starve other users on
     # the same exit node, plus a per-IP backstop for bot defense. See
     # `_check_rate_limit` docstring + Wave 2I Fix 5 (P83-1).
-    await _check_rate_limit(client_ip, submitted_username)
+    # BUG-075: pass `req` so the rate-limit rejection path can emit an audit
+    # event with the originating request context.
+    await _check_rate_limit(client_ip, submitted_username, req=req)
 
     # P37 fix — username enumeration timing oracle.
     # Previously this branch short-circuited on a username mismatch and never
