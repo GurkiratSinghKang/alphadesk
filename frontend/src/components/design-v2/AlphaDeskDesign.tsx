@@ -8181,24 +8181,58 @@ function STButton({ children, tone = "default" }) {
 // ─── sections ────────────────────────────────────────────────────────────
 
 function STProfile() {
+  // BUG-073 (audit 2026-05-11, M1-06, F-SCOUT-75): Settings → Profile
+  // previously hardcoded "Operator / operator@tradingalpha.net / role
+  // OPERATOR" as design-comp placeholders. The audit-checker flagged
+  // these as potential cross-tenant data leak (later down-classified
+  // to "UI placeholder, not real leak"). We replace with a live fetch
+  // of /api/v1/user/me so the page reflects the actual signed-in user
+  // and the audit-log identity the user sees here matches what gets
+  // written downstream. Falls back to a clearly-marked "Loading…"
+  // state, not a hardcoded persona.
+  const [user, setUser] = React.useState<{ username?: string; email?: string; role?: string; displayName?: string } | null>(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch("/api/v1/user/me", { credentials: "include" });
+        if (!r.ok) return;
+        const data = await r.json();
+        if (cancelled) return;
+        setUser({
+          username: data.username || data.profile?.username || undefined,
+          email: data.profile?.email || data.email || undefined,
+          role: data.role || data.profile?.role || undefined,
+          displayName: data.profile?.display_name || data.profile?.displayName || data.display_name || data.username || undefined,
+        });
+      } catch {
+        // Network error — leave fallback rendering "—" / Loading.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const displayName = user?.displayName ?? user?.username ?? "—";
+  const email = user?.email ?? "—";
+  const roleLabel = (user?.role ?? "").toUpperCase() || "—";
+  const avatar = (user?.username ?? "?").slice(0, 2).toUpperCase();
   return (
     <STCard title="Profile" sub="What appears on receipts, in audit logs, and to anyone you collaborate with.">
       <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "8px 0 14px", borderBottom: "1px solid var(--border-hair)" }}>
-        <div style={{ width: 64, height: 64, borderRadius: "50%", background: "var(--brand)", color: "var(--ink-050)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 28, fontWeight: 500, letterSpacing: "-0.02em" }}>OS</div>
+        <div style={{ width: 64, height: 64, borderRadius: "50%", background: "var(--brand)", color: "var(--ink-050)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 28, fontWeight: 500, letterSpacing: "-0.02em" }}>{avatar}</div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 18, color: "var(--ink-1000)" }}>Operator</div>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>operator@tradingalpha.net</div>
+          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 18, color: "var(--ink-1000)" }}>{displayName}</div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>{email}</div>
           <div style={{ marginTop: 6 }}><STButton>Upload new avatar</STButton></div>
         </div>
       </div>
-      <STField label="Display name" hint="Used in audit log entries and team views"><STInput value="Operator" width={320} /></STField>
-      <STField label="Email" hint="Login email · primary notification recipient"><STInput value="operator@tradingalpha.net" mono width={320} /></STField>
+      <STField label="Display name" hint="Used in audit log entries and team views"><STInput value={displayName} width={320} /></STField>
+      <STField label="Email" hint="Login email · primary notification recipient"><STInput value={email} mono width={320} /></STField>
       {/* 2026-05-10 (honest empty-state): previously defaulted to "+1 (555) 123-4567"
        * which is the universal placeholder phone number. Default to empty so an
        * unset field doesn't look like a real configured number. */}
       <STField label="Phone" hint="Optional · used only for security alerts and SMS 2FA"><STInput value="" mono width={220} /></STField>
       <STField label="Role" hint="Set by admins · contact ops to change">
-        <span className="t-mono" style={{ fontSize: 11, padding: "4px 10px", border: "1px solid var(--brand)", color: "var(--brand)", borderRadius: 2, letterSpacing: "0.06em", fontWeight: 600 }}>OPERATOR</span>
+        <span className="t-mono" style={{ fontSize: 11, padding: "4px 10px", border: "1px solid var(--brand)", color: "var(--brand)", borderRadius: 2, letterSpacing: "0.06em", fontWeight: 600 }}>{roleLabel}</span>
       </STField>
     </STCard>
   );
