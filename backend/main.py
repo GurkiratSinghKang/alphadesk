@@ -44,6 +44,8 @@ from api.routes import exit_rules as exit_rules_routes
 from api.routes import admin_control as admin_control_routes
 from api.routes import metrics as metrics_routes
 from api.routes import user as user_routes
+# BUG-088 (audit 2026-05-11): in-app support ticket intake.
+from api.routes import support as support_routes
 # v2 Phase B (B.1–B.18) backend extensions. Each module owns one
 # slice of the redesign plan; ALL_V2_MISC_ROUTERS aggregates the
 # lighter-weight read-mostly slices into a single import.
@@ -739,6 +741,10 @@ app.include_router(broker_routes.router, prefix="/api/v1/broker", tags=["Broker"
 # every landing-page sample). Validated payload shape + per-IP
 # rate-limit at the route layer keeps abuse bounded.
 app.include_router(metrics_routes.router, prefix="/api/v1/metrics", tags=["Metrics"])
+# BUG-088 (audit 2026-05-11): in-app support ticket intake. Auth
+# required — the route uses `Depends(require_auth)` internally and
+# the operator's username is the ticket attribution.
+app.include_router(support_routes.router, prefix="/api/v1/support", tags=["Support"])
 app.include_router(access_requests_routes.router, prefix="/api/v1/access-requests", tags=["Access Requests"])
 # PM-5 (audit/2026-05-05-position-management): admin CRUD for the
 # configurable exit-rules engine. Auth-required; rule edits are
