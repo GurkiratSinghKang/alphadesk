@@ -79,6 +79,12 @@ import {
   pausePipelineStage,
   resumePipelineStage,
   triggerPipeline,
+  // 2026-05-11 (round 5e): Analytics page wired to /portfolio/
+  // performance + journal + calendar for real Sharpe + equity curve
+  // + monthly P&L heatmap + trade journal.
+  getPortfolioPerformance,
+  getPortfolioJournal,
+  getPortfolioCalendar,
 } from "@/lib/api";
 import type {
   NotificationPrefType,
@@ -6588,23 +6594,62 @@ const PipelinePage = () => {
 // shows only what's real: current account equity + per-name unrealized
 // P&L from live positions. Historical performance metrics return when a
 // /api/v1/portfolio/equity-curve (or similar ledger endpoint) ships.
+// 2026-05-11 (round 5e backend wiring): AnalyticsPage was an honest
+// empty-state — fake equity curve / Sharpe / monthly heatmap were
+// removed in round 2, leaving only live equity + positions. The real
+// performance endpoint (/api/v1/portfolio/performance) has been live
+// the whole time and returns Sharpe, Sortino, max-drawdown, win-rate,
+// profit-factor, equity-curve, daily-returns, and rolling-30d sharpe.
+// Plus /portfolio/journal (trade notes) and /portfolio/calendar
+// (per-day P&L for the heatmap). Wired now.
 const AnalyticsPage = () => {
   const live = useDesignLiveData();
+  const [period, setPeriod] = useState<string>("30d");
+  const [perf, setPerf] = useState<Awaited<ReturnType<typeof getPortfolioPerformance>> | null>(null);
+  const [calendar, setCalendar] = useState<Awaited<ReturnType<typeof getPortfolioCalendar>> | null>(null);
+  const [journal, setJournal] = useState<Awaited<ReturnType<typeof getPortfolioJournal>>>([]);
+  const [perfErr, setPerfErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const results = await Promise.allSettled([
+        getPortfolioPerformance(period),
+        getPortfolioCalendar(),
+        getPortfolioJournal({ limit: 12 }),
+      ]);
+      if (cancelled) return;
+      if (results[0].status === "fulfilled") setPerf(results[0].value);
+      else setPerfErr(results[0].reason instanceof Error ? results[0].reason.message : "Performance unavailable.");
+      if (results[1].status === "fulfilled") setCalendar(results[1].value);
+      if (results[2].status === "fulfilled") setJournal(results[2].value);
+    })();
+    return () => { cancelled = true; };
+  }, [period]);
+
   const equity = asFiniteNumber(live.portfolio?.equity, 0) || 0;
   const cash = asFiniteNumber(live.portfolio?.cash, 0) || 0;
   const positions = (live.positions || []).map((p) => {
     const symbol = String(p.symbol || p.sym || "").toUpperCase();
     const pnl = asFiniteNumber(p.unrealizedPnl ?? p.unrealized_pnl ?? p.unrealizedPl ?? p.unrealized_pl, null);
-    const pnlPct = asFiniteNumber(p.unrealizedPnlPct ?? p.unrealized_pnl_pct ?? p.unrealizedPlpc ?? p.unrealized_plpc, null);
-    const marketValue = asFiniteNumber(p.marketValue ?? p.market_value ?? p.extendedMarketValue ?? p.extended_market_value, null);
     const strategy = p.strategy || p.asset_class || "manual";
-    return { symbol, pnl, pnlPct, marketValue, strategy };
+    return { symbol, pnl, strategy };
   });
   const winners = [...positions].filter((p) => (p.pnl ?? 0) > 0).sort((a, b) => (b.pnl ?? 0) - (a.pnl ?? 0)).slice(0, 5);
   const losers = [...positions].filter((p) => (p.pnl ?? 0) < 0).sort((a, b) => (a.pnl ?? 0) - (b.pnl ?? 0)).slice(0, 5);
   const totalUnrealized = positions.reduce((s, p) => s + (p.pnl ?? 0), 0);
   const winnersMax = winners.reduce((m, p) => Math.max(m, Math.abs(p.pnl ?? 0)), 1);
   const losersMax = losers.reduce((m, p) => Math.max(m, Math.abs(p.pnl ?? 0)), 1);
+
+  // Equity curve sparkline: backend emits [{timestamp, equity}] points.
+  const equityCurve = (perf?.equity_curve || []).filter((p: any) => Number.isFinite(p?.equity));
+  const equityMin = equityCurve.length ? Math.min(...equityCurve.map((p: any) => p.equity)) : 0;
+  const equityMax = equityCurve.length ? Math.max(...equityCurve.map((p: any) => p.equity)) : 1;
+  const equityRange = Math.max(1, equityMax - equityMin);
+
+  // Demo flag — when backend can't compute (e.g. no broker connected),
+  // it returns is_demo=true. Surface that explicitly.
+  const isDemo = !!perf?.is_demo;
 
   return (
     <div style={{ overflow: "auto", height: "100%", padding: "24px 32px 60px" }}>
@@ -6613,14 +6658,43 @@ const AnalyticsPage = () => {
           <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>ANALYTICS / LIVE BOOK</div>
           <h1 style={{ margin: "6px 0 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 32, fontWeight: 400, letterSpacing: "-0.02em" }}>Performance · review</h1>
           <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14 }}>
-            Live account equity and unrealized P&amp;L by name. Historical equity curve, Sharpe, monthly returns, and strategy attribution are hidden until a performance-ledger endpoint exists.
+            Live performance from <span className="t-mono" style={{ fontSize: 11.5, fontStyle: "normal" }}>/api/v1/portfolio/&#123;performance,calendar,journal&#125;</span> · current equity + positions + winners/losers grid below.
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
-          <StatusDot tone={live.error ? "down" : "up"} size={6} />
-          <span>{live.error ? "Backend error" : "Backend positions"} · {formatLiveDate(live.refreshedAt)}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "inline-flex", border: "1px solid var(--border)", borderRadius: 3, overflow: "hidden" }}>
+            {(["7d", "30d", "90d", "1y", "ytd", "all"] as const).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                style={{
+                  padding: "5px 10px",
+                  background: period === p ? "var(--brand)" : "transparent",
+                  color: period === p ? "var(--brand-on)" : "var(--fg)",
+                  border: "none",
+                  fontFamily: "var(--font-ui)",
+                  fontSize: 11,
+                  cursor: "pointer",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+            <StatusDot tone={live.error || perfErr ? "down" : "up"} size={6} />
+            <span>{live.error || perfErr ? "Backend error" : "Live"} · {formatLiveDate(live.refreshedAt)}</span>
+          </div>
         </div>
       </header>
+
+      {isDemo && (
+        <div style={{ marginBottom: 14, padding: "10px 14px", background: "rgba(201,166,107,0.06)", border: "1px solid var(--gold-500)", borderRadius: 3, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: "var(--gold-500)" }}>
+          Backend returned <span className="t-mono" style={{ fontStyle: "normal" }}>is_demo: true</span> — these numbers are fallback / demo data. Connect a broker in Settings → Brokerage to see real performance.
+        </div>
+      )}
 
       {/* Real account state — equity + cash + unrealized P&L + position count. */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1, background: "var(--border)", border: "1px solid var(--border)", borderRadius: 4, marginBottom: 20 }}>
@@ -6638,17 +6712,108 @@ const AnalyticsPage = () => {
         ))}
       </div>
 
-      {/* Honest empty-state for the historical performance series. */}
-      <div style={{ marginBottom: 22, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
-        <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>PERFORMANCE LEDGER</div>
-        <h2 className="t-h3" style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>Equity curve, Sharpe, monthly returns</h2>
-        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, lineHeight: 1.55 }}>
-          No live equity-history endpoint is currently exposed to the frontend. This page now refuses to fabricate a 90-day curve, drawdown band, monthly returns heatmap, or strategy / sector attribution; it shows only real account state and current positions until the backend publishes ledger output.
-        </div>
+      {/* Performance metrics row — period-scoped. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 1, background: "var(--border)", border: "1px solid var(--border)", borderRadius: 4, marginBottom: 20 }}>
+        {[
+          { label: "TOTAL RETURN", val: perf ? `${(perf.total_return_pct * 100).toFixed(2)}%` : "—", tone: perf && perf.total_return_pct > 0 ? "up" : perf && perf.total_return_pct < 0 ? "down" : null },
+          { label: "SHARPE", val: perf?.sharpe_ratio == null ? "—" : perf.sharpe_ratio.toFixed(2), tone: null },
+          { label: "SORTINO", val: perf?.sortino_ratio == null ? "—" : perf.sortino_ratio.toFixed(2), tone: null },
+          { label: "MAX DD", val: perf?.max_drawdown == null ? "—" : `${(perf.max_drawdown * 100).toFixed(1)}%`, tone: "down" },
+          { label: "WIN RATE", val: perf?.win_rate == null ? "—" : `${(perf.win_rate * 100).toFixed(0)}%`, tone: null },
+          { label: "TRADES", val: perf ? String(perf.total_trades) : "—", tone: null },
+        ].map((m, i) => (
+          <div key={i} style={{ padding: "14px 16px", background: "var(--ink-100)", borderRadius: 4 }}>
+            <div className="t-label" style={{ color: "var(--fg-hint)" }}>{m.label}</div>
+            <div
+              className="t-mono"
+              style={{
+                marginTop: 4,
+                fontSize: 18,
+                fontWeight: 500,
+                color:
+                  m.tone === "up" ? "var(--up-500)" : m.tone === "down" ? "var(--down-500)" : "var(--ink-1000)",
+              }}
+            >
+              {m.val}
+            </div>
+          </div>
+        ))}
       </div>
 
+      {/* Equity curve sparkline */}
+      <div style={{ marginBottom: 22, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <div>
+            <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>EQUITY CURVE · {period.toUpperCase()}</div>
+            <h2 style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>
+              {equityCurve.length} datapoints · {perf?.daily_returns?.length ?? 0} daily returns
+            </h2>
+          </div>
+          {equityCurve.length > 0 && (
+            <div style={{ display: "flex", gap: 18, fontFamily: "var(--font-mono)", fontSize: 11 }}>
+              <div>
+                <div style={{ color: "var(--fg-hint)", fontSize: 9, letterSpacing: "0.18em" }}>LOW</div>
+                <div style={{ color: "var(--down-500)", marginTop: 2 }}>{fmtMoney(equityMin, { dec: 0 })}</div>
+              </div>
+              <div>
+                <div style={{ color: "var(--fg-hint)", fontSize: 9, letterSpacing: "0.18em" }}>HIGH</div>
+                <div style={{ color: "var(--up-500)", marginTop: 2 }}>{fmtMoney(equityMax, { dec: 0 })}</div>
+              </div>
+            </div>
+          )}
+        </div>
+        {equityCurve.length >= 4 ? (
+          <svg width="100%" height="120" viewBox={`0 0 ${equityCurve.length} 100`} preserveAspectRatio="none" style={{ marginTop: 10 }}>
+            <polyline
+              fill="none"
+              stroke="var(--brand)"
+              strokeWidth="0.6"
+              vectorEffect="non-scaling-stroke"
+              points={equityCurve
+                .map((p: any, i: number) => `${i},${100 - ((p.equity - equityMin) / equityRange) * 100}`)
+                .join(" ")}
+            />
+          </svg>
+        ) : (
+          <div style={{ marginTop: 10, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 13 }}>
+            Not enough datapoints for a curve. Performance endpoint returned {equityCurve.length} points for the selected period.
+          </div>
+        )}
+      </div>
+
+      {/* Monthly calendar heatmap from /portfolio/calendar */}
+      {calendar && calendar.has_data && calendar.days.length > 0 && (
+        <div style={{ marginBottom: 22, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>CALENDAR · {String(calendar.year)}-{String(calendar.month).padStart(2, "0")}</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <h2 style={{ margin: "2px 0 12px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>
+              {fmtMoney(calendar.month_total, { sign: true, dec: 0 })} · {calendar.winning_days}W / {calendar.losing_days}L
+            </h2>
+            {calendar.best_day && (
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--up-500)" }}>
+                best · {calendar.best_day.date} · {fmtMoney(calendar.best_day.pnl, { sign: true, dec: 0 })}
+              </span>
+            )}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+            {calendar.days.map((d) => {
+              const intensity = Math.min(1, Math.abs(d.pnl) / Math.max(1, Math.abs(calendar.best_day?.pnl ?? 1)));
+              const bg = d.pnl > 0 ? `rgba(83, 173, 95, ${intensity * 0.65 + 0.1})` : d.pnl < 0 ? `rgba(224, 120, 86, ${intensity * 0.65 + 0.1})` : "var(--bg)";
+              return (
+                <div key={d.date} title={`${d.date} · ${fmtMoney(d.pnl, { sign: true, dec: 0 })} · ${d.trades} trades · ${(d.win_rate * 100).toFixed(0)}% win`} style={{ padding: 6, border: "1px solid var(--border-hair)", borderRadius: 2, background: bg, minHeight: 38 }}>
+                  <div className="t-mono" style={{ fontSize: 10, color: "var(--fg-muted)" }}>{d.date.slice(-2)}</div>
+                  <div className="t-mono" style={{ fontSize: 11, color: d.pnl > 0 ? "var(--up-500)" : d.pnl < 0 ? "var(--down-500)" : "var(--fg-muted)" }}>
+                    {fmtMoney(d.pnl, { sign: true, dec: 0 })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Real per-name unrealized P&L from live positions. */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, marginBottom: 22 }}>
         <div>
           <div className="t-label" style={{ marginBottom: 12 }}>Live winners · unrealized</div>
           {winners.length === 0 && (
@@ -6684,6 +6849,31 @@ const AnalyticsPage = () => {
           ))}
         </div>
       </div>
+
+      {/* Trade journal — last 12 entries from /portfolio/journal */}
+      {journal.length > 0 && (
+        <div>
+          <div className="t-label" style={{ marginBottom: 12 }}>Trade journal · last {journal.length}</div>
+          {journal.map((j) => (
+            <div key={j.id} style={{ padding: "12px 0", borderBottom: "1px solid var(--border-hair)" }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+                {j.symbol && (
+                  <span className="t-mono" style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-1000)" }}>{j.symbol}</span>
+                )}
+                <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>
+                  {new Date(j.entry_date).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </span>
+                {j.tags.map((tag) => (
+                  <span key={tag} style={{ fontFamily: "var(--font-ui)", fontSize: 10, color: "var(--brand)", padding: "1px 6px", border: "1px solid var(--gold-500)", borderRadius: 2, letterSpacing: "0.06em" }}>{tag}</span>
+                ))}
+              </div>
+              <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--ink-1000)", lineHeight: 1.45 }}>
+                {j.content}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
