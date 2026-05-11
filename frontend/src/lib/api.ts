@@ -3387,6 +3387,151 @@ export function markAllNotificationsRead() {
   });
 }
 
+// ─── Notification preferences (round 5d backend wiring) ────────────
+//
+// Settings → Notifications drives 6 backend channel types: fill /
+// agent / risk / system / billing / support. Each row carries email
+// + push + slack toggles plus quiet-hours + min-severity. The
+// /preferences/{type} PATCH auto-creates a default row on first edit,
+// so the FE can fire off PATCHes for any type without an explicit
+// provisioning step.
+export type NotificationPrefType = "fill" | "agent" | "risk" | "system" | "billing" | "support";
+
+export interface NotificationPreference {
+  type: NotificationPrefType;
+  channel_email: boolean;
+  channel_push: boolean;
+  channel_slack: boolean;
+  quiet_hours_start: string | null;
+  quiet_hours_end: string | null;
+  quiet_hours_tz: string | null;
+  min_severity: "info" | "warning" | "error";
+}
+
+export interface NotificationPreferencePatch {
+  channel_email?: boolean;
+  channel_push?: boolean;
+  channel_slack?: boolean;
+  quiet_hours_start?: string | null;
+  quiet_hours_end?: string | null;
+  quiet_hours_tz?: string | null;
+  min_severity?: "info" | "warning" | "error";
+}
+
+export function getNotificationPreferences() {
+  return apiFetch<NotificationPreference[]>(`/api/v1/notifications/preferences`);
+}
+
+export function patchNotificationPreference(
+  type: NotificationPrefType,
+  patch: NotificationPreferencePatch,
+) {
+  return apiFetch<NotificationPreference>(`/api/v1/notifications/preferences/${type}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+// ─── Pipeline stages v2 (round 5d) ────────────────────────────────
+//
+// B.1 per-stage pause/resume. Replaces the global-halt model with 5
+// stages: ingest / enrich / score / risk / execute. Admin-only on
+// pause+resume; list is for any authed user so the operator sees the
+// state badge from non-admin surfaces.
+export type PipelineStageName = "ingest" | "enrich" | "score" | "risk" | "execute";
+
+export interface PipelineStage {
+  stage: PipelineStageName;
+  is_paused: boolean;
+  paused_by: string | null;
+  paused_at: string | null;
+  reason: string | null;
+  last_run_started_at: string | null;
+  last_run_finished_at: string | null;
+  last_run_status: string | null;
+  queue_depth: number;
+}
+
+export function getPipelineStages() {
+  return apiFetch<PipelineStage[]>(`/api/v1/pipeline/stages`);
+}
+
+export function pausePipelineStage(stage: PipelineStageName, reason: string) {
+  return apiFetch<PipelineStage>(`/api/v1/pipeline/stages/${stage}/pause`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function resumePipelineStage(stage: PipelineStageName) {
+  return apiFetch<PipelineStage>(`/api/v1/pipeline/stages/${stage}/resume`, {
+    method: "POST",
+  });
+}
+
+// ─── Pipeline operations (round 5d) ───────────────────────────────
+//
+// Wraps the trigger / cancel / scheduler / schedule / summary endpoints
+// the design's Pipeline page surfaces but didn't actually call.
+export interface PipelineSchedulerState {
+  last_premarket?: string;
+  last_open?: string;
+  last_midday?: string;
+  last_close?: string;
+  last_heartbeat?: string | null;
+  next_scheduled_run?: string | null;
+  missed_runs?: number;
+}
+
+export interface PipelineSchedule {
+  windows: Array<{ name: string; et: string }>;
+  enabled: boolean;
+  last_updated?: string;
+}
+
+export interface PipelineSummary {
+  last_run_date?: string | null;
+  last_run_status?: string | null;
+  last_run_finished_at?: string | null;
+  universe?: number | null;
+  candidates?: number | null;
+  staged?: number | null;
+  live?: number | null;
+  filled?: number | null;
+}
+
+export interface PipelineRealtimeSetup {
+  symbol: string;
+  strategy: string | null;
+  signal: string | null;
+  conviction: number | null;
+  entry_price: number | null;
+  rationale: string | null;
+  timestamp: string | null;
+}
+
+export function getPipelineSchedule() {
+  return apiFetch<PipelineSchedule>(`/api/v1/pipeline/schedule`);
+}
+
+export function getPipelineSchedulerState() {
+  return apiFetch<PipelineSchedulerState>(`/api/v1/pipeline/scheduler_state`);
+}
+
+export function getPipelineSummary() {
+  return apiFetch<PipelineSummary>(`/api/v1/pipeline/summary`);
+}
+
+export function cancelPipelineRun() {
+  return apiFetch<{ cancelled: boolean; reason?: string }>(`/api/v1/pipeline/cancel`, {
+    method: "POST",
+  });
+}
+
+export function getPipelineRealtimeSetups() {
+  return apiFetch<PipelineRealtimeSetup[]>(`/api/v1/pipeline/realtime-setups`);
+}
+
 export async function getPipelineRun(date: string): Promise<PipelineRun> {
   const raw = await apiFetch<Record<string, unknown>>(`/api/v1/pipeline/history/${date}`);
   return mapPipelineRun(raw);

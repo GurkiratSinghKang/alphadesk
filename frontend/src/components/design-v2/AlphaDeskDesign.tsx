@@ -14,6 +14,7 @@ import { usePathname, useRouter } from "next/navigation";
 // already subscribes to the store, so paper-mode treatment is
 // consistent across the app.
 import { useUIStore } from "@/stores/ui";
+import { useCurrentUser } from "@/hooks/useQueries";
 import { env } from "@/env";
 import { clearPersistedStores } from "@/lib/auth/clearPersistedStores";
 import {
@@ -59,6 +60,31 @@ import {
   confirmUserErase,
   postUserExport,
   previewUserErase,
+  // 2026-05-11 (round 5d): Settings → Notifications wired to the
+  // 6-type backend preference table (fill / agent / risk / system
+  // / billing / support). Each row has email/push/slack + quiet
+  // hours + min-severity. PATCH auto-creates on first edit so no
+  // upfront provisioning is needed.
+  getNotificationPreferences,
+  patchNotificationPreference,
+  // 2026-05-11 (round 5d): Pipeline page wired to real backend
+  // status / scheduler / summary endpoints + admin trigger + cancel.
+  cancelPipelineRun,
+  getPipelineSchedule,
+  getPipelineSchedulerState,
+  getPipelineStages,
+  getPipelineStatus,
+  getPipelineSummary,
+  getPipelineRealtimeSetups,
+  pausePipelineStage,
+  resumePipelineStage,
+  triggerPipeline,
+} from "@/lib/api";
+import type {
+  NotificationPrefType,
+  NotificationPreference,
+  NotificationPreferencePatch,
+  PipelineStageName,
 } from "@/lib/api";
 // 2026-05-10 (chart wiring): swap the design's hand-rolled SVG HeroChart
 // for the real lightweight-charts engine via a thin wrapper. The mock
@@ -6189,13 +6215,132 @@ const LegacyStrategiesPage = ({ tweaks, onNav }) => {
 // a fake 6-stage funnel with hardcoded `Universe 4,823 → Filtered 412
 // → Ranked 38 → Candidates 12 → Staged 3 → Live 2` plus 4 fake
 // candidate cards (AMD/META/ASML/JNJ with hand-written thesis copy).
-// None of those numbers came from the backend pipeline run; they're
-// straight from `MOCK_PIPELINE`. This page now shows real account state
-// + a clear "no live pipeline output" message until the backend
-// publishes a `pipeline.run` artifact through `/api/v1/pipeline/staged`
-// or equivalent.
+// 2026-05-11 (round 5d backend wiring): the page now consumes the
+// real /api/v1/pipeline/* surface — status, scheduler_state, summary,
+// stages (B.1 5-row pause/resume), staged candidates, realtime-setups,
+// and the admin trigger + cancel verbs. Numbers that come back null
+// render em-dashes. The 5-stage pause/resume strip exposes B.1
+// directly so an admin can stop the ingest stage without halting all
+// of trading.
+type PipelineLiveStatus = {
+  running: boolean;
+  stage?: string | null;
+  progress?: Record<string, number> | null;
+  started_at?: string | null;
+  run_id?: string | null;
+  current_strategy?: string | null;
+  last_run?: string | null;
+  last_result?: string | null;
+};
+
+const PIPELINE_STAGES: PipelineStageName[] = ["ingest", "enrich", "score", "risk", "execute"];
+
 const PipelinePage = () => {
   const live = useDesignLiveData();
+  // Admin-only operations show only to admin users. The /readyz-full
+  // surface tags admins explicitly. We read from /api/v1/user/me
+  // through React Query so the admin badge propagates without leaking
+  // role state into the LiveDataProvider context.
+  const currentUser = useCurrentUser();
+  const role = currentUser.data?.role || "";
+  const isAdmin = role === "admin" || role === "operator";
+
+  const [status, setStatus] = useState<PipelineLiveStatus | null>(null);
+  const [scheduler, setScheduler] = useState<Awaited<ReturnType<typeof getPipelineSchedulerState>> | null>(null);
+  const [summary, setSummary] = useState<Awaited<ReturnType<typeof getPipelineSummary>> | null>(null);
+  const [schedule, setSchedule] = useState<Awaited<ReturnType<typeof getPipelineSchedule>> | null>(null);
+  const [stages, setStages] = useState<Awaited<ReturnType<typeof getPipelineStages>>>([]);
+  const [setups, setSetups] = useState<Awaited<ReturnType<typeof getPipelineRealtimeSetups>>>([]);
+  const [loadingErr, setLoadingErr] = useState<string | null>(null);
+  const [actionStatus, setActionStatus] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const refresh = React.useCallback(async () => {
+    setLoadingErr(null);
+    const results = await Promise.allSettled([
+      getPipelineStatus(),
+      getPipelineSchedulerState(),
+      getPipelineSummary(),
+      getPipelineSchedule(),
+      getPipelineStages(),
+      getPipelineRealtimeSetups(),
+    ]);
+    if (results[0].status === "fulfilled") setStatus(results[0].value as PipelineLiveStatus);
+    if (results[1].status === "fulfilled") setScheduler(results[1].value);
+    if (results[2].status === "fulfilled") setSummary(results[2].value);
+    if (results[3].status === "fulfilled") setSchedule(results[3].value);
+    if (results[4].status === "fulfilled") setStages(results[4].value);
+    if (results[5].status === "fulfilled") setSetups(results[5].value);
+
+    const firstErr = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
+    if (firstErr) setLoadingErr(firstErr.reason instanceof Error ? firstErr.reason.message : String(firstErr.reason));
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    // Poll status every 5s while the pipeline is running so the operator
+    // sees progress without manually clicking refresh.
+    const id = window.setInterval(() => { void refresh(); }, 10_000);
+    return () => window.clearInterval(id);
+  }, [refresh]);
+
+  const handleTrigger = async () => {
+    if (!isAdmin) return;
+    if (!window.confirm("Trigger a full pipeline run? This kicks off ingest → enrich → score → risk → execute and may place orders.")) return;
+    setActionLoading(true);
+    setActionStatus(null);
+    try {
+      const res = await triggerPipeline();
+      setActionStatus({ tone: "ok", text: `Run ${res.run_id} started.` });
+      await refresh();
+    } catch (e) {
+      setActionStatus({ tone: "err", text: e instanceof Error ? e.message : "Trigger failed." });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+  const handleCancel = async () => {
+    if (!isAdmin) return;
+    setActionLoading(true);
+    setActionStatus(null);
+    try {
+      const res = await cancelPipelineRun();
+      setActionStatus({ tone: res.cancelled ? "ok" : "err", text: res.cancelled ? "Cancel requested — pipeline will exit at next stage boundary." : (res.reason === "no_run" ? "No pipeline run is currently in flight." : "Cancel rejected.") });
+      await refresh();
+    } catch (e) {
+      setActionStatus({ tone: "err", text: e instanceof Error ? e.message : "Cancel failed." });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleStageToggle = async (stage: PipelineStageName, currentlyPaused: boolean) => {
+    if (!isAdmin) return;
+    if (currentlyPaused) {
+      setActionLoading(true);
+      try {
+        await resumePipelineStage(stage);
+        await refresh();
+      } catch (e) {
+        setActionStatus({ tone: "err", text: e instanceof Error ? e.message : `Resume ${stage} failed.` });
+      } finally {
+        setActionLoading(false);
+      }
+    } else {
+      const reason = window.prompt(`Reason for pausing the ${stage} stage? (audit trail will record this)`, "");
+      if (!reason || !reason.trim()) return;
+      setActionLoading(true);
+      try {
+        await pausePipelineStage(stage, reason.trim());
+        await refresh();
+      } catch (e) {
+        setActionStatus({ tone: "err", text: e instanceof Error ? e.message : `Pause ${stage} failed.` });
+      } finally {
+        setActionLoading(false);
+      }
+    }
+  };
+
   const positions = (live.positions || []).map((p) => ({
     symbol: String(p.symbol || p.sym || "").toUpperCase(),
     qty: asFiniteNumber(p.quantity ?? p.qty, 0) || 0,
@@ -6203,28 +6348,214 @@ const PipelinePage = () => {
     strategy: p.strategy || p.asset_class || "manual",
   }));
 
+  const isRunning = !!status?.running;
+  const stageMap: Record<string, typeof stages[number] | undefined> = {};
+  for (const s of stages) stageMap[s.stage] = s;
+  // Map progress dict to ordered counters for the funnel band.
+  const funnelCells: { label: string; value: number | null; sub?: string | null }[] = [
+    { label: "UNIVERSE", value: asFiniteNumber(summary?.universe, null), sub: schedule ? `${schedule.windows?.length || 0} windows/day` : null },
+    { label: "CANDIDATES", value: asFiniteNumber(summary?.candidates, null), sub: null },
+    { label: "STAGED", value: asFiniteNumber(summary?.staged, null), sub: null },
+    { label: "LIVE", value: asFiniteNumber(summary?.live, null), sub: null },
+    { label: "FILLED", value: asFiniteNumber(summary?.filled, null), sub: null },
+  ];
+
   return (
     <div style={{ overflow: "auto", height: "100%", padding: "24px 32px 60px" }}>
       <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 14px", borderBottom: "1px solid var(--border-hair)", marginBottom: 18 }}>
         <div>
           <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>PIPELINE / LIVE QUEUE</div>
-          <h1 style={{ margin: "6px 0 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 32, fontWeight: 400, letterSpacing: "-0.02em" }}>Universe → live</h1>
+          <h1 style={{ margin: "6px 0 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 32, fontWeight: 400, letterSpacing: "-0.02em" }}>
+            Universe → live
+            {isRunning && (
+              <span style={{ marginLeft: 14, fontSize: 14, fontStyle: "normal", fontFamily: "var(--font-mono)", color: "var(--up-500)", letterSpacing: "0.04em" }}>
+                ● RUNNING · {status?.stage || "—"}{status?.current_strategy ? ` · ${status.current_strategy}` : ""}
+              </span>
+            )}
+          </h1>
           <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14 }}>
-            The funnel renders only what a real pipeline run publishes. Universe / Filtered / Ranked / Candidates / Staged / Live counts and candidate cards are hidden until the backend pipeline artifact is exposed to the frontend.
+            Live pipeline state from <span className="t-mono" style={{ fontSize: 11.5, fontStyle: "normal" }}>/api/v1/pipeline/&#123;status,scheduler_state,summary,schedule,stages,realtime-setups&#125;</span>. Polls every 10s.
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
-          <StatusDot tone={live.error ? "down" : "up"} size={6} />
-          <span>{live.error ? "Backend error" : "Live book"} · {formatLiveDate(live.refreshedAt)}</span>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+            <StatusDot tone={loadingErr ? "down" : isRunning ? "up" : "neutral"} size={6} />
+            <span>{loadingErr ? "Backend error" : isRunning ? "Running" : "Idle"} · last {formatLiveDate(status?.last_run || scheduler?.last_heartbeat || null)}</span>
+          </div>
+          {isAdmin && (
+            <div style={{ display: "inline-flex", gap: 6 }}>
+              <button
+                onClick={handleTrigger}
+                disabled={actionLoading || isRunning}
+                style={{
+                  padding: "6px 14px",
+                  background: "var(--brand)",
+                  color: "var(--brand-on)",
+                  border: "1px solid var(--brand)",
+                  borderRadius: 3,
+                  fontFamily: "var(--font-ui)",
+                  fontSize: 11.5,
+                  cursor: actionLoading || isRunning ? "not-allowed" : "pointer",
+                  opacity: actionLoading || isRunning ? 0.5 : 1,
+                }}
+              >
+                {actionLoading ? "Working…" : "Trigger run"}
+              </button>
+              <button
+                onClick={handleCancel}
+                disabled={actionLoading || !isRunning}
+                style={{
+                  padding: "6px 14px",
+                  background: "rgba(224,120,86,0.10)",
+                  color: "var(--down-500)",
+                  border: "1px solid var(--down-500)",
+                  borderRadius: 3,
+                  fontFamily: "var(--font-ui)",
+                  fontSize: 11.5,
+                  cursor: actionLoading || !isRunning ? "not-allowed" : "pointer",
+                  opacity: actionLoading || !isRunning ? 0.5 : 1,
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          {actionStatus && (
+            <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: actionStatus.tone === "ok" ? "var(--up-500)" : "var(--down-500)" }}>{actionStatus.text}</div>
+          )}
         </div>
       </header>
 
+      {/* Funnel band — values from /pipeline/summary; null cells render em-dash. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 1, background: "var(--border)", border: "1px solid var(--border)", borderRadius: 4, marginBottom: 22 }}>
+        {funnelCells.map((c) => (
+          <div key={c.label} style={{ padding: "14px 16px", background: "var(--ink-100)" }}>
+            <div className="t-label" style={{ color: "var(--fg-hint)" }}>{c.label}</div>
+            <div className="t-mono" style={{ marginTop: 4, fontSize: 22, color: "var(--ink-1000)", fontWeight: 500 }}>
+              {c.value == null ? "—" : c.value.toLocaleString()}
+            </div>
+            {c.sub && <div className="t-body-sm" style={{ marginTop: 2, color: "var(--fg-muted)", fontFamily: "var(--font-display)", fontStyle: "italic" }}>{c.sub}</div>}
+          </div>
+        ))}
+      </div>
+
+      {/* Stage pause/resume strip — B.1 per-stage control. Admin can toggle any. */}
+      {stages.length > 0 && (
+        <div style={{ marginBottom: 22 }}>
+          <div className="t-label" style={{ marginBottom: 10 }}>5-stage pipeline · per-stage pause/resume</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+            {PIPELINE_STAGES.map((name) => {
+              const s = stageMap[name];
+              if (!s) return (
+                <div key={name} style={{ padding: 12, border: "1px solid var(--border-hair)", background: "var(--ink-100)", borderRadius: 3 }}>
+                  <div className="t-eyebrow-italic" style={{ color: "var(--fg-hint)", letterSpacing: "0.16em", fontSize: 9.5 }}>{name.toUpperCase()}</div>
+                  <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)" }}>No row.</div>
+                </div>
+              );
+              const paused = s.is_paused;
+              return (
+                <div key={name} style={{ padding: 12, border: paused ? "1px solid var(--down-500)" : "1px solid var(--border)", background: "var(--ink-100)", borderRadius: 3 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                    <div className="t-eyebrow-italic" style={{ color: paused ? "var(--down-500)" : "var(--brand)", letterSpacing: "0.16em", fontSize: 9.5 }}>{name.toUpperCase()}</div>
+                    <StatusDot tone={paused ? "down" : "up"} size={5} />
+                  </div>
+                  <div className="t-mono" style={{ marginTop: 6, fontSize: 11.5, color: "var(--ink-1000)" }}>
+                    {paused ? "PAUSED" : s.last_run_status?.toUpperCase() || "READY"}
+                  </div>
+                  <div style={{ marginTop: 2, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-muted)" }}>
+                    queue {s.queue_depth.toLocaleString()}
+                  </div>
+                  {paused && s.reason && (
+                    <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 10.5, color: "var(--down-500)" }} title={s.reason}>
+                      {s.reason.slice(0, 56)}{s.reason.length > 56 ? "…" : ""}
+                    </div>
+                  )}
+                  {isAdmin && (
+                    <button
+                      onClick={() => handleStageToggle(name, paused)}
+                      disabled={actionLoading}
+                      style={{
+                        marginTop: 8,
+                        width: "100%",
+                        padding: "4px 8px",
+                        background: paused ? "var(--brand)" : "rgba(224,120,86,0.10)",
+                        color: paused ? "var(--brand-on)" : "var(--down-500)",
+                        border: `1px solid ${paused ? "var(--brand)" : "var(--down-500)"}`,
+                        borderRadius: 3,
+                        fontFamily: "var(--font-ui)",
+                        fontSize: 10.5,
+                        cursor: actionLoading ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {paused ? "Resume" : "Pause…"}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Scheduler state — surfaces the cron heartbeat + next scheduled run. */}
+      {scheduler && (
+        <div style={{ marginBottom: 22, padding: "14px 18px", border: "1px solid var(--border-hair)", background: "var(--ink-100)", borderRadius: 3, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 18 }}>
+          <div>
+            <div className="t-label" style={{ color: "var(--fg-hint)" }}>Last heartbeat</div>
+            <div className="t-mono" style={{ marginTop: 4, fontSize: 13, color: "var(--ink-1000)" }}>
+              {scheduler.last_heartbeat ? formatLiveDate(scheduler.last_heartbeat) : "—"}
+            </div>
+          </div>
+          <div>
+            <div className="t-label" style={{ color: "var(--fg-hint)" }}>Next scheduled run</div>
+            <div className="t-mono" style={{ marginTop: 4, fontSize: 13, color: "var(--ink-1000)" }}>
+              {scheduler.next_scheduled_run ? formatLiveDate(scheduler.next_scheduled_run) : "—"}
+            </div>
+          </div>
+          <div>
+            <div className="t-label" style={{ color: "var(--fg-hint)" }}>Missed runs (today)</div>
+            <div className="t-mono" style={{ marginTop: 4, fontSize: 13, color: scheduler.missed_runs ? "var(--down-500)" : "var(--ink-1000)" }}>
+              {scheduler.missed_runs ?? 0}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Staged candidates — pulled from realtime-setups. */}
       <div style={{ marginBottom: 22, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
         <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>STAGED · AWAITING YOUR REVIEW</div>
-        <h2 className="t-h3" style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>No candidates awaiting review right now.</h2>
-        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, lineHeight: 1.55 }}>
-          The next pipeline run will surface candidates here. Each card will get a row with the thesis, conviction score, and a Stage / Skip decision before it touches capital.
-        </div>
+        {setups.length === 0 ? (
+          <>
+            <h2 className="t-h3" style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>No candidates awaiting review right now.</h2>
+            <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, lineHeight: 1.55 }}>
+              The next pipeline run will surface candidates here. Each card will get a row with the thesis, conviction score, and a Stage / Skip decision before it touches capital.
+            </div>
+          </>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, marginTop: 10 }}>
+            {setups.slice(0, 8).map((c, i) => (
+              <div key={`${c.symbol}-${i}`} style={{ padding: 14, border: "1px solid var(--border-hair)", borderRadius: 3, background: "var(--bg)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <span className="t-mono" style={{ fontSize: 14, color: "var(--ink-1000)", fontWeight: 600 }}>{c.symbol}</span>
+                  <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-muted)" }}>{c.strategy || "—"}</span>
+                </div>
+                <div style={{ marginTop: 4, fontFamily: "var(--font-ui)", fontSize: 11.5, color: "var(--ink-1000)" }}>
+                  {c.signal || "—"} {c.conviction != null && <span style={{ color: "var(--brand)" }}>· conv {(c.conviction * 100).toFixed(0)}%</span>}
+                </div>
+                {c.entry_price != null && (
+                  <div style={{ marginTop: 2, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+                    entry {fmtMoney(c.entry_price, { dec: 2 })}
+                  </div>
+                )}
+                {c.rationale && (
+                  <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg)", lineHeight: 1.45 }}>
+                    {c.rationale.length > 140 ? c.rationale.slice(0, 140) + "…" : c.rationale}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{ marginTop: 24 }}>
@@ -8462,24 +8793,319 @@ function ConnStat({ k, v, mono, tone }) {
   );
 }
 
-function STNotifications() {
+// 2026-05-11 (round 5d backend wiring): STNotifications was 8 fake
+// hardcoded toggles whose onClick changed nothing — the design's
+// "Email · daily briefing" / "Email · order fills" / "Quiet hours
+// 22:00 → 06:00" copy was decoration, not config.
+//
+// Now wired to the actual /api/v1/notifications/preferences surface
+// (B.4). Backend types are fill / agent / risk / system / billing /
+// support. Each row carries 3 channel toggles (email / push / slack)
+// + quiet-hours window + min-severity threshold. The PATCH endpoint
+// auto-creates the row on first edit so there's no provisioning step.
+// Push/Slack columns render but stay disabled with a footnote until
+// the provider integrations land (push: B.4 web-push wiring; Slack:
+// per-tenant webhook in Settings → Integrations).
+const NOTIFICATION_TYPES: { type: NotificationPrefType; label: string; hint: string }[] = [
+  { type: "fill", label: "Order fills", hint: "Each broker fill / partial / cancel." },
+  { type: "agent", label: "Agent outputs", hint: "AI memos and signal decisions." },
+  { type: "risk", label: "Risk breaches", hint: "Stop-out, drawdown band, concentration warnings." },
+  { type: "system", label: "System halts", hint: "Pipeline pause, broker disconnect, feed drop." },
+  { type: "billing", label: "Billing", hint: "Plan changes, invoice events, payment failures." },
+  { type: "support", label: "Support replies", hint: "Operator → user thread updates." },
+];
+
+const DEFAULT_PREF = (type: NotificationPrefType): NotificationPreference => ({
+  type,
+  channel_email: type === "risk" || type === "system" || type === "billing",
+  channel_push: false,
+  channel_slack: false,
+  quiet_hours_start: null,
+  quiet_hours_end: null,
+  quiet_hours_tz: null,
+  min_severity: "info",
+});
+
+function PrefToggle({ on, onChange, disabled }: { on: boolean; onChange: () => void; disabled?: boolean }) {
   return (
-    <STCard title="Notifications" sub="Where AlphaDesk reaches you. The notification bell in the top bar always shows in-app messages regardless of these settings.">
-      <STField label="Email · daily briefing" hint="Pre-market summary · 06:30 ET"><STToggle on={true} /></STField>
-      <STField label="Email · weekly performance" hint="Friday 17:00 ET · attribution + drawdown"><STToggle on={true} /></STField>
-      <STField label="Email · order fills" hint="One email per fill · noisy on active strategies"><STToggle on={false} /></STField>
-      <STField label="Email · stop-loss triggered" hint="Always sent for risk events"><STToggle on={true} /></STField>
-      <STField label="In-app · agent activity feed" hint="Stream agent decisions in the bell drawer"><STToggle on={true} /></STField>
-      <STField label="In-app · pipeline candidates" hint="When a new candidate enters the pipeline"><STToggle on={true} /></STField>
-      <STField label="SMS · risk events only" hint="Stop-outs · margin calls · feed disconnects"><STToggle on={false} /></STField>
-      <STField label="Quiet hours" hint="Suppress non-critical notifications during these hours">
-        <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-          <STInput value="22:00" mono width={80} />
-          <span style={{ color: "var(--fg-muted)", fontFamily: "var(--font-mono)", fontSize: 11 }}>—</span>
-          <STInput value="06:00" mono width={80} />
-        </span>
-      </STField>
-    </STCard>
+    <button
+      onClick={() => { if (!disabled) onChange(); }}
+      disabled={disabled}
+      style={{
+        width: 38,
+        height: 20,
+        borderRadius: 10,
+        background: on ? "var(--up-500)" : "var(--bg-elev-1)",
+        border: "1px solid var(--border)",
+        padding: 0,
+        position: "relative",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.4 : 1,
+        transition: "background 150ms",
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          top: 1,
+          left: on ? 19 : 1,
+          width: 16,
+          height: 16,
+          borderRadius: "50%",
+          background: "var(--ink-1000)",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
+          transition: "left 150ms",
+        }}
+      />
+    </button>
+  );
+}
+
+function STNotifications() {
+  const [prefs, setPrefs] = useState<Record<string, NotificationPreference>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [savingType, setSavingType] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await getNotificationPreferences();
+        if (cancelled) return;
+        const map: Record<string, NotificationPreference> = {};
+        for (const r of rows) map[r.type] = r;
+        setPrefs(map);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Preferences fetch failed.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const prefOf = (t: NotificationPrefType): NotificationPreference =>
+    prefs[t] ?? DEFAULT_PREF(t);
+
+  const persist = async (
+    t: NotificationPrefType,
+    patch: Partial<NotificationPreference>,
+  ) => {
+    // Optimistic update: render the change immediately, roll back on error.
+    const previous = prefs[t];
+    const optimistic = { ...prefOf(t), ...patch };
+    setPrefs((cur) => ({ ...cur, [t]: optimistic }));
+    setSavingType(t);
+    try {
+      const updated = await patchNotificationPreference(t, patch);
+      setPrefs((cur) => ({ ...cur, [t]: updated }));
+    } catch (e) {
+      setPrefs((cur) => {
+        const next = { ...cur };
+        if (previous) next[t] = previous;
+        else delete next[t];
+        return next;
+      });
+      setError(e instanceof Error ? e.message : "Save failed.");
+    } finally {
+      setSavingType(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <STCard title="Notifications" sub="Loading saved preferences from /api/v1/notifications/preferences…">
+        <div style={{ padding: "20px 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 13 }}>
+          Loading…
+        </div>
+      </STCard>
+    );
+  }
+
+  // Quiet hours + min-severity are per-type rows in the backend; we
+  // surface them once as a single "Defaults" card that PATCHes all
+  // 6 rows in a fan-out. This matches the design's intent ("Suppress
+  // non-critical notifications during these hours") while staying
+  // faithful to the data shape.
+  const allTypes: NotificationPrefType[] = NOTIFICATION_TYPES.map((r) => r.type);
+  // Use the "system" row as the canonical defaults source — it's
+  // present for every user once any pref is edited.
+  const defaultsRow = prefOf("system");
+
+  const applyDefaultsToAll = async (patch: NotificationPreferencePatch) => {
+    setSavingType("__defaults__");
+    try {
+      await Promise.all(allTypes.map((t) => patchNotificationPreference(t, patch)));
+      const refreshed = await getNotificationPreferences();
+      const map: Record<string, NotificationPreference> = {};
+      for (const r of refreshed) map[r.type] = r;
+      setPrefs(map);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Defaults save failed.");
+    } finally {
+      setSavingType(null);
+    }
+  };
+
+  return (
+    <>
+      <STCard
+        title="Notifications"
+        sub="Where AlphaDesk reaches you. The notification bell in the top bar always shows in-app messages regardless of these settings — the channel rows below control out-of-band routing (email / push / Slack)."
+      >
+        {error && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: "10px 14px",
+              background: "rgba(224,120,86,0.08)",
+              border: "1px solid var(--down-500)",
+              borderRadius: 3,
+              fontFamily: "var(--font-display)",
+              fontStyle: "italic",
+              fontSize: 12,
+              color: "var(--down-500)",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 64px 64px 64px",
+            gap: 14,
+            paddingBottom: 8,
+            borderBottom: "1px solid var(--border-hair)",
+          }}
+        >
+          <div />
+          {(["Email", "Push", "Slack"] as const).map((h) => (
+            <div key={h} style={{ textAlign: "center" }}>
+              <div className="t-eyebrow-italic" style={{ color: "var(--fg-hint)", fontSize: 9.5, letterSpacing: "0.18em" }}>
+                {h.toUpperCase()}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {NOTIFICATION_TYPES.map((row) => {
+          const p = prefOf(row.type);
+          const isSaving = savingType === row.type;
+          return (
+            <div
+              key={row.type}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 64px 64px 64px",
+                gap: 14,
+                padding: "12px 0",
+                borderBottom: "1px solid var(--border-hair)",
+                alignItems: "center",
+                opacity: isSaving ? 0.6 : 1,
+              }}
+            >
+              <div>
+                <div style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--ink-1000)", fontWeight: 500 }}>{row.label}</div>
+                <div style={{ marginTop: 3, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-muted)", lineHeight: 1.4 }}>
+                  {row.hint}
+                </div>
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <PrefToggle on={p.channel_email} onChange={() => persist(row.type, { channel_email: !p.channel_email })} />
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <PrefToggle on={p.channel_push} onChange={() => persist(row.type, { channel_push: !p.channel_push })} disabled />
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <PrefToggle on={p.channel_slack} onChange={() => persist(row.type, { channel_slack: !p.channel_slack })} disabled />
+              </div>
+            </div>
+          );
+        })}
+
+        <div
+          style={{
+            marginTop: 12,
+            fontFamily: "var(--font-display)",
+            fontStyle: "italic",
+            fontSize: 11.5,
+            color: "var(--fg-muted)",
+          }}
+        >
+          Push and Slack remain disabled until the web-push (B.4) + per-tenant Slack webhook integrations ship. Email saves immediately on toggle.
+        </div>
+      </STCard>
+
+      <STCard
+        title="Quiet hours · severity floor"
+        sub="Applies to every notification channel above. Saving fans out a PATCH to all 6 backend rows."
+      >
+        <STField label="Quiet hours" hint="HH:MM in your local timezone. Empty = always on.">
+          <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+            <input
+              type="time"
+              value={defaultsRow.quiet_hours_start ?? ""}
+              onChange={(e) => applyDefaultsToAll({ quiet_hours_start: e.target.value || null })}
+              style={{
+                width: 110,
+                padding: "7px 10px",
+                fontFamily: "var(--font-mono)",
+                fontSize: 12.5,
+                color: "var(--ink-1000)",
+                background: "var(--bg-elev-1)",
+                border: "1px solid var(--border)",
+                borderRadius: 3,
+                outline: "none",
+              }}
+            />
+            <span style={{ color: "var(--fg-muted)", fontFamily: "var(--font-mono)", fontSize: 11 }}>—</span>
+            <input
+              type="time"
+              value={defaultsRow.quiet_hours_end ?? ""}
+              onChange={(e) => applyDefaultsToAll({ quiet_hours_end: e.target.value || null })}
+              style={{
+                width: 110,
+                padding: "7px 10px",
+                fontFamily: "var(--font-mono)",
+                fontSize: 12.5,
+                color: "var(--ink-1000)",
+                background: "var(--bg-elev-1)",
+                border: "1px solid var(--border)",
+                borderRadius: 3,
+                outline: "none",
+              }}
+            />
+            {savingType === "__defaults__" && (
+              <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-muted)", marginLeft: 8 }}>Saving…</span>
+            )}
+          </span>
+        </STField>
+        <STField label="Severity floor" hint="info = everything · warning = problems + risk · error = critical only">
+          <select
+            value={defaultsRow.min_severity}
+            onChange={(e) => applyDefaultsToAll({ min_severity: e.target.value as "info" | "warning" | "error" })}
+            style={{
+              width: 200,
+              padding: "7px 10px",
+              fontFamily: "var(--font-ui)",
+              fontSize: 12.5,
+              color: "var(--ink-1000)",
+              background: "var(--bg-elev-1)",
+              border: "1px solid var(--border)",
+              borderRadius: 3,
+              outline: "none",
+            }}
+          >
+            <option value="info">info · everything</option>
+            <option value="warning">warning · problems + risk</option>
+            <option value="error">error · critical only</option>
+          </select>
+        </STField>
+      </STCard>
+    </>
   );
 }
 
