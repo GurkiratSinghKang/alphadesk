@@ -160,12 +160,23 @@ export function ApiDegradedBanner({
           aria-expanded={expanded}
           aria-controls="api-degraded-banner-detail"
           onClick={() => setExpanded((v) => !v)}
-          className="flex min-w-0 flex-1 items-start gap-2 py-2 text-left"
+          /* BUG-082 (audit 2026-05-11, F-SCOUT-07): the banner WAS already
+             interactive (button + aria-expanded), but the affordance was
+             too subtle — scout reported "no expand affordance". Add
+             `cursor-pointer` so the cursor reflects clickability + a
+             hover state so the affordance is discoverable, and a "Show
+             details" text label next to the arrow so the action is
+             explicit rather than implied. */
+          className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 rounded-sm py-2 text-left hover:bg-[color-mix(in_oklab,var(--state-warning-bg)_70%,var(--state-warning-border))] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-state-warning-fg"
           style={{ minHeight: 40 }}
         >
           <span aria-hidden className="select-none font-mono">
             {expanded ? "▾" : "▸"}
           </span>
+          <span aria-hidden className="hidden font-medium sm:inline">
+            {expanded ? "Hide details" : "Show details"}
+          </span>
+          <span aria-hidden className="hidden text-state-warning-fg-muted sm:inline">·</span>
           <span className="min-w-0 flex-1">
             <span className="font-semibold uppercase tracking-wide">Data unavailable</span>
             <span className="mx-2 text-state-warning-fg-muted">·</span>
