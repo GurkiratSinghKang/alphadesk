@@ -2681,7 +2681,7 @@ function EarningsAheadStrip({ onPickTicker }: { onPickTicker?: (sym: string) => 
     let cancelled = false;
     (async () => {
       try {
-        const res = await getEarningsCalendar({ window: "next_5_days" });
+        const res = await getEarningsCalendar({ window: "both" });
         if (cancelled) return;
         const sorted = (res.earnings || [])
           .filter((r: any) => Number.isFinite(r?.daysUntil))
