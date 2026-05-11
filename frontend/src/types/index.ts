@@ -169,6 +169,8 @@ export interface Position {
   currentPrice: number;
   unrealizedPnl: number;
   marketValue: number;
+  stopLoss?: number | null;
+  takeProfit?: number | null;
   side?: "long" | "short";
   sector?: string;
   // Round-11 / Y-12 (P3): backend ``PositionResponse`` (trades.py:512)

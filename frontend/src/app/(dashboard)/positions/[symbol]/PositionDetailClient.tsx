@@ -13,6 +13,10 @@ import { cn } from "@/lib/utils";
 import type { Position } from "@/types";
 import type { Agent, AgentArchetype } from "@/lib/types/agents";
 
+function normalizePositionSymbol(value: string): string {
+  return value.trim().toUpperCase();
+}
+
 /**
  * /positions/[symbol] — v2-plan §2.2.
  *
@@ -48,7 +52,8 @@ export default function PositionDetailClient({ symbol }: { symbol: string }) {
 
   const position = React.useMemo<Position | null>(() => {
     if (!positions) return null;
-    return positions.find((p) => p.symbol === symbol) ?? null;
+    const requested = normalizePositionSymbol(symbol);
+    return positions.find((p) => normalizePositionSymbol(p.symbol) === requested) ?? null;
   }, [positions, symbol]);
 
   if (loadError) {

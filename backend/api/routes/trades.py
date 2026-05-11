@@ -843,6 +843,8 @@ class PositionResponse(BaseModel):
     market_value: float
     unrealized_pnl: float
     unrealized_pnl_pct: float
+    stop_loss: float | None = None
+    take_profit: float | None = None
     asset_class: str = "equity"
     # Round-5 F-6 — originating strategy id, derived by joining on the
     # most recent open Trade row for the position's symbol. Null when no
@@ -2734,6 +2736,38 @@ async def list_positions(username: str = Depends(require_auth)) -> list[Position
                 exc_info=True,
             )
 
+        # BUG-060 (audit 2026-05-11): the v2 position detail and pipeline
+        # pages must surface exit levels for held symbols. Alpaca's position
+        # snapshot does not carry our local stop/take-profit policy, so enrich
+        # from the trade ledger's open rows when available. Best-effort only:
+        # a ledger outage should not hide broker positions.
+        symbol_to_exit_levels: dict[str, tuple[float | None, float | None]] = {}
+        try:
+            from data.ingestion.trade_ledger import TradeLedger
+
+            def _level(value: Any) -> float | None:
+                try:
+                    if value in (None, ""):
+                        return None
+                    level = float(value)
+                    return level if level > 0 else None
+                except (TypeError, ValueError):
+                    return None
+
+            for row in TradeLedger().get_open_positions():
+                sym_key = str(row.get("symbol") or "").strip().upper()
+                if not sym_key or sym_key in symbol_to_exit_levels:
+                    continue
+                symbol_to_exit_levels[sym_key] = (
+                    _level(row.get("stop_loss")),
+                    _level(row.get("take_profit")),
+                )
+        except Exception:
+            logger.debug(
+                "Position exit-level join skipped due to trade-ledger error",
+                exc_info=True,
+            )
+
         # Batch EH-3 (2026-05-05): augment each position with the
         # latest extended-hours quote (when available). The fetch is
         # best-effort — if the quote endpoint 404s or times out we
@@ -2799,6 +2833,8 @@ async def list_positions(username: str = Depends(require_auth)) -> list[Position
                     market_value=float(p["market_value"]),
                     unrealized_pnl=float(p["unrealized_pl"]),
                     unrealized_pnl_pct=float(p["unrealized_plpc"]) * 100,
+                    stop_loss=symbol_to_exit_levels.get(sym.upper(), (None, None))[0],
+                    take_profit=symbol_to_exit_levels.get(sym.upper(), (None, None))[1],
                     asset_class=asset_class,
                     strategy=symbol_to_strategy.get(sym),
                     extended_price=ext_price,

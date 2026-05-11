@@ -29,6 +29,7 @@ import {
   getNotifications,
   getOptionsChain,
   getOrders,
+  getPipelinePositions,
   getPortfolioSummary,
   getPositions,
   getPriceAlerts,
@@ -143,10 +144,48 @@ function quoteLast(q) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function normalizeBookSymbol(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
 function asFiniteNumber(v, fallback = null) {
   if (v == null || v === "") return fallback;
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function getPositionStopLoss(position) {
+  return asFiniteNumber(position?.stopLoss ?? position?.stop_loss, null);
+}
+
+function getPositionTakeProfit(position) {
+  return asFiniteNumber(position?.takeProfit ?? position?.take_profit, null);
+}
+
+function normalizeDesignPosition(position, fallbackSymbol = "") {
+  const symbol = normalizeBookSymbol(position?.symbol ?? position?.sym ?? fallbackSymbol);
+  const qty = asFiniteNumber(position?.quantity ?? position?.qty ?? position?.shares, 0) || 0;
+  const avg = asFiniteNumber(position?.avgCost ?? position?.avg_cost ?? position?.entryPrice ?? position?.entry_price, 0) || 0;
+  const last = asFiniteNumber(position?.currentPrice ?? position?.current_price ?? position?.last, avg) || 0;
+  const marketValue = asFiniteNumber(position?.marketValue ?? position?.market_value, qty * last) || 0;
+  const pl = asFiniteNumber(position?.unrealizedPnl ?? position?.unrealized_pnl ?? position?.unrealizedPl ?? position?.unrealized_pl ?? position?.pnl, marketValue - qty * avg) || 0;
+  const plPct = asFiniteNumber(position?.unrealizedPnlPct ?? position?.unrealized_pnl_pct ?? position?.unrealizedPlpc ?? position?.unrealized_plpc ?? position?.pnlPct ?? position?.pnl_pct, avg ? (pl / Math.max(Math.abs(qty * avg), 1)) * 100 : 0) || 0;
+  const rawSide = String(position?.side || "long").toLowerCase();
+  return {
+    sym: symbol,
+    strategy: position?.strategy || position?.asset_class || "manual",
+    side: rawSide === "short" ? "short" : "long",
+    qty,
+    avg,
+    last,
+    pl,
+    plPct,
+    opened: position?.entryDate || position?.entry_date || position?.entry_time || "Live",
+    stop: getPositionStopLoss(position),
+    takeProfit: getPositionTakeProfit(position),
+    sector: position?.sector,
+    marketValue,
+  };
 }
 
 function formatMarketCap(v) {
@@ -5667,14 +5706,28 @@ const ExtrasEmptyState = ({ icon = "○", title, body, action, onAction }) => (
 // ─── Position detail ────────────────────────────────────────────────────────
 
 const PositionPage = ({ sym = "NVDA", onPickTicker, onTrade, onBack }) => {
-  const pos = MOCK_POSITIONS.find(p => p.sym === sym);
-  if (!pos) {
-    return <ExtrasEmptyState icon="∅" title="No open position in this symbol" body="Open a research view to see signals, AI thesis, and stage a trade." action="Open research" onAction={() => onPickTicker(sym)} />;
+  const live = useDesignLiveData();
+  const requestedSym = normalizeBookSymbol(sym);
+  const livePositions = live.positions || [];
+  const livePosition = livePositions.find(p => normalizeBookSymbol(p.symbol ?? p.sym) === requestedSym);
+  const pos = livePosition ? normalizeDesignPosition(livePosition, requestedSym) : null;
+  if (!pos && live.loading) {
+    return (
+      <div style={{ overflow: "auto", height: "100%", padding: "60px 32px" }}>
+        <ExtrasEmptyState icon="○" title={`Loading ${requestedSym} position`} body="Pulling open positions from the broker." />
+      </div>
+    );
   }
-  const mv = pos.qty * pos.last;
+  if (!pos) {
+    return <ExtrasEmptyState icon="∅" title={`No open position in ${requestedSym}`} body="No broker-held position matched this symbol in the live book." action="Open research" onAction={() => onPickTicker(requestedSym)} />;
+  }
+  const mv = pos.marketValue || pos.qty * pos.last;
   const cost = pos.qty * pos.avg;
-  const daysHeld = 18; // synthetic
-  const stopDist = ((pos.last - pos.stop) / pos.last) * 100;
+  const daysHeld = 18; // synthetic fallback until lot-age history lands
+  const stopDist = pos.stop != null && pos.last ? (Math.abs(pos.last - pos.stop) / pos.last) * 100 : null;
+  const riskIfStop = pos.stop != null
+    ? Math.abs((pos.side === "short" ? pos.stop - pos.last : pos.last - pos.stop) * pos.qty)
+    : null;
 
   // synthetic trade log
   const log = [
@@ -5700,7 +5753,7 @@ const PositionPage = ({ sym = "NVDA", onPickTicker, onTrade, onBack }) => {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => onPickTicker(sym)} style={{ padding: "8px 14px", fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", background: "transparent", color: "var(--fg-muted)", border: "1px solid var(--border)", borderRadius: 3, cursor: "default" }}>Research</button>
+          <button onClick={() => onPickTicker(pos.sym)} style={{ padding: "8px 14px", fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", background: "transparent", color: "var(--fg-muted)", border: "1px solid var(--border)", borderRadius: 3, cursor: "default" }}>Research</button>
           <button onClick={onTrade} style={{ padding: "8px 14px", fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", background: "var(--brand)", color: "var(--brand-on)", border: 0, borderRadius: 3, cursor: "default" }}>Adjust trade</button>
         </div>
       </div>
@@ -5752,9 +5805,9 @@ const PositionPage = ({ sym = "NVDA", onPickTicker, onTrade, onBack }) => {
           <div style={{ padding: "14px 16px", border: "1px solid var(--border)", background: "var(--ink-100)", borderRadius: 4 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto", rowGap: 10, columnGap: 16, fontFamily: "var(--font-mono)", fontSize: 12 }}>
               <span style={{ color: "var(--fg-muted)" }}>Stop · hard</span>
-              <span style={{ color: "var(--down-500)" }}>${pos.stop.toFixed(2)} · {stopDist.toFixed(1)}%</span>
+              <span style={{ color: pos.stop == null ? "var(--fg-hint)" : "var(--down-500)" }}>{pos.stop == null ? "— · not reported" : `$${pos.stop.toFixed(2)} · ${stopDist == null ? "—" : stopDist.toFixed(1)}%`}</span>
               <span style={{ color: "var(--fg-muted)" }}>Risk if stop</span>
-              <span style={{ color: "var(--ink-1000)" }}>−${((pos.last - pos.stop) * pos.qty).toFixed(0)}</span>
+              <span style={{ color: "var(--ink-1000)" }}>{riskIfStop == null ? "—" : `−$${riskIfStop.toFixed(0)}`}</span>
               <span style={{ color: "var(--fg-muted)" }}>Concentration</span>
               <span style={{ color: "var(--ink-1000)" }}>11.9% / 15% cap</span>
               <span style={{ color: "var(--fg-muted)" }}>Strategy alloc</span>
@@ -5778,7 +5831,7 @@ const PositionPage = ({ sym = "NVDA", onPickTicker, onTrade, onBack }) => {
           </div>
 
           <div style={{ marginTop: 18 }}>
-            <div className="t-label" style={{ marginBottom: 10 }}>Total exposure to {sym}</div>
+            <div className="t-label" style={{ marginBottom: 10 }}>Total exposure to {pos.sym}</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto", rowGap: 8, fontFamily: "var(--font-mono)", fontSize: 12 }}>
               <span style={{ color: "var(--fg-muted)" }}>Direct · stock</span>
               <span style={{ color: "var(--ink-1000)" }}>250 sh · ${mv.toLocaleString()}</span>
@@ -6196,11 +6249,29 @@ const LegacyStrategiesPage = ({ tweaks, onNav }) => {
 // or equivalent.
 const PipelinePage = () => {
   const live = useDesignLiveData();
-  const positions = (live.positions || []).map((p) => ({
-    symbol: String(p.symbol || p.sym || "").toUpperCase(),
-    qty: asFiniteNumber(p.quantity ?? p.qty, 0) || 0,
-    pnl: asFiniteNumber(p.unrealizedPnl ?? p.unrealized_pnl ?? p.unrealizedPl ?? p.unrealized_pl, null),
-    strategy: p.strategy || p.asset_class || "manual",
+  const [pipelinePositions, setPipelinePositions] = React.useState(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    getPipelinePositions()
+      .then((payload) => {
+        if (!cancelled) setPipelinePositions(payload?.positions || []);
+      })
+      .catch(() => {
+        if (!cancelled) setPipelinePositions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const sourcePositions = pipelinePositions?.length ? pipelinePositions : (live.positions || []);
+  const positions = sourcePositions.map((p) => ({
+    symbol: normalizeBookSymbol(p.symbol || p.sym),
+    qty: asFiniteNumber(p.shares ?? p.quantity ?? p.qty, 0) || 0,
+    pnl: asFiniteNumber(p.pnl ?? p.unrealizedPnl ?? p.unrealized_pnl ?? p.unrealizedPl ?? p.unrealized_pl, null),
+    strategy: p.strategy || p.asset_class || p.signal || "manual",
+    stopLoss: getPositionStopLoss(p),
   }));
 
   return (
@@ -6234,11 +6305,21 @@ const PipelinePage = () => {
             No live positions returned by the backend.
           </div>
         )}
+        {positions.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "100px 100px 1fr 120px 120px", gap: 14, padding: "0 0 8px", borderBottom: "1px solid var(--border)", fontFamily: "var(--font-ui)", fontSize: 9.5, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--fg-hint)" }}>
+            <span>Symbol</span>
+            <span>Qty</span>
+            <span>Strategy</span>
+            <span style={{ textAlign: "right" }}>Stop_loss</span>
+            <span style={{ textAlign: "right" }}>P&amp;L</span>
+          </div>
+        )}
         {positions.map((p) => (
-          <div key={p.symbol} style={{ display: "grid", gridTemplateColumns: "100px 100px 1fr 120px", gap: 14, padding: "10px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
+          <div key={p.symbol} style={{ display: "grid", gridTemplateColumns: "100px 100px 1fr 120px 120px", gap: 14, padding: "10px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
             <span className="t-mono" style={{ color: "var(--ink-1000)", fontSize: 13, fontWeight: 600 }}>{p.symbol}</span>
             <span className="t-mono" style={{ color: "var(--fg-muted)", fontSize: 12 }}>{p.qty.toLocaleString()} sh</span>
             <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 12 }}>{p.strategy}</span>
+            <span className="t-mono" style={{ color: p.stopLoss == null ? "var(--fg-hint)" : "var(--down-500)", fontSize: 12, textAlign: "right" }}>{p.stopLoss == null ? "—" : fmtMoney(p.stopLoss, { dec: 2 })}</span>
             <span className="t-mono" style={{ color: p.pnl == null || p.pnl >= 0 ? "var(--up-500)" : "var(--down-500)", fontSize: 12, textAlign: "right" }}>{p.pnl == null ? "—" : fmtMoney(p.pnl, { sign: true, dec: 0 })}</span>
           </div>
         ))}

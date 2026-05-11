@@ -1493,7 +1493,7 @@ describe('getOrders', () => {
 describe('getPositions', () => {
   it('maps snake_case fields to camelCase Position', async () => {
     const payload = [
-      { symbol: 'AAPL', quantity: 10, avg_cost: 150, current_price: 175, unrealized_pnl: 250, market_value: 1750, side: 'long' },
+      { symbol: 'AAPL', quantity: 10, avg_cost: 150, current_price: 175, unrealized_pnl: 250, market_value: 1750, stop_loss: 142.5, take_profit: 190, side: 'long' },
     ];
     mockFetch.mockReturnValueOnce(ok(payload));
 
@@ -1505,6 +1505,8 @@ describe('getPositions', () => {
     expect(result[0].currentPrice).toBe(175);
     expect(result[0].unrealizedPnl).toBe(250);
     expect(result[0].marketValue).toBe(1750);
+    expect(result[0].stopLoss).toBe(142.5);
+    expect(result[0].takeProfit).toBe(190);
     expect(result[0].side).toBe('long');
   });
 

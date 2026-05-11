@@ -2698,6 +2698,8 @@ export async function getPositions(): Promise<Position[]> {
     currentPrice: (p.current_price as number) ?? (p.currentPrice as number) ?? 0,
     unrealizedPnl: (p.unrealized_pnl as number) ?? (p.unrealizedPnl as number) ?? 0,
     marketValue: (p.market_value as number) ?? (p.marketValue as number) ?? 0,
+    stopLoss: (p.stop_loss as number) ?? (p.stopLoss as number) ?? null,
+    takeProfit: (p.take_profit as number) ?? (p.takeProfit as number) ?? null,
     side: (p.side as "long" | "short") ?? undefined,
     sector: (p.sector as string) ?? undefined,
     // Round-5 F-6 — strategy attribution. The backend joins on the
