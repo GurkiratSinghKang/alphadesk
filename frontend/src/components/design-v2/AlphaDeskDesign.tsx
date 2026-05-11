@@ -3899,23 +3899,10 @@ function ChartPanel({ t, large, symbol }) {
   const [range, setRange] = useState("3M");
   const [chartMode, setChartMode] = useState("line");
   const [overlays, setOverlays] = useState({
-    sma20: true, sma50: true, sma200: false,
-    ema9: false, ema21: false,
-    vwap: false, anchoredVwap: false,
-    bollinger: false, keltner: false, donchian: false,
-    rsi: false, macd: false,
-    volProfile: false,
-    regime: true, signals: true, levels: true,
-    earnings: false, exDiv: false,
-    avgPrice: false,
+    SMA: true, EMA: false, VWAP: false, Bollinger: false,
+    RSI: false, MACD: false, Volume: true,
   });
-  // 2026-05-10 (chart wiring): symbol resolution prefers an explicit
-  // prop (e.g. from `/symbols/[ticker]` URL), falls through to the
-  // ticker mock for legacy callsites. The toolbar's `range`,
-  // `chartMode`, `overlays` state stays here for the design's controls;
-  // HeroChartWired only consumes `range` (it builds candle/SMA/etc.
-  // overlays through ChartPane's own indicator menu — preserving the
-  // `chart-template:default` localStorage layout users may have saved).
+  const enabledIndicators = INDICATOR_KEYS.filter(k => overlays[k]);
   const sym = symbol || t?.sym || "SPY";
   return (
     <div>
@@ -3923,7 +3910,7 @@ function ChartPanel({ t, large, symbol }) {
         <ChartToolbar range={range} setRange={setRange} chartMode={chartMode} setChartMode={setChartMode} overlays={overlays} setOverlays={setOverlays} />
       </div>
       <div style={{ position: "relative", width: "100%", height: 360, display: "flex" }}>
-        <HeroChartWired symbol={sym} range={range} chartType={chartMode === "line" ? "line" : "candle"} />
+        <HeroChartWired symbol={sym} range={range} chartType={chartMode === "line" ? "line" : "candle"} indicators={enabledIndicators} />
       </div>
     </div>
   );
@@ -4733,16 +4720,11 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
   const [range, setRange] = useState("3M");
   const [chartMode, setChartMode] = useState("candle");
   const [overlays, setOverlays] = useState({
-    sma20: true, sma50: true, sma200: false,
-    ema9: false, ema21: false,
-    vwap: true, anchoredVwap: false,
-    bollinger: false, keltner: false, donchian: false,
-    rsi: false, macd: false,
-    volProfile: false,
-    regime: true, signals: true, levels: true,
-    earnings: true, exDiv: false,
-    avgPrice: true,
+    SMA: true, EMA: false, VWAP: true, Bollinger: false,
+    RSI: false, MACD: false,
+    Volume: true,
   });
+  const enabledIndicators = INDICATOR_KEYS.filter(k => overlays[k]);
   const [builderStrategy, setBuilderStrategy] = useState("vertical-call");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
@@ -4953,7 +4935,7 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
              * tools menu; the design's toolbar `chartMode` + `overlays`
              * state still drives the local controls but no longer feeds the
              * mock SVG. Range chips stay wired through `range`. */}
-            <HeroChartWired symbol={sym || t?.sym || "SPY"} range={range} chartType={chartMode === "line" ? "line" : "candle"} />
+            <HeroChartWired symbol={sym || t?.sym || "SPY"} range={range} chartType={chartMode === "line" ? "line" : "candle"} indicators={enabledIndicators} />
           </div>
           <VolumeRail t={t} />
         </section>
@@ -5122,42 +5104,33 @@ function TradeHeader({ t }) {
 
 // ─── chart toolbar (range + overlays) ────────────────────────────────────────
 
+// 2026-05-11 (round 22): Indicators dropdown now mirrors ChartPane's
+// real indicator engine (VWAP / EMA / SMA / Bollinger / RSI / MACD /
+// Volume). Each key here doubles as the ChartPane `Indicator` token —
+// the dropdown's checkbox state flows through HeroChartWired into
+// ChartPane as a controlled `indicators` prop, so toggling a row
+// actually adds/removes the series on the chart. The earlier
+// granular keys (sma20 / sma50 / ema9 / keltner / donchian / regime /
+// signals / levels / earnings / exDiv / avgPrice) were aspirational
+// — the chart engine doesn't expose per-period or layer toggles, so
+// rendering them in the dropdown was misleading.
 const OVERLAY_GROUPS = [
-  { group: "Moving averages", items: [
-    { key: "sma20",  label: "SMA · 20",  dot: "var(--ice-500)" },
-    { key: "sma50",  label: "SMA · 50",  dot: "var(--gold-700)" },
-    { key: "sma200", label: "SMA · 200", dot: "var(--ink-400)" },
-    { key: "ema9",   label: "EMA · 9",   dot: "var(--brand)" },
-    { key: "ema21",  label: "EMA · 21",  dot: "var(--gold-500)" },
+  { group: "Trend", items: [
+    { key: "SMA",       label: "SMA",        dot: "var(--ice-500)" },
+    { key: "EMA",       label: "EMA",        dot: "var(--brand)" },
+    { key: "VWAP",      label: "VWAP",       dot: "var(--gold-300)" },
+    { key: "Bollinger", label: "Bollinger",  dot: "var(--ink-400)" },
   ]},
-  { group: "Volume / VWAP", items: [
-    { key: "vwap",         label: "VWAP",          dot: "var(--gold-300)" },
-    { key: "anchoredVwap", label: "Anchored VWAP", dot: "var(--gold-700)" },
-    { key: "volProfile",   label: "Volume profile", dot: "var(--ink-400)" },
-    /* 2026-05-10 (round 4 honest empty-state): the previous label
-     * hardcoded "128.40" as the avg cost, which is NVDA-specific
-     * and renders for every symbol regardless. Drop the price tag —
-     * the actual avg cost line on the chart is rendered by ChartPane
-     * from real position data when an `avgPrice` overlay is enabled. */
-    { key: "avgPrice",     label: "Avg cost", dot: "var(--brand)" },
+  { group: "Momentum", items: [
+    { key: "RSI",  label: "RSI",  dot: "var(--brand)" },
+    { key: "MACD", label: "MACD", dot: "var(--ice-500)" },
   ]},
-  { group: "Bands", items: [
-    { key: "bollinger", label: "Bollinger · 20·2",  dot: "var(--ice-500)" },
-    { key: "keltner",   label: "Keltner · 20·1.5",  dot: "var(--gold-700)" },
-    { key: "donchian",  label: "Donchian · 20",     dot: "var(--ink-400)" },
-  ]},
-  { group: "Oscillators · separate pane", items: [
-    { key: "rsi",  label: "RSI · 14",       dot: "var(--brand)" },
-    { key: "macd", label: "MACD · 12·26·9", dot: "var(--ice-500)" },
-  ]},
-  { group: "Layers", items: [
-    { key: "levels",   label: "Support · resistance", dot: "var(--down-500)" },
-    { key: "signals",  label: "Strategy signals",     dot: "var(--brand)" },
-    { key: "regime",   label: "Regime bands",         dot: "var(--ink-400)" },
-    { key: "earnings", label: "Earnings markers",     dot: "var(--gold-500)" },
-    { key: "exDiv",    label: "Ex-dividend dates",    dot: "var(--ice-500)" },
+  { group: "Volume", items: [
+    { key: "Volume", label: "Volume", dot: "var(--gold-500)" },
   ]},
 ];
+
+const INDICATOR_KEYS = OVERLAY_GROUPS.flatMap(g => g.items.map(it => it.key));
 
 function ChartToolbar({ range, setRange, chartMode, setChartMode, overlays, setOverlays }) {
   const ranges = ["1D", "5D", "1M", "3M", "6M", "YTD", "1Y", "ALL"];
@@ -5196,7 +5169,7 @@ function ChartToolbar({ range, setRange, chartMode, setChartMode, overlays, setO
         border: "1px solid var(--border)", padding: "5px 12px", borderRadius: 3, cursor: "default"
       }}>
         <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--brand)" }} />
-        Studies <span className="t-mono" style={{ fontSize: 9.5, letterSpacing: "0.04em", color: "var(--fg-hint)" }}>{onCount}</span>
+        Indicators <span className="t-mono" style={{ fontSize: 9.5, letterSpacing: "0.04em", color: "var(--fg-hint)" }}>{onCount}</span>
         <span style={{ fontSize: 8, marginLeft: 2, color: "var(--fg-hint)" }}>{open ? "▲" : "▼"}</span>
       </a>
       {open && (
@@ -6146,21 +6119,17 @@ function AIMemoPanel({ isOption, symbol }) {
     <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 4, padding: 12 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--gold-500)", boxShadow: "0 0 8px var(--gold-500)", animation: "pulse 2s infinite" }} />
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--fg-muted)" }} />
           <span className="t-label" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>AI · Memo</span>
         </span>
-        <span className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)" }}>backend gated</span>
+        <span className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)" }}>not yet generated</span>
       </div>
       <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: "var(--ink-900)", lineHeight: 1.5 }}>
-        {isOption ? (
-          <>No live option memo has been generated for <span style={{ color: "var(--gold-300)" }}>{symbol}</span>. Chain rows load from the backend when available; synthetic option advice is hidden.</>
-        ) : (
-          <>No live trade memo has been generated for <span style={{ color: "var(--gold-300)" }}>{symbol}</span>. The ticket, quote, chart, and portfolio risk are still wired to backend data.</>
-        )}
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 9 }}>
-        <Chip tone="brand">Live data</Chip>
-        <Chip tone="muted">Memo unavailable</Chip>
+        No memo for <span style={{ color: "var(--gold-300)" }}>{symbol}</span> yet.
+        {" "}
+        {isOption
+          ? "Pick a contract on the Options tab and the agent will write a memo once the chain returns a quote."
+          : "The agent will write a memo once a strategy or alert produces a setup on this symbol."}
       </div>
     </div>
   );
