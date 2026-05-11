@@ -16,6 +16,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useUIStore } from "@/stores/ui";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { useCurrentUser } from "@/hooks/useQueries";
+// BUG-070 follow-up (audit 2026-05-11): read WS-fed quote ticks from
+// useMarketStore instead of REST-fetching every page change.
+import { useMarketStore } from "@/stores/market";
 import { env } from "@/env";
 import { clearPersistedStores } from "@/lib/auth/clearPersistedStores";
 import {
@@ -456,19 +459,38 @@ function LiveDataProvider({ symbol, page, children }) {
         ...LIVE_QUOTE_SYMBOLS,
       ].map((s) => String(s || "").toUpperCase()).filter(Boolean))].slice(0, 18);
 
-      // BUG-070 partial: skip the REST quote fan-out on routes that
-      // don't render a ticker rail. Saves ~18 calls/pageview. Live
-      // tick updates still arrive via the WS "quotes" channel
-      // (useDataPipeline → useMarketStore) where present.
+      // BUG-070 (audit 2026-05-11, M2-01): structurally cut the
+      // REST quote fan-out. The WebSocket "quotes" channel
+      // (useDataPipeline → useMarketStore) is already running on
+      // every dashboard route thanks to the WebSocketProvider in
+      // `lib/providers.tsx`. Read from the store first; only
+      // REST-fetch symbols the WS hasn't populated yet (cold start).
+      // This drops the steady-state polling rate to ~0 calls per
+      // pageview once WS has warmed (~1 second after mount).
       const quotes = {};
       if (shouldLoadQuotes) {
-        const quoteEntries = await Promise.allSettled(
-          seedSymbols.map(async (s) => [s, await getQuote(s, { suppressAuthRedirect: true })]),
-        );
-        for (const entry of quoteEntries) {
-          if (entry.status !== "fulfilled") continue;
-          const [s, q] = entry.value;
-          if (q) quotes[s] = q;
+        // First: harvest whatever the WS-fed store already has.
+        const storeQuotes = useMarketStore.getState().quotes;
+        const missing: string[] = [];
+        for (const sym of seedSymbols) {
+          const cached = storeQuotes[sym];
+          if (cached) {
+            quotes[sym] = cached;
+          } else {
+            missing.push(sym);
+          }
+        }
+        // Only REST-fetch the cold-start tail. WS will overwrite as
+        // ticks arrive.
+        if (missing.length > 0) {
+          const quoteEntries = await Promise.allSettled(
+            missing.map(async (s) => [s, await getQuote(s, { suppressAuthRedirect: true })]),
+          );
+          for (const entry of quoteEntries) {
+            if (entry.status !== "fulfilled") continue;
+            const [s, q] = entry.value;
+            if (q) quotes[s] = q;
+          }
         }
       }
 
