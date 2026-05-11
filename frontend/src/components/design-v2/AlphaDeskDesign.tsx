@@ -1775,7 +1775,7 @@ function NavItem({ n, page, onNav }) {
     );
   }
   return (
-    <div ref={ref} data-ad-user-menu="" style={{ position: "relative" }}>
+    <div ref={ref} data-ad-nav-menu={n.id} style={{ position: "relative" }}>
       <a onClick={() => setOpen(o => !o)} style={{
         display: "inline-flex", alignItems: "center", gap: 4,
         fontFamily: "var(--font-ui)", fontSize: 13, color: isActive ? "var(--ink-1000)" : "var(--fg-muted)",
@@ -1854,10 +1854,16 @@ function UserMenu({ onNav, theme = "dark", onTheme }) {
   const onLeave = (e) => e.currentTarget.style.background = "transparent";
   return (
     <div ref={ref} data-ad-user-menu="" style={{ position: "relative" }}>
-      <button onClick={() => setOpen(o => !o)}
+      <button
+        type="button"
+        aria-label="Open account menu"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        data-ad-user-menu-trigger=""
+        onClick={() => setOpen(o => !o)}
         style={{ width: 32, height: 32, padding: 0, borderRadius: "50%", background: "linear-gradient(135deg,var(--gold-600),var(--gold-300))", border: "1px solid var(--border-strong)", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 15, color: "var(--brand-on)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "default" }}>α</button>
       {open && (
-        <div style={{ position: "absolute", top: 36, right: 0, width: 240, background: "var(--ink-150)", border: "1px solid var(--border)", borderRadius: 6, boxShadow: "var(--shadow-2)", zIndex: 60, padding: "4px 0" }}>
+        <div role="menu" data-ad-user-menu-panel="" style={{ position: "absolute", top: 36, right: 0, width: 240, background: "var(--ink-150)", border: "1px solid var(--border)", borderRadius: 6, boxShadow: "var(--shadow-2)", zIndex: 60, padding: "4px 0" }}>
           <div style={{ padding: "10px 12px 8px" }}>
             <div className="t-body-sm" style={{ color: "var(--ink-1000)", fontWeight: 500 }}>Alex Park</div>
             <div className="t-body-sm" style={{ color: "var(--fg-muted)", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12 }}>alex@alphadesk.io · Operator</div>
