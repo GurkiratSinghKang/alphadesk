@@ -727,6 +727,11 @@ export function toggleStrategy(strategyId: string) {
   return apiFetch<ToggleStrategyResponse>(`/api/v1/strategies/${strategyId}/toggle`, { method: "POST" });
 }
 
+// 2026-05-11 (round 5g): kill-switch clients (getStrategyDisabledEvents
+// + emergencyDisableStrategy + reEnableStrategy) already live further
+// below in this file (Plan B.5 section). The Strategy Playbook UI now
+// consumes them — no new client code needed here. See line ~860.
+
 export interface StrategyAnalytics {
   strategy_id: string;
   sector_exposure: { current: Record<string, number> };
@@ -1952,6 +1957,28 @@ export function getScreenerPresets() {
   return apiFetch<{ id: number; name: string; filters: unknown[]; created_at: string }[]>(
     `/api/v1/screener/presets`,
   );
+}
+
+// 2026-05-11 (round 5g): backend exposes POST /api/v1/screener/presets
+// for saving a screener preset. ``filters`` is the same
+// ScreenerFilter[] shape ``POST /screen`` accepts (field/op/value).
+// The wire response includes id + created_at so a callsite can render
+// the new preset in the picker immediately.
+export interface SavedScreenerPreset {
+  id: number;
+  name: string;
+  filters: Array<{ field: string; op: string; value: number | number[] | string[] }>;
+  created_at: string;
+}
+
+export function saveScreenerPreset(
+  name: string,
+  filters: Array<{ field: string; op: string; value: number | number[] | string[] }>,
+) {
+  return apiFetch<SavedScreenerPreset>(`/api/v1/screener/presets`, {
+    method: "POST",
+    body: JSON.stringify({ name, filters }),
+  });
 }
 
 export interface RiskMonitorState {
