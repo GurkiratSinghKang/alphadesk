@@ -4101,7 +4101,12 @@ const OVERLAY_GROUPS = [
     { key: "vwap",         label: "VWAP",          dot: "var(--gold-300)" },
     { key: "anchoredVwap", label: "Anchored VWAP", dot: "var(--gold-700)" },
     { key: "volProfile",   label: "Volume profile", dot: "var(--ink-400)" },
-    { key: "avgPrice",     label: "Avg cost · 128.40", dot: "var(--brand)" },
+    /* 2026-05-10 (round 4 honest empty-state): the previous label
+     * hardcoded "128.40" as the avg cost, which is NVDA-specific
+     * and renders for every symbol regardless. Drop the price tag —
+     * the actual avg cost line on the chart is rendered by ChartPane
+     * from real position data when an `avgPrice` overlay is enabled. */
+    { key: "avgPrice",     label: "Avg cost", dot: "var(--brand)" },
   ]},
   { group: "Bands", items: [
     { key: "bollinger", label: "Bollinger · 20·2",  dot: "var(--ice-500)" },
