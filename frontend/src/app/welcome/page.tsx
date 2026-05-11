@@ -303,18 +303,52 @@ function MKHero() {
       <div
         style={{
           marginTop: 80,
-          display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
-          gap: 32,
           paddingTop: 32,
           borderTop: "1px solid var(--border-hair)",
         }}
       >
+        {/* BUG-068 disclaimer banner — explicit "ILLUSTRATIVE" framing so the
+            em-dash placeholders below aren't read as "we have these stats and
+            chose not to display them". Replace with audited numbers + remove
+            this disclaimer once NEXT_PUBLIC_PUBLISH_LAUNCH_KPIS=1 is set. */}
+        {process.env.NEXT_PUBLIC_PUBLISH_LAUNCH_KPIS !== "1" && (
+          <div
+            className="t-mono"
+            style={{
+              marginBottom: 24,
+              fontSize: 11,
+              color: "var(--fg-hint)",
+              letterSpacing: "0.16em",
+            }}
+          >
+            ILLUSTRATIVE · PRE-LAUNCH BETA · NO HISTORICAL TRACK RECORD YET
+          </div>
+        )}
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, 1fr)",
+          gap: 32,
+        }}
+      >
+        {/* BUG-068 (audit 2026-05-11, P4 compliance / F-SCOUT-90 / P5):
+            this KPI strip previously advertised "284 OPERATORS",
+            "11.4k TRADES/WEEK", "+18.2% MEDIAN OPERATOR YTD" while the
+            production deployment is single-tenant with ~0 real fills
+            (/admin/users self-described as "Single-tenant"). That tier
+            of unsubstantiated performance claim is securities-marketing
+            fraud risk under SEC Marketing Rule + FINRA 2210. Until we
+            ship real audited numbers, the cells render as em-dashes
+            with the section labeled "ILLUSTRATIVE · PRE-LAUNCH BETA".
+            Set NEXT_PUBLIC_PUBLISH_LAUNCH_KPIS=1 in env to re-enable
+            the literal values when they're audited and approved. */}
         {[
-          { k: "OPERATORS", v: "284", s: "active across the platform" },
-          { k: "STRATEGIES PUBLISHED", v: "23", s: "fully backtested · all auditable" },
-          { k: "TRADES / WEEK", v: "11.4k", s: "executed across all books" },
-          { k: "MEDIAN OPERATOR YTD", v: "+18.2%", s: "net of fees · 2025" },
+          { k: "OPERATORS", v: process.env.NEXT_PUBLIC_PUBLISH_LAUNCH_KPIS === "1" ? "284" : "—", s: "active across the platform" },
+          { k: "STRATEGIES PUBLISHED", v: process.env.NEXT_PUBLIC_PUBLISH_LAUNCH_KPIS === "1" ? "23" : "—", s: "fully backtested · all auditable" },
+          { k: "TRADES / WEEK", v: process.env.NEXT_PUBLIC_PUBLISH_LAUNCH_KPIS === "1" ? "11.4k" : "—", s: "executed across all books" },
+          { k: "MEDIAN OPERATOR YTD", v: process.env.NEXT_PUBLIC_PUBLISH_LAUNCH_KPIS === "1" ? "+18.2%" : "—", s: "net of fees · 2025" },
         ].map((s) => (
           <div key={s.k}>
             <div
