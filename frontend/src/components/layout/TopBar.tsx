@@ -19,6 +19,13 @@ import { useUIStore } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 import { ProfileMenu } from "./ProfileMenu";
 import HaltTradingButton from "./HaltTradingButton";
+// BUG-088 (audit 2026-05-11, P5-XX): minimal in-app help/support
+// surface. Replaces "mailto-only contact page" by exposing the four
+// canonical contact channels (support, legal, security, docs) in a
+// top-bar popover so signed-in operators don't have to navigate
+// off-page to find support. Full ticket-queue backend is the
+// BUG-088 follow-up.
+import HelpMenu from "./HelpMenu";
 // v2 phase 1.7 — NotificationBell mounts the Sheet-based
 // NotificationDrawer (Phase 0b). The popover-based
 // NotificationCenter is retained in the tree for one release
@@ -173,6 +180,7 @@ export function TopBar() {
          * viewport so the chrome doesn't crowd; emergencies on mobile
          * route through /strategies/{id} per-strategy switches. */}
         <HaltTradingButton className="hidden sm:inline-flex" />
+        <HelpMenu className="hidden sm:inline-flex" />
         <AgentBell />
         <NotificationBell />
         <ProfileMenu />
