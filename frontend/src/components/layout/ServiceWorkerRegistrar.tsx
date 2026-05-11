@@ -35,24 +35,47 @@ export default function ServiceWorkerRegistrar() {
     const url = "/sw.js";
     let cancelled = false;
 
-    navigator.serviceWorker
-      .register(url, { scope: "/" })
-      .then((reg) => {
-        if (cancelled) return;
-        // Trigger SKIP_WAITING when an update is found so the new worker
-        // doesn't sit idle until every tab closes.
-        reg.addEventListener("updatefound", () => {
-          const installing = reg.installing;
-          if (!installing) return;
-          installing.addEventListener("statechange", () => {
-            if (
-              installing.state === "installed" &&
-              navigator.serviceWorker.controller
-            ) {
-              installing.postMessage({ type: "SKIP_WAITING" });
-            }
-          });
+    // BUG-087 (audit 2026-05-11, P10-06): the audit log showed `/sw.js`
+    // re-registered ~198× per page lifetime. The cause: every soft
+    // navigation re-triggers the global useEffect under StrictMode-style
+    // remounts in some environments, AND we used to call
+    // `navigator.serviceWorker.register(...)` unconditionally. While
+    // the register call is idempotent at the spec level, repeated
+    // calls each emit a network roundtrip + log line. Guard with
+    // getRegistration() first: if a controller is already installed
+    // for our scope, attach the updatefound listener to it instead of
+    // re-registering.
+    const attachUpdateListener = (reg: ServiceWorkerRegistration) => {
+      reg.addEventListener("updatefound", () => {
+        const installing = reg.installing;
+        if (!installing) return;
+        installing.addEventListener("statechange", () => {
+          if (
+            installing.state === "installed" &&
+            navigator.serviceWorker.controller
+          ) {
+            installing.postMessage({ type: "SKIP_WAITING" });
+          }
         });
+      });
+    };
+
+    navigator.serviceWorker
+      .getRegistration("/")
+      .then((existing) => {
+        if (cancelled) return;
+        if (existing) {
+          // Already registered — just attach the update listener (idempotent
+          // at the addEventListener level for a fresh reg from getRegistration).
+          attachUpdateListener(existing);
+          return;
+        }
+        return navigator.serviceWorker
+          .register(url, { scope: "/" })
+          .then((reg) => {
+            if (cancelled) return;
+            attachUpdateListener(reg);
+          });
       })
       .catch(() => {
         // Failures here are best-effort: if the SW file is missing or
