@@ -120,6 +120,10 @@ import {
   patchStrategyAllocCapital,
   getKillSwitchThresholds,
   patchKillSwitchThresholds,
+  // 2026-05-11 (round 8): dashboard RegimePanel enrichment —
+  // 20-day index sparklines + sector winners/losers strip.
+  getIndexSparklines,
+  getMarketSectors,
 } from "@/lib/api";
 import type {
   NotificationPrefType,
@@ -2850,12 +2854,34 @@ function RegimePanel({ onPickTicker }) {
   const live = useDesignLiveData();
   const r = live.regime?.regime || {};
   const q = live.quotes || {};
+  // 2026-05-11 (round 8): pull real 20-day sparklines for SPY/QQQ/
+  // IWM/DIA from /market-overview/indices/sparklines, and sector
+  // performance from /market-overview/sectors. Both fall back to
+  // null cleanly when the endpoints are unreachable; the panel
+  // continues to render quote rows from live.quotes regardless.
+  const [sparklines, setSparklines] = useState<Record<string, number[]>>({});
+  const [sectors, setSectors] = useState<Awaited<ReturnType<typeof getMarketSectors>> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [spk, sec] = await Promise.allSettled([
+        getIndexSparklines(),
+        getMarketSectors(),
+      ]);
+      if (cancelled) return;
+      if (spk.status === "fulfilled") setSparklines(spk.value.sparklines || {});
+      if (sec.status === "fulfilled") setSectors(sec.value);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const quoteRow = (sym) => {
     const quote = q[sym];
     return {
       sym,
       v: quote ? quoteLast(quote) : null,
       d: quote ? quoteChangePct(quote) : null,
+      spk: sparklines[sym] || null,
     };
   };
   const indices = [
@@ -2869,6 +2895,15 @@ function RegimePanel({ onPickTicker }) {
     quoteRow("META"),
   ];
   const confidence = Number(r.confidence ?? 0);
+
+  // Sector strip: top 3 winners + top 3 losers by change_pct.
+  const sectorList = Array.isArray(sectors?.sectors) ? sectors.sectors : [];
+  const topSectors = sectorList
+    .filter((s) => Number.isFinite(s?.change_pct))
+    .slice()
+    .sort((a, b) => b.change_pct - a.change_pct);
+  const sectorTop = topSectors.slice(0, 3);
+  const sectorBottom = topSectors.slice(-3).reverse();
 
   return (
     <Section eyebrow="01" title="Market" right={<span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>{live.refreshedAt ? "Live · backend" : "Loading"}</span>}>
@@ -2895,7 +2930,7 @@ function RegimePanel({ onPickTicker }) {
           <div
             key={ix.sym}
             onClick={() => onPickTicker?.(ix.sym)}
-            style={{ background: "var(--bg)", padding: "9px 12px", display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, alignItems: "baseline", cursor: "pointer", transition: "background 120ms" }}
+            style={{ background: "var(--bg)", padding: "9px 12px", display: "grid", gridTemplateColumns: "auto 1fr 40px auto", gap: 10, alignItems: "baseline", cursor: "pointer", transition: "background 120ms" }}
             onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-elev-1)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = "var(--bg)"; }}
           >
@@ -2903,10 +2938,66 @@ function RegimePanel({ onPickTicker }) {
             <span className="t-mono" style={{ fontSize: 13, color: "var(--ink-1000)", textAlign: "right" }}>
               {ix.v == null ? "—" : ix.v >= 1000 ? ix.v.toLocaleString() : ix.v.toFixed(2)}
             </span>
+            {/* 2026-05-11 (round 8): mini 20-day sparkline from
+             * /market-overview/indices/sparklines. Only SPY/QQQ/IWM/
+             * DIA have data; the rest stay blank. Color tracks the
+             * daily change direction (green up, red down). */}
+            {ix.spk && ix.spk.length >= 4 ? (() => {
+              const min = Math.min(...ix.spk);
+              const max = Math.max(...ix.spk);
+              const range = Math.max(1e-6, max - min);
+              const pts = ix.spk.map((v, i) => `${(i / (ix.spk.length - 1)) * 40},${10 - ((v - min) / range) * 10}`).join(" ");
+              const tone = ix.d == null ? "var(--fg-hint)" : ix.d >= 0 ? "var(--up-500)" : "var(--down-500)";
+              return (
+                <svg width="40" height="10" viewBox="0 0 40 10" preserveAspectRatio="none" style={{ alignSelf: "center" }}>
+                  <polyline fill="none" stroke={tone} strokeWidth="1" vectorEffect="non-scaling-stroke" points={pts} />
+                </svg>
+              );
+            })() : <span />}
             {ix.d == null ? <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-hint)", textAlign: "right" }}>—</span> : <Delta value={ix.d} dec={2} suffix="%" />}
           </div>
         ))}
       </div>
+
+      {/* 2026-05-11 (round 8): sector performance strip from
+       * /market-overview/sectors. Shows top-3 winners + top-3 losers
+       * by change_pct so a glance at the dashboard shows where the
+       * market is rotating. Hidden when the endpoint returns no rows
+       * (e.g. weekend / pre-market with stale data). */}
+      {sectorList.length > 0 && (
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border-hair)" }}>
+          <div className="t-label" style={{ marginBottom: 6, color: "var(--fg-hint)" }}>Sectors · today</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            <div>
+              <div className="t-mono" style={{ fontSize: 9, color: "var(--fg-hint)", letterSpacing: "0.08em", marginBottom: 3 }}>WINNERS</div>
+              {sectorTop.map((s) => (
+                <div key={s.sector} title={`Top: ${s.leader} ${s.leader_change_pct >= 0 ? "+" : ""}${s.leader_change_pct.toFixed(2)}%`} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, fontSize: 11, padding: "2px 0", alignItems: "baseline" }}>
+                  <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.sector}</span>
+                  <span className="t-mono" style={{ color: s.change_pct >= 0 ? "var(--up-500)" : "var(--down-500)" }}>
+                    {s.change_pct >= 0 ? "+" : ""}{s.change_pct.toFixed(2)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div>
+              <div className="t-mono" style={{ fontSize: 9, color: "var(--fg-hint)", letterSpacing: "0.08em", marginBottom: 3 }}>LOSERS</div>
+              {sectorBottom.map((s) => (
+                <div key={s.sector} title={`Top: ${s.leader} ${s.leader_change_pct >= 0 ? "+" : ""}${s.leader_change_pct.toFixed(2)}%`} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, fontSize: 11, padding: "2px 0", alignItems: "baseline" }}>
+                  <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.sector}</span>
+                  <span className="t-mono" style={{ color: s.change_pct >= 0 ? "var(--up-500)" : "var(--down-500)" }}>
+                    {s.change_pct >= 0 ? "+" : ""}{s.change_pct.toFixed(2)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {sectors?.is_demo && (
+            <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 10.5, color: "var(--gold-500)" }}>
+              demo data · backend reported is_demo=true
+            </div>
+          )}
+        </div>
+      )}
     </Section>
   );
 }
