@@ -7307,42 +7307,116 @@ function SPHeader({ counts }) {
 
 // ─── today's contribution bar ────────────────────────────────────────────
 
+// 2026-05-11 (round 7): SPContribution was computing
+// `invested × (mtd / 100)` as an *estimate* of strategy contribution
+// because no real per-strategy P&L endpoint was wired here. The
+// /api/v1/strategies/contribution endpoint (used on the Analytics
+// page since Round 5h) returns actual realized P&L from closed trades
+// with today / MTD / lifetime buckets. We now consume it directly and
+// fall back to the estimate only when the endpoint is unreachable.
 function SPContribution({ items = [] }) {
-  const liveRows = items.filter(s => s.stage === "live" || s.stage === "manual");
-  // 2026-05-10 (round 2 honest empty-state): the label was "TODAY'S
-  // CONTRIBUTION" but the math reduces `s.invested * (s.mtd / 100)`
-  // where `s.mtd` is sourced from the registry's `total_return_pct`
-  // — that's lifetime, not today. Relabel to "ESTIMATED LIFETIME
-  // CONTRIBUTION" so the readout matches what's computed. A real
-  // intraday contribution view returns when the strategy registry
-  // exposes a `today_return_pct` field.
-  const day = liveRows.reduce((a, s) => a + (s.invested * (s.mtd / 100)), 0);
-  const grossUp = liveRows.filter(s => s.mtd > 0).reduce((a, s) => a + (s.invested * (s.mtd / 100)), 0);
-  const grossDn = liveRows.filter(s => s.mtd < 0).reduce((a, s) => a + (s.invested * (s.mtd / 100)), 0);
+  const [period, setPeriod] = useState<"today" | "mtd" | "lifetime">("lifetime");
+  const [contribution, setContribution] = useState<Awaited<ReturnType<typeof getStrategyContribution>> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getStrategyContribution();
+        if (!cancelled) setContribution(res);
+      } catch { /* fall through to estimate */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const liveRows = items.filter((s: any) => s.stage === "live" || s.stage === "manual");
+  // Map design-side strategy short-name to backend strategy key.
+  const byKey = new Map<string, typeof contribution extends null ? never : NonNullable<typeof contribution>["contributions"][number]>();
+  if (contribution) {
+    for (const row of contribution.contributions) {
+      byKey.set(String(row.strategy).toLowerCase(), row);
+    }
+  }
+  const pickValue = (row: typeof contribution extends null ? never : NonNullable<typeof contribution>["contributions"][number] | undefined, designRow: any): number => {
+    if (row) {
+      if (period === "today") return row.today_pnl;
+      if (period === "mtd") return row.mtd_pnl;
+      return row.total_pnl;
+    }
+    // Fallback estimate (only used when /contribution didn't load).
+    if (period === "lifetime") return designRow.invested * (designRow.mtd / 100);
+    return 0;
+  };
+
+  const rowsWithValue = liveRows.map((s: any) => {
+    const id = String(s.id || s.short || "").toLowerCase();
+    const name = String(s.name || s.short || "").toLowerCase();
+    const row = byKey.get(id) || byKey.get(name);
+    return { s, row, value: pickValue(row, s) };
+  });
+  const total = rowsWithValue.reduce((a, r) => a + r.value, 0);
+  const grossUp = rowsWithValue.filter((r) => r.value > 0).reduce((a, r) => a + r.value, 0);
+  const grossDn = rowsWithValue.filter((r) => r.value < 0).reduce((a, r) => a + r.value, 0);
+  const max = Math.max(1, ...rowsWithValue.map((r) => Math.abs(r.value)));
+
+  const periodLabel = period === "today" ? "TODAY" : period === "mtd" ? "MONTH-TO-DATE" : "LIFETIME";
+  const sourceLabel = contribution
+    ? "Real P&L from closed trades · /api/v1/strategies/contribution"
+    : "Estimated · invested × lifetime return (live endpoint unreachable)";
+
   return (
     <div style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: "16px 18px", marginBottom: 16 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12, gap: 14 }}>
         <div>
-          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>ESTIMATED LIFETIME CONTRIBUTION</div>
-          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 18, color: "var(--ink-1000)", marginTop: 2 }}>Invested capital × lifetime return per strategy</div>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <div className="t-mono" style={{ fontSize: 22, color: day >= 0 ? "var(--up-500)" : "var(--down-500)", fontWeight: 500 }}>
-            {day >= 0 ? "+" : "−"}${Math.abs(day).toLocaleString()}
+          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>STRATEGY CONTRIBUTION · {periodLabel}</div>
+          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 18, color: "var(--ink-1000)", marginTop: 2 }}>
+            {sourceLabel}
           </div>
-          <div className="t-mono" style={{ fontSize: 10, color: "var(--fg-muted)" }}>
-            <span style={{ color: "var(--up-500)" }}>+${grossUp.toLocaleString()}</span> / <span style={{ color: "var(--down-500)" }}>−${Math.abs(grossDn).toLocaleString()}</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          {contribution && (
+            <div style={{ display: "inline-flex", border: "1px solid var(--border)", borderRadius: 3, overflow: "hidden" }}>
+              {(["today", "mtd", "lifetime"] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPeriod(p)}
+                  style={{
+                    padding: "5px 10px",
+                    background: period === p ? "var(--brand)" : "transparent",
+                    color: period === p ? "var(--brand-on)" : "var(--fg)",
+                    border: "none",
+                    fontFamily: "var(--font-ui)",
+                    fontSize: 11,
+                    cursor: "pointer",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
+          <div style={{ textAlign: "right" }}>
+            <div className="t-mono" style={{ fontSize: 22, color: total >= 0 ? "var(--up-500)" : "var(--down-500)", fontWeight: 500 }}>
+              {total >= 0 ? "+" : "−"}${Math.abs(total).toLocaleString()}
+            </div>
+            <div className="t-mono" style={{ fontSize: 10, color: "var(--fg-muted)" }}>
+              <span style={{ color: "var(--up-500)" }}>+${grossUp.toLocaleString()}</span> / <span style={{ color: "var(--down-500)" }}>−${Math.abs(grossDn).toLocaleString()}</span>
+            </div>
           </div>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(liveRows.length, 1)}, 1fr)`, gap: 4, alignItems: "end", height: 90 }}>
-        {liveRows.length === 0 && <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 13 }}>No live strategies returned.</div>}
-        {liveRows.map(s => {
-          const v = s.invested * (s.mtd / 100);
-          const max = Math.max(1, ...liveRows.map((row) => Math.abs(row.invested * (row.mtd / 100))));
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(rowsWithValue.length, 1)}, 1fr)`, gap: 4, alignItems: "end", height: 90 }}>
+        {rowsWithValue.length === 0 && <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 13 }}>No live strategies returned.</div>}
+        {rowsWithValue.map(({ s, row, value }: any) => {
+          const v = value;
           const h = (Math.abs(v) / max) * 100;
+          const tooltip = row
+            ? `${s.short} · today ${row.today_pnl >= 0 ? "+" : "−"}$${Math.abs(row.today_pnl).toLocaleString()} · MTD ${row.mtd_pnl >= 0 ? "+" : "−"}$${Math.abs(row.mtd_pnl).toLocaleString()} · lifetime ${row.total_pnl >= 0 ? "+" : "−"}$${Math.abs(row.total_pnl).toLocaleString()} · ${row.closed_count} closed`
+            : `${s.short} · estimate from invested × lifetime return`;
           return (
-            <div key={s.id} style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", height: "100%", position: "relative", cursor: "default" }}>
+            <div key={s.id} title={tooltip} style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", height: "100%", position: "relative", cursor: "default" }}>
               <div style={{
                 height: `${h}%`,
                 minHeight: 2,
@@ -7351,7 +7425,7 @@ function SPContribution({ items = [] }) {
                 borderRadius: "1px 1px 0 0",
               }} />
               <div className="t-mono" style={{ fontSize: 9.5, color: v >= 0 ? "var(--up-500)" : "var(--down-500)", textAlign: "center", marginTop: 4 }}>
-                {v >= 0 ? "+" : "−"}${Math.abs(v)}
+                {v >= 0 ? "+" : "−"}${Math.abs(Math.round(v)).toLocaleString()}
               </div>
               <div style={{ fontFamily: "var(--font-ui)", fontSize: 9.5, color: "var(--fg-hint)", textAlign: "center", marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.short}</div>
             </div>
