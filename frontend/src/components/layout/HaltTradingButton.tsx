@@ -122,14 +122,21 @@ export default function HaltTradingButton({ className }: { className?: string })
         triggeredAt ? ` at ${triggeredAt}` : ""
       }${status.reason ? ` — ${status.reason}` : ""}. Click to resume.`
     : "Halt trading: cancel open orders + flatten positions.";
-  const liveStatus = halted
-    ? `Trading halted${status.reason ? `: ${status.reason}` : ""}.`
-    : "Trading halt is clear.";
 
   return (
     <>
-      <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
-        {liveStatus}
+      {/* BUG-086 (audit 2026-05-11, M3-09, continues 2026-05-05 F6): halt
+          state is a safety-critical signal but transitioned silently for
+          screen-reader users. The visible icon swap (ShieldWarning →
+          ShieldCheck) doesn't get announced. This sr-only live region
+          mirrors the current state so any change is read by assistive
+          tech as it happens. `aria-live="assertive"` because a halt is
+          urgent — interrupting whatever the user was reading is the
+          desired behaviour. */}
+      <span className="sr-only" role="status" aria-live="assertive" aria-atomic="true">
+        {halted
+          ? `Trading is halted${status.halted_by ? ` by ${status.halted_by}` : ""}${triggeredAt ? ` at ${triggeredAt}` : ""}${status.reason ? `. Reason: ${status.reason}` : ""}.`
+          : "Trading is active."}
       </span>
       <Button
         variant="outline"
