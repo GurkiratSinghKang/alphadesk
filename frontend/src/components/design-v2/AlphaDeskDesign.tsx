@@ -89,6 +89,12 @@ import {
   // the real broker reconciliation surface (state + run).
   getReconciliationState,
   runBrokerReconciliation,
+  // 2026-05-11 (round 5g): Strategy Playbook surfaces the layered
+  // kill-switch (Layer-3 manual disable + history) so an admin can
+  // halt a strategy without flipping the per-strategy active flag.
+  emergencyDisableStrategy,
+  getStrategyDisabledEvents,
+  reEnableStrategy,
 } from "@/lib/api";
 import type {
   NotificationPrefType,
@@ -11680,12 +11686,24 @@ const StrategyPlaybook = ({ tweaks, stratName = "Momentum & Quality", onNav, onB
   const [livePositions, setLivePositions] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [toggling, setToggling] = useState(false);
+  // 2026-05-11 (round 5g): kill-switch state — disabled-events history
+  // + emergency-disable + re-enable. Admin-only buttons surface only
+  // when the current user has admin/operator role.
+  const [disabledEvents, setDisabledEvents] = useState<Awaited<ReturnType<typeof getStrategyDisabledEvents>>>([]);
+  const [killSwitchStatus, setKillSwitchStatus] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  const [killSwitchLoading, setKillSwitchLoading] = useState(false);
+  const currentUser = useCurrentUser();
+  const userRole = currentUser.data?.role || "";
+  const isAdmin = userRole === "admin" || userRole === "operator";
+  const activeDisable = disabledEvents.find((e) => !e.resolved_at) || null;
+
   useEffect(() => {
     let cancelled = false;
     if (!matched?.id && !matched?.slug) {
       setDetail(null);
       setLivePositions(null);
       setAnalytics(null);
+      setDisabledEvents([]);
       return;
     }
     const id = matched.id || matched.slug;
@@ -11693,14 +11711,79 @@ const StrategyPlaybook = ({ tweaks, stratName = "Momentum & Quality", onNav, onB
       getStrategyPerformance(id).catch(() => null),
       getStrategyPositions(id).catch(() => null),
       getStrategyAnalytics(id).catch(() => null),
-    ]).then(([perf, pos, ana]) => {
+      // include_resolved=true so the audit history surfaces, not just
+      // active disables. UI marks resolved rows with a strikethrough
+      // and shows resolved_by + resolved_at.
+      getStrategyDisabledEvents(id, true).catch(() => []),
+    ]).then(([perf, pos, ana, events]) => {
       if (cancelled) return;
       setDetail(perf);
       setLivePositions(pos);
       setAnalytics(ana);
+      setDisabledEvents(Array.isArray(events) ? events : []);
     });
     return () => { cancelled = true; };
   }, [matched?.id, matched?.slug]);
+
+  const refreshDisabledEvents = async () => {
+    if (!strategyId) return;
+    try {
+      const events = await getStrategyDisabledEvents(String(strategyId), true);
+      setDisabledEvents(Array.isArray(events) ? events : []);
+    } catch { /* ignore */ }
+  };
+
+  const handleEmergencyDisable = async () => {
+    if (!strategyId || killSwitchLoading) return;
+    if (!isAdmin) return;
+    const reason = window.prompt(
+      `EMERGENCY DISABLE — ${displayName}\n\nThis is the Layer-3 manual kill-switch. The strategy will stop accepting new signals immediately. Open positions stay open (use a flatten flow to exit). Reason will be recorded in the audit log.\n\nReason for disabling:`,
+      "",
+    );
+    if (!reason || !reason.trim()) return;
+    setKillSwitchLoading(true);
+    setKillSwitchStatus(null);
+    try {
+      const res = await emergencyDisableStrategy(String(strategyId), reason.trim());
+      setKillSwitchStatus({
+        tone: res.success ? "ok" : "err",
+        text: res.success
+          ? `Disabled (event #${res.event_id}). New signals halted.`
+          : res.message === "already_disabled"
+          ? `Strategy is already Layer-3 disabled (event #${res.event_id}). Re-enable first if you want to disable with a new reason.`
+          : `Disable rejected: ${res.message}`,
+      });
+      await refreshDisabledEvents();
+    } catch (e) {
+      setKillSwitchStatus({ tone: "err", text: e instanceof Error ? e.message : "Disable failed." });
+    } finally {
+      setKillSwitchLoading(false);
+    }
+  };
+
+  const handleReEnable = async () => {
+    if (!strategyId || killSwitchLoading) return;
+    if (!isAdmin) return;
+    if (!window.confirm(`Re-enable ${displayName}? This resolves the latest unresolved disable event and resumes signal processing.`)) return;
+    setKillSwitchLoading(true);
+    setKillSwitchStatus(null);
+    try {
+      const res = await reEnableStrategy(String(strategyId));
+      setKillSwitchStatus({
+        tone: res.success ? "ok" : "err",
+        text: res.success
+          ? `Re-enabled (resolved event #${res.resolved_event_id}). Signals resume on next tick.`
+          : res.message === "no_active_disable"
+          ? "No active disable event to resolve."
+          : `Re-enable rejected: ${res.message}`,
+      });
+      await refreshDisabledEvents();
+    } catch (e) {
+      setKillSwitchStatus({ tone: "err", text: e instanceof Error ? e.message : "Re-enable failed." });
+    } finally {
+      setKillSwitchLoading(false);
+    }
+  };
 
   const status = detail?.status || matched?.status || matched?.state || (matched ? "live" : "unknown");
   const invested = asFiniteNumber(detail?.invested_amount ?? matched?.invested ?? matched?.capital_allocated, null);
@@ -11778,9 +11861,55 @@ const StrategyPlaybook = ({ tweaks, stratName = "Momentum & Quality", onNav, onB
           {matched && (
             <button onClick={handleToggle} disabled={toggling} style={{ padding: "4px 10px", border: "1px solid var(--border)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, color: toggling ? "var(--fg-hint)" : "var(--ink-1000)", background: "var(--bg-elev-1)", cursor: toggling ? "wait" : "default" }}>{toggling ? "Toggling…" : status === "active" || status === "live" ? "Pause" : "Resume"}</button>
           )}
+          {/* 2026-05-11 (round 5g kill-switch): Layer-3 manual disable.
+           * Admin-only. When an active disable exists, render
+           * "Re-enable" instead of "Emergency disable" so the flow is
+           * one button at a time. */}
+          {matched && isAdmin && (
+            activeDisable ? (
+              <button
+                onClick={handleReEnable}
+                disabled={killSwitchLoading}
+                style={{
+                  padding: "4px 10px",
+                  border: "1px solid var(--brand)",
+                  borderRadius: 3,
+                  fontFamily: "var(--font-ui)",
+                  fontSize: 12,
+                  color: "var(--brand)",
+                  background: "rgba(201,166,107,0.06)",
+                  cursor: killSwitchLoading ? "wait" : "pointer",
+                }}
+              >
+                {killSwitchLoading ? "Re-enabling…" : "Re-enable strategy"}
+              </button>
+            ) : (
+              <button
+                onClick={handleEmergencyDisable}
+                disabled={killSwitchLoading}
+                style={{
+                  padding: "4px 10px",
+                  border: "1px solid var(--down-500)",
+                  borderRadius: 3,
+                  fontFamily: "var(--font-ui)",
+                  fontSize: 12,
+                  color: "var(--down-500)",
+                  background: "rgba(224,120,86,0.08)",
+                  cursor: killSwitchLoading ? "wait" : "pointer",
+                }}
+              >
+                {killSwitchLoading ? "Working…" : "Emergency disable"}
+              </button>
+            )
+          )}
           <a onClick={() => onBacktest?.()} style={{ padding: "4px 10px", border: "1px solid var(--border)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--ink-1000)", background: "var(--bg-elev-1)", cursor: "default" }}>Backtest workbench →</a>
         </div>
       </header>
+      {killSwitchStatus && (
+        <div style={{ marginBottom: 12, padding: "8px 14px", background: killSwitchStatus.tone === "ok" ? "rgba(83,173,95,0.06)" : "rgba(224,120,86,0.08)", border: `1px solid ${killSwitchStatus.tone === "ok" ? "var(--up-500)" : "var(--down-500)"}`, borderRadius: 3, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: killSwitchStatus.tone === "ok" ? "var(--up-500)" : "var(--down-500)" }}>
+          {killSwitchStatus.text}
+        </div>
+      )}
 
       {/* 2026-05-10 (round 5 backend wiring): per-strategy detail
        * fetched from /api/v1/strategies/{id}/performance. When the
@@ -11909,6 +12038,89 @@ const StrategyPlaybook = ({ tweaks, stratName = "Momentum & Quality", onNav, onB
           </div>
         ))}
       </div>
+
+      {/* 2026-05-11 (round 5g): kill-switch audit history. Renders the
+       * latest 6 disable events (resolved + unresolved). Active row
+       * pinned at top with red border; resolved rows muted with the
+       * resolution metadata in line. Empty state hides the whole
+       * section so the playbook stays calm when nothing's been
+       * tripped. */}
+      {disabledEvents.length > 0 && (
+        <div style={{ marginBottom: 20, padding: 18, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <div>
+              <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>KILL-SWITCH · AUDIT HISTORY</div>
+              <h2 style={{ margin: "2px 0 4px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 18, letterSpacing: "-0.01em", fontWeight: 400 }}>
+                {activeDisable
+                  ? `Layer ${activeDisable.layer} disable active`
+                  : `${disabledEvents.length} resolved event${disabledEvents.length === 1 ? "" : "s"}`}
+              </h2>
+            </div>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--fg-hint)", letterSpacing: "0.04em" }}>
+              L1 drawdown · L2 burn · L3 manual
+            </span>
+          </div>
+          <div style={{ marginTop: 10 }}>
+            {disabledEvents.slice(0, 6).map((e) => {
+              const isActive = !e.resolved_at;
+              const layerLabel = e.layer === 1 ? "L1 · DRAWDOWN" : e.layer === 2 ? "L2 · BURN" : "L3 · MANUAL";
+              return (
+                <div
+                  key={e.id}
+                  style={{
+                    padding: "10px 12px",
+                    marginBottom: 6,
+                    borderRadius: 3,
+                    border: isActive ? "1px solid var(--down-500)" : "1px solid var(--border-hair)",
+                    background: isActive ? "rgba(224,120,86,0.06)" : "var(--bg)",
+                    opacity: isActive ? 1 : 0.85,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                    <span className="t-mono" style={{ fontSize: 10, padding: "2px 6px", border: `1px solid ${isActive ? "var(--down-500)" : "var(--border)"}`, color: isActive ? "var(--down-500)" : "var(--fg-muted)", borderRadius: 2, letterSpacing: "0.06em", fontWeight: 600 }}>
+                      {layerLabel}
+                    </span>
+                    <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-hint)" }}>
+                      #{e.id} · {formatLiveDate(e.triggered_at)}
+                    </span>
+                    {e.manual_actor && (
+                      <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-muted)" }}>
+                        by {e.manual_actor}
+                      </span>
+                    )}
+                    {isActive ? (
+                      <span style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--down-500)", letterSpacing: "0.06em", fontWeight: 600 }}>ACTIVE</span>
+                    ) : (
+                      <span style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--up-500)", letterSpacing: "0.06em" }}>
+                        RESOLVED · {formatLiveDate(e.resolved_at)}{e.resolved_by ? ` · ${e.resolved_by}` : ""}
+                      </span>
+                    )}
+                  </div>
+                  {e.reason && (
+                    <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--ink-1000)", lineHeight: 1.4 }}>
+                      {e.reason}
+                    </div>
+                  )}
+                  {(e.peak_nav != null || e.current_nav != null || e.threshold != null) && (
+                    <div style={{ marginTop: 6, display: "flex", gap: 18, fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--fg-muted)" }}>
+                      {e.peak_nav != null && <span>peak {fmtMoney(e.peak_nav, { dec: 0 })}</span>}
+                      {e.current_nav != null && <span>now {fmtMoney(e.current_nav, { dec: 0 })}</span>}
+                      {e.realized_pnl != null && <span>realized {fmtMoney(e.realized_pnl, { sign: true, dec: 0 })}</span>}
+                      {e.threshold != null && <span>threshold {(e.threshold * 100).toFixed(1)}%</span>}
+                      {e.alloc_capital != null && <span>alloc {fmtMoney(e.alloc_capital, { dec: 0 })}</span>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {!isAdmin && (
+            <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-hint)" }}>
+              Read-only. Admin role required to disable / re-enable strategies from this surface.
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
