@@ -1,7 +1,7 @@
 /**
  * Regression test for BUG-067 — CSP middleware modes.
  *
- * The middleware ships in two modes gated by NEXT_PUBLIC_CSP_ENFORCE_STRICT:
+ * The middleware ships in two modes gated by CSP_ENFORCE_STRICT:
  *   - default: Content-Security-Policy-Report-Only
  *   - strict:  Content-Security-Policy (enforced, with nonce)
  *
@@ -24,9 +24,9 @@ describe("BUG-067 — CSP middleware mode flag", () => {
   let savedDisable: string | undefined;
 
   beforeEach(() => {
-    savedFlag = process.env.NEXT_PUBLIC_CSP_ENFORCE_STRICT;
+    savedFlag = process.env.CSP_ENFORCE_STRICT;
     savedDisable = process.env.NEXT_PUBLIC_DISABLE_CSP_REPORT_ONLY;
-    delete process.env.NEXT_PUBLIC_CSP_ENFORCE_STRICT;
+    delete process.env.CSP_ENFORCE_STRICT;
     delete process.env.NEXT_PUBLIC_DISABLE_CSP_REPORT_ONLY;
     // Reset module cache so the middleware re-reads env vars each test.
     vi.resetModules();
@@ -34,7 +34,7 @@ describe("BUG-067 — CSP middleware mode flag", () => {
 
   afterEach(() => {
     if (savedFlag !== undefined) {
-      process.env.NEXT_PUBLIC_CSP_ENFORCE_STRICT = savedFlag;
+      process.env.CSP_ENFORCE_STRICT = savedFlag;
     }
     if (savedDisable !== undefined) {
       process.env.NEXT_PUBLIC_DISABLE_CSP_REPORT_ONLY = savedDisable;
@@ -51,7 +51,7 @@ describe("BUG-067 — CSP middleware mode flag", () => {
   });
 
   it("strict mode sets enforced Content-Security-Policy", async () => {
-    process.env.NEXT_PUBLIC_CSP_ENFORCE_STRICT = "1";
+    process.env.CSP_ENFORCE_STRICT = "1";
     const mod = await import("@/middleware");
     const req = makeRequest() as never;
     const res: { headers: Headers } = mod.middleware(req);
@@ -63,7 +63,7 @@ describe("BUG-067 — CSP middleware mode flag", () => {
   });
 
   it("strict mode CSP contains 'nonce-' and 'strict-dynamic' but NOT 'unsafe-inline'", async () => {
-    process.env.NEXT_PUBLIC_CSP_ENFORCE_STRICT = "1";
+    process.env.CSP_ENFORCE_STRICT = "1";
     const mod = await import("@/middleware");
     const req = makeRequest() as never;
     const res: { headers: Headers } = mod.middleware(req);
@@ -77,7 +77,7 @@ describe("BUG-067 — CSP middleware mode flag", () => {
   });
 
   it("strict mode mints a different nonce per request", async () => {
-    process.env.NEXT_PUBLIC_CSP_ENFORCE_STRICT = "1";
+    process.env.CSP_ENFORCE_STRICT = "1";
     const mod = await import("@/middleware");
     const reqA = makeRequest() as never;
     const reqB = makeRequest() as never;
@@ -91,7 +91,7 @@ describe("BUG-067 — CSP middleware mode flag", () => {
   });
 
   it("disable env var short-circuits both modes", async () => {
-    process.env.NEXT_PUBLIC_CSP_ENFORCE_STRICT = "1"; // would normally enable
+    process.env.CSP_ENFORCE_STRICT = "1"; // would normally enable
     process.env.NEXT_PUBLIC_DISABLE_CSP_REPORT_ONLY = "1";
     const mod = await import("@/middleware");
     const req = makeRequest() as never;
