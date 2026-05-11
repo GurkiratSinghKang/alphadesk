@@ -23,9 +23,9 @@ import { useMarketStore, useQuote, useQuotes } from "@/stores/market";
 import { useUIStore } from "@/stores/ui";
 import { usePortfolioStore } from "@/stores/portfolio";
 import { useOptionsStore, type SelectedStrike } from "@/stores/options";
-import { placeOrder, cancelOrder } from "@/lib/api";
+import { placeOrder, cancelOrder, previewOrder } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
-import type { PlaceOrderPayload } from "@/lib/api";
+import type { OrderPreviewResponse, PlaceOrderPayload } from "@/lib/api";
 import type { Position } from "@/types";
 import {
   formatCurrency,
@@ -134,6 +134,25 @@ export function buildOccSymbol(leg: TradeLeg): string | null {
   return `${root}${yy}${mm}${dd}${cp}${strikeStr}`;
 }
 
+function orderPreviewFailureMessage(preview: OrderPreviewResponse): string {
+  const failed = preview.checks.find((check) => !check.passed);
+  if (failed) {
+    return `${failed.label}: ${failed.detail || "Order review check failed."}`;
+  }
+  if (!preview.review_id) {
+    return "Server review did not mint a submit token. Preview the order again.";
+  }
+  return "Server review blocked this order.";
+}
+
+async function previewPayloadForSubmit(payload: PlaceOrderPayload) {
+  const preview = await previewOrder(payload);
+  if (!preview.can_submit || !preview.review_id) {
+    throw new Error(orderPreviewFailureMessage(preview));
+  }
+  return { preview, reviewedPayload: { ...payload, review_id: preview.review_id } };
+}
+
 function detectStrategy(legs: TradeLeg[]): string {
   if (legs.length === 0) return "No Legs";
   if (legs.length === 1) {
@@ -192,6 +211,8 @@ function TradeBuilderTab() {
   const [submitting, setSubmitting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingOrder, setPendingOrder] = useState<PlaceOrderPayload | null>(null);
+  const [orderPreview, setOrderPreview] = useState<OrderPreviewResponse | null>(null);
+  const [orderError, setOrderError] = useState<string | null>(null);
 
   useEffect(() => {
     setLegs((prev) =>
@@ -325,7 +346,7 @@ function TradeBuilderTab() {
     ]);
   };
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     if (legs.length === 0 || submitting) return;
     // MF-P1-2: gate on brokerDegraded — match /trade's
     // buildExecutionReadiness check. A broker pipeline reporting
@@ -338,6 +359,9 @@ function TradeBuilderTab() {
       });
       return;
     }
+    setSubmitting(true);
+    setOrderPreview(null);
+    setOrderError(null);
     // Wave 4P Fix 4 (P98): build OCC-format option symbols for every
     // option leg so the backend sees the strike/expiry/call-put
     // encoded in the symbol. Stock legs keep the underlying ticker.
@@ -351,6 +375,8 @@ function TradeBuilderTab() {
       type: "limit",
       quantity: legs[0].quantity,
       price: legs[0].price,
+      route_intent: "broker_order_review",
+      quote_at_fill_ts: currentQuote?.timestamp ?? Date.now() / 1000,
       legs: legs.map((l) => {
         if (l.type === "call" || l.type === "put") {
           const occ = buildOccSymbol(l);
@@ -379,9 +405,19 @@ function TradeBuilderTab() {
         };
       }),
     };
-    setPendingOrder(payload);
-    setConfirmOpen(true);
-  }, [legs, submitting, selectedSymbol, toast, brokerDegraded]);
+    try {
+      const { preview, reviewedPayload } = await previewPayloadForSubmit(payload);
+      setOrderPreview(preview);
+      setPendingOrder(reviewedPayload);
+      setConfirmOpen(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Order preview failed";
+      setOrderError(message);
+      toast({ type: "error", message: "Order preview failed: " + message });
+    } finally {
+      setSubmitting(false);
+    }
+  }, [legs, submitting, selectedSymbol, toast, brokerDegraded, currentQuote?.timestamp]);
 
   const confirmSubmit = useCallback(async () => {
     if (!pendingOrder || submitting) return;
@@ -391,6 +427,8 @@ function TradeBuilderTab() {
       const order = await placeOrder(pendingOrder);
       addOrder(order);
       setPendingOrder(null);
+      setOrderPreview(null);
+      setOrderError(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       toast({ type: "error", message: "Order failed: " + message });
@@ -561,9 +599,19 @@ function TradeBuilderTab() {
       )}
 
       <div className="mt-auto">
+        {orderError && (
+          <div
+            id="trade-panel-order-alert"
+            role="alert"
+            className="mb-2 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-label text-destructive"
+          >
+            {orderError}
+          </div>
+        )}
         <Button
           onClick={handleSubmit}
           disabled={submitting || legs.length === 0}
+          aria-describedby={orderError ? "trade-panel-order-alert" : undefined}
           className={cn(
             "w-full font-medium",
 	            tradingMode === "paper"
@@ -624,6 +672,34 @@ function TradeBuilderTab() {
                   {aggregateGreeks.delta == null ? "\u2014" : formatGreek(aggregateGreeks.delta, 2)}
                 </span>
               </div>
+              {orderPreview && (
+                <div
+                  className="rounded-md border border-border bg-muted/30 p-2"
+                  aria-live="polite"
+                >
+                  <div className="mb-1 text-label font-medium uppercase tracking-wider text-muted-foreground">
+                    Server preview
+                  </div>
+                  <div className="space-y-1">
+                    {orderPreview.checks.map((check) => (
+                      <div key={check.code} className="flex items-start gap-2 text-label">
+                        <span
+                          aria-hidden="true"
+                          className={check.passed ? "text-[var(--profit)]" : "text-destructive"}
+                        >
+                          {check.passed ? "✓" : "×"}
+                        </span>
+                        <span className="text-foreground">
+                          {check.label}
+                          {check.detail ? (
+                            <span className="text-muted-foreground"> — {check.detail}</span>
+                          ) : null}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>
@@ -881,14 +957,19 @@ function PositionsTab() {
                 if (!price || price <= 0 || !Number.isFinite(price)) return;
                 const pos = positions.find((p) => p.symbol === stopLossSymbol);
                 if (!pos) return;
-                setStopLossSubmitting(true);
-                placeOrder({
+                const payload: PlaceOrderPayload = {
                   symbol: pos.symbol,
                   side: pos.side === "short" ? "buy" : "sell",
                   type: "stop",
                   quantity: pos.quantity,
                   price,
-                })
+                  stop_price: price,
+                  route_intent: "broker_order_review",
+                  quote_at_fill_ts: Date.now() / 1000,
+                };
+                setStopLossSubmitting(true);
+                previewPayloadForSubmit(payload)
+                  .then(({ reviewedPayload }) => placeOrder(reviewedPayload))
                   .then(() => {
                     toast({ type: "success", message: `Stop loss set at $${price.toFixed(2)} for ${stopLossSymbol}` });
                     setStopLossOpen(false);

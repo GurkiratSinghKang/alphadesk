@@ -24,10 +24,11 @@ import { useMarketStore } from "@/stores/market";
 import { useUIStore } from "@/stores/ui";
 import { cn, safeNum } from "@/lib/utils";
 import { HelpCircle } from "@/components/ui/HelpCircle";
-import { chatWithAgent, getAnalysis, analyzeSymbol, placeOrder } from "@/lib/api";
+import { chatWithAgent, getAnalysis, analyzeSymbol, placeOrder, previewOrder } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import { PositionSizer } from "@/components/panels/PositionSizer";
 import { MultiTimeframe } from "@/components/panels/MultiTimeframe";
+import type { PlaceOrderPayload } from "@/lib/api";
 import type { ChatMessage, Analysis, QuickOrderEvent } from "@/types";
 
 // ─── Score Gauge ─────────────────────────────────────────────
@@ -737,6 +738,19 @@ function ChatTab({ symbol }: { symbol: string }) {
 // grows real broker-side wiring.
 type AdvancedOrderType = "market" | "limit" | "stop" | "stop_limit";
 
+async function previewAndSubmitOrder(payload: PlaceOrderPayload) {
+  const preview = await previewOrder(payload);
+  const failed = preview.checks.find((check) => !check.passed);
+  if (!preview.can_submit || !preview.review_id) {
+    throw new Error(
+      failed
+        ? `${failed.label}: ${failed.detail || "Order review check failed."}`
+        : "Server review did not mint a submit token. Preview the order again.",
+    );
+  }
+  return placeOrder({ ...payload, review_id: preview.review_id });
+}
+
 function OrderTab({ symbol }: { symbol: string }) {
   const quote = useMarketStore((s) => s.quotes[symbol]);
   const { toast } = useToast();
@@ -747,6 +761,7 @@ function OrderTab({ symbol }: { symbol: string }) {
   const [stopPrice, setStopPrice] = useState(quote?.last ?? 0);
   const [tif, setTif] = useState<"day" | "gtc">("day");
   const [submitting, setSubmitting] = useState(false);
+  const [orderError, setOrderError] = useState("");
 
   // Update prices when quote changes and order type is market
   useEffect(() => {
@@ -788,18 +803,24 @@ function OrderTab({ symbol }: { symbol: string }) {
 
   const handleSubmit = async () => {
     setSubmitting(true);
+    setOrderError("");
     try {
-      await placeOrder({
+      const payload: PlaceOrderPayload = {
         symbol,
         side,
         type: orderType,
         quantity,
         price: orderType === "limit" ? limitPrice : orderType === "stop_limit" ? limitPrice : undefined,
         stop_price: orderType === "stop" ? stopPrice : orderType === "stop_limit" ? stopPrice : undefined,
-      });
+        time_in_force: tif,
+        route_intent: "broker_order_review",
+        quote_at_fill_ts: quote?.timestamp ?? Date.now() / 1000,
+      };
+      await previewAndSubmitOrder(payload);
       toast({ type: "success", message: `Order placed: ${buildOrderLabel()}` });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Order failed";
+      setOrderError(message);
       toast({ type: "error", message });
     } finally {
       setSubmitting(false);
@@ -947,9 +968,19 @@ function OrderTab({ symbol }: { symbol: string }) {
       </div>
 
       {/* Submit */}
+      {orderError && (
+        <div
+          id="analysis-order-alert"
+          role="alert"
+          className="rounded border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-label text-destructive"
+        >
+          {orderError}
+        </div>
+      )}
       <button
         onClick={handleSubmit}
         disabled={submitting || quantity <= 0}
+        aria-describedby={orderError ? "analysis-order-alert" : undefined}
         className={cn(
           "w-full rounded-lg py-2.5 text-sm font-semibold transition-colors disabled:opacity-50",
           side === "buy"

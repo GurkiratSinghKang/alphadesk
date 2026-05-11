@@ -60,6 +60,8 @@ import {
   commitUserTradingMode,
   confirmUserErase,
   postUserExport,
+  placeOrder,
+  previewOrder,
   previewUserErase,
 } from "@/lib/api";
 // 2026-05-10 (chart wiring): swap the design's hand-rolled SVG HeroChart
@@ -4260,6 +4262,7 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
   const [stopPct, setStopPct] = useState(4.0);
   const [optStrike, setOptStrike] = useState(140);
   const [optType, setOptType] = useState("call");
+  const [selectedOptionContract, setSelectedOptionContract] = useState(null);
   const [contracts, setContracts] = useState(10);
   const [range, setRange] = useState("3M");
   const [chartMode, setChartMode] = useState("candle");
@@ -4277,6 +4280,11 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
   const [builderStrategy, setBuilderStrategy] = useState("vertical-call");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [orderStage, setOrderStage] = useState("idle"); // idle | previewing | ready | submitting | success | error
+  const [orderPreview, setOrderPreview] = useState(null);
+  const [stagedOrder, setStagedOrder] = useState(null);
+  const [orderError, setOrderError] = useState("");
+  const [orderSuccess, setOrderSuccess] = useState("");
 
   useEffect(() => {
     if (t.px > 0) setLimitPx(t.px);
@@ -4293,6 +4301,142 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
   const stopPx = limitPx * (1 - stopPct / 100);
   const riskDollars = isOption ? contracts * 284 : qty * (limitPx - stopPx);
   const riskPct = live.portfolio?.equity ? (riskDollars / live.portfolio.equity) * 100 : 0;
+  const quoteSnapshot = live.quotes?.[String(t.sym || sym || "SPY").toUpperCase()] || live.tickerContext?.quote?.value || null;
+
+  useEffect(() => {
+    setOrderStage("idle");
+    setOrderPreview(null);
+    setStagedOrder(null);
+    setOrderError("");
+    setOrderSuccess("");
+  }, [asset, side, qty, orderType, limitPx, stopPct, optStrike, optType, selectedOptionContract?.symbol, contracts, t.sym]);
+
+  const buildOrderPayload = () => {
+    const symbol = String(t.sym || sym || "SPY").trim().toUpperCase();
+    const entryPrice = Number(limitPx);
+    if (asset === "stock") {
+      const quantity = Math.floor(Number(qty));
+      if (!symbol) throw new Error("Symbol is required before staging an order.");
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        throw new Error("Quantity must be greater than zero.");
+      }
+      if (quantity > 1_000_000) {
+        throw new Error("Quantity is above the one-million share ticket limit.");
+      }
+      if ((orderType === "limit" || orderType === "stop") && (!Number.isFinite(entryPrice) || entryPrice <= 0)) {
+        throw new Error("Enter a positive price before staging this order.");
+      }
+
+      const payload = {
+        symbol,
+        side,
+        type: orderType,
+        quantity,
+        time_in_force: "day",
+        strategy: "manual",
+        route_intent: "broker_order_review",
+        quote_at_fill_ts: quoteSnapshot?.timestamp ?? Date.now() / 1000,
+      };
+      if (orderType === "limit") payload.price = entryPrice;
+      if (orderType === "stop") payload.stop_price = Number(stopPx);
+      return payload;
+    }
+
+    if (asset === "option") {
+      if (!selectedOptionContract?.symbol) {
+        throw new Error("Select a live option contract from the chain before staging an order.");
+      }
+      if (orderType !== "market" && orderType !== "limit") {
+        throw new Error("Option ticket supports market or limit orders.");
+      }
+      const quantity = Math.floor(Number(contracts));
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        throw new Error("Contracts must be greater than zero.");
+      }
+      if (quantity > 10_000) {
+        throw new Error("Contracts are above the ten-thousand contract ticket limit.");
+      }
+      if (orderType === "limit" && (!Number.isFinite(entryPrice) || entryPrice <= 0)) {
+        throw new Error("Enter a positive option limit price before staging this order.");
+      }
+
+      const payload = {
+        symbol: String(selectedOptionContract.symbol).toUpperCase(),
+        side,
+        type: orderType,
+        quantity,
+        time_in_force: "day",
+        strategy: "manual",
+        route_intent: "broker_order_review",
+      };
+      if (orderType === "limit") payload.price = entryPrice;
+      const rawTs = selectedOptionContract.chainFetchedAt || selectedOptionContract.last_trade_time || null;
+      const parsedTs = rawTs ? Date.parse(rawTs) / 1000 : NaN;
+      if (Number.isFinite(parsedTs)) payload.quote_at_fill_ts = parsedTs;
+      return payload;
+    }
+
+    throw new Error("Select Stock or Option before staging an order.");
+  };
+
+  const orderPreviewMessage = (preview) => {
+    const failed = preview?.checks?.find((check) => !check.passed);
+    if (failed) return `${failed.label}: ${failed.detail || "Order review check failed."}`;
+    if (!preview?.review_id) return "Server review did not mint a submit token. Preview the order again.";
+    return "Server review blocked this order.";
+  };
+
+  const submitStagedOrder = async () => {
+    if (!stagedOrder || orderStage === "submitting") return;
+    setOrderStage("submitting");
+    setOrderError("");
+    setOrderSuccess("");
+    try {
+      const order = await placeOrder(stagedOrder);
+      setOrderSuccess(`Order ${order?.id || ""} submitted.`.trim());
+      setOrderStage("success");
+      setStagedOrder(null);
+    } catch (err) {
+      setOrderError(err instanceof Error ? err.message : "Order submit failed.");
+      setOrderStage("ready");
+    }
+  };
+
+  const handleStageOrder = async () => {
+    if (orderStage === "ready" && stagedOrder) {
+      await submitStagedOrder();
+      return;
+    }
+    if (orderStage === "previewing" || orderStage === "submitting") return;
+    setOrderStage("previewing");
+    setOrderPreview(null);
+    setStagedOrder(null);
+    setOrderError("");
+    setOrderSuccess("");
+    try {
+      const payload = buildOrderPayload();
+      const preview = await previewOrder(payload);
+      setOrderPreview(preview);
+      if (!preview.can_submit || !preview.review_id) {
+        setOrderError(orderPreviewMessage(preview));
+        setOrderStage("error");
+        return;
+      }
+      setStagedOrder({ ...payload, review_id: preview.review_id });
+      setOrderStage("ready");
+    } catch (err) {
+      setOrderError(err instanceof Error ? err.message : "Order preview failed.");
+      setOrderStage("error");
+    }
+  };
+
+  const stageButtonLabel =
+    orderStage === "previewing" ? "Previewing order..."
+    : orderStage === "submitting" ? "Submitting order..."
+    : orderStage === "ready" ? `Confirm ${side} order →`
+    : orderStage === "success" ? "Order submitted"
+    : `Stage ${isOption ? `${side} to open` : `${side} order`} →`;
+  const stageDisabled = orderStage === "previewing" || orderStage === "submitting";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: "var(--border)" }}>
@@ -4363,7 +4507,7 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
           <AssetTabs asset={asset} setAsset={setAsset} />
           {asset === "stock" && <OrderTicket {...{ side, setSide, qty, setQty, orderType, setOrderType, limitPx, setLimitPx, stopPct, setStopPct, notional, stopPx, riskDollars, riskPct, accountEquity: live.portfolio?.equity || 0 }} />}
           {asset === "option" && <>
-            <OptionChainPanel symbol={t.sym} spot={t.px} optStrike={optStrike} setOptStrike={setOptStrike} optType={optType} setOptType={setOptType} setLimitPx={setLimitPx} />
+            <OptionChainPanel symbol={t.sym} spot={t.px} optStrike={optStrike} setOptStrike={setOptStrike} optType={optType} setOptType={setOptType} setLimitPx={setLimitPx} setSelectedOptionContract={setSelectedOptionContract} />
             <OptionForm {...{ side, setSide, contracts, setContracts, optStrike, setOptStrike, optType, setOptType, orderType, setOrderType, limitPx, setLimitPx }} />
             <GreeksStrip />
             <PayoffPanel />
@@ -4371,9 +4515,60 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
           </>}
           {asset === "builder" && <OptionBuilder strategy={builderStrategy} setStrategy={setBuilderStrategy} />}
           <AIMemoPanel isOption={isOption} symbol={t.sym} />
-          <button style={{ marginTop: 4, height: 46, background: side === "buy" ? "var(--up-500)" : "var(--down-500)", color: "var(--up-on)", border: 0, borderRadius: 4, fontFamily: "var(--font-ui)", fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "default" }}>
-            Stage {isOption ? `${side} to open` : `${side} order`} →
+          <button
+            type="button"
+            onClick={handleStageOrder}
+            disabled={stageDisabled}
+            aria-describedby={orderError ? "trade-order-alert" : orderPreview ? "trade-order-status" : undefined}
+            style={{
+              marginTop: 4,
+              height: 46,
+              background: side === "buy" ? "var(--up-500)" : "var(--down-500)",
+              color: "var(--up-on)",
+              border: 0,
+              borderRadius: 4,
+              fontFamily: "var(--font-ui)",
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+              cursor: stageDisabled ? "not-allowed" : "pointer",
+              opacity: stageDisabled ? 0.72 : 1,
+            }}
+          >
+            {stageButtonLabel}
           </button>
+          {(orderPreview || orderError || orderSuccess) && (
+            <div
+              id="trade-order-status"
+              aria-live="polite"
+              style={{ padding: "10px 12px", background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, display: "flex", flexDirection: "column", gap: 7 }}
+            >
+              {orderError && (
+                <div id="trade-order-alert" role="alert" style={{ fontFamily: "var(--font-ui)", fontSize: 11.5, color: "var(--down-500)", lineHeight: 1.35 }}>
+                  {orderError}
+                </div>
+              )}
+              {orderSuccess && (
+                <div style={{ fontFamily: "var(--font-ui)", fontSize: 11.5, color: "var(--up-500)", lineHeight: 1.35 }}>
+                  {orderSuccess}
+                </div>
+              )}
+              {orderPreview?.checks?.length ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  {orderPreview.checks.map((check) => (
+                    <div key={check.code} style={{ display: "grid", gridTemplateColumns: "16px minmax(0,1fr)", gap: 7, alignItems: "start", fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--fg-dim)", lineHeight: 1.35 }}>
+                      <span aria-hidden="true" style={{ color: check.passed ? "var(--up-500)" : "var(--down-500)", fontFamily: "var(--font-mono)" }}>{check.passed ? "✓" : "×"}</span>
+                      <span>
+                        <span style={{ color: "var(--ink-1000)" }}>{check.label}</span>
+                        {check.detail ? <span style={{ color: "var(--fg-muted)" }}> — {check.detail}</span> : null}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )}
           <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)", textAlign: "center", marginTop: -8 }}>Reviewed against regime + risk policy</div>
         </aside>
         ))}
@@ -5031,7 +5226,7 @@ function OrderTicket(p) {
         <button onClick={() => p.setSide("sell")} style={tradeBtnStyle("sell", p.side === "sell")}>Sell</button>
       </div>
       <Field label="Quantity">
-        <input aria-label="Share quantity" inputMode="numeric" value={p.qty} onChange={(e) => p.setQty(+e.target.value || 0)} style={inputStyle} />
+        <input aria-label="Share quantity" type="number" inputMode="numeric" min="1" max="1000000" value={p.qty} onChange={(e) => p.setQty(+e.target.value || 0)} style={inputStyle} />
         <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", marginLeft: 8, alignSelf: "center" }}>≈ {fmtMoney(p.notional, { dec: 0 })}</span>
       </Field>
       <Field label="Order type">
@@ -5048,7 +5243,7 @@ function OrderTicket(p) {
       </Field>
       {p.orderType === "limit" && (
         <Field label="Limit price">
-          <input aria-label="Limit price" inputMode="decimal" value={p.limitPx.toFixed(2)} onChange={(e) => p.setLimitPx(+e.target.value || 0)} style={inputStyle} />
+          <input aria-label="Limit price" type="number" inputMode="decimal" min="0.01" step="0.01" value={p.limitPx.toFixed(2)} onChange={(e) => p.setLimitPx(+e.target.value || 0)} style={inputStyle} />
         </Field>
       )}
       <Field label="Stop loss · % of entry">
@@ -5117,7 +5312,7 @@ function Check({ ok, warn, label }) {
 
 // ─── option chain ────────────────────────────────────────────────────────────
 
-function OptionChainPanel({ symbol, spot, optStrike, setOptStrike, optType, setOptType, setLimitPx }) {
+function OptionChainPanel({ symbol, spot, optStrike, setOptStrike, optType, setOptType, setLimitPx, setSelectedOptionContract }) {
   const [expiry, setExpiry] = useState("");
   const [chain, setChain] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -5127,6 +5322,7 @@ function OptionChainPanel({ symbol, spot, optStrike, setOptStrike, optType, setO
     let cancelled = false;
     setLoading(true);
     setError("");
+    setSelectedOptionContract?.(null);
     getOptionsChain(symbol)
       .then((next) => {
         if (cancelled) return;
@@ -5163,10 +5359,12 @@ function OptionChainPanel({ symbol, spot, optStrike, setOptStrike, optType, setO
   });
   const selectRow = (r, side) => {
     const mid = side === "call" ? r.callMid : r.putMid;
-    if (mid == null) return;
+    const contract = side === "call" ? r.call : r.put;
+    if (mid == null || !contract?.symbol) return;
     setOptStrike(r.k);
     setOptType(side);
     setLimitPx(+mid.toFixed(2));
+    setSelectedOptionContract?.({ ...contract, chainFetchedAt: chain?.fetchedAt || null });
   };
   return (
     <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 4 }}>
@@ -5246,14 +5444,14 @@ function OptionForm(p) {
         </div>
       </Field>
       <Field label="Contracts">
-        <input aria-label="Option contracts" inputMode="numeric" value={p.contracts} onChange={(e) => p.setContracts(+e.target.value || 0)} style={inputStyle} />
+        <input aria-label="Option contracts" type="number" inputMode="numeric" min="1" max="10000" value={p.contracts} onChange={(e) => p.setContracts(+e.target.value || 0)} style={inputStyle} />
         <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", marginLeft: 8, alignSelf: "center" }}>limit {p.limitPx.toFixed(2)}</span>
       </Field>
       <Field label="Order · limit">
         <select aria-label="Option order type" value={p.orderType} onChange={(e) => p.setOrderType(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
           <option value="market">Market</option><option value="limit">Limit</option>
         </select>
-        <input aria-label="Option limit price" inputMode="decimal" value={p.limitPx.toFixed(2)} onChange={(e) => p.setLimitPx(+e.target.value || 0)} style={{ ...inputStyle, flex: 1, marginLeft: 6 }} />
+        <input aria-label="Option limit price" type="number" inputMode="decimal" min="0.01" step="0.01" value={p.limitPx.toFixed(2)} onChange={(e) => p.setLimitPx(+e.target.value || 0)} style={{ ...inputStyle, flex: 1, marginLeft: 6 }} />
       </Field>
     </div>
   );
