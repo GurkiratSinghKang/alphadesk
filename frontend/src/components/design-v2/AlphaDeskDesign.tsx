@@ -14365,9 +14365,31 @@ const AdminPage = ({ tweaks, onNav }) => {
           <h1 style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 36, color: "var(--ink-1000)", letterSpacing: "-0.025em", lineHeight: 1.05, margin: "6px 0 4px" }}>Application control center</h1>
           <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--fg-dim)", maxWidth: 720 }}>Read-only live backend health, provider-key status, layout config, and last deploy state. Mutating admin actions remain admin-gated.</div>
         </div>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 11px 5px 9px", border: `1px solid ${live.error ? "rgba(224,120,86,0.45)" : "rgba(168,208,77,0.45)"}`, background: live.error ? "rgba(224,120,86,0.08)" : "rgba(168,208,77,0.08)", borderRadius: 999 }}>
-          <StatusDot tone={live.error ? "down" : "up"} size={6} glow />
-          <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: live.error ? "var(--down-500)" : "var(--up-500)" }}>{live.error ? "NEEDS ATTENTION" : "LIVE BACKEND"}</span>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 11px 5px 9px", border: `1px solid ${live.error ? "rgba(224,120,86,0.45)" : "rgba(168,208,77,0.45)"}`, background: live.error ? "rgba(224,120,86,0.08)" : "rgba(168,208,77,0.08)", borderRadius: 999 }}>
+            <StatusDot tone={live.error ? "down" : "up"} size={6} glow />
+            <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: live.error ? "var(--down-500)" : "var(--up-500)" }}>{live.error ? "NEEDS ATTENTION" : "LIVE BACKEND"}</span>
+          </div>
+          {/* 2026-05-11 (round 21): /api/v1/user/me badge — shows
+           * the authenticated operator + role pill so admins know
+           * which session they're acting from. Confidence-building
+           * when juggling impersonation or multi-tenant admin. */}
+          {currentUser.data && (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+              <span style={{ color: "var(--fg-hint)", letterSpacing: "0.04em" }}>SIGNED IN</span>
+              <span style={{ color: "var(--ink-1000)" }}>{currentUser.data.username}</span>
+              {currentUser.data.role && (
+                <span style={{ padding: "1px 7px", border: `1px solid ${isAdmin ? "var(--brand)" : "var(--border-strong)"}`, color: isAdmin ? "var(--brand)" : "var(--fg-muted)", borderRadius: 999, fontSize: 9.5, letterSpacing: "0.06em", fontWeight: 600, textTransform: "uppercase" }}>
+                  {currentUser.data.role}
+                </span>
+              )}
+              {currentUser.data.is_demo_seed && (
+                <span style={{ padding: "1px 7px", border: "1px solid var(--gold-500)", color: "var(--gold-500)", borderRadius: 999, fontSize: 9.5, letterSpacing: "0.06em", fontWeight: 600, textTransform: "uppercase" }}>
+                  DEMO SEED
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </header>
 
