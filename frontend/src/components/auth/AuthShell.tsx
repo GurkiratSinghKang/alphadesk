@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 /**
  * AuthShell — full-screen takeover matching the v2 auth design (two-column
@@ -82,13 +82,35 @@ export function AuthShell({
 }
 
 function AuthBrandPane({ brand }: { brand?: AuthShellProps["brand"] }) {
-  const today = new Date();
-  const longDate = today
-    .toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })
-    .toUpperCase();
+  const [dateLabels, setDateLabels] = useState(() => ({
+    long: "MARKET BRIEF",
+    short: "TODAY",
+  }));
+
+  useEffect(() => {
+    const today = new Date();
+    setDateLabels({
+      long: today
+        .toLocaleDateString("en-US", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+          timeZone: "America/New_York",
+        })
+        .toUpperCase(),
+      short: today
+        .toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          timeZone: "America/New_York",
+        })
+        .toUpperCase(),
+    });
+  }, []);
 
   const eyebrow =
-    brand?.eyebrow ?? `${longDate} · 09:14 ET`;
+    brand?.eyebrow ?? `${dateLabels.long} · 09:14 ET`;
   const title =
     brand?.title ?? (
       <>
@@ -98,11 +120,11 @@ function AuthBrandPane({ brand }: { brand?: AuthShellProps["brand"] }) {
   const body =
     brand?.body ??
     "The morning brief is ready. Three new pipeline candidates surfaced overnight, the Risk agent is green across all books, and your weekly memo is queued.";
-  const card = brand?.card ?? <DefaultBriefingCard today={today} />;
+  const card = brand?.card ?? <DefaultBriefingCard shortDate={dateLabels.short} />;
 
   return (
     <aside
-      className="flex flex-col overflow-visible border-b border-border lg:overflow-auto lg:border-b-0 lg:border-r"
+      className="order-2 flex flex-col overflow-visible border-t border-border lg:order-none lg:overflow-auto lg:border-r lg:border-t-0"
       style={{ background: "var(--ink-100)", padding: "clamp(24px, 5vw, 32px) clamp(22px, 6vw, 44px) 28px" }}
     >
       <div className="flex items-center gap-2.5">
@@ -184,10 +206,7 @@ function AuthBrandPane({ brand }: { brand?: AuthShellProps["brand"] }) {
   );
 }
 
-function DefaultBriefingCard({ today }: { today: Date }) {
-  const shortDate = today
-    .toLocaleDateString("en-US", { month: "short", day: "numeric" })
-    .toUpperCase();
+function DefaultBriefingCard({ shortDate }: { shortDate: string }) {
   const briefRows = [
     { t: "Scout has surfaced", b: "47 candidates · 3 above 0.85 confidence" },
     { t: "Risk gating is GREEN", b: "Drawdown headroom 4.6% · book size 71% of cap" },
@@ -342,7 +361,7 @@ function AuthFormPane({
   const useDesignFooter = footerLeft === undefined && footerRight === undefined;
 
   return (
-    <div className="flex flex-col overflow-visible lg:overflow-auto" style={{ padding: "clamp(24px, 5vw, 32px) clamp(22px, 7vw, 60px)" }}>
+    <div className="order-1 flex min-h-[100dvh] flex-col overflow-visible lg:order-none lg:min-h-0 lg:overflow-auto" style={{ padding: "clamp(20px, 5vw, 32px) clamp(22px, 7vw, 60px)" }}>
       <header className="flex items-center justify-end gap-3.5">
         <span
           className="t-mono"

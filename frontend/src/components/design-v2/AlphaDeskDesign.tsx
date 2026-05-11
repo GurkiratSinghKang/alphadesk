@@ -14,8 +14,15 @@ import { usePathname, useRouter } from "next/navigation";
 // already subscribes to the store, so paper-mode treatment is
 // consistent across the app.
 import { useUIStore } from "@/stores/ui";
+import { env } from "@/env";
+import { clearPersistedStores } from "@/lib/auth/clearPersistedStores";
 import {
+  addWatchlistItem,
+  createWatchlistV2,
   getEnrichedWatchlist,
+  getAdminBackendKeys,
+  getLayoutConfig,
+  getLastDeploy,
   getMarketRegime,
   getMarketNews,
   getMorningBrief,
@@ -26,6 +33,7 @@ import {
   getPositions,
   getPriceAlerts,
   getQuote,
+  getRiskDashboard,
   getStrategies,
   getTickerContext,
   getTickerFundamentals,
@@ -73,6 +81,10 @@ const LiveDataContext = React.createContext({
   userWatchlist: null,
   watchlists: [],
   quotes: {},
+  riskDashboard: null,
+  adminKeys: null,
+  adminLayout: null,
+  adminLastDeploy: null,
   error: null,
 });
 
@@ -101,6 +113,7 @@ function quoteLast(q) {
 }
 
 function asFiniteNumber(v, fallback = null) {
+  if (v == null || v === "") return fallback;
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 }
@@ -152,7 +165,7 @@ function useDesignLiveData() {
   return React.useContext(LiveDataContext);
 }
 
-function LiveDataProvider({ symbol, children }) {
+function LiveDataProvider({ symbol, page, children }) {
   const [state, setState] = React.useState(() => ({
     loading: true,
     refreshedAt: null,
@@ -170,12 +183,17 @@ function LiveDataProvider({ symbol, children }) {
     userWatchlist: null,
     watchlists: [],
     quotes: {},
+    riskDashboard: null,
+    adminKeys: null,
+    adminLayout: null,
+    adminLastDeploy: null,
     error: null,
   }));
 
   React.useEffect(() => {
     let cancelled = false;
     const selected = String(symbol || "NVDA").toUpperCase();
+    const shouldLoadAdmin = page === "admin" || page === "admin-users";
 
     async function load() {
       setState((prev) => ({ ...prev, loading: true, error: null }));
@@ -193,6 +211,10 @@ function LiveDataProvider({ symbol, children }) {
         notificationsR,
         userWatchlistR,
         watchlistsR,
+        riskDashboardR,
+        adminKeysR,
+        adminLayoutR,
+        adminLastDeployR,
       ] = await Promise.allSettled([
         getPortfolioSummary(),
         getPositions(),
@@ -212,6 +234,10 @@ function LiveDataProvider({ symbol, children }) {
         getNotifications({ limit: 20 }),
         getUserWatchlist(),
         getWatchlistsV2(),
+        getRiskDashboard(),
+        shouldLoadAdmin ? getAdminBackendKeys() : Promise.resolve(null),
+        shouldLoadAdmin ? getLayoutConfig() : Promise.resolve(null),
+        shouldLoadAdmin ? getLastDeploy() : Promise.resolve(null),
       ]);
 
       const userSymbols = userWatchlistR.status === "fulfilled"
@@ -298,6 +324,10 @@ function LiveDataProvider({ symbol, children }) {
         userWatchlist: userWatchlistR.status === "fulfilled" ? userWatchlistR.value : null,
         watchlists,
         quotes,
+        riskDashboard: riskDashboardR.status === "fulfilled" ? riskDashboardR.value : null,
+        adminKeys: shouldLoadAdmin && adminKeysR.status === "fulfilled" ? adminKeysR.value || [] : null,
+        adminLayout: shouldLoadAdmin && adminLayoutR.status === "fulfilled" ? adminLayoutR.value : null,
+        adminLastDeploy: shouldLoadAdmin && adminLastDeployR.status === "fulfilled" ? adminLastDeployR.value : null,
         error: null,
       });
     }
@@ -314,7 +344,7 @@ function LiveDataProvider({ symbol, children }) {
     return () => {
       cancelled = true;
     };
-  }, [symbol]);
+  }, [symbol, page]);
 
   return <LiveDataContext.Provider value={state}>{children}</LiveDataContext.Provider>;
 }
@@ -376,6 +406,11 @@ const __LAYOUT_GUARD_STYLE = `
     white-space: nowrap;
   }
 
+  [data-ad-mobile-menu-trigger],
+  [data-ad-mobile-menu] {
+    display: none;
+  }
+
   [data-ad-main] [style*="font-size: 8px"],
   [data-ad-main] [style*="font-size: 8.5px"],
   [data-ad-main] [style*="font-size: 9px"],
@@ -404,13 +439,12 @@ const __LAYOUT_GUARD_STYLE = `
     [data-ad-topbar] {
       display: flex !important;
       align-items: center !important;
-      gap: 10px !important;
+      gap: 8px !important;
       height: 56px !important;
       padding: 0 12px !important;
-      overflow-x: auto !important;
+      overflow-x: hidden !important;
       overflow-y: hidden !important;
-      scrollbar-width: none;
-      -webkit-overflow-scrolling: touch;
+      position: relative !important;
     }
 
     [data-ad-topbar]::-webkit-scrollbar,
@@ -425,28 +459,54 @@ const __LAYOUT_GUARD_STYLE = `
       flex: 0 0 auto !important;
       height: 100%;
       align-items: center !important;
-      padding-right: 10px;
+      padding-right: 6px;
       background: var(--ink-050);
     }
 
-    [data-ad-nav] {
+    [data-ad-mobile-menu-trigger] {
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
       flex: 0 0 auto !important;
-      margin-left: 0 !important;
+      width: 36px !important;
+      height: 36px !important;
+      min-width: 36px !important;
+      min-height: 36px !important;
+      padding: 0 !important;
+      border: 1px solid var(--border) !important;
+      border-radius: 4px !important;
+      background: var(--bg-elev-1) !important;
+      color: var(--ink-1000) !important;
     }
 
-    [data-ad-nav] > * {
-      flex: 0 0 auto;
+    [data-ad-mobile-menu] {
+      display: grid !important;
+      position: fixed !important;
+      top: 62px !important;
+      left: 12px !important;
+      right: 12px !important;
+      z-index: 80 !important;
+      max-height: min(68dvh, 560px) !important;
+      overflow: auto !important;
+      padding: 8px !important;
+      border: 1px solid var(--border-strong) !important;
+      border-radius: 6px !important;
+      background: var(--ink-150) !important;
+      box-shadow: var(--shadow-2) !important;
     }
 
-    [data-ad-nav] a,
-    [data-ad-nav] button {
-      min-height: 40px !important;
-      padding: 9px 12px !important;
+    [data-ad-nav] {
+      display: none !important;
+    }
+
+    [data-ad-search] {
+      display: none !important;
     }
 
     [data-ad-mode-toggle] {
       flex: 0 0 auto !important;
       height: 34px !important;
+      margin-left: auto !important;
     }
 
     [data-ad-mode-toggle] button {
@@ -477,28 +537,16 @@ const __LAYOUT_GUARD_STYLE = `
       max-width: 100% !important;
     }
 
-    [data-ad-app][data-screen-label="AlphaDesk · trade"] [data-ad-main] [data-screen-label] {
-      width: 960px !important;
-      min-width: 960px !important;
-      max-width: none !important;
-    }
-
-    [data-ad-app][data-screen-label="AlphaDesk · trade"] [data-ad-main] > * {
-      width: 960px !important;
-      min-width: 960px !important;
-      max-width: none !important;
-    }
-
-    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="grid-template-columns"] {
+    [data-ad-main] [style*="grid-template-columns"] {
       grid-template-columns: minmax(0, 1fr) !important;
     }
 
-    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="display: flex"] {
+    [data-ad-main] [style*="display: flex"] {
       flex-wrap: wrap !important;
       min-width: 0 !important;
     }
 
-    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="overflow: hidden"] {
+    [data-ad-main] [style*="overflow: hidden"] {
       overflow: auto !important;
     }
 
@@ -537,27 +585,46 @@ const __LAYOUT_GUARD_STYLE = `
       height: 34px !important;
       gap: 14px !important;
       padding: 0 12px !important;
-      overflow-x: auto !important;
+      overflow-x: hidden !important;
       overflow-y: hidden !important;
       font-size: 10.5px !important;
-      scrollbar-width: none;
-      -webkit-overflow-scrolling: touch;
+    }
+
+    [data-ad-statusbar] span:nth-of-type(n+6) {
+      display: none !important;
     }
   }
 
   @media (max-width: 640px) {
-    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="padding: 32px 28px"],
-    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="padding: 28px"],
-    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="padding: 24px"] {
+    [data-ad-brand] {
+      font-size: 18px !important;
+    }
+
+    [data-ad-mode-toggle] button {
+      padding: 0 9px !important;
+      letter-spacing: 0.08em !important;
+    }
+
+    [data-ad-main] [style*="padding: 32px 28px"],
+    [data-ad-main] [style*="padding: 28px"],
+    [data-ad-main] [style*="padding: 24px"] {
       padding: 20px 18px !important;
     }
 
-    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="width: 720px"],
-    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="width: 560px"],
-    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="width: 540px"],
-    [data-ad-app]:not([data-screen-label="AlphaDesk · trade"]) [data-ad-main] [style*="width: 520px"] {
+    [data-ad-main] [style*="width: 720px"],
+    [data-ad-main] [style*="width: 560px"],
+    [data-ad-main] [style*="width: 540px"],
+    [data-ad-main] [style*="width: 520px"] {
       width: calc(100vw - 24px) !important;
       max-width: calc(100vw - 24px) !important;
+    }
+  }
+
+  @media (max-width: 380px) {
+    [data-ad-brand] {
+      max-width: 86px !important;
+      overflow: hidden !important;
+      white-space: nowrap !important;
     }
   }
 `;
@@ -1582,6 +1649,7 @@ function TopBar({ page, onNav, onSearch, regime, theme = "dark", onTheme }) {
     ]},
   ];
   const [clock, setClock] = useState("");
+  const [mobileOpen, setMobileOpen] = useState(false);
   useEffect(() => {
     const tick = () => {
       const d = new Date();
@@ -1594,16 +1662,34 @@ function TopBar({ page, onNav, onSearch, regime, theme = "dark", onTheme }) {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, []);
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e) => { if (e.key === "Escape") setMobileOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
 
   return (
-    <div data-ad-topbar="" style={{ display: "grid", gridTemplateColumns: "auto auto 1fr auto auto auto auto", alignItems: "center", padding: "0 18px", height: 56, background: "var(--ink-050)", borderBottom: "1px solid var(--border)", gap: 14 }}>
+    <div data-ad-topbar="" style={{ display: "grid", gridTemplateColumns: "auto auto 1fr auto auto auto auto", alignItems: "center", padding: "0 18px", height: 56, background: "var(--ink-050)", borderBottom: "1px solid var(--border)", gap: 14, position: "relative" }}>
       <div data-ad-brand="" style={{ display: "flex", alignItems: "baseline", gap: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 22, color: "var(--ink-1000)", letterSpacing: "-0.02em", cursor: "default" }}>
         <span style={{ color: "var(--brand)" }}>α</span>AlphaDesk
       </div>
 
+      <button
+        data-ad-mobile-menu-trigger=""
+        aria-label="Open navigation menu"
+        aria-expanded={mobileOpen}
+        onClick={() => setMobileOpen((open) => !open)}
+        style={{ display: "none" }}
+      >
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h16" /></svg>
+      </button>
+
       <nav data-ad-nav="" style={{ display: "flex", gap: 2, marginLeft: 18 }}>
         {navs.map(n => <NavItem key={n.id} n={n} page={page} onNav={onNav} />)}
       </nav>
+
+      {mobileOpen && <MobileNavMenu navs={navs} page={page} onNav={(id) => { setMobileOpen(false); onNav(id); }} />}
 
       <SearchBar onPick={onSearch} />
 
@@ -1614,6 +1700,46 @@ function TopBar({ page, onNav, onSearch, regime, theme = "dark", onTheme }) {
       <div data-ad-clock="" style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)", letterSpacing: "0.02em" }}>{clock}</div>
 
       <UserMenu onNav={onNav} theme={theme} onTheme={onTheme} />
+    </div>
+  );
+}
+
+function MobileNavMenu({ navs, page, onNav }) {
+  const rows = navs.flatMap((n) => [
+    { id: n.id, label: n.label, parent: null },
+    ...(n.children || []).map((c) => ({ ...c, parent: n.label })),
+  ]);
+  return (
+    <div data-ad-mobile-menu="">
+      {rows.map((n) => {
+        const active = page === n.id;
+        return (
+          <button
+            key={`${n.parent || "root"}-${n.id}`}
+            onClick={() => onNav(n.id)}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr auto",
+              gap: 10,
+              alignItems: "baseline",
+              width: "100%",
+              minHeight: 42,
+              padding: "9px 11px",
+              border: active ? "1px solid var(--border-strong)" : "1px solid transparent",
+              borderLeft: active ? "2px solid var(--brand)" : "2px solid transparent",
+              borderRadius: 4,
+              background: active ? "var(--bg-elev-1)" : "transparent",
+              color: active ? "var(--ink-1000)" : "var(--fg)",
+              textAlign: "left",
+              cursor: "default",
+            }}
+          >
+            <span style={{ fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: active ? 600 : 500 }}>{n.label}</span>
+            {n.parent && <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--fg-hint)" }}>{n.parent}</span>}
+            {n.hint && <span style={{ gridColumn: "1 / -1", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)" }}>{n.hint}</span>}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -1690,6 +1816,7 @@ function NavItem({ n, page, onNav }) {
 
 function UserMenu({ onNav, theme = "dark", onTheme }) {
   const [open, setOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
     const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
@@ -1699,13 +1826,30 @@ function UserMenu({ onNav, theme = "dark", onTheme }) {
     return () => { window.removeEventListener("mousedown", onClick); window.removeEventListener("keydown", onKey); };
   }, []);
   const go = (id) => { setOpen(false); onNav(id); };
+  const executeLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    const base = env.API_URL || "";
+    try {
+      await fetch(`${base}/api/v1/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch {
+      // Best effort: local state still needs to be cleared so the browser
+      // leaves the account immediately even if the network request fails.
+    }
+    clearPersistedStores();
+    window.dispatchEvent(new CustomEvent("alphadesk:auth-logout"));
+    window.location.href = "/login";
+  };
   const itemStyle = { display: "flex", alignItems: "baseline", gap: 10, padding: "8px 12px", cursor: "default", fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--ink-1000)" };
   const labelStyle = { fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--fg-hint)", letterSpacing: "0.06em", padding: "10px 12px 4px" };
   const sep = { borderTop: "1px solid var(--border-hair)", margin: "4px 0" };
   const onEnter = (e) => e.currentTarget.style.background = "var(--bg-elev-2)";
   const onLeave = (e) => e.currentTarget.style.background = "transparent";
   return (
-    <div ref={ref} style={{ position: "relative" }}>
+    <div ref={ref} data-ad-user-menu="" style={{ position: "relative" }}>
       <button onClick={() => setOpen(o => !o)}
         style={{ width: 32, height: 32, padding: 0, borderRadius: "50%", background: "linear-gradient(135deg,var(--gold-600),var(--gold-300))", border: "1px solid var(--border-strong)", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 15, color: "var(--brand-on)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "default" }}>α</button>
       {open && (
@@ -1728,7 +1872,7 @@ function UserMenu({ onNav, theme = "dark", onTheme }) {
             <ThemeToggle value={theme} onChange={onTheme} />
           </div>
           <div style={sep} />
-          <div style={{ ...itemStyle, color: "var(--fg-muted)" }} onMouseEnter={onEnter} onMouseLeave={onLeave}>Sign out</div>
+          <div style={{ ...itemStyle, color: "var(--fg-muted)" }} onMouseEnter={onEnter} onMouseLeave={onLeave} onClick={executeLogout}>{loggingOut ? "Signing out..." : "Sign out"}</div>
         </div>
       )}
     </div>
@@ -2140,7 +2284,7 @@ function NotificationBell({ items, onRead, onOpenAll }) {
   }, []);
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <button data-ad-icon-button="" onClick={() => setOpen(o => !o)} style={{ position: "relative", width: 32, height: 32, background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--fg)", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "default" }}>
+      <button data-ad-icon-button="" aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"} aria-expanded={open} onClick={() => setOpen(o => !o)} style={{ position: "relative", width: 32, height: 32, background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--fg)", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "default" }}>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10 21a2 2 0 0 0 4 0" /></svg>
         {unread > 0 && <span style={{ position: "absolute", top: -5, right: -5, minWidth: 16, height: 16, padding: "0 4px", borderRadius: 8, background: "var(--down-500)", color: "var(--down-on)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{unread}</span>}
       </button>
@@ -4489,7 +4633,7 @@ function OrderTicket(p) {
         <button onClick={() => p.setSide("sell")} style={tradeBtnStyle("sell", p.side === "sell")}>Sell</button>
       </div>
       <Field label="Quantity">
-        <input value={p.qty} onChange={(e) => p.setQty(+e.target.value || 0)} style={inputStyle} />
+        <input aria-label="Share quantity" inputMode="numeric" value={p.qty} onChange={(e) => p.setQty(+e.target.value || 0)} style={inputStyle} />
         <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", marginLeft: 8, alignSelf: "center" }}>≈ {fmtMoney(p.notional, { dec: 0 })}</span>
       </Field>
       <Field label="Order type">
@@ -4506,16 +4650,16 @@ function OrderTicket(p) {
       </Field>
       {p.orderType === "limit" && (
         <Field label="Limit price">
-          <input value={p.limitPx.toFixed(2)} onChange={(e) => p.setLimitPx(+e.target.value || 0)} style={inputStyle} />
+          <input aria-label="Limit price" inputMode="decimal" value={p.limitPx.toFixed(2)} onChange={(e) => p.setLimitPx(+e.target.value || 0)} style={inputStyle} />
         </Field>
       )}
       <Field label="Stop loss · % of entry">
-        <input value={p.stopPct.toFixed(1)} onChange={(e) => p.setStopPct(+e.target.value || 0)} style={inputStyle} />
+        <input aria-label="Stop loss percent of entry" inputMode="decimal" value={p.stopPct.toFixed(1)} onChange={(e) => p.setStopPct(+e.target.value || 0)} style={inputStyle} />
         <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", marginLeft: 8, alignSelf: "center" }}>≈ {p.stopPx.toFixed(2)}</span>
       </Field>
       <div style={{ marginTop: 12, padding: "12px 12px", background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4 }}>
         <div className="t-label" style={{ marginBottom: 8 }}>Position sizer</div>
-        <input type="range" min="50" max="600" step="25" value={p.qty} onChange={(e) => p.setQty(+e.target.value)} style={{ width: "100%", accentColor: "var(--gold-500)" }} />
+        <input aria-label="Position size slider" type="range" min="50" max="600" step="25" value={p.qty} onChange={(e) => p.setQty(+e.target.value)} style={{ width: "100%", accentColor: "var(--gold-500)" }} />
         <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-hint)", marginTop: 4 }}>
           <span>50</span><span>600 sh</span>
         </div>
@@ -4626,7 +4770,7 @@ function OptionChainPanel({ symbol, spot, optStrike, setOptStrike, optType, setO
     <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 4 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "10px 12px 8px", borderBottom: "1px solid var(--border-hair)" }}>
         <span className="t-label">Option chain</span>
-        <select value={activeExpiry} onChange={(e) => setExpiry(e.target.value)} style={{ background: "var(--ink-100)", border: "1px solid var(--border-hair)", color: "var(--ink-1000)", fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "2px 6px", borderRadius: 2, outline: "none" }}>
+        <select aria-label="Option expiry" value={activeExpiry} onChange={(e) => setExpiry(e.target.value)} style={{ background: "var(--ink-100)", border: "1px solid var(--border-hair)", color: "var(--ink-1000)", fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "2px 6px", borderRadius: 2, outline: "none" }}>
           {expiries.length === 0 && <option value="">No expiry</option>}
           {expiries.map(x => <option key={x} value={x}>{x}</option>)}
         </select>
@@ -4688,26 +4832,26 @@ function OptionForm(p) {
         <button onClick={() => p.setSide("sell")} style={tradeBtnStyle("sell", p.side === "sell")}>Sell<br /><span style={{ fontSize: 8, opacity: 0.7 }}>to open</span></button>
       </div>
       <Field label="Expiry">
-        <select value={expiry} onChange={(e) => setExpiry(e.target.value)} style={inputStyle}>
+        <select aria-label="Option expiry" value={expiry} onChange={(e) => setExpiry(e.target.value)} style={inputStyle}>
           {expiries.map(x => <option key={x}>{x}</option>)}
         </select>
       </Field>
       <Field label="Strike · type">
-        <input value={"$" + p.optStrike} onChange={(e) => p.setOptStrike(+e.target.value.replace(/\D/g, "") || 0)} style={{ ...inputStyle, flex: 1 }} />
+        <input aria-label="Option strike" inputMode="decimal" value={"$" + p.optStrike} onChange={(e) => p.setOptStrike(+e.target.value.replace(/\D/g, "") || 0)} style={{ ...inputStyle, flex: 1 }} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginLeft: 6, flex: 1 }}>
           <button onClick={() => p.setOptType("call")} style={optTypeBtn(p.optType === "call")}>Call</button>
           <button onClick={() => p.setOptType("put")}  style={optTypeBtn(p.optType === "put")}>Put</button>
         </div>
       </Field>
       <Field label="Contracts">
-        <input value={p.contracts} onChange={(e) => p.setContracts(+e.target.value || 0)} style={inputStyle} />
+        <input aria-label="Option contracts" inputMode="numeric" value={p.contracts} onChange={(e) => p.setContracts(+e.target.value || 0)} style={inputStyle} />
         <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", marginLeft: 8, alignSelf: "center" }}>limit {p.limitPx.toFixed(2)}</span>
       </Field>
       <Field label="Order · limit">
-        <select value={p.orderType} onChange={(e) => p.setOrderType(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
+        <select aria-label="Option order type" value={p.orderType} onChange={(e) => p.setOrderType(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
           <option value="market">Market</option><option value="limit">Limit</option>
         </select>
-        <input value={p.limitPx.toFixed(2)} onChange={(e) => p.setLimitPx(+e.target.value || 0)} style={{ ...inputStyle, flex: 1, marginLeft: 6 }} />
+        <input aria-label="Option limit price" inputMode="decimal" value={p.limitPx.toFixed(2)} onChange={(e) => p.setLimitPx(+e.target.value || 0)} style={{ ...inputStyle, flex: 1, marginLeft: 6 }} />
       </Field>
     </div>
   );
@@ -6620,15 +6764,69 @@ const WatchlistsPage = ({ onNav }) => {
   const allActiveSymbols = active ? (symbolsByList[active.id] || []) : [];
   const symbols = allActiveSymbols.filter(s => matchesWlFilter(s, filter));
   const allSymbols = Object.values(symbolsByList).flat();
+  const [actionStatus, setActionStatus] = useState("");
+  const numericWatchlistId = (list = active) => {
+    const raw = String(list?.id || "").replace(/^live-/, "");
+    const id = Number(raw);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  };
+  const refreshSoon = () => {
+    window.setTimeout(() => window.location.reload(), 500);
+  };
+  const handleNewList = async () => {
+    const name = window.prompt("New watchlist name");
+    if (!name?.trim()) return;
+    setActionStatus("Creating watchlist...");
+    try {
+      await createWatchlistV2({ name: name.trim(), description: "Created from AlphaDesk watchlists." });
+      setActionStatus("Watchlist created. Refreshing...");
+      refreshSoon();
+    } catch (err) {
+      setActionStatus(err instanceof Error ? err.message : "Could not create watchlist.");
+    }
+  };
+  const handleQuickAdd = async (rawSymbol) => {
+    const symbol = String(rawSymbol || "").toUpperCase().replace(/[^A-Z0-9.-]/g, "").slice(0, 16);
+    if (!symbol) return;
+    const id = numericWatchlistId();
+    if (!id) {
+      setActionStatus("Pick a live backend watchlist before adding symbols.");
+      return;
+    }
+    setActionStatus(`Adding ${symbol}...`);
+    try {
+      await addWatchlistItem(id, symbol);
+      setActionStatus(`${symbol} added. Refreshing...`);
+      refreshSoon();
+    } catch (err) {
+      setActionStatus(err instanceof Error ? err.message : `Could not add ${symbol}.`);
+    }
+  };
+  const handleExport = (list = active) => {
+    if (!list) return;
+    const rows = [["Symbol", "Name", "Price", "ChangePct", "Volume", "Reason"], ...(symbolsByList[list.id] || []).map((s) => [s.sym, s.name, s.px, s.pct, s.vol, s.reason])];
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${String(list.name || "watchlist").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "watchlist"}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setActionStatus(`Exported ${list.name}.`);
+  };
+  const handleEdit = () => {
+    setActionStatus("Edit list is read-only here until the watchlist PATCH endpoint ships. Quick add and export are live.");
+  };
 
   return (
     <div style={{ padding: "20px 24px 60px", maxWidth: 1640, margin: "0 auto" }}>
-      <WLHeader lists={lists} loading={live.loading} />
+      <WLHeader lists={lists} loading={live.loading} onNewList={handleNewList} />
       <WLPulse allSymbols={allSymbols} />
       <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 16, marginTop: 16, alignItems: "start" }}>
-        <WLRail lists={lists} activeId={activeId} setActiveId={setActiveId} />
+        <WLRail lists={lists} activeId={activeId} setActiveId={setActiveId} onQuickAdd={handleQuickAdd} actionStatus={actionStatus} />
         <div style={{ display: "grid", gap: 12, minWidth: 0 }}>
-          <WLActiveHeader list={active} onNav={onNav} />
+          <WLActiveHeader list={active} onNav={onNav} onExport={handleExport} onEdit={handleEdit} actionStatus={actionStatus} />
           <WLFilterBar filter={filter} setFilter={setFilter} list={active} symbols={allActiveSymbols} />
           <WLTable symbols={symbols} onNav={onNav} />
           <WLAIMemo list={active} />
@@ -6640,7 +6838,7 @@ const WatchlistsPage = ({ onNav }) => {
 
 // ─── header ──────────────────────────────────────────────────────────────
 
-function WLHeader({ lists, loading }) {
+function WLHeader({ lists, loading, onNewList }) {
   const count = lists.reduce((a,l)=>a+l.count,0);
   return (
     <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 14px", borderBottom: "1px solid var(--border-hair)", marginBottom: 16 }}>
@@ -6656,7 +6854,7 @@ function WLHeader({ lists, loading }) {
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
         <StatusDot tone="up" size={6} />
         <span>{loading ? "Loading backend lists" : "Backend lists · live"}</span>
-        <span style={{ marginLeft: 10, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 3, color: "var(--ink-1000)", background: "var(--bg-elev-1)" }}>+ New list</span>
+        <button onClick={onNewList} style={{ marginLeft: 10, padding: "5px 10px", minHeight: 32, border: "1px solid var(--border)", borderRadius: 3, color: "var(--ink-1000)", background: "var(--bg-elev-1)", fontFamily: "var(--font-ui)", fontSize: 11, cursor: "default" }}>+ New list</button>
       </div>
     </header>
   );
@@ -6702,7 +6900,12 @@ function WLPulse({ allSymbols }) {
 
 // ─── left rail ───────────────────────────────────────────────────────────
 
-function WLRail({ lists, activeId, setActiveId }) {
+function WLRail({ lists, activeId, setActiveId, onQuickAdd, actionStatus }) {
+  const [draft, setDraft] = useState("");
+  const submit = () => {
+    onQuickAdd?.(draft);
+    setDraft("");
+  };
   return (
     <aside style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: 12, position: "sticky", top: 12 }}>
       <div className="t-label" style={{ color: "var(--fg-hint)", padding: "0 4px 8px" }}>YOUR LISTS</div>
@@ -6738,9 +6941,17 @@ function WLRail({ lists, activeId, setActiveId }) {
         <div className="t-label" style={{ color: "var(--fg-hint)", marginBottom: 6 }}>QUICK ADD</div>
         <div style={{ display: "flex", gap: 4, alignItems: "center", padding: "6px 8px", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderRadius: 3 }}>
           <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>$</span>
-          <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-muted)", flex: 1 }}>SYM…</span>
-          <span className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)", letterSpacing: "0.05em" }}>↵</span>
+          <input
+            aria-label="Symbol to add"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value.toUpperCase())}
+            onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+            placeholder="SYM"
+            style={{ flex: 1, minWidth: 0, border: 0, outline: "none", background: "transparent", color: "var(--ink-1000)", fontFamily: "var(--font-mono)", fontSize: 12 }}
+          />
+          <button onClick={submit} aria-label="Add symbol to active watchlist" style={{ minWidth: 32, minHeight: 32, padding: "0 8px", border: "1px solid var(--border)", borderRadius: 2, background: "var(--ink-100)", color: "var(--fg)", fontFamily: "var(--font-mono)", fontSize: 10, cursor: "default" }}>ADD</button>
         </div>
+        {actionStatus && <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)", lineHeight: 1.35 }}>{actionStatus}</div>}
       </div>
     </aside>
   );
@@ -6748,7 +6959,7 @@ function WLRail({ lists, activeId, setActiveId }) {
 
 // ─── active list header ──────────────────────────────────────────────────
 
-function WLActiveHeader({ list, onNav }) {
+function WLActiveHeader({ list, onNav, onExport, onEdit, actionStatus }) {
   if (!list) return null;
   const isAI = list.owner === "ai";
   return (
@@ -6766,9 +6977,10 @@ function WLActiveHeader({ list, onNav }) {
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
           <span className="t-mono" style={{ fontSize: 10.5, color: "var(--fg-hint)" }}>{list.updated}</span>
           <span style={{ display: "flex", gap: 6 }}>
-            <span style={{ padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--ink-1000)", background: "var(--bg-elev-1)" }}>Edit list</span>
-            <span style={{ padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--fg-muted)" }}>Export</span>
+            <button onClick={onEdit} style={{ padding: "5px 10px", minHeight: 32, border: "1px solid var(--border)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--ink-1000)", background: "var(--bg-elev-1)", cursor: "default" }}>Edit list</button>
+            <button onClick={() => onExport?.(list)} style={{ padding: "5px 10px", minHeight: 32, border: "1px solid var(--border)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--fg-muted)", background: "transparent", cursor: "default" }}>Export</button>
           </span>
+          {actionStatus && <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-muted)", maxWidth: 260, textAlign: "right" }}>{actionStatus}</span>}
         </div>
       </div>
       <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-hair)", display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
@@ -7427,7 +7639,7 @@ if (typeof window !== "undefined") Object.assign(window, { ReportsPage });
 
 // Settings — personal account configuration. Operator/admin lives in Control Center.
 
-const SettingsPage = ({ onNav }) => {
+const SettingsPage = ({ onNav, theme = "dark", onTheme }) => {
   const [section, setSection] = useState("profile");
   const sections = [
     { id: "profile",      label: "Profile",         hint: "Name, email, avatar" },
@@ -7447,7 +7659,7 @@ const SettingsPage = ({ onNav }) => {
         <STRail sections={sections} active={section} setActive={setSection} />
         <div style={{ minWidth: 0 }}>
           {section === "profile"       && <STProfile />}
-          {section === "preferences"   && <STPreferences />}
+          {section === "preferences"   && <STPreferences theme={theme} onTheme={onTheme} />}
           {section === "trading"       && <STTrading />}
           {section === "broker"        && <STBroker />}
           {section === "notifications" && <STNotifications />}
@@ -7535,9 +7747,9 @@ function STInput({ value, mono, width = "100%" }) {
   );
 }
 
-function STSelect({ value, options, width = 240 }) {
+function STSelect({ value, options, width = 240, onChange }) {
   return (
-    <select defaultValue={value} style={{
+    <select defaultValue={value} onChange={(e) => onChange?.(e.target.value)} style={{
       width, padding: "7px 10px",
       fontFamily: "var(--font-ui)", fontSize: 12.5,
       color: "var(--ink-1000)", background: "var(--bg-elev-1)",
@@ -7607,7 +7819,7 @@ function STProfile() {
   );
 }
 
-function STPreferences() {
+function STPreferences({ theme = "dark", onTheme }) {
   return (
     <STCard title="Preferences" sub="Per-user display preferences. These don't affect strategy execution.">
       <STField label="Timezone" hint="Used everywhere except market session times (always ET)">
@@ -7623,7 +7835,7 @@ function STPreferences() {
         <STSelect value="dense" options={[{ v: "comfortable", l: "Comfortable" }, { v: "dense", l: "Dense" }]} width={180} />
       </STField>
       <STField label="Theme" hint="System follows OS · Dark is the default authoring theme">
-        <STSelect value="dark" options={[{ v: "dark", l: "Dark" }, { v: "system", l: "System" }, { v: "light", l: "Light · beta" }]} width={180} />
+        <STSelect value={theme} onChange={(v) => onTheme?.(v === "system" ? "dark" : v)} options={[{ v: "dark", l: "Dark" }, { v: "system", l: "System" }, { v: "light", l: "Light · beta" }]} width={180} />
       </STField>
       <STField label="Number format" hint="$1,234.56 vs $1.234,56 · affects display only, never calculations">
         <STSelect value="us" options={[{ v: "us", l: "1,234.56 · US" }, { v: "eu", l: "1.234,56 · EU" }]} width={180} />
@@ -9277,6 +9489,7 @@ if (typeof window !== "undefined") Object.assign(window, { AuthPage });
 
 const RiskPage = ({ tweaks, onNav, onPickTicker }) => {
   const live = useDesignLiveData();
+  const risk = live.riskDashboard || {};
   const equity = asFiniteNumber(live.portfolio?.equity, 0) || 0;
   const cash = asFiniteNumber(live.portfolio?.cash, 0) || 0;
   const positions = live.positions || [];
@@ -9291,6 +9504,16 @@ const RiskPage = ({ tweaks, onNav, onPickTicker }) => {
   }).sort((a, b) => Math.abs(b.marketValue) - Math.abs(a.marketValue));
   const gross = rows.reduce((a, r) => a + Math.abs(r.marketValue), 0);
   const top = rows[0];
+  const var95 = asFiniteNumber(risk.var_95, null);
+  const var99 = asFiniteNumber(risk.var_99, null);
+  const beta = asFiniteNumber(risk.portfolio_beta, null);
+  const maxDd = asFiniteNumber(risk.max_drawdown_pct ?? risk.current_drawdown_pct, null);
+  const riskPct = (v) => {
+    const n = asFiniteNumber(v, null);
+    if (n == null) return null;
+    return Math.abs(n) <= 1 ? n * 100 : n;
+  };
+  const ddPct = riskPct(maxDd);
   return (
     <div style={{ padding: "20px 24px 40px", maxWidth: 1640, margin: "0 auto" }}>
       <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 14px", borderBottom: "1px solid var(--border-hair)", marginBottom: 18 }}>
@@ -9298,7 +9521,7 @@ const RiskPage = ({ tweaks, onNav, onPickTicker }) => {
           <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>RISK / LIVE PORTFOLIO</div>
           <h1 style={{ margin: "6px 0 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 32, fontWeight: 400, letterSpacing: "-0.02em" }}>What can hurt us today</h1>
           <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14 }}>
-            Live account and position exposure. VaR, stress scenarios, and correlation are hidden until a risk-engine endpoint exists.
+            Live account, position exposure, and risk-engine output. Stress scenarios and correlation stay blank until those endpoints expose model output.
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
@@ -9307,17 +9530,18 @@ const RiskPage = ({ tweaks, onNav, onPickTicker }) => {
         </div>
       </header>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 1, background: "var(--border)", border: "1px solid var(--border)", borderRadius: 4, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 1, background: "var(--border)", border: "1px solid var(--border)", borderRadius: 4, marginBottom: 16 }}>
         {[
           { label: "ACCOUNT EQUITY", val: fmtMoney(equity, { dec: 2 }), sub: live.portfolio?.source || "portfolio summary" },
-          { label: "CASH", val: fmtMoney(cash, { dec: 2 }), sub: "available cash" },
           { label: "GROSS EXPOSURE", val: fmtMoney(gross, { dec: 0 }), sub: equity > 0 ? `${(gross / equity).toFixed(2)}× equity` : "positions endpoint" },
-          { label: "POSITIONS", val: String(rows.length), sub: "/api/v1/trades/positions" },
-          { label: "TOP WEIGHT", val: top ? `${top.symbol} ${top.weight.toFixed(1)}%` : "—", sub: top ? fmtMoney(top.marketValue, { dec: 0 }) : "no positions" },
+          { label: "VAR · 1D · 95%", val: var95 == null ? "—" : fmtMoney(var95, { dec: 0 }), sub: "/api/v1/risk/dashboard", tone: var95 == null ? "neutral" : "warn" },
+          { label: "VAR · 1D · 99%", val: var99 == null ? "—" : fmtMoney(var99, { dec: 0 }), sub: risk.estimated ? "estimated" : "risk engine", tone: var99 == null ? "neutral" : "down" },
+          { label: "MAX DRAWDOWN", val: ddPct == null ? "—" : `${ddPct.toFixed(2)}%`, sub: "risk dashboard", tone: ddPct != null && ddPct < -5 ? "down" : "neutral" },
+          { label: "PORTFOLIO BETA", val: beta == null ? "—" : beta.toFixed(2), sub: top ? `top ${top.symbol} ${top.weight.toFixed(1)}%` : "no positions" },
         ].map((m, i) => (
           <div key={i} style={{ padding: "16px 18px", background: "var(--ink-100)", borderRadius: 4, position: "relative" }}>
             <div className="t-label" style={{ color: "var(--fg-hint)" }}>{m.label}</div>
-            <div className="t-mono" style={{ marginTop: 6, fontSize: 24, color: "var(--ink-1000)", fontWeight: 500 }}>{m.val}</div>
+            <div className="t-mono" style={{ marginTop: 6, fontSize: 24, color: m.tone === "down" ? "var(--down-500)" : m.tone === "warn" ? "var(--gold-300)" : "var(--ink-1000)", fontWeight: 500 }}>{m.val}</div>
             <div className="t-body-sm" style={{ marginTop: 2, color: "var(--fg-muted)", fontFamily: "var(--font-display)", fontStyle: "italic" }}>{m.sub}</div>
           </div>
         ))}
@@ -9349,10 +9573,14 @@ const RiskPage = ({ tweaks, onNav, onPickTicker }) => {
           <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>RISK ENGINE</div>
           <h2 className="t-h3" style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>Model state</h2>
           <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, lineHeight: 1.55 }}>
-            No live VaR/stress/correlation endpoint is currently exposed to the frontend. This page now refuses to fabricate those figures; it shows only real account and position data until the backend publishes model output.
+            The risk dashboard endpoint is mounted and feeding this surface. Scenario stress and correlation modules remain omitted until their dedicated endpoints publish model output.
           </div>
           <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
             {[
+              ["VaR 95", var95 == null ? "—" : fmtMoney(var95, { dec: 0 })],
+              ["VaR 99", var99 == null ? "—" : fmtMoney(var99, { dec: 0 })],
+              ["Current drawdown", riskPct(risk.current_drawdown_pct) == null ? "—" : `${riskPct(risk.current_drawdown_pct).toFixed(2)}%`],
+              ["Portfolio beta", beta == null ? "—" : beta.toFixed(2)],
               ["Portfolio source", live.portfolio?.source || "backend"],
               ["Demo mode", live.portfolio?.is_demo ? "yes" : "no"],
               ["Open orders", String((live.orders || []).length)],
@@ -9765,20 +9993,18 @@ if (typeof window !== "undefined") Object.assign(window, { RiskPage });
 const StrategyPlaybook = ({ tweaks, stratName = "Momentum & Quality", onNav, onBack, onPickTicker, onBacktest }) => {
   const live = useDesignLiveData();
   const stratList = Array.isArray(live.strategies) ? live.strategies : [];
-  const lowered = String(stratName || "").toLowerCase();
+  const lowered = normalizeStrategyKey(stratName || "");
   const matched = stratList.find((s) => {
-    const id = String(s.id || s.slug || s.name || "").toLowerCase();
-    const nm = String(s.name || s.label || "").toLowerCase();
-    const slug = String(s.slug || "").toLowerCase();
-    return id === lowered || nm === lowered || slug === lowered;
+    const keys = [s.id, s.slug, s.name, s.label].map(normalizeStrategyKey);
+    return keys.includes(lowered);
   });
   const displayName = matched?.name || matched?.label || stratName;
   const status = matched?.status || matched?.state || (matched ? "live" : "unknown");
   const invested = asFiniteNumber(matched?.invested ?? matched?.capital_allocated, null);
   const openPositionsCount = asFiniteNumber(matched?.open_positions ?? matched?.position_count, null);
   const ownedPositions = (live.positions || []).filter((p) => {
-    const ps = String(p.strategy || p.asset_class || "").toLowerCase();
-    return ps === lowered || ps === displayName.toLowerCase();
+    const ps = normalizeStrategyKey(p.strategy || p.asset_class || "");
+    return ps === lowered || ps === normalizeStrategyKey(displayName);
   }).map((p) => ({
     symbol: String(p.symbol || p.sym || "").toUpperCase(),
     qty: asFiniteNumber(p.quantity ?? p.qty, 0) || 0,
@@ -10324,6 +10550,9 @@ if (typeof window !== "undefined") Object.assign(window, { BacktestPage });
 
 const AdminPage = ({ tweaks, onNav }) => {
   const live = useDesignLiveData();
+  const adminKeys = Array.isArray(live.adminKeys) ? live.adminKeys : [];
+  const layoutSections = Array.isArray(live.adminLayout?.dashboard_sections) ? live.adminLayout.dashboard_sections : [];
+  const deploy = live.adminLastDeploy || null;
   const modules = [
     { name: "API proxy", value: live.error ? "error" : "online", tone: live.error ? "down" : "up", caption: live.error || "Frontend API calls authenticated and responding." },
     { name: "Portfolio", value: live.portfolio ? "connected" : "empty", tone: live.portfolio ? "up" : "warn", caption: live.portfolio?.source ? `source ${live.portfolio.source}` : "No portfolio payload returned." },
@@ -10333,6 +10562,9 @@ const AdminPage = ({ tweaks, onNav }) => {
     { name: "Watchlists", value: `${(live.watchlists || []).length}`, tone: "up", caption: "enriched list count" },
     { name: "Quotes", value: `${Object.keys(live.quotes || {}).length}`, tone: "up", caption: "live quote cache" },
     { name: "Notifications", value: `${(live.notifications || []).length}`, tone: "up", caption: "/api/v1/notifications" },
+    { name: "Provider keys", value: adminKeys.length ? `${adminKeys.filter((k) => k.set).length}/${adminKeys.length} set` : "gated", tone: adminKeys.length ? "up" : "warn", caption: "/api/v1/admin/control-center/keys" },
+    { name: "Layout config", value: layoutSections.length ? `${layoutSections.length} sections` : "gated", tone: layoutSections.length ? "up" : "warn", caption: "/api/v1/admin/control-center/layout" },
+    { name: "Last deploy", value: deploy?.triggered_at ? "available" : "none", tone: deploy?.triggered_at ? "up" : "warn", caption: deploy?.actor ? `actor ${deploy.actor}` : "/api/v1/admin/control-center/deploy/last" },
   ];
 
   return (
@@ -10341,7 +10573,7 @@ const AdminPage = ({ tweaks, onNav }) => {
         <div>
           <div className="t-label">ADMIN · CONTROL CENTER</div>
           <h1 style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 36, color: "var(--ink-1000)", letterSpacing: "-0.025em", lineHeight: 1.05, margin: "6px 0 4px" }}>Application control center</h1>
-          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--fg-dim)", maxWidth: 720 }}>Read-only live backend health. Runtime controls, key rotation, audit trails, and deploy dispatch stay hidden until real admin APIs exist.</div>
+          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--fg-dim)", maxWidth: 720 }}>Read-only live backend health, provider-key status, layout config, and last deploy state. Mutating admin actions remain admin-gated.</div>
         </div>
         <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 11px 5px 9px", border: `1px solid ${live.error ? "rgba(224,120,86,0.45)" : "rgba(168,208,77,0.45)"}`, background: live.error ? "rgba(224,120,86,0.08)" : "rgba(168,208,77,0.08)", borderRadius: 999 }}>
           <StatusDot tone={live.error ? "down" : "up"} size={6} glow />
@@ -10361,7 +10593,7 @@ const AdminPage = ({ tweaks, onNav }) => {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 18 }}>
-        <AdminSection eyebrow="ADMIN · LIVE FEEDS" title="Backend endpoints" sub="The control center now reflects existing APIs instead of a mock architecture graph.">
+        <AdminSection eyebrow="ADMIN · LIVE FEEDS" title="Backend endpoints" sub="The control center reflects mounted APIs instead of a mock architecture graph.">
           <div style={{ display: "grid", gap: 10 }}>
             {[
               ["/api/v1/portfolio/summary", live.portfolio ? "responding" : "empty"],
@@ -10369,6 +10601,10 @@ const AdminPage = ({ tweaks, onNav }) => {
               ["/api/v1/trades/orders", `${(live.orders || []).length} orders`],
               ["/api/v1/strategies", `${(live.strategies || []).length} strategies`],
               ["/api/v1/notifications", `${(live.notifications || []).length} notifications`],
+              ["/api/v1/risk/dashboard", live.riskDashboard ? "responding" : "empty"],
+              ["/api/v1/admin/control-center/keys", adminKeys.length ? `${adminKeys.length} key slots` : "admin gated"],
+              ["/api/v1/admin/control-center/layout", layoutSections.length ? `${layoutSections.length} sections` : "admin gated"],
+              ["/api/v1/admin/control-center/deploy/last", deploy ? "responding" : "admin gated"],
             ].map(([k, v]) => (
               <div key={k} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 16, padding: "10px 0", borderBottom: "1px solid var(--border-hair)" }}>
                 <span className="t-mono" style={{ color: "var(--fg-muted)", fontSize: 12 }}>{k}</span>
@@ -10377,9 +10613,18 @@ const AdminPage = ({ tweaks, onNav }) => {
             ))}
           </div>
         </AdminSection>
-        <AdminSection eyebrow="ADMIN · WRITE SURFACES" title="Disabled until backed" sub="No mock command parser, fake key state, or pretend deploy rail is exposed in production UI.">
+        <AdminSection eyebrow="ADMIN · WRITE SURFACES" title="Admin APIs mounted" sub="Provider keys, layout config, and deploy status are exposed through admin-gated endpoints. This design surface keeps mutating actions read-only for now.">
           <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--fg-muted)", lineHeight: 1.6 }}>
-            This route is intentionally read-only. Add signed admin endpoints for feature flags, provider keys, risk gates, deploy dispatch, and audit logs, and the controls can be reintroduced without design placeholders.
+            Key rotation and deploy dispatch endpoints exist in the backend and require admin authorization. The visual control center shows live status only; the dedicated admin client can own mutation flows without design placeholders or fake key state.
+          </div>
+          <div style={{ marginTop: 16, display: "grid", gap: 8 }}>
+            {adminKeys.slice(0, 6).map((k) => (
+              <div key={k.key || k.label} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", borderTop: "1px solid var(--border-hair)", paddingTop: 8 }}>
+                <span className="t-label" style={{ color: "var(--fg-hint)" }}>{k.label || k.key}</span>
+                <span className="t-mono" style={{ color: k.set ? "var(--up-500)" : "var(--fg-muted)", fontSize: 12 }}>{k.set ? k.masked || "set" : "not set"}</span>
+              </div>
+            ))}
+            {adminKeys.length === 0 && <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg-muted)" }}>No admin key payload returned for this session.</div>}
           </div>
         </AdminSection>
       </div>
@@ -11234,10 +11479,15 @@ const DESIGN_PAGE_ROUTES = {
 
 const STRATEGY_NAME_TO_SLUG = {
   "Momentum & Quality": "momentum-quality",
+  "Momentum + Quality": "momentum-quality",
+  "Momentum + Q": "momentum-quality",
   "Regime Adaptive": "regime-adaptive",
+  "Regime Adapt": "regime-adaptive",
   PEAD: "earnings-options-play",
+  "Earnings Options": "earnings-options-play",
   "Mean Reversion": "mean-reversion",
   "Pairs · Sector": "pairs-trading",
+  "Pairs Trading": "pairs-trading",
   "AI Alpha": "trading-agents-research",
 };
 
@@ -11263,6 +11513,15 @@ export function designStrategyNameFromSlug(slug = "momentum-quality") {
     .filter(Boolean)
     .map(part => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function normalizeStrategyKey(value = "") {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/\+/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 function designRouteFor(page: AlphaDeskDesignPage, opts: { ticker?: string; strat?: string } = {}) {
@@ -11355,7 +11614,12 @@ export function AlphaDeskDesignApp({ initialPage = "dashboard", initialSymbol = 
   // Theme — token swap. Default dark; light remaps tokens.css to a warm-paper
   // palette via [data-theme="light"]. No component-level branching needed.
   useEffect(() => {
-    document.documentElement.dataset.theme = t.theme || "dark";
+    const theme = t.theme || "dark";
+    const root = document.documentElement;
+    root.dataset.theme = theme;
+    root.classList.toggle("dark", theme !== "light");
+    root.classList.toggle("light", theme === "light");
+    root.style.colorScheme = theme === "light" ? "light" : "dark";
   }, [t.theme]);
 
   const onNav = navigate;
@@ -11389,7 +11653,7 @@ export function AlphaDeskDesignApp({ initialPage = "dashboard", initialSymbol = 
   else if (page === "strategies") body = <StrategiesPage tweaks={t} onNav={onNav} />;
   else if (page === "watchlists") body = <WatchlistsPage tweaks={t} onNav={onNav} />;
   else if (page === "reports")    body = <ReportsPage tweaks={t} onNav={onNav} onPickTicker={onPickTicker} />;
-  else if (page === "settings")   body = <SettingsPage onNav={onNav} onBack={() => goBack("dashboard")} />;
+  else if (page === "settings")   body = <SettingsPage onNav={onNav} onBack={() => goBack("dashboard")} theme={t.theme || "dark"} onTheme={v => setTweak("theme", v)} />;
   else if (page === "onboarding") body = <OnboardingPage onNav={onNav} />;
   else if (page === "marketing")  body = <MarketingPage onNav={onNav} />;
   else if (page === "auth")       body = <AuthPage onNav={onNav} />;
@@ -11408,7 +11672,7 @@ export function AlphaDeskDesignApp({ initialPage = "dashboard", initialSymbol = 
   const standalone = page === "marketing" || page === "auth" || page === "onboarding" || page === "mobile";
 
   return (
-    <LiveDataProvider symbol={sym}>
+    <LiveDataProvider symbol={sym} page={page}>
     <div data-ad-app="" data-screen-label={`AlphaDesk · ${page}`} style={{ display: "grid", gridTemplateRows: standalone ? "1fr" : "auto minmax(0,1fr) auto", height: "100dvh", minHeight: 0, background: "var(--bg)", overflow: "hidden" }}>
       <LayoutGuardStyle />
       {!standalone && <TopBar page={page} onNav={onNav} onSearch={onPickTicker} regime={MOCK_REGIME.state} theme={t.theme || "dark"} onTheme={v => setTweak("theme", v)} />}

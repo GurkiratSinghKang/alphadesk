@@ -715,7 +715,7 @@ function EOPV2Hero({
         borderLeft: "2px solid var(--brand)",
       }}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-col items-start gap-3 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0 flex-1">
           <p
             className="t-eyebrow-italic"
@@ -763,7 +763,7 @@ function EOPV2Hero({
         <div
           role="status"
           aria-live="polite"
-          className="flex flex-col items-end gap-1 t-eyebrow-italic"
+          className="flex flex-col items-start gap-1 t-eyebrow-italic md:items-end"
           style={{ letterSpacing: "0.12em", color: "var(--fg-muted)" }}
         >
           {loading ? (

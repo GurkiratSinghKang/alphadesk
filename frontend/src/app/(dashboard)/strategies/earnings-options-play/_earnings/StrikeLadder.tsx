@@ -130,9 +130,9 @@ export default function StrikeLadder({ ladder, underlying }: StrikeLadderProps) 
         role="region"
         aria-label="Strike ladder, scrollable"
         tabIndex={0}
-        className="mt-1 overflow-x-auto"
+        className="mt-1 overflow-x-auto rounded-sm border border-transparent focus:border-[color:var(--brand)] sm:border-0"
       >
-        <table className="w-full table-auto border-separate border-spacing-0 t-mono text-body-sm tabular-nums">
+        <table className="min-w-[720px] w-full table-auto border-separate border-spacing-0 t-mono text-body-sm tabular-nums">
           <thead className="sticky top-0 bg-[color:var(--bg-card)] z-10">
             {/*
               Round-8 / AX-11: every Greek glyph carries an

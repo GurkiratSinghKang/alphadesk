@@ -223,6 +223,12 @@ export function OnboardingTour() {
   const completeTour = useCallback(() => {
     safeSetItem(STORAGE_KEY, "1");
     safeSetItem(DISMISSED_KEY, "true");
+    try {
+      window.sessionStorage.removeItem(RUN_AFTER_LOGIN_KEY);
+      window.sessionStorage.setItem(SHOWN_THIS_LOGIN_KEY, "1");
+    } catch {
+      // Ignore storage denial; the persistent dismissed flags above are enough.
+    }
     setActive(false);
     setCommandPaletteOpen(false);
   }, [setCommandPaletteOpen]);

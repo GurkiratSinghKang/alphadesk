@@ -110,6 +110,7 @@ function isDashboardRoute(pathname: string | null): boolean {
   // route AND any nested subroute.
   if (/^\/strategies\/[^/]+(\/.*)?$/.test(pathname)) return true;
   if (/^\/symbols\/[^/]+(\/.*)?$/.test(pathname)) return true;
+  if (/^\/trade\/[^/]+$/.test(pathname)) return true;
   if (/^\/agents\/[^/]+(\/.*)?$/.test(pathname)) return true;
   if (/^\/positions\/[^/]+(\/.*)?$/.test(pathname)) return true;
   if (/^\/admin\/users\/[^/]+$/.test(pathname)) return true;

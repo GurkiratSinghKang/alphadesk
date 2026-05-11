@@ -14,7 +14,56 @@ export const dynamic = "force-static";
 
 export default function WelcomePage() {
   return (
-    <div style={{ background: "var(--bg)", color: "var(--fg)", minHeight: "100vh" }}>
+    <div data-welcome-page="" style={{ background: "var(--bg)", color: "var(--fg)", minHeight: "100vh" }}>
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @media (max-width: 760px) {
+              [data-welcome-page] header {
+                padding: 12px 18px !important;
+              }
+              [data-welcome-page] nav {
+                max-width: 100% !important;
+                overflow-x: visible !important;
+                gap: 10px !important;
+                padding-bottom: 2px !important;
+              }
+              [data-welcome-page] nav a {
+                flex: 0 0 auto !important;
+                white-space: nowrap !important;
+              }
+              [data-welcome-page] nav a[href="#thesis"],
+              [data-welcome-page] nav a[href="#agents"],
+              [data-welcome-page] nav a[href="/pricing"],
+              [data-welcome-page] nav a[href="/about"] {
+                display: none !important;
+              }
+              [data-welcome-page] section {
+                padding-left: 18px !important;
+                padding-right: 18px !important;
+              }
+              [data-welcome-page] [data-welcome-hero] {
+                padding-top: 48px !important;
+                padding-bottom: 64px !important;
+              }
+              [data-welcome-page] [data-welcome-hero-title] {
+                font-size: clamp(44px, 14vw, 60px) !important;
+                line-height: 1 !important;
+                letter-spacing: -0.025em !important;
+              }
+              [data-welcome-page] [style*="grid-template-columns"] {
+                grid-template-columns: minmax(0, 1fr) !important;
+              }
+              [data-welcome-page] [style*="position: sticky"] {
+                position: static !important;
+              }
+              [data-welcome-page] [style*="display: flex"] {
+                flex-wrap: wrap !important;
+              }
+            }
+          `,
+        }}
+      />
       <MKHeader />
       <MKHero />
       <MKThesis />
@@ -150,6 +199,7 @@ function MKHeader() {
 function MKHero() {
   return (
     <section
+      data-welcome-hero=""
       style={{
         padding: "80px 40px 100px",
         maxWidth: 1320,
@@ -163,6 +213,7 @@ function MKHero() {
         INVITE-ONLY · OPERATOR ACCESS
       </div>
       <h1
+        data-welcome-hero-title=""
         className="m-0 mt-5 italic"
         style={{
           fontFamily: "var(--font-display)",
@@ -270,7 +321,7 @@ function MKHero() {
               className="t-eyebrow-italic"
               style={{
                 color: "var(--fg-hint)",
-                fontSize: 9.5,
+                fontSize: 11,
                 letterSpacing: "0.16em",
               }}
             >
@@ -550,7 +601,7 @@ function MKAgents() {
                 <span
                   className="t-mono"
                   style={{
-                    fontSize: 10,
+                    fontSize: 11,
                     color: "var(--fg-hint)",
                     letterSpacing: "0.06em",
                   }}
@@ -677,7 +728,7 @@ function MKResults() {
               className="t-eyebrow-italic"
               style={{
                 color: "var(--fg-hint)",
-                fontSize: 9.5,
+                fontSize: 11,
                 letterSpacing: "0.16em",
               }}
             >
@@ -714,7 +765,7 @@ function MKResults() {
         className="t-mono"
         style={{
           marginTop: 22,
-          fontSize: 10,
+          fontSize: 11,
           color: "var(--fg-hint)",
           letterSpacing: "0.06em",
           maxWidth: 920,
@@ -806,7 +857,7 @@ function MKFooter() {
               className="t-eyebrow-italic"
               style={{
                 color: "var(--fg-hint)",
-                fontSize: 9.5,
+                fontSize: 11,
                 letterSpacing: "0.18em",
               }}
             >
