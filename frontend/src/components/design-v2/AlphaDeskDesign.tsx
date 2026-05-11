@@ -109,6 +109,17 @@ import {
   ackPriceAlert,
   getAgentControls,
   patchAgentControl,
+  // 2026-05-11 (round 6): emergency trading controls (halt + flatten
+  // + resume) plus the per-strategy alloc-capital and kill-switch
+  // threshold editors. All four PATCH/POST endpoints are admin-only.
+  flattenAllPositions,
+  getHaltStatus,
+  haltTrading,
+  resumeTrading,
+  getStrategyAllocCapital,
+  patchStrategyAllocCapital,
+  getKillSwitchThresholds,
+  patchKillSwitchThresholds,
 } from "@/lib/api";
 import type {
   NotificationPrefType,
@@ -12207,6 +12218,20 @@ const StrategyPlaybook = ({ tweaks, stratName = "Momentum & Quality", onNav, onB
         ))}
       </div>
 
+      {/* 2026-05-11 (round 6): kill-switch threshold + alloc-capital
+       * editor. Admin-only edit buttons that PATCH the in-memory
+       * overlays on /trades/strategy-kill-switch-thresholds and
+       * /trades/strategy-alloc-capital. The card always renders the
+       * effective values (default OR env OR overlay) so a non-admin
+       * can read the current configuration. */}
+      {matched && (
+        <KillSwitchConfigCard
+          strategyId={String(strategyId)}
+          displayName={displayName}
+          isAdmin={isAdmin}
+        />
+      )}
+
       {/* 2026-05-11 (round 5g): kill-switch audit history. Renders the
        * latest 6 disable events (resolved + unresolved). Active row
        * pinned at top with red border; resolved rows muted with the
@@ -12292,6 +12317,224 @@ const StrategyPlaybook = ({ tweaks, stratName = "Momentum & Quality", onNav, onB
     </div>
   );
 };
+
+// 2026-05-11 (round 6): per-strategy kill-switch threshold +
+// alloc-capital editor. Reads the global config from /trades/
+// strategy-kill-switch-thresholds and /trades/strategy-alloc-capital,
+// drills into the row for THIS strategy, and lets admin PATCH the
+// overlay. Non-admin sees read-only effective values.
+function KillSwitchConfigCard({
+  strategyId,
+  displayName,
+  isAdmin,
+}: {
+  strategyId: string;
+  displayName: string;
+  isAdmin: boolean;
+}) {
+  const [thresholds, setThresholds] = useState<Awaited<ReturnType<typeof getKillSwitchThresholds>> | null>(null);
+  const [alloc, setAlloc] = useState<Awaited<ReturnType<typeof getStrategyAllocCapital>> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+
+  const refresh = React.useCallback(async () => {
+    const [t, a] = await Promise.allSettled([
+      getKillSwitchThresholds(),
+      getStrategyAllocCapital(),
+    ]);
+    if (t.status === "fulfilled") setThresholds(t.value);
+    if (a.status === "fulfilled") setAlloc(a.value);
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh, strategyId]);
+
+  // Resolve effective values for THIS strategy. Backend returns
+  // sorted maps keyed by strategy name; fall back to default when
+  // unconfigured.
+  const layer1Effective = thresholds?.effective?.[strategyId]?.layer1 ?? thresholds?.default?.layer1 ?? null;
+  const layer2Effective = thresholds?.effective?.[strategyId]?.layer2 ?? thresholds?.default?.layer2 ?? null;
+  const layer1Overlay = thresholds?.overlay?.layer1?.[strategyId] ?? null;
+  const layer2Overlay = thresholds?.overlay?.layer2?.[strategyId] ?? null;
+  const allocEffective = alloc?.effective?.[strategyId] ?? alloc?.default ?? null;
+  const allocOverlay = alloc?.overlay?.[strategyId] ?? null;
+
+  const fmtPct = (v: number | null) =>
+    v == null ? "—" : `${(v * 100).toFixed(2)}%`;
+
+  const editLayerThreshold = async (layer: 1 | 2) => {
+    if (!isAdmin || busy) return;
+    const currentRaw = layer === 1 ? layer1Overlay ?? layer1Effective : layer2Overlay ?? layer2Effective;
+    const promptValue = currentRaw == null ? "" : (currentRaw * 100).toFixed(2);
+    const next = window.prompt(
+      `Layer ${layer} threshold for ${displayName} (negative percent, e.g. -8 for -8% drawdown). ` +
+      `Empty = drop overlay, use default (${layer === 1 ? fmtPct(thresholds?.default?.layer1 ?? null) : fmtPct(thresholds?.default?.layer2 ?? null)}).`,
+      promptValue,
+    );
+    if (next === null) return;
+    const trimmed = next.trim();
+    setBusy(true);
+    setMsg(null);
+    try {
+      if (trimmed === "") {
+        // Clear the overlay so the env/default takes over.
+        await patchKillSwitchThresholds({
+          [layer === 1 ? "layer1" : "layer2"]: { clear: [strategyId] },
+        });
+        setMsg({ tone: "ok", text: `Layer ${layer} overlay cleared.` });
+      } else {
+        const parsed = Number.parseFloat(trimmed);
+        if (!Number.isFinite(parsed) || parsed > 0) {
+          setMsg({ tone: "err", text: "Threshold must be a number ≤ 0 (negative percent, e.g. -8 for -8%)." });
+          setBusy(false);
+          return;
+        }
+        const asFraction = parsed / 100;
+        await patchKillSwitchThresholds({
+          [layer === 1 ? "layer1" : "layer2"]: { set: { [strategyId]: asFraction } },
+        });
+        setMsg({ tone: "ok", text: `Layer ${layer} overlay set to ${fmtPct(asFraction)}.` });
+      }
+      await refresh();
+    } catch (e) {
+      setMsg({ tone: "err", text: e instanceof Error ? e.message : "PATCH failed." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const editAlloc = async () => {
+    if (!isAdmin || busy) return;
+    const currentRaw = allocOverlay ?? allocEffective;
+    const next = window.prompt(
+      `Alloc capital for ${displayName} (USD notional). Empty = drop overlay, use default ($${alloc?.default?.toLocaleString() ?? "—"}).`,
+      currentRaw != null ? String(currentRaw) : "",
+    );
+    if (next === null) return;
+    const trimmed = next.trim();
+    setBusy(true);
+    setMsg(null);
+    try {
+      if (trimmed === "") {
+        await patchStrategyAllocCapital({ clear: [strategyId] });
+        setMsg({ tone: "ok", text: "Alloc-capital overlay cleared." });
+      } else {
+        const parsed = Number.parseFloat(trimmed);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+          setMsg({ tone: "err", text: "Alloc capital must be a non-negative number." });
+          setBusy(false);
+          return;
+        }
+        await patchStrategyAllocCapital({ set: { [strategyId]: parsed } });
+        setMsg({ tone: "ok", text: `Alloc-capital overlay set to $${parsed.toLocaleString()}.` });
+      }
+      await refresh();
+    } catch (e) {
+      setMsg({ tone: "err", text: e instanceof Error ? e.message : "PATCH failed." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!thresholds || !alloc) {
+    return (
+      <div style={{ marginBottom: 20, padding: 18, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 13 }}>
+        Loading kill-switch configuration…
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginBottom: 20, padding: 18, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <div>
+          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>KILL-SWITCH · CONFIGURATION</div>
+          <h2 style={{ margin: "2px 0 4px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 18, letterSpacing: "-0.01em", fontWeight: 400 }}>
+            Drawdown · Daily-PnL ratio · Alloc capital
+          </h2>
+        </div>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--fg-hint)", letterSpacing: "0.04em" }}>
+          per-strategy overlay over global defaults
+        </span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginTop: 12 }}>
+        {[
+          {
+            key: "layer1",
+            label: "LAYER 1 · DRAWDOWN",
+            effective: layer1Effective,
+            overlay: layer1Overlay,
+            defaultVal: thresholds.default.layer1,
+            format: fmtPct,
+            onEdit: () => editLayerThreshold(1),
+          },
+          {
+            key: "layer2",
+            label: "LAYER 2 · DAILY P&L RATIO",
+            effective: layer2Effective,
+            overlay: layer2Overlay,
+            defaultVal: thresholds.default.layer2,
+            format: fmtPct,
+            onEdit: () => editLayerThreshold(2),
+          },
+          {
+            key: "alloc",
+            label: "ALLOC CAPITAL",
+            effective: allocEffective,
+            overlay: allocOverlay,
+            defaultVal: alloc.default,
+            format: (v: number | null) => (v == null ? "—" : `$${v.toLocaleString()}`),
+            onEdit: editAlloc,
+          },
+        ].map((cfg) => (
+          <div key={cfg.key} style={{ padding: 12, border: "1px solid var(--border-hair)", background: "var(--bg)", borderRadius: 3 }}>
+            <div className="t-label" style={{ color: "var(--fg-hint)" }}>{cfg.label}</div>
+            <div className="t-mono" style={{ marginTop: 4, fontSize: 18, color: "var(--ink-1000)", fontWeight: 500 }}>
+              {cfg.format(cfg.effective)}
+            </div>
+            <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-muted)" }}>
+              {cfg.overlay != null
+                ? <>overlay · default <span className="t-mono" style={{ fontStyle: "normal" }}>{cfg.format(cfg.defaultVal)}</span></>
+                : <>default · no overlay</>}
+            </div>
+            {isAdmin && (
+              <button
+                onClick={cfg.onEdit}
+                disabled={busy}
+                style={{
+                  marginTop: 8,
+                  width: "100%",
+                  padding: "4px 8px",
+                  background: "var(--bg-elev-1)",
+                  color: "var(--ink-1000)",
+                  border: "1px solid var(--border-strong)",
+                  borderRadius: 3,
+                  fontFamily: "var(--font-ui)",
+                  fontSize: 11,
+                  cursor: busy ? "wait" : "pointer",
+                  opacity: busy ? 0.5 : 1,
+                }}
+              >
+                {cfg.overlay != null ? "Edit overlay…" : "Set overlay…"}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      {msg && (
+        <div style={{ marginTop: 10, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: msg.tone === "ok" ? "var(--up-500)" : "var(--down-500)" }}>
+          {msg.text}
+        </div>
+      )}
+      {!isAdmin && (
+        <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-hint)" }}>
+          Read-only. Admin role required to edit overlays.
+        </div>
+      )}
+    </div>
+  );
+}
 
 function PBHeader({ s, onBack, onNav }) {
   return (
@@ -12780,6 +13023,99 @@ const AdminPage = ({ tweaks, onNav }) => {
   const [agentControls, setAgentControls] = useState<Awaited<ReturnType<typeof getAgentControls>>>([]);
   const [agentControlBusy, setAgentControlBusy] = useState<number | null>(null);
   const [agentControlErr, setAgentControlErr] = useState<string | null>(null);
+
+  // 2026-05-11 (round 6): emergency trading controls. Three POSTs:
+  //   /trades/halt          — sets the halt flag + cancels open orders.
+  //                            Optional flatten=true closes positions too.
+  //   /trades/flatten_all   — close every position at market, leave
+  //                            trading enabled. For end-of-day de-risk.
+  //   /trades/resume        — clears the halt flag.
+  // All three are admin-only and audit-logged.
+  const [haltState, setHaltState] = useState<Awaited<ReturnType<typeof getHaltStatus>> | null>(null);
+  const [haltBusy, setHaltBusy] = useState<"halt" | "flatten" | "resume" | null>(null);
+  const [haltMsg, setHaltMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getHaltStatus();
+        if (!cancelled) setHaltState(res);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const refreshHalt = async () => {
+    try {
+      const res = await getHaltStatus();
+      setHaltState(res);
+    } catch { /* ignore */ }
+  };
+  const handleHalt = async () => {
+    if (!isAdmin || haltBusy) return;
+    const reason = window.prompt(
+      "HALT TRADING — cancels every open order and blocks new orders. " +
+      "Optionally flatten all positions too (you'll be asked next).\n\nReason for halt:",
+      "",
+    );
+    if (!reason || !reason.trim()) return;
+    const flatten = window.confirm(
+      "Also FLATTEN all open positions at market?\n\n" +
+      "OK = halt + flatten (close every position)\n" +
+      "Cancel = halt only (keep positions; cancel open orders)",
+    );
+    setHaltBusy("halt");
+    setHaltMsg(null);
+    try {
+      const res = await haltTrading({ flatten, reason: reason.trim() });
+      setHaltMsg({
+        tone: "ok",
+        text: res.flatten_queued_for_next_open
+          ? "Halted. Flatten queued for next market open."
+          : res.flatten_indeterminate
+          ? "Halted. Flatten partial — broker state indeterminate."
+          : flatten
+          ? "Halted + flattened."
+          : "Halted (positions kept).",
+      });
+      await refreshHalt();
+    } catch (e) {
+      setHaltMsg({ tone: "err", text: e instanceof Error ? e.message : "Halt failed." });
+    } finally {
+      setHaltBusy(null);
+    }
+  };
+  const handleFlatten = async () => {
+    if (!isAdmin || haltBusy) return;
+    if (!window.confirm("FLATTEN ALL POSITIONS — close every open position at market without halting trading. Final and admin-only. Confirm?")) return;
+    setHaltBusy("flatten");
+    setHaltMsg(null);
+    try {
+      const res = await flattenAllPositions();
+      setHaltMsg({
+        tone: "ok",
+        text: `${res.summary.flatten_successes}/${res.summary.flatten_attempts} positions closed.`,
+      });
+    } catch (e) {
+      setHaltMsg({ tone: "err", text: e instanceof Error ? e.message : "Flatten failed." });
+    } finally {
+      setHaltBusy(null);
+    }
+  };
+  const handleResume = async () => {
+    if (!isAdmin || haltBusy) return;
+    if (!window.confirm("RESUME TRADING — clear the halt flag and allow new orders. Confirm?")) return;
+    setHaltBusy("resume");
+    setHaltMsg(null);
+    try {
+      const res = await resumeTrading();
+      setHaltMsg({ tone: "ok", text: res.message || "Trading resumed." });
+      await refreshHalt();
+    } catch (e) {
+      setHaltMsg({ tone: "err", text: e instanceof Error ? e.message : "Resume failed." });
+    } finally {
+      setHaltBusy(null);
+    }
+  };
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -12866,6 +13202,117 @@ const AdminPage = ({ tweaks, onNav }) => {
             <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-dim)", lineHeight: 1.35, marginTop: 8 }}>{m.caption}</div>
           </div>
         ))}
+      </div>
+
+      {/* 2026-05-11 (round 6): Emergency trading controls. Halt /
+       * flatten / resume — admin-only writes. Each gated on
+       * window.prompt (halt) or window.confirm (flatten + resume).
+       * State pill mirrors /halt-status so any admin landing on this
+       * page sees whether trading is allowed right now. */}
+      <div style={{ marginBottom: 18, padding: "18px 22px", border: `1px solid ${haltState?.halted ? "var(--down-500)" : "var(--border)"}`, background: haltState?.halted ? "rgba(224,120,86,0.06)" : "var(--ink-100)", borderRadius: 4 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 18 }}>
+          <div>
+            <div className="t-eyebrow-italic" style={{ color: haltState?.halted ? "var(--down-500)" : "var(--brand)", letterSpacing: "0.2em" }}>
+              EMERGENCY · TRADING CONTROLS
+            </div>
+            <h2 style={{ margin: "2px 0 4px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>
+              {haltState
+                ? haltState.halted
+                  ? `Trading halted${haltState.halted_by ? ` by ${haltState.halted_by}` : ""}`
+                  : "Trading enabled"
+                : "Loading halt status…"}
+            </h2>
+            {haltState?.halted && haltState.reason && (
+              <div style={{ marginTop: 2, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--down-500)" }}>
+                Reason: {haltState.reason}
+              </div>
+            )}
+            {haltState?.halted_at && (
+              <div style={{ marginTop: 2, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+                halted at {formatLiveDate(haltState.halted_at)}
+              </div>
+            )}
+            {!haltState?.halted && (
+              <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: "var(--fg-muted)", maxWidth: 600 }}>
+                Halt cancels every open order. Flatten closes positions without halting trading. Both are audit-logged and admin-only.
+              </div>
+            )}
+          </div>
+          {isAdmin && haltState && (
+            <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+              {!haltState.halted ? (
+                <>
+                  <button
+                    onClick={handleHalt}
+                    disabled={!!haltBusy}
+                    style={{
+                      padding: "6px 14px",
+                      background: "rgba(224,120,86,0.10)",
+                      color: "var(--down-500)",
+                      border: "1px solid var(--down-500)",
+                      borderRadius: 3,
+                      fontFamily: "var(--font-ui)",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      letterSpacing: "0.04em",
+                      cursor: haltBusy ? "wait" : "pointer",
+                      opacity: haltBusy ? 0.5 : 1,
+                    }}
+                  >
+                    {haltBusy === "halt" ? "Halting…" : "HALT TRADING"}
+                  </button>
+                  <button
+                    onClick={handleFlatten}
+                    disabled={!!haltBusy}
+                    style={{
+                      padding: "6px 14px",
+                      background: "var(--bg-elev-1)",
+                      color: "var(--ink-1000)",
+                      border: "1px solid var(--border-strong)",
+                      borderRadius: 3,
+                      fontFamily: "var(--font-ui)",
+                      fontSize: 12,
+                      cursor: haltBusy ? "wait" : "pointer",
+                      opacity: haltBusy ? 0.5 : 1,
+                    }}
+                  >
+                    {haltBusy === "flatten" ? "Flattening…" : "Flatten all"}
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={handleResume}
+                  disabled={!!haltBusy}
+                  style={{
+                    padding: "6px 14px",
+                    background: "var(--brand)",
+                    color: "var(--brand-on)",
+                    border: "1px solid var(--brand)",
+                    borderRadius: 3,
+                    fontFamily: "var(--font-ui)",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    letterSpacing: "0.04em",
+                    cursor: haltBusy ? "wait" : "pointer",
+                    opacity: haltBusy ? 0.5 : 1,
+                  }}
+                >
+                  {haltBusy === "resume" ? "Resuming…" : "RESUME TRADING"}
+                </button>
+              )}
+            </div>
+          )}
+          {!isAdmin && haltState && (
+            <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-hint)", flexShrink: 0 }}>
+              admin-only controls
+            </span>
+          )}
+        </div>
+        {haltMsg && (
+          <div style={{ marginTop: 10, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: haltMsg.tone === "ok" ? "var(--up-500)" : "var(--down-500)" }}>
+            {haltMsg.text}
+          </div>
+        )}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 18 }}>
