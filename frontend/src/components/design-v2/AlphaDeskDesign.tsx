@@ -17,6 +17,10 @@ import { useUIStore } from "@/stores/ui";
 // BUG-070 follow-up (audit 2026-05-11): read WS-fed quote ticks from
 // useMarketStore instead of REST-fetching every page change.
 import { useMarketStore } from "@/stores/market";
+// BUG-056 options follow-up (audit 2026-05-11): build OCC option
+// symbols from the form state so single-leg option orders can ride
+// the same preview→submit flow as equity.
+import { formatOccSymbol } from "@/lib/occ";
 import { env } from "@/env";
 import { clearPersistedStores } from "@/lib/auth/clearPersistedStores";
 import {
@@ -4301,6 +4305,10 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
   const [optStrike, setOptStrike] = useState(140);
   const [optType, setOptType] = useState("call");
   const [contracts, setContracts] = useState(10);
+  // BUG-056 options follow-up: expiry was previously OptionChainPanel-
+  // internal — TradePage couldn't see it at submit time. Lift it so the
+  // option order build can synthesize the OCC contract symbol.
+  const [optExpiry, setOptExpiry] = useState("");
   const [range, setRange] = useState("3M");
   const [chartMode, setChartMode] = useState("candle");
   const [overlays, setOverlays] = useState({
@@ -4329,19 +4337,70 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
   const [ticketError, setTicketError] = useState(null); // string | null
   const [ticketReceipt, setTicketReceipt] = useState(null); // { id, status } | null
 
+  // BUG-056 options follow-up: build a single-leg option payload via
+  // formatOccSymbol when the form is on the "option" asset tab. Returns
+  // null if the inputs can't form a valid OCC contract — caller surfaces
+  // a user-facing error.
+  function buildOptionPayload() {
+    const occ = formatOccSymbol({
+      symbol: t.sym,
+      expiry: optExpiry,
+      side: optType, // "call" or "put"
+      strike: optStrike,
+    });
+    if (!occ) return null;
+    return {
+      symbol: t.sym, // underlying (broker sees both via the leg + parent)
+      side,
+      quantity: contracts,
+      type: orderType,
+      price: orderType === "limit" || orderType === "stop_limit" ? limitPx : undefined,
+      legs: [
+        {
+          symbol: occ,
+          side,
+          quantity: contracts,
+          price: orderType === "limit" || orderType === "stop_limit" ? limitPx : undefined,
+        },
+      ],
+    };
+  }
+
+  function buildEquityPayload() {
+    return {
+      symbol: t.sym,
+      side,
+      quantity: qty,
+      type: orderType,
+      price: orderType === "limit" || orderType === "stop_limit" ? limitPx : undefined,
+    };
+  }
+
   async function handleTicketStage() {
     if (ticketStage === "previewing" || ticketStage === "submitting") return;
+    const isOptionTicket = asset === "option";
+    let payload;
+    if (isOptionTicket) {
+      payload = buildOptionPayload();
+      if (!payload) {
+        setTicketError(
+          optExpiry
+            ? `Couldn't form OCC contract: symbol=${t.sym} expiry=${optExpiry} strike=${optStrike}. Check the option chain has loaded.`
+            : "Pick an expiry from the chain panel before staging an option order.",
+        );
+        setTicketStage("error");
+        return;
+      }
+    } else {
+      payload = buildEquityPayload();
+    }
     if (ticketStage === "reviewed" && ticketPreview && ticketPreview.review_id) {
       // Second click — submit.
       setTicketStage("submitting");
       setTicketError(null);
       try {
         const result = await placeOrder({
-          symbol: t.sym,
-          side,
-          quantity: qty,
-          type: orderType,
-          price: orderType === "limit" || orderType === "stop_limit" ? limitPx : undefined,
+          ...payload,
           review_id: ticketPreview.review_id,
         });
         setTicketReceipt({ id: result.id || result.order_id || "(no id)", status: result.status || "submitted" });
@@ -4357,13 +4416,7 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
     setTicketError(null);
     setTicketReceipt(null);
     try {
-      const preview = await previewOrder({
-        symbol: t.sym,
-        side,
-        quantity: qty,
-        type: orderType,
-        price: orderType === "limit" || orderType === "stop_limit" ? limitPx : undefined,
-      });
+      const preview = await previewOrder(payload);
       setTicketPreview(preview);
       setTicketStage(preview && preview.can_submit ? "reviewed" : "error");
       if (preview && !preview.can_submit) {
@@ -4468,7 +4521,7 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
           <AssetTabs asset={asset} setAsset={setAsset} />
           {asset === "stock" && <OrderTicket {...{ side, setSide, qty, setQty, orderType, setOrderType, limitPx, setLimitPx, stopPct, setStopPct, notional, stopPx, riskDollars, riskPct, accountEquity: live.portfolio?.equity || 0 }} />}
           {asset === "option" && <>
-            <OptionChainPanel symbol={t.sym} spot={t.px} optStrike={optStrike} setOptStrike={setOptStrike} optType={optType} setOptType={setOptType} setLimitPx={setLimitPx} />
+            <OptionChainPanel symbol={t.sym} spot={t.px} optStrike={optStrike} setOptStrike={setOptStrike} optType={optType} setOptType={setOptType} setLimitPx={setLimitPx} expiry={optExpiry} setExpiry={setOptExpiry} />
             <OptionForm {...{ side, setSide, contracts, setContracts, optStrike, setOptStrike, optType, setOptType, orderType, setOrderType, limitPx, setLimitPx }} />
             <GreeksStrip />
             <PayoffPanel />
@@ -4485,18 +4538,22 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
               receipt/error renders below. Options legs are not yet
               supported through this minimal wiring — equity-only.
               Options builders are still a follow-up. */}
-          {isOption ? (
+          {asset === "builder" ? (
             <>
+              {/* BUG-056 follow-up: OptionBuilder (multi-leg spreads/condors) still
+                  routes to v1 because the builder UI emits a richer leg shape
+                  (combo_type, defined-risk classification) that needs more
+                  plumbing than this minimal wire-up can do safely. */}
               <button
                 type="button"
                 disabled
                 aria-disabled="true"
-                title="Multi-leg option order wiring is the next follow-up. Stick with /trade for now."
+                title="Multi-leg builder spreads/condors still route to /trade — full v2 wiring is the next follow-up."
                 style={{ marginTop: 4, height: 46, background: "var(--bg-elev-2)", color: "var(--fg-muted)", border: "1px solid var(--border-strong)", borderRadius: 4, fontFamily: "var(--font-ui)", fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "not-allowed", opacity: 0.7 }}>
-                Stage {side} to open (options wiring pending)
+                Stage spread (multi-leg → /trade)
               </button>
               <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)", textAlign: "center", marginTop: -8 }}>
-                Use <a href={`/trade?symbol=${t.sym}`} style={{ color: "var(--brand)", textDecoration: "underline" }}>/trade</a> for multi-leg option orders
+                Use <a href={`/trade?symbol=${t.sym}`} style={{ color: "var(--brand)", textDecoration: "underline" }}>/trade</a> for multi-leg spreads
               </div>
             </>
           ) : (
@@ -4508,10 +4565,14 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
                 aria-busy={ticketStage === "previewing" || ticketStage === "submitting"}
                 style={{ marginTop: 4, height: 46, background: ticketStage === "reviewed" ? "var(--brand)" : (side === "buy" ? "var(--up-500)" : "var(--down-500)"), color: ticketStage === "reviewed" ? "var(--ink-1000)" : "var(--up-on)", border: 0, borderRadius: 4, fontFamily: "var(--font-ui)", fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", cursor: (ticketStage === "previewing" || ticketStage === "submitting" || ticketStage === "submitted") ? "wait" : "pointer", opacity: (ticketStage === "previewing" || ticketStage === "submitting") ? 0.7 : 1 }}>
                 {ticketStage === "previewing" && "Previewing…"}
-                {ticketStage === "reviewed" && `Confirm ${side} ${qty} ${t.sym} →`}
+                {ticketStage === "reviewed" && (asset === "option"
+                  ? `Confirm ${side} ${contracts} ${optType} ${optStrike} (${optExpiry || "?"}) →`
+                  : `Confirm ${side} ${qty} ${t.sym} →`)}
                 {ticketStage === "submitting" && "Submitting…"}
                 {ticketStage === "submitted" && "Submitted ✓"}
-                {(ticketStage === "idle" || ticketStage === "error") && `Stage ${side} order →`}
+                {(ticketStage === "idle" || ticketStage === "error") && (asset === "option"
+                  ? `Stage ${side} to open →`
+                  : `Stage ${side} order →`)}
               </button>
               {ticketStage === "reviewed" && ticketPreview && (
                 <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg)", textAlign: "left", padding: "8px 10px", background: "var(--bg-elev-1)", border: "1px solid var(--border-hair)", borderRadius: 3 }}>
@@ -5280,8 +5341,12 @@ function Check({ ok, warn, label }) {
 
 // ─── option chain ────────────────────────────────────────────────────────────
 
-function OptionChainPanel({ symbol, spot, optStrike, setOptStrike, optType, setOptType, setLimitPx }) {
-  const [expiry, setExpiry] = useState("");
+function OptionChainPanel({ symbol, spot, optStrike, setOptStrike, optType, setOptType, setLimitPx, expiry: expiryProp, setExpiry: setExpiryProp }) {
+  // BUG-056 options follow-up: support lifted-state form (props from TradePage)
+  // OR fall back to internal state (for any caller that hasn't been updated).
+  const [internalExpiry, setInternalExpiry] = useState("");
+  const expiry = expiryProp !== undefined ? expiryProp : internalExpiry;
+  const setExpiry = setExpiryProp || setInternalExpiry;
   const [chain, setChain] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -5294,7 +5359,11 @@ function OptionChainPanel({ symbol, spot, optStrike, setOptStrike, optType, setO
       .then((next) => {
         if (cancelled) return;
         setChain(next);
-        setExpiry((cur) => cur || next?.expirations?.[0] || "");
+        // Auto-pick the nearest expiry if the form doesn't have one yet.
+        if (!expiry) {
+          const candidate = next?.expirations?.[0] || "";
+          if (candidate) setExpiry(candidate);
+        }
       })
       .catch((err) => {
         if (cancelled) return;
