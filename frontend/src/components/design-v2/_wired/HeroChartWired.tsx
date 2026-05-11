@@ -34,7 +34,7 @@ import dynamic from "next/dynamic";
 import { useMemo } from "react";
 
 import { getBars } from "@/lib/api";
-import type { TimeFrame } from "@/types";
+import type { ChartType, TimeFrame } from "@/types";
 
 // Dynamic-import ChartPane: lightweight-charts touches `window` at
 // module-evaluation time (canvas init), so SSR would crash. The
@@ -76,11 +76,14 @@ export interface HeroChartWiredProps {
   symbol?: string;
   /** Range chip from the design's chart toolbar. */
   range?: string;
+  /** Chart mode owned by the surrounding design toolbar. */
+  chartType?: ChartType;
 }
 
 export default function HeroChartWired({
   symbol,
   range = "3M",
+  chartType = "candle",
 }: HeroChartWiredProps) {
   const sym = (symbol || "SPY").toUpperCase();
   const { timeframe, limit } = RANGE_TO_FETCH[range] ?? RANGE_TO_FETCH["3M"];
@@ -124,6 +127,8 @@ export default function HeroChartWired({
     >
       <ChartPane
         data={bars}
+        chartType={chartType}
+        showToolbar={false}
         isLoading={isLoading}
         error={isError}
         onRetry={() => {

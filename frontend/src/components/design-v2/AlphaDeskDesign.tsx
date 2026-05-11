@@ -3176,7 +3176,7 @@ function ChartPanel({ t, large, symbol }) {
         <ChartToolbar range={range} setRange={setRange} chartMode={chartMode} setChartMode={setChartMode} overlays={overlays} setOverlays={setOverlays} />
       </div>
       <div style={{ position: "relative", width: "100%", height: 360, display: "flex" }}>
-        <HeroChartWired symbol={sym} range={range} />
+        <HeroChartWired symbol={sym} range={range} chartType={chartMode === "line" ? "line" : "candle"} />
       </div>
     </div>
   );
@@ -3979,7 +3979,7 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
              * tools menu; the design's toolbar `chartMode` + `overlays`
              * state still drives the local controls but no longer feeds the
              * mock SVG. Range chips stay wired through `range`. */}
-            <HeroChartWired symbol={sym || t?.sym || "SPY"} range={range} />
+            <HeroChartWired symbol={sym || t?.sym || "SPY"} range={range} chartType={chartMode === "line" ? "line" : "candle"} />
           </div>
           <VolumeRail t={t} />
         </section>

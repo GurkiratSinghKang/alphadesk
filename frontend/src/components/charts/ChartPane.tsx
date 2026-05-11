@@ -44,6 +44,10 @@ import { deriveMarketStructure } from "@/lib/marketStructure";
 
 export interface ChartPaneProps {
   data: OHLCVBar[];
+  /** Optional owner-controlled chart type, used when an outer design toolbar owns the mode switch. */
+  chartType?: ChartType;
+  /** Render ChartPane's built-in toolbar. Set false when the parent renders its own chart chrome. */
+  showToolbar?: boolean;
   topOfBook?: TopOfBookQuote | null;
   marketDepth?: MarketDepthSnapshot | null;
   tradeOverlays?: ChartTradeOverlay[];
@@ -383,6 +387,8 @@ function getBookColors() {
 
 export default function ChartPane({
   data,
+  chartType: controlledChartType,
+  showToolbar = true,
   topOfBook,
   marketDepth,
   tradeOverlays = [],
@@ -399,7 +405,7 @@ export default function ChartPane({
   // localStorage so it survives a refresh. Lazy-init reads the saved
   // template on first mount; subsequent state changes trigger a write
   // via the effect below.
-  const [chartType, setChartType] = React.useState<ChartType>(() => {
+  const [localChartType, setLocalChartType] = React.useState<ChartType>(() => {
     const raw = safeGetItem("alphadesk:chart-template:default");
     if (!raw) return "candle";
     try {
@@ -411,6 +417,7 @@ export default function ChartPane({
     }
     return "candle";
   });
+  const chartType = controlledChartType ?? localChartType;
   const chartThemeKey = usePreferencesStore((s) => s.display.theme);
   const [activeTool, setActiveTool] = React.useState<DrawingTool>("cursor");
   const [menuOpen, setMenuOpen] = React.useState(false);
@@ -1004,6 +1011,7 @@ export default function ChartPane({
           appear half-hidden. With the chrome above and the rail below,
           every drawing button is fully visible and unambiguously
           clickable. */}
+      {showToolbar ? (
       <div
         data-chart-toolbar=""
         className={cn(
@@ -1021,7 +1029,7 @@ export default function ChartPane({
                   key={t.id}
                   type="button"
                   aria-pressed={active}
-                  onClick={() => setChartType(t.id)}
+                  onClick={() => setLocalChartType(t.id)}
                   title={t.label}
                   className={cn(
                     "inline-flex min-h-10 items-center gap-1.5 px-2.5 rounded-xs transition-colors",
@@ -1352,6 +1360,7 @@ export default function ChartPane({
             ) : null}
           </div>
         </div>
+      ) : null}
 
       {/* Below-chrome row: drawing-tools rail (left, md+) + canvas area. */}
       <div className="flex-1 min-h-0 flex">
