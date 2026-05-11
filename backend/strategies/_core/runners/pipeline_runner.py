@@ -29,6 +29,17 @@ from strategies._core.providers import ProviderBundle
 PositionsProvider = Callable[[date], list[Position] | Awaitable[list[Position]]]
 
 
+def _strategy_kill_switch_name(strategy: Any) -> str:
+    """Return the stable identifier used by kill-switch rows."""
+    name = getattr(strategy, "name", None)
+    if name is None:
+        meta = getattr(strategy, "META", None)
+        name = getattr(meta, "name", None)
+    if name is None:
+        name = strategy.__class__.__name__
+    return str(name)
+
+
 def invoke_strategy_with_kill_switch(
     strategy: Any,
     input: Any,
@@ -51,9 +62,10 @@ def invoke_strategy_with_kill_switch(
     if kill_switch is None:
         return strategy.run(input, params)
 
-    decision = kill_switch.is_enabled(strategy.name, kill_switch_context)
+    strategy_name = _strategy_kill_switch_name(strategy)
+    decision = kill_switch.is_enabled(strategy_name, kill_switch_context)
     if not decision.enabled:
-        return _kill_switch_blocked_result(strategy.name, decision)
+        return _kill_switch_blocked_result(strategy_name, decision)
     return strategy.run(input, params)
 
 
@@ -78,9 +90,10 @@ async def invoke_strategy_with_kill_switch_async(
     if kill_switch is None:
         return strategy.run(input, params)
 
-    decision = await kill_switch.is_enabled_async(strategy.name, kill_switch_context)
+    strategy_name = _strategy_kill_switch_name(strategy)
+    decision = await kill_switch.is_enabled_async(strategy_name, kill_switch_context)
     if not decision.enabled:
-        return _kill_switch_blocked_result(strategy.name, decision)
+        return _kill_switch_blocked_result(strategy_name, decision)
     return strategy.run(input, params)
 
 

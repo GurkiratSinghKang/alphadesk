@@ -39,6 +39,16 @@ def _build_input() -> StrategyInput:
     )
 
 
+class _MetaOnlyStrategy:
+    class META:
+        name = "test_strategy"
+
+    def __init__(self, result: StrategyResult | None = None) -> None:
+        self.run = MagicMock(
+            return_value=result or StrategyResult(signals=[], diagnostics={"ran": True})
+        )
+
+
 class TestPipelineRunnerKillSwitch:
     def test_disabled_strategy_short_circuits(self) -> None:
         """When kill-switch returns disabled, strategy.run() is NOT called."""
@@ -72,6 +82,33 @@ class TestPipelineRunnerKillSwitch:
         assert result.signals == []
         assert result.diagnostics.get("kill_switch_disabled") is True
         assert result.diagnostics.get("kill_switch_layer") == 3
+
+    def test_strategy_without_name_uses_meta_name(self) -> None:
+        """BUG-061: real Strategy classes expose META.name, not .name."""
+        from strategies._core.runners.pipeline_runner import (
+            invoke_strategy_with_kill_switch,
+        )
+        repo = InMemoryDisabledEventsRepo()
+        repo.insert(DisabledEvent(
+            id=None, strategy="test_strategy", layer=3,
+            triggered_at=datetime.now(timezone.utc),
+            manual_actor="alice", reason="meta name test",
+        ))
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=98.0,
+                                alloc_capital=10000.0, realized_today=0.0)
+
+        strategy = _MetaOnlyStrategy()
+        result = invoke_strategy_with_kill_switch(
+            strategy=strategy,
+            input=_build_input(),
+            params=MagicMock(),
+            kill_switch=ks,
+            kill_switch_context=ctx,
+        )
+        strategy.run.assert_not_called()
+        assert isinstance(result, StrategyResult)
+        assert result.diagnostics.get("kill_switch_disabled") is True
 
     def test_enabled_strategy_runs_normally(self) -> None:
         """When kill-switch returns enabled, strategy.run() IS called and its result returned."""
@@ -155,6 +192,34 @@ class TestAsyncKillSwitchWrapper:
         assert isinstance(result, StrategyResult)
         assert result.diagnostics.get("kill_switch_disabled") is True
         assert result.diagnostics.get("kill_switch_layer") == 3
+
+    @pytest.mark.asyncio
+    async def test_async_strategy_without_name_uses_meta_name(self) -> None:
+        """BUG-061 repro path: async wrapper must not read strategy.name."""
+        from strategies._core.runners.pipeline_runner import (
+            invoke_strategy_with_kill_switch_async,
+        )
+        repo = InMemoryDisabledEventsRepo()
+        repo.insert(DisabledEvent(
+            id=None, strategy="test_strategy", layer=3,
+            triggered_at=datetime.now(timezone.utc),
+            manual_actor="alice", reason="async meta name test",
+        ))
+        ks = KillSwitch(repo=repo)
+        ctx = KillSwitchContext(peak_nav=100.0, current_nav=98.0,
+                                alloc_capital=10000.0, realized_today=0.0)
+
+        strategy = _MetaOnlyStrategy()
+        result = await invoke_strategy_with_kill_switch_async(
+            strategy=strategy,
+            input=_build_input(),
+            params=MagicMock(),
+            kill_switch=ks,
+            kill_switch_context=ctx,
+        )
+        strategy.run.assert_not_called()
+        assert isinstance(result, StrategyResult)
+        assert result.diagnostics.get("kill_switch_disabled") is True
 
     @pytest.mark.asyncio
     async def test_async_enabled_strategy_runs(self) -> None:
