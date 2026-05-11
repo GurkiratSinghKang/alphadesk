@@ -371,6 +371,16 @@ function LiveDataProvider({ symbol, page, children }) {
     // computation). Only fetch when the operator is actually on the
     // risk dashboard.
     const shouldLoadRiskExtras = page === "risk" || page === "risk-dashboard";
+    // BUG-066 + BUG-069 partial (audit 2026-05-11, F-SCOUT-06, M2-02):
+    // Dashboard first paint was firing 41 API calls because we enriched
+    // every watchlist (up to 12 fan-out × getEnrichedWatchlist) on EVERY
+    // route — not just /watchlists. The dashboard's watchlist panel
+    // shows symbols from the user's primary watchlist (userWatchlistR)
+    // which is already fetched; the per-list enrichment is only needed
+    // on /watchlists where the multi-list view actually renders. Skip
+    // the fan-out everywhere else. Conservatively still include the
+    // user-watchlist scaffold but defer the 12-call enrichment loop.
+    const shouldEnrichWatchlists = page === "watchlists";
 
     async function load() {
       setState((prev) => ({ ...prev, loading: true, error: null }));
@@ -445,12 +455,17 @@ function LiveDataProvider({ symbol, page, children }) {
       }
 
       const rawLists = watchlistsR.status === "fulfilled" ? (watchlistsR.value || []) : [];
-      const enriched = await Promise.allSettled(
-        rawLists.slice(0, 12).map(async (wl) => {
-          const payload = await getEnrichedWatchlist(wl.id);
-          return { shell: wl, payload };
-        }),
-      );
+      // BUG-066/069 partial: only enrich when actually rendering the
+      // multi-list /watchlists surface; other routes display the user's
+      // primary watchlist via `userWatchlistR` which is already fetched.
+      const enriched = shouldEnrichWatchlists
+        ? await Promise.allSettled(
+            rawLists.slice(0, 12).map(async (wl) => {
+              const payload = await getEnrichedWatchlist(wl.id);
+              return { shell: wl, payload };
+            }),
+          )
+        : [];
       const watchlists = enriched
         .filter((r) => r.status === "fulfilled")
         .map((r) => {
