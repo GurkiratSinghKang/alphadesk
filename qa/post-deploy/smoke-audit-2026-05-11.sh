@@ -74,7 +74,7 @@ if [ -n "$csp_ro" ]; then
     fail "Report-Only header present but missing 'strict-dynamic' (BUG-067 partial regressed)"
   fi
 else
-  fail "Content-Security-Policy-Report-Only header missing (BUG-067 middleware not deployed)"
+  fail "Content-Security-Policy-Report-Only header missing (BUG-067 proxy not deployed)"
 fi
 
 # ─── BUG-077: CSRF Origin middleware ────────────────────────────────

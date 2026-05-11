@@ -44,23 +44,81 @@ function isKnownDashboardRoute(pathname: string): boolean {
   return false;
 }
 
+const REPORT_URI = "/api/v1/security/csp-report";
+
 /**
- * CSP is owned by Caddy (see infrastructure/Caddyfile line 97, which uses
- * the `>` operator to FORCE a permissive fallback policy on every response).
+ * BUG-067 (audit 2026-05-11, M1-01, continues 2026-04-19 BUG-040):
+ * Next.js proxy-managed Content-Security-Policy migration.
  *
- * The earlier nonce/strict-dynamic flow in this proxy was disabled by the
- * INCIDENT on 2026-04-20 13:43 ET: prerendered (X-Nextjs-Cache: HIT) HTML
- * pages bake their nonce at build time, so the per-request nonce minted
- * here never matched — `strict-dynamic` then blocked every bootstrap
- * script. Caddy now force-replaces the CSP header regardless of what this
- * proxy emits, so emitting our own CSP is wasted work (and the ignored
- * `x-nonce` request header was dead code).
+ * Default mode (CSP_ENFORCE_STRICT !== "1") sets a strict
+ * Content-Security-Policy-Report-Only header so browsers report
+ * nonce/strict-dynamic violations without blocking. Strict mode flips
+ * to an enforced Content-Security-Policy header via runtime env.
  *
- * Kept as a plain pass-through until a build-time hash CSP or
- * `dynamic = "force-dynamic"` approach lets us revive per-request nonces.
+ * This lives in proxy.ts rather than middleware.ts because Next 16 treats
+ * proxy.ts as the replacement entrypoint and fails the production build if
+ * both files are present.
  */
-function forwardRequest(): NextResponse {
-  return NextResponse.next();
+function strictPolicy(nonce: string): string {
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    `style-src 'self' 'nonce-${nonce}' https://fonts.googleapis.com`,
+    "img-src 'self' data: blob:",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "connect-src 'self' wss:",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+    "upgrade-insecure-requests",
+    `report-uri ${REPORT_URI}`,
+  ].join("; ");
+}
+
+function mintNonce(): string {
+  const uuid = crypto.randomUUID();
+  const hex = uuid.replace(/-/g, "");
+  const bytes = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) {
+    bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+  }
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return typeof btoa !== "undefined"
+    ? btoa(bin)
+    : Buffer.from(bytes).toString("base64");
+}
+
+export function applyCspToResponse(
+  request: Pick<NextRequest, "headers">,
+  response?: NextResponse,
+): NextResponse {
+  if (process.env.NEXT_PUBLIC_DISABLE_CSP_REPORT_ONLY === "1") {
+    return response ?? NextResponse.next();
+  }
+
+  const nonce = mintNonce();
+  let res = response;
+  if (!res) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-nonce", nonce);
+    res = NextResponse.next({
+      request: { headers: requestHeaders },
+    });
+  }
+
+  const policy = strictPolicy(nonce);
+  if (process.env.CSP_ENFORCE_STRICT === "1") {
+    res.headers.set("Content-Security-Policy", policy);
+  } else {
+    res.headers.set("Content-Security-Policy-Report-Only", policy);
+  }
+  return res;
+}
+
+function forwardRequest(request: NextRequest): NextResponse {
+  return applyCspToResponse(request);
 }
 
 export function resolveBackendSessionApiBase(request: NextRequest): string {
@@ -104,7 +162,7 @@ export async function proxy(request: NextRequest) {
     // suite needs to snapshot the login screen, and bouncing to / would
     // make that impossible. The prod redirect-to-/ behaviour is preserved
     // when bypass is OFF (the normal else-branch below).
-    return forwardRequest();
+    return forwardRequest(request);
   }
 
   const token = request.cookies.get("access_token")?.value;
@@ -129,9 +187,12 @@ export async function proxy(request: NextRequest) {
     if (isLoginPage) {
       // Redirects don't need a CSP (no HTML body), but Caddy's fallback
       // will still cover them. Return early without the nonce.
-      return NextResponse.redirect(new URL("/", request.url));
+      return applyCspToResponse(
+        request,
+        NextResponse.redirect(new URL("/", request.url)),
+      );
     }
-    return forwardRequest();
+    return forwardRequest(request);
   }
 
   // Unauthenticated. Public pages and login pages pass through; anything
@@ -139,11 +200,14 @@ export async function proxy(request: NextRequest) {
   // Unknown paths (e.g. `/this-does-not-exist`) also pass through so Next
   // can render the 404 page with a real 404 status.
   if (isLoginPage || isPublicPage) {
-    return forwardRequest();
+    return forwardRequest(request);
   }
 
   if (isKnownDashboardRoute(pathname)) {
-    const response = NextResponse.redirect(new URL("/login", request.url));
+    const response = applyCspToResponse(
+      request,
+      NextResponse.redirect(new URL("/login", request.url)),
+    );
     response.cookies.delete("access_token");
     return response;
   }
@@ -151,7 +215,7 @@ export async function proxy(request: NextRequest) {
   // Unknown route, unauthenticated — let Next's not-found handler run.
   // CSP for the rendered 404 HTML is supplied by Caddy (see forwardRequest
   // comment above).
-  return forwardRequest();
+  return forwardRequest(request);
 }
 
 export const config = {

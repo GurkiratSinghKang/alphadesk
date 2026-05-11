@@ -36,7 +36,7 @@ BUG-NNN whose fix needs investigation.
 
 - After merging `claude/focused-shirley-206414` into `feature/deployment`.
 - After any deploy that touches `backend/api/routes/`, `backend/main.py`,
-  `backend/core/auth.py`, or `frontend/src/middleware.ts`.
+  `backend/core/auth.py`, or `frontend/src/proxy.ts`.
 - Before a release candidate is promoted to live trading.
 
 ## Integration ideas
