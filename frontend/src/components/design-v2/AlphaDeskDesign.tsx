@@ -4349,10 +4349,30 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
           </>}
           {asset === "builder" && <OptionBuilder strategy={builderStrategy} setStrategy={setBuilderStrategy} />}
           <AIMemoPanel isOption={isOption} symbol={t.sym} />
-          <button style={{ marginTop: 4, height: 46, background: side === "buy" ? "var(--up-500)" : "var(--down-500)", color: "var(--up-on)", border: 0, borderRadius: 4, fontFamily: "var(--font-ui)", fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "default" }}>
-            Stage {isOption ? `${side} to open` : `${side} order`} →
+          {/* BUG-056 (audit 2026-05-11, F-SCOUT-99..102, P1-01): the
+              previous version of this button silently rendered as
+              decoration — no onClick, no submit handler. A scalper
+              clicked "Stage buy order →" and nothing happened: no
+              feedback, no error, no POST in the network panel. The
+              design-v2 ticket isn't yet wired to the real `/preview
+              → /orders` flow (that's the BUG-056 follow-up). Until
+              the wired ticket lands, render the button as explicitly
+              disabled with an inline note pointing operators at the
+              v1 trade page (`/trade?symbol=...`) which uses the
+              tested `OrderBar.tsx` flow. This stops users from
+              thinking they placed an order that never reached the
+              server. */}
+          <button
+            type="button"
+            disabled
+            aria-disabled="true"
+            title="The v2 design preview is not wired to the broker. Use /trade?symbol= to place a real paper order."
+            style={{ marginTop: 4, height: 46, background: "var(--bg-elev-2)", color: "var(--fg-muted)", border: "1px solid var(--border-strong)", borderRadius: 4, fontFamily: "var(--font-ui)", fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "not-allowed", opacity: 0.7 }}>
+            Stage {isOption ? `${side} to open` : `${side} order`} (preview)
           </button>
-          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)", textAlign: "center", marginTop: -8 }}>Reviewed against regime + risk policy</div>
+          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)", textAlign: "center", marginTop: -8 }}>
+            Design preview only · use <a href={`/trade?symbol=${t.sym}`} style={{ color: "var(--brand)", textDecoration: "underline" }}>/trade</a> to submit a real order
+          </div>
         </aside>
         ))}
       </div>
