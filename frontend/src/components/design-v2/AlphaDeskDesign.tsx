@@ -35,6 +35,10 @@ import {
   getQuote,
   getRiskDashboard,
   getStrategies,
+  getStrategyAnalytics,
+  getStrategyPerformance,
+  getStrategyPositions,
+  toggleStrategy,
   getTickerContext,
   getTickerFundamentals,
   getUserWatchlist,
@@ -10031,21 +10035,88 @@ const StrategyPlaybook = ({ tweaks, stratName = "Momentum & Quality", onNav, onB
     const keys = [s.id, s.slug, s.name, s.label].map(normalizeStrategyKey);
     return keys.includes(lowered);
   });
+  const strategyId = matched?.id || matched?.slug || stratName;
   const displayName = matched?.name || matched?.label || stratName;
-  const status = matched?.status || matched?.state || (matched ? "live" : "unknown");
-  const invested = asFiniteNumber(matched?.invested ?? matched?.capital_allocated, null);
-  const openPositionsCount = asFiniteNumber(matched?.open_positions ?? matched?.position_count, null);
-  const ownedPositions = (live.positions || []).filter((p) => {
-    const ps = normalizeStrategyKey(p.strategy || p.asset_class || "");
-    return ps === lowered || ps === normalizeStrategyKey(displayName);
-  }).map((p) => ({
-    symbol: String(p.symbol || p.sym || "").toUpperCase(),
-    qty: asFiniteNumber(p.quantity ?? p.qty, 0) || 0,
-    avg: asFiniteNumber(p.avgEntryPrice ?? p.avg_entry_price ?? p.cost_basis, null),
-    last: asFiniteNumber(p.currentPrice ?? p.current_price ?? p.price, null),
-    pnl: asFiniteNumber(p.unrealizedPnl ?? p.unrealized_pnl ?? p.unrealizedPl ?? p.unrealized_pl, null),
-    pnlPct: asFiniteNumber(p.unrealizedPnlPct ?? p.unrealized_pnl_pct ?? p.unrealizedPlpc ?? p.unrealized_plpc, null),
-  }));
+
+  // 2026-05-10 (round 5 backend wiring): fetch the rich strategy
+  // detail when we have a registry match. The dashboard-level
+  // `/api/v1/strategies` list returns name + status + a few summary
+  // numbers; the per-strategy `/performance`, `/positions`, and
+  // `/analytics` endpoints carry sharpe / max drawdown / equity
+  // curve / sector exposure / monthly returns / streaks / etc.
+  const [detail, setDetail] = useState(null);
+  const [livePositions, setLivePositions] = useState(null);
+  const [analytics, setAnalytics] = useState(null);
+  const [toggling, setToggling] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    if (!matched?.id && !matched?.slug) {
+      setDetail(null);
+      setLivePositions(null);
+      setAnalytics(null);
+      return;
+    }
+    const id = matched.id || matched.slug;
+    Promise.all([
+      getStrategyPerformance(id).catch(() => null),
+      getStrategyPositions(id).catch(() => null),
+      getStrategyAnalytics(id).catch(() => null),
+    ]).then(([perf, pos, ana]) => {
+      if (cancelled) return;
+      setDetail(perf);
+      setLivePositions(pos);
+      setAnalytics(ana);
+    });
+    return () => { cancelled = true; };
+  }, [matched?.id, matched?.slug]);
+
+  const status = detail?.status || matched?.status || matched?.state || (matched ? "live" : "unknown");
+  const invested = asFiniteNumber(detail?.invested_amount ?? matched?.invested ?? matched?.capital_allocated, null);
+  const currentValue = asFiniteNumber(detail?.current_value, null);
+  const totalReturnPct = asFiniteNumber(detail?.total_return_pct, null);
+  const annualizedReturnPct = asFiniteNumber(detail?.annualized_return_pct, null);
+  const sharpe = asFiniteNumber(detail?.sharpe_ratio, null);
+  const maxDrawdown = asFiniteNumber(detail?.max_drawdown, null);
+  const winRate = asFiniteNumber(detail?.win_rate, null);
+  const profitFactor = asFiniteNumber(detail?.profit_factor, null);
+  const equityCurve = Array.isArray(detail?.equity_curve) ? detail.equity_curve : [];
+  const openPositionsCount = asFiniteNumber(detail?.active_positions_count ?? matched?.open_positions ?? matched?.position_count, null);
+  const paperOnly = !!detail?.paper_only;
+  const liveDisabled = !!detail?.live_disabled;
+
+  const ownedPositions = Array.isArray(livePositions) && livePositions.length > 0
+    ? livePositions.map((p) => ({
+        symbol: String(p.symbol || "").toUpperCase(),
+        qty: asFiniteNumber(p.shares, 0) || 0,
+        avg: asFiniteNumber(p.entry_price, null),
+        last: asFiniteNumber(p.current_price, null),
+        pnl: asFiniteNumber(p.unrealized_pnl, null),
+        pnlPct: asFiniteNumber(p.unrealized_pnl_pct, null),
+      }))
+    : (live.positions || []).filter((p) => {
+        const ps = normalizeStrategyKey(p.strategy || p.asset_class || "");
+        return ps === lowered || ps === normalizeStrategyKey(displayName);
+      }).map((p) => ({
+        symbol: String(p.symbol || p.sym || "").toUpperCase(),
+        qty: asFiniteNumber(p.quantity ?? p.qty, 0) || 0,
+        avg: asFiniteNumber(p.avgEntryPrice ?? p.avg_entry_price ?? p.cost_basis, null),
+        last: asFiniteNumber(p.currentPrice ?? p.current_price ?? p.price, null),
+        pnl: asFiniteNumber(p.unrealizedPnl ?? p.unrealized_pnl ?? p.unrealizedPl ?? p.unrealized_pl, null),
+        pnlPct: asFiniteNumber(p.unrealizedPnlPct ?? p.unrealized_pnl_pct ?? p.unrealizedPlpc ?? p.unrealized_plpc, null),
+      }));
+
+  const handleToggle = async () => {
+    if (!strategyId || toggling) return;
+    setToggling(true);
+    try {
+      await toggleStrategy(String(strategyId));
+      // Re-fetch the performance to pick up the new status.
+      const perf = await getStrategyPerformance(String(strategyId)).catch(() => null);
+      setDetail(perf);
+    } finally {
+      setToggling(false);
+    }
+  };
 
   return (
     <div style={{ padding: "20px 24px 40px", maxWidth: 1640, margin: "0 auto" }}>
@@ -10062,23 +10133,124 @@ const StrategyPlaybook = ({ tweaks, stratName = "Momentum & Quality", onNav, onB
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", border: "1px solid var(--border-strong)", borderRadius: 999, fontFamily: "var(--font-mono)", fontSize: 10.5, color: matched ? "var(--up-500)" : "var(--fg-muted)", background: "var(--bg-elev-1)" }}>
             <StatusDot tone={matched ? "up" : "muted"} size={5} />{matched ? String(status).toUpperCase() : "NOT REGISTERED"}
           </span>
+          {paperOnly && (
+            <span style={{ padding: "4px 10px", border: "1px solid var(--gold-500)", color: "var(--gold-300)", borderRadius: 999, fontFamily: "var(--font-mono)", fontSize: 10.5, background: "rgba(201,166,107,0.08)" }}>PAPER-ONLY</span>
+          )}
+          {liveDisabled && (
+            <span style={{ padding: "4px 10px", border: "1px solid var(--down-500)", color: "var(--down-500)", borderRadius: 999, fontFamily: "var(--font-mono)", fontSize: 10.5, background: "rgba(224,120,86,0.08)" }}>LIVE DISABLED</span>
+          )}
+          {/* 2026-05-10 (round 5 backend wiring): toggle button POSTs
+           * /api/v1/strategies/{id}/toggle and re-fetches the
+           * performance row so the badge above flips with the new
+           * status. Disabled while a request is in flight. */}
+          {matched && (
+            <button onClick={handleToggle} disabled={toggling} style={{ padding: "4px 10px", border: "1px solid var(--border)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, color: toggling ? "var(--fg-hint)" : "var(--ink-1000)", background: "var(--bg-elev-1)", cursor: toggling ? "wait" : "default" }}>{toggling ? "Toggling…" : status === "active" || status === "live" ? "Pause" : "Resume"}</button>
+          )}
           <a onClick={() => onBacktest?.()} style={{ padding: "4px 10px", border: "1px solid var(--border)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--ink-1000)", background: "var(--bg-elev-1)", cursor: "default" }}>Backtest workbench →</a>
         </div>
       </header>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, background: "var(--border)", border: "1px solid var(--border)", borderRadius: 4, marginBottom: 20 }}>
+      {/* 2026-05-10 (round 5 backend wiring): per-strategy detail
+       * fetched from /api/v1/strategies/{id}/performance. When the
+       * endpoint hasn't returned yet, we fall back to the registry
+       * summary (3-card row). Once detail arrives the metrics row
+       * expands to 7 cards including sharpe / max DD / profit factor. */}
+      <div style={{ display: "grid", gridTemplateColumns: detail ? "repeat(7, 1fr)" : "repeat(3, 1fr)", gap: 1, background: "var(--border)", border: "1px solid var(--border)", borderRadius: 4, marginBottom: 20 }}>
         {[
           { label: "REGISTRY STATUS", val: matched ? String(status) : "—", sub: matched ? "/api/v1/strategies" : "Not in registry" },
-          { label: "INVESTED CAPITAL", val: invested == null ? "—" : fmtMoney(invested, { dec: 0 }), sub: invested == null ? "no allocation reported" : "from registry" },
-          { label: "OPEN POSITIONS", val: openPositionsCount == null ? String(ownedPositions.length) : String(openPositionsCount), sub: ownedPositions.length === 0 ? "no positions tagged with this strategy" : `${ownedPositions.length} live` },
+          { label: "INVESTED", val: invested == null ? "—" : fmtMoney(invested, { dec: 0 }), sub: currentValue != null ? `now ${fmtMoney(currentValue, { dec: 0 })}` : "no allocation" },
+          { label: "OPEN POSITIONS", val: openPositionsCount == null ? String(ownedPositions.length) : String(openPositionsCount), sub: ownedPositions.length === 0 ? "no positions" : `${ownedPositions.length} live` },
+          ...(detail ? [
+            { label: "TOTAL RETURN", val: totalReturnPct == null ? "—" : `${totalReturnPct >= 0 ? "+" : ""}${totalReturnPct.toFixed(2)}%`, sub: annualizedReturnPct == null ? "lifetime" : `ann ${annualizedReturnPct >= 0 ? "+" : ""}${annualizedReturnPct.toFixed(1)}%`, tone: totalReturnPct == null ? "neutral" : totalReturnPct >= 0 ? "up" : "down" },
+            { label: "SHARPE", val: sharpe == null ? "—" : sharpe.toFixed(2), sub: "risk-adjusted" },
+            { label: "MAX DRAWDOWN", val: maxDrawdown == null ? "—" : `${maxDrawdown.toFixed(2)}%`, sub: "underwater peak", tone: "down" },
+            { label: "WIN RATE", val: winRate == null ? "—" : `${(winRate * (Math.abs(winRate) <= 1 ? 100 : 1)).toFixed(1)}%`, sub: profitFactor == null ? "of closed trades" : `PF ${profitFactor.toFixed(2)}` },
+          ] : []),
         ].map((m, i) => (
           <div key={i} style={{ padding: "16px 18px", background: "var(--ink-100)", borderRadius: 4 }}>
             <div className="t-label" style={{ color: "var(--fg-hint)" }}>{m.label}</div>
-            <div className="t-mono" style={{ marginTop: 6, fontSize: 22, color: "var(--ink-1000)", fontWeight: 500 }}>{m.val}</div>
+            <div className="t-mono" style={{ marginTop: 6, fontSize: 22, color: m.tone === "up" ? "var(--up-500)" : m.tone === "down" ? "var(--down-500)" : "var(--ink-1000)", fontWeight: 500 }}>{m.val}</div>
             <div className="t-body-sm" style={{ marginTop: 2, color: "var(--fg-muted)", fontFamily: "var(--font-display)", fontStyle: "italic" }}>{m.sub}</div>
           </div>
         ))}
       </div>
+
+      {/* 2026-05-10 (round 5): equity curve from
+       * /api/v1/strategies/{id}/performance. Renders when at least
+       * 8 points exist (otherwise Sparkline is misleading). */}
+      {equityCurve.length >= 8 && (
+        <div style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: 18, marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
+            <div>
+              <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>EQUITY CURVE · LEDGER</div>
+              <h2 className="t-h3" style={{ margin: "2px 0 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>{equityCurve.length} ledger points · last {detail?.last_trade_date || "—"}</h2>
+            </div>
+            <span className="t-mono" style={{ fontSize: 10.5, color: "var(--fg-muted)" }}>/api/v1/strategies/{strategyId}/performance</span>
+          </div>
+          <Sparkline data={equityCurve.map((p) => Number(p.value || 0))} color="var(--up-500)" width={1200} height={130} fill />
+        </div>
+      )}
+
+      {/* 2026-05-10 (round 5): analytics decomposition from
+       * /api/v1/strategies/{id}/analytics — sector exposure +
+       * streaks + hold-time stats + monthly returns. Each panel
+       * gated on data presence. */}
+      {analytics && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+          {/* Sector exposure (left) */}
+          {analytics.sector_exposure && Object.keys(analytics.sector_exposure).length > 0 && (
+            <div style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: 18 }}>
+              <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>SECTOR EXPOSURE</div>
+              <h2 className="t-h3" style={{ margin: "2px 0 12px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 20, letterSpacing: "-0.015em", fontWeight: 400 }}>By sector</h2>
+              <div style={{ display: "grid", gap: 6 }}>
+                {Object.entries(analytics.sector_exposure)
+                  .map(([k, v]) => ({ sector: k, pct: asFiniteNumber(v.allocation_pct ?? v.pct, 0) || 0, value: asFiniteNumber(v.value, 0) || 0 }))
+                  .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))
+                  .slice(0, 8)
+                  .map((s) => (
+                    <div key={s.sector} style={{ display: "grid", gridTemplateColumns: "150px 1fr 70px", gap: 12, alignItems: "center" }}>
+                      <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg)", fontSize: 12.5 }}>{s.sector}</span>
+                      <div style={{ position: "relative", height: 6, background: "var(--bg-elev-1)", borderRadius: 2 }}>
+                        <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${Math.min(100, Math.abs(s.pct))}%`, background: s.pct >= 0 ? "var(--brand)" : "var(--down-500)", borderRadius: 2 }} />
+                      </div>
+                      <span className="t-mono" style={{ color: "var(--fg-muted)", textAlign: "right", fontSize: 11 }}>{s.pct.toFixed(1)}%</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+          {/* Streaks + hold-time (right) */}
+          <div style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: 18 }}>
+            <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>STREAKS · HOLD TIME</div>
+            <h2 className="t-h3" style={{ margin: "2px 0 12px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 20, letterSpacing: "-0.015em", fontWeight: 400 }}>Trading rhythm</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              {analytics.streaks && (
+                <>
+                  <div>
+                    <div className="t-label" style={{ color: "var(--fg-hint)" }}>CURRENT</div>
+                    <div className="t-mono" style={{ marginTop: 4, fontSize: 18, color: analytics.streaks.current?.type === "win" ? "var(--up-500)" : "var(--down-500)", fontWeight: 500 }}>{analytics.streaks.current?.count || 0} {analytics.streaks.current?.type || ""}</div>
+                  </div>
+                  <div>
+                    <div className="t-label" style={{ color: "var(--fg-hint)" }}>BEST WIN STREAK</div>
+                    <div className="t-mono" style={{ marginTop: 4, fontSize: 18, color: "var(--up-500)", fontWeight: 500 }}>{analytics.streaks.best_win || 0}</div>
+                  </div>
+                  <div>
+                    <div className="t-label" style={{ color: "var(--fg-hint)" }}>WORST LOSS STREAK</div>
+                    <div className="t-mono" style={{ marginTop: 4, fontSize: 18, color: "var(--down-500)", fontWeight: 500 }}>{analytics.streaks.worst_loss || 0}</div>
+                  </div>
+                </>
+              )}
+              {analytics.hold_time_stats && (
+                <div>
+                  <div className="t-label" style={{ color: "var(--fg-hint)" }}>MEDIAN HOLD</div>
+                  <div className="t-mono" style={{ marginTop: 4, fontSize: 18, color: "var(--ink-1000)", fontWeight: 500 }}>{analytics.hold_time_stats.median_hold_days?.toFixed(1) || "—"}d</div>
+                  <div className="t-body-sm" style={{ marginTop: 2, color: "var(--fg-muted)", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11 }}>win {analytics.hold_time_stats.avg_win_days?.toFixed(1)}d · loss {analytics.hold_time_stats.avg_loss_days?.toFixed(1)}d</div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ marginBottom: 20, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
         <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>PLAYBOOK · WORKFLOW</div>
