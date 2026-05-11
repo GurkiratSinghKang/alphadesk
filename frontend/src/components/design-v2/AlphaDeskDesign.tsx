@@ -4619,29 +4619,16 @@ function OptionBuilder({ strategy, setStrategy }) {
             </div>
           ))}
         </div>
-        {/* economics */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", borderTop: "1px solid var(--border-hair)" }}>
-          {[
-            { k: "Net " + (sel.credit ? "credit" : "debit"), v: sel.credit ? "+1.42" : "−2.18", tone: sel.credit ? "up" : "down" },
-            { k: "Max profit", v: sel.credit ? "$142" : "$282", tone: "up" },
-            { k: "Max loss",   v: sel.credit ? "−$358" : "−$218", tone: "down" },
-          ].map((cell, i) => (
-            <div key={i} style={{ padding: "9px 10px", borderRight: i < 2 ? "1px solid var(--border-hair)" : "0", display: "flex", flexDirection: "column", gap: 3 }}>
-              <span className="t-label" style={{ fontSize: 8.5 }}>{cell.k}</span>
-              <span className={cell.tone === "up" ? "u-profit" : "u-loss"} style={{ fontFamily: "var(--font-mono)", fontSize: 13 }}>{cell.v}</span>
-            </div>
-          ))}
-        </div>
-        {/* breakevens + POP */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderTop: "1px solid var(--border-hair)" }}>
-          <div style={{ padding: "8px 10px", borderRight: "1px solid var(--border-hair)" }}>
-            <div className="t-label" style={{ fontSize: 8.5 }}>Breakeven</div>
-            <div className="t-mono" style={{ fontSize: 12, color: "var(--ink-1000)", marginTop: 2 }}>$133.42 · $141.58</div>
-          </div>
-          <div style={{ padding: "8px 10px" }}>
-            <div className="t-label" style={{ fontSize: 8.5 }}>Prob of profit</div>
-            <div className="t-mono" style={{ fontSize: 12, color: "var(--ice-500)", marginTop: 2 }}>62%</div>
-          </div>
+        {/* 2026-05-10 (round 2 honest empty-state): the previous
+         * builder rendered hardcoded economics ("+1.42" / "$142" /
+         * "−$358"), hardcoded breakevens "$133.42 · $141.58", and
+         * hardcoded POP "62%" for every strategy regardless of legs
+         * or live chain quotes. Those numbers had no relationship to
+         * the chosen strategy. Replaced with honest "not yet
+         * computed" treatment until a builder backend wires payoff
+         * math to live option chain. */}
+        <div style={{ borderTop: "1px solid var(--border-hair)", padding: "10px 12px", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)", lineHeight: 1.5 }}>
+          Net credit / debit, max profit / loss, breakevens, and probability-of-profit are computed from a live option chain. Pick a contract on the Options tab to populate this panel.
         </div>
       </div>
 
@@ -4713,8 +4700,12 @@ function RiskPreviewCard({ notional, riskDollars, riskPct, stopPx, isOption }) {
       <RiskRow label="Risk · $" v={fmtMoney(riskDollars, { dec: 0 })} tone="down" />
       <RiskRow label="Risk · % equity" v={fmtPct(riskPct, 2)} tone={riskPct > 1 ? "down" : "up"} />
       {!isOption && <RiskRow label="Stop · price" v={"$" + stopPx.toFixed(2)} />}
-      <RiskRow label="Reward target" v="+8.0%" tone="up" />
-      <RiskRow label="R:R" v="2.0×" />
+      {/* 2026-05-10 (round 2 honest empty-state): the previous card
+       * showed hardcoded "Reward target +8.0%" and "R:R 2.0×" for
+       * every order regardless of strategy / target. Reward and R:R
+       * require a real take-profit input the operator hasn't given
+       * yet (the ticket only collects entry + stop). Hide both rows
+       * until the ticket gains a take-profit field. */}
       <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border-hair)", display: "flex", flexDirection: "column", gap: 5 }}>
         <Check ok={riskPct <= 1} warn={riskPct > 1 && riskPct <= 2} label={riskPct <= 1 ? "Risk under 1% account cap" : "Risk above 1% account cap"} />
         <Check ok label="Quote and position data loaded from backend" />
