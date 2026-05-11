@@ -567,7 +567,13 @@ async def login(request: LoginRequest, req: Request):
     try:
         password_ok = verify_password(request.password, target_hash)
     except Exception:
-        logger.warning("verify_password raised — treating as failed auth", exc_info=True)
+        # BUG-090 (audit 2026-05-11, M5-09): drop exc_info — the only common
+        # bcrypt failure (72-byte ValueError) is now handled inside
+        # verify_password, so any remaining exception is a config-grade issue
+        # (malformed hash, etc.). Emit a low-cardinality structured warning
+        # without the noisy stack to avoid drift into log spam + faint
+        # side-channel signal.
+        logger.warning("verify_password raised — treating as failed auth", extra={"event": "verify_password_error"})
         password_ok = False
 
     # Auth succeeds ONLY if (a) bcrypt matched AND (b) we compared against
@@ -898,9 +904,10 @@ async def change_password(
         )
 
     try:
-        old_ok = verify_password(request.old_password, settings.ADMIN_PASSWORD_HASH)
+        old_ok = verify_password(request.old_password, settings.ADMIN_PASSWORD_HASH)  # bounded internally — BUG-090
     except Exception:
-        logger.warning("change-password: verify_password raised", exc_info=True)
+        # BUG-090 (M5-09): drop exc_info, same reasoning as the login path.
+        logger.warning("change-password: verify_password raised", extra={"event": "verify_password_error"})
         old_ok = False
 
     if not old_ok:
