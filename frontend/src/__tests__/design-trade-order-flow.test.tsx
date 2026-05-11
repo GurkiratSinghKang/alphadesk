@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AlphaDeskDesignApp } from "@/components/design-v2/AlphaDeskDesign";
-import { placeOrder, previewOrder } from "@/lib/api";
+import { getOrders, getPortfolioSummary, getPositions, placeOrder, previewOrder } from "@/lib/api";
 
 function installMatchMedia(matches = false) {
   Object.defineProperty(window, "matchMedia", {
@@ -49,6 +49,9 @@ describe("AlphaDeskDesign trade ticket", () => {
       status: "filled",
       createdAt: "",
     });
+    vi.mocked(getPositions).mockClear();
+    vi.mocked(getOrders).mockClear();
+    vi.mocked(getPortfolioSummary).mockClear();
   });
 
   afterEach(() => {
@@ -69,6 +72,9 @@ describe("AlphaDeskDesign trade ticket", () => {
     fireEvent.click(await screen.findByRole("button", { name: /stage buy order/i }));
 
     await waitFor(() => expect(previewOrder).toHaveBeenCalledTimes(1));
+    expect(getPositions).not.toHaveBeenCalled();
+    expect(getOrders).not.toHaveBeenCalled();
+    expect(getPortfolioSummary).not.toHaveBeenCalled();
     expect(vi.mocked(previewOrder).mock.calls[0][0]).toMatchObject({
       symbol: "SPY",
       side: "buy",

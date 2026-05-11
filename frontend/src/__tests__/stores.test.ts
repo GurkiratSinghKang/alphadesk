@@ -423,6 +423,8 @@ describe('Portfolio Store', () => {
       orders: [],
       summary: { equity: 0, cash: 0, buyingPower: 0, totalMarketValue: 0, unrealizedPnl: 0, unrealizedPnlPct: 0, realizedPnlToday: 0, positionsCount: 0, dayPnl: 0, dayPnlPct: 0 },
       greeks: { netDelta: 0, netGamma: 0, netTheta: 0, netVega: 0, betaWeightedDelta: 0 },
+      snapshotAt: null,
+      snapshotSource: null,
     });
   });
 
@@ -453,6 +455,37 @@ describe('Portfolio Store', () => {
     expect(usePortfolioStore.getState().summary.equity).toBe(100000);
     expect(usePortfolioStore.getState().summary.cash).toBe(95000);
     expect(usePortfolioStore.getState().summary.buyingPower).toBe(200000);
+    expect(usePortfolioStore.getState().snapshotSource).toBe('manual');
+  });
+
+  it('setSnapshot updates portfolio slices atomically with a watermark', () => {
+    const snapshotAt = Date.now() - 5000;
+    usePortfolioStore.getState().setSnapshot(
+      {
+        positions: [
+          { symbol: 'AVGO', quantity: 15, avgCost: 1200, currentPrice: 1280, unrealizedPnl: 1200, marketValue: 19200 },
+        ],
+        summary: {
+          equity: 101200,
+          cash: 82000,
+          buyingPower: 164000,
+          totalMarketValue: 19200,
+          unrealizedPnl: 1200,
+          unrealizedPnlPct: 1.2,
+          realizedPnlToday: 0,
+          positionsCount: 1,
+          dayPnl: 1200,
+          dayPnlPct: 1.2,
+        },
+      },
+      { source: 'rest', timestamp: snapshotAt },
+    );
+
+    const state = usePortfolioStore.getState();
+    expect(state.positions[0].symbol).toBe('AVGO');
+    expect(state.summary.unrealizedPnl).toBe(1200);
+    expect(state.snapshotAt).toBe(snapshotAt);
+    expect(state.snapshotSource).toBe('rest');
   });
 
   it('setPositions updates positions array', () => {

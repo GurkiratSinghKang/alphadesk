@@ -19,38 +19,37 @@ import type { Quote, Alert, Position, Order, PortfolioSummary, PortfolioGreeks }
  * portfolio state that the WS stream does not itself refresh (quotes
  * arrive over WS; positions/orders/summary/greeks don't).
  */
-export function fetchPortfolioData() {
-  getPositions()
-    .then((positions) => {
-      usePortfolioStore.getState().setPositions(positions);
-    })
-    .catch((err) => {
-      console.warn("[DataPipeline] Positions fetch failed:", err.message);
-    });
+export async function fetchPortfolioData() {
+  const snapshotAt = Date.now();
+  const [positionsR, ordersR, summaryR, greeksR] = await Promise.allSettled([
+    getPositions(),
+    getOrders(),
+    getPortfolioSummary(),
+    getPortfolioGreeks(),
+  ]);
 
-  getOrders()
-    .then((orders) => {
-      usePortfolioStore.getState().setOrders(orders);
-    })
-    .catch((err) => {
-      console.warn("[DataPipeline] Orders fetch failed:", err.message);
-    });
+  if (positionsR.status === "rejected") {
+    console.warn("[DataPipeline] Positions fetch failed:", positionsR.reason?.message ?? positionsR.reason);
+  }
+  if (ordersR.status === "rejected") {
+    console.warn("[DataPipeline] Orders fetch failed:", ordersR.reason?.message ?? ordersR.reason);
+  }
+  if (summaryR.status === "rejected") {
+    console.warn("[DataPipeline] Summary fetch failed:", summaryR.reason?.message ?? summaryR.reason);
+  }
+  if (greeksR.status === "rejected") {
+    console.warn("[DataPipeline] Greeks fetch failed:", greeksR.reason?.message ?? greeksR.reason);
+  }
 
-  getPortfolioSummary()
-    .then((summary) => {
-      usePortfolioStore.getState().setSummary(summary);
-    })
-    .catch((err) => {
-      console.warn("[DataPipeline] Summary fetch failed:", err.message);
-    });
-
-  getPortfolioGreeks()
-    .then((greeks) => {
-      usePortfolioStore.getState().setGreeks(greeks);
-    })
-    .catch((err) => {
-      console.warn("[DataPipeline] Greeks fetch failed:", err.message);
-    });
+  const snapshot = {
+    positions: positionsR.status === "fulfilled" ? positionsR.value : undefined,
+    orders: ordersR.status === "fulfilled" ? ordersR.value : undefined,
+    summary: summaryR.status === "fulfilled" ? summaryR.value : undefined,
+    greeks: greeksR.status === "fulfilled" ? greeksR.value : undefined,
+  };
+  if (Object.values(snapshot).some((value) => value !== undefined)) {
+    usePortfolioStore.getState().setSnapshot(snapshot, { source: "rest", timestamp: snapshotAt });
+  }
 }
 
 function firstNumber(raw: Record<string, unknown>, ...keys: string[]): number {
@@ -228,7 +227,7 @@ export function useDataPipeline(enabled: boolean = true) {
       }
 
       // Fetch portfolio data
-      fetchPortfolioData();
+      void fetchPortfolioData();
     };
 
     fetchInitialData();
@@ -261,7 +260,7 @@ export function useDataPipeline(enabled: boolean = true) {
     if (wsStatus !== "reconnecting" && wsStatus !== "failed") return;
 
     const handle = setTimeout(() => {
-      fetchPortfolioData();
+      void fetchPortfolioData();
     }, 60_000);
 
     return () => clearTimeout(handle);
@@ -295,30 +294,32 @@ export function useDataPipeline(enabled: boolean = true) {
     unsubs.push(
       onMessage("portfolio", (msg) => {
         const payload = msg.data as Record<string, unknown>;
+        const snapshotAt = Date.now();
+        const snapshot: {
+          positions?: Position[];
+          orders?: Order[];
+          summary?: PortfolioSummary;
+          greeks?: PortfolioGreeks;
+        } = {};
         if (payload?.positions) {
           const rawPositions = payload.positions as Record<string, unknown>[];
           const mapped = rawPositions.map(normalizeWsPosition);
-          usePortfolioStore
-            .getState()
-            .setPositions(mapped);
+          snapshot.positions = mapped;
         }
         if (payload?.orders) {
           const rawOrders = payload.orders as Record<string, unknown>[];
-          usePortfolioStore
-            .getState()
-            .setOrders(rawOrders.map(normalizeWsOrder));
+          snapshot.orders = rawOrders.map(normalizeWsOrder);
         }
         if (payload?.summary) {
           const rawSummary = payload.summary as Record<string, unknown>;
-          usePortfolioStore
-            .getState()
-            .setSummary(normalizeWsSummary(rawSummary));
+          snapshot.summary = normalizeWsSummary(rawSummary);
         }
         if (payload?.greeks) {
           const rawGreeks = payload.greeks as Record<string, unknown>;
-          usePortfolioStore
-            .getState()
-            .setGreeks(normalizeWsGreeks(rawGreeks));
+          snapshot.greeks = normalizeWsGreeks(rawGreeks);
+        }
+        if (Object.keys(snapshot).length > 0) {
+          usePortfolioStore.getState().setSnapshot(snapshot, { source: "ws", timestamp: snapshotAt });
         }
       })
     );

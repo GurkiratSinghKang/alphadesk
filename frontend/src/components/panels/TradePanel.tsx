@@ -25,6 +25,7 @@ import { usePortfolioStore } from "@/stores/portfolio";
 import { useOptionsStore, type SelectedStrike } from "@/stores/options";
 import { placeOrder, cancelOrder, previewOrder } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
+import { fetchPortfolioData } from "@/hooks/useDataPipeline";
 import type { OrderPreviewResponse, PlaceOrderPayload } from "@/lib/api";
 import type { Position } from "@/types";
 import {
@@ -789,10 +790,8 @@ function PositionRow({ p, onSelect }: { p: Position; onSelect: (sym: string) => 
 
 function PositionsTab() {
   const positions = usePortfolioStore((s) => s.positions);
-  const setPositions = usePortfolioStore((s) => s.setPositions);
+  const snapshotAt = usePortfolioStore((s) => s.snapshotAt);
   const { selectedSymbol, setSelectedSymbol } = useMarketStore();
-  const [loading, setLoading] = useState(false);
-  const [fetched, setFetched] = useState(false);
   const { toast } = useToast();
   const [stopLossOpen, setStopLossOpen] = useState(false);
   const [stopLossPrice, setStopLossPrice] = useState("");
@@ -821,18 +820,12 @@ function PositionsTab() {
     return () => window.removeEventListener("alphadesk:shortcut", handler);
   }, [positions, selectedSymbol, toast]);
 
-  // Fetch positions from API on mount
+  // Prime the canonical portfolio snapshot if the root bridge has not
+  // delivered one yet. Do not issue a local positions-only fetch; that is
+  // what created cross-page P&L drift.
   useEffect(() => {
-    if (fetched) return;
-    setFetched(true);
-    setLoading(true);
-    import("@/lib/api").then(({ getPositions }) =>
-      getPositions()
-        .then((data) => { if (data.length) setPositions(data); })
-        .catch((err) => { console.error("Failed to load positions:", err); })
-        .finally(() => setLoading(false))
-    );
-  }, [fetched, setPositions]);
+    if (!snapshotAt) void fetchPortfolioData();
+  }, [snapshotAt]);
 
   // Compute total live P&L across all positions.
   // Wave 14 perf-audit-r3 P0 #3: `useQuotes` shallow-compares only the
@@ -855,7 +848,7 @@ function PositionsTab() {
     }, 0);
   }, [positions, quotes]);
 
-  if (loading && positions.length === 0) {
+  if (!snapshotAt && positions.length === 0) {
     return (
       <div className="flex items-center justify-center gap-2 p-6 text-label text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading positions...
@@ -1003,12 +996,10 @@ function PositionsTab() {
 
 function OrdersTab() {
   const orders = usePortfolioStore((s) => s.orders);
-  const setOrders = usePortfolioStore((s) => s.setOrders);
+  const snapshotAt = usePortfolioStore((s) => s.snapshotAt);
   const updateOrderStatus = usePortfolioStore((s) => s.updateOrderStatus);
   const { setSelectedSymbol } = useMarketStore();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
-  const [fetched, setFetched] = useState(false);
   // Track which order IDs are currently mid-cancel so the row can show
   // "Cancelling…" feedback and the button stays disabled until the
   // backend confirms the 204.
@@ -1017,20 +1008,13 @@ function OrdersTab() {
   // the in-flight loading boolean so the modal disables while confirming.
   const destructive = useDestructiveAction();
 
-  // Fetch orders from API on mount
+  // Prime the canonical portfolio snapshot if needed. Orders share the same
+  // snapshot watermark as positions/summary.
   useEffect(() => {
-    if (fetched) return;
-    setFetched(true);
-    setLoading(true);
-    import("@/lib/api").then(({ getOrders }) =>
-      getOrders()
-        .then((data) => { if (data.length) setOrders(data); })
-        .catch((err) => { console.error("Failed to load orders:", err); })
-        .finally(() => setLoading(false))
-    );
-  }, [fetched, setOrders]);
+    if (!snapshotAt) void fetchPortfolioData();
+  }, [snapshotAt]);
 
-  if (loading && orders.length === 0) {
+  if (!snapshotAt && orders.length === 0) {
     return (
       <div className="flex items-center justify-center gap-2 p-6 text-label text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading orders...

@@ -167,7 +167,7 @@ export function useWebSocket(): UseWebSocketReturn {
         const wasReconnecting = prevStatusRef.current === "reconnecting";
         if (wasReconnecting && hasBeenOpenRef.current) {
           try {
-            fetchPortfolioData();
+            void fetchPortfolioData();
           } catch {
             // fetchPortfolioData swallows its own errors internally; the
             // try is just defensive so a hypothetical top-level throw

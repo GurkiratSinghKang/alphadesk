@@ -14,6 +14,7 @@ import { usePathname, useRouter } from "next/navigation";
 // already subscribes to the store, so paper-mode treatment is
 // consistent across the app.
 import { useUIStore } from "@/stores/ui";
+import { usePortfolioStore } from "@/stores/portfolio";
 import { env } from "@/env";
 import { clearPersistedStores } from "@/lib/auth/clearPersistedStores";
 import {
@@ -28,10 +29,6 @@ import {
   getMorningBrief,
   getNotifications,
   getOptionsChain,
-  getOrders,
-  getPipelinePositions,
-  getPortfolioSummary,
-  getPositions,
   getPriceAlerts,
   getQuote,
   getRiskCorrelation,
@@ -239,6 +236,15 @@ function useDesignLiveData() {
 }
 
 function LiveDataProvider({ symbol, page, children }) {
+  const canonicalPortfolio = usePortfolioStore((s) => s.summary);
+  const canonicalPositions = usePortfolioStore((s) => s.positions);
+  const canonicalOrders = usePortfolioStore((s) => s.orders);
+  const portfolioSnapshotAt = usePortfolioStore((s) => s.snapshotAt);
+  const portfolioSnapshotSource = usePortfolioStore((s) => s.snapshotSource);
+  const canonicalPositionSymbolsKey = React.useMemo(
+    () => (canonicalPositions || []).map((p) => p.symbol).filter(Boolean).join("|"),
+    [canonicalPositions],
+  );
   const [state, setState] = React.useState(() => ({
     loading: true,
     refreshedAt: null,
@@ -282,9 +288,6 @@ function LiveDataProvider({ symbol, page, children }) {
     async function load() {
       setState((prev) => ({ ...prev, loading: true, error: null }));
       const [
-        portfolioR,
-        positionsR,
-        ordersR,
         strategiesR,
         alertsR,
         regimeR,
@@ -305,9 +308,6 @@ function LiveDataProvider({ symbol, page, children }) {
         adminLayoutR,
         adminLastDeployR,
       ] = await Promise.allSettled([
-        getPortfolioSummary(),
-        getPositions(),
-        getOrders(),
         getStrategies(),
         getPriceAlerts(),
         getMarketRegime(),
@@ -337,8 +337,8 @@ function LiveDataProvider({ symbol, page, children }) {
       const userSymbols = userWatchlistR.status === "fulfilled"
         ? (userWatchlistR.value?.symbols || [])
         : [];
-      const positionSymbols = positionsR.status === "fulfilled"
-        ? (positionsR.value || []).map((p) => p.symbol)
+      const positionSymbols = canonicalPositionSymbolsKey
+        ? canonicalPositionSymbolsKey.split("|").filter(Boolean)
         : [];
       const seedSymbols = [...new Set([
         selected,
@@ -397,9 +397,9 @@ function LiveDataProvider({ symbol, page, children }) {
       setState({
         loading: false,
         refreshedAt: new Date().toISOString(),
-        portfolio: portfolioR.status === "fulfilled" ? portfolioR.value : null,
-        positions: positionsR.status === "fulfilled" ? positionsR.value || [] : [],
-        orders: ordersR.status === "fulfilled" ? ordersR.value || [] : [],
+        portfolio: null,
+        positions: [],
+        orders: [],
         strategies: strategiesR.status === "fulfilled" ? strategiesR.value || [] : [],
         alerts: alertsR.status === "fulfilled" ? alertsR.value || [] : [],
         regime: regimeR.status === "fulfilled" ? regimeR.value : null,
@@ -443,9 +443,19 @@ function LiveDataProvider({ symbol, page, children }) {
     return () => {
       cancelled = true;
     };
-  }, [symbol, page]);
+  }, [symbol, page, canonicalPositionSymbolsKey]);
 
-  return <LiveDataContext.Provider value={state}>{children}</LiveDataContext.Provider>;
+  const value = React.useMemo(() => ({
+    ...state,
+    refreshedAt: portfolioSnapshotAt ? new Date(portfolioSnapshotAt).toISOString() : state.refreshedAt,
+    portfolio: portfolioSnapshotAt ? canonicalPortfolio : null,
+    positions: portfolioSnapshotAt ? canonicalPositions : [],
+    orders: portfolioSnapshotAt ? canonicalOrders : [],
+    portfolioSnapshotAt,
+    portfolioSnapshotSource,
+  }), [state, portfolioSnapshotAt, portfolioSnapshotSource, canonicalPortfolio, canonicalPositions, canonicalOrders]);
+
+  return <LiveDataContext.Provider value={value}>{children}</LiveDataContext.Provider>;
 }
 
 const __LAYOUT_GUARD_STYLE = `
@@ -6456,24 +6466,7 @@ const LegacyStrategiesPage = ({ tweaks, onNav }) => {
 // or equivalent.
 const PipelinePage = () => {
   const live = useDesignLiveData();
-  const [pipelinePositions, setPipelinePositions] = React.useState(null);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    getPipelinePositions()
-      .then((payload) => {
-        if (!cancelled) setPipelinePositions(payload?.positions || []);
-      })
-      .catch(() => {
-        if (!cancelled) setPipelinePositions([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const sourcePositions = pipelinePositions?.length ? pipelinePositions : (live.positions || []);
-  const positions = sourcePositions.map((p) => ({
+  const positions = (live.positions || []).map((p) => ({
     symbol: normalizeBookSymbol(p.symbol || p.sym),
     qty: asFiniteNumber(p.shares ?? p.quantity ?? p.qty, 0) || 0,
     pnl: asFiniteNumber(p.pnl ?? p.unrealizedPnl ?? p.unrealized_pnl ?? p.unrealizedPl ?? p.unrealized_pl, null),

@@ -331,7 +331,7 @@ export function useNotifications() {
         // Dashboard/store consumers read broker state from Zustand, not these
         // query keys. Hydrate the store immediately so the visible book moves
         // with the fill/reject toast instead of waiting for reconnect/manual refresh.
-        fetchPortfolioData();
+        void fetchPortfolioData();
       }
 
       const sym = (data.symbol ?? "").toUpperCase() || "—";

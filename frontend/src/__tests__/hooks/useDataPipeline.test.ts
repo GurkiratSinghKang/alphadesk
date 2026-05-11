@@ -69,6 +69,8 @@ describe('useDataPipeline', () => {
       orders: [],
       summary: { equity: 0, cash: 0, buyingPower: 0, totalMarketValue: 0, unrealizedPnl: 0, unrealizedPnlPct: 0, realizedPnlToday: 0, positionsCount: 0, dayPnl: 0, dayPnlPct: 0 },
       greeks: { netDelta: 0, netGamma: 0, netTheta: 0, netVega: 0, betaWeightedDelta: 0 },
+      snapshotAt: null,
+      snapshotSource: null,
     });
     useAlertsStore.setState({ alerts: [] });
   });
@@ -141,6 +143,21 @@ describe('useDataPipeline', () => {
     const positions = usePortfolioStore.getState().positions;
     expect(positions.length).toBe(1);
     expect(positions[0].symbol).toBe('TSLA');
+    expect(usePortfolioStore.getState().snapshotSource).toBe('ws');
+    expect(usePortfolioStore.getState().snapshotAt).toEqual(expect.any(Number));
+  });
+
+  it('commits REST portfolio data as one canonical snapshot', async () => {
+    const { fetchPortfolioData } = await import('@/hooks/useDataPipeline');
+
+    await fetchPortfolioData();
+
+    const state = usePortfolioStore.getState();
+    expect(state.snapshotSource).toBe('rest');
+    expect(state.snapshotAt).toEqual(expect.any(Number));
+    expect(state.summary.equity).toBe(100000);
+    expect(state.positions).toEqual([]);
+    expect(state.orders).toEqual([]);
   });
 
   it('ignores quote messages without a symbol', async () => {

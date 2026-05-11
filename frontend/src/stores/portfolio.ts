@@ -1,11 +1,29 @@
 import { create } from "zustand";
 import type { Position, Order, PortfolioSummary, PortfolioGreeks } from "@/types";
 
+const PORTFOLIO_SNAPSHOT_CHANNEL = "alphadesk:portfolio-snapshot";
+
+type PortfolioSnapshotSource = "rest" | "ws" | "manual";
+type PortfolioSnapshotPayload = Partial<{
+  positions: Position[];
+  orders: Order[];
+  summary: PortfolioSummary;
+  greeks: PortfolioGreeks;
+}>;
+
 interface PortfolioState {
   positions: Position[];
   orders: Order[];
   summary: PortfolioSummary;
   greeks: PortfolioGreeks;
+  /**
+   * Canonical portfolio snapshot watermark. Any page rendering open-position
+   * P&L should consume this store snapshot instead of issuing its own
+   * positions/summary fetch, so all surfaces show the same values from the
+   * same tick.
+   */
+  snapshotAt: number | null;
+  snapshotSource: PortfolioSnapshotSource | null;
   /**
    * True when the backend recently served a response tagged `is_demo: true`
    * (or `source: "demo"`) — i.e. the broker or market-data provider is
@@ -29,6 +47,10 @@ interface PortfolioState {
   updateOrderStatus: (id: string, status: Order["status"]) => void;
   setSummary: (summary: PortfolioSummary) => void;
   setGreeks: (greeks: PortfolioGreeks) => void;
+  setSnapshot: (
+    snapshot: PortfolioSnapshotPayload,
+    meta?: { source?: PortfolioState["snapshotSource"]; timestamp?: number },
+  ) => void;
   setBrokerDegraded: (
     degraded: boolean,
     meta?: { endpoint?: string; timestamp?: number },
@@ -60,17 +82,33 @@ const defaultGreeks: PortfolioGreeks = {
   betaWeightedDelta: 0,
 };
 
+function broadcastPortfolioSnapshot(
+  snapshot: PortfolioSnapshotPayload,
+  meta: { source: PortfolioSnapshotSource; timestamp: number },
+) {
+  if (typeof window === "undefined" || typeof BroadcastChannel === "undefined") return;
+  try {
+    const channel = new BroadcastChannel(PORTFOLIO_SNAPSHOT_CHANNEL);
+    channel.postMessage({ snapshot, meta });
+    channel.close();
+  } catch {
+    // Broadcast is an optimization for same-browser tab consistency.
+  }
+}
+
 export const usePortfolioStore = create<PortfolioState>((set) => ({
   positions: [],
   orders: [],
   summary: defaultSummary,
   greeks: defaultGreeks,
+  snapshotAt: null,
+  snapshotSource: null,
   brokerDegraded: false,
   brokerDegradedEndpoint: null,
   brokerDegradedAt: null,
 
-  setPositions: (positions) => set({ positions }),
-  setOrders: (orders) => set({ orders }),
+  setPositions: (positions) => set({ positions, snapshotAt: Date.now(), snapshotSource: "manual" }),
+  setOrders: (orders) => set({ orders, snapshotAt: Date.now(), snapshotSource: "manual" }),
 
   addOrder: (order) =>
     set((state) => ({ orders: [order, ...state.orders].slice(0, 200) })),
@@ -80,8 +118,21 @@ export const usePortfolioStore = create<PortfolioState>((set) => ({
       orders: state.orders.map((o) => (o.id === id ? { ...o, status } : o)),
     })),
 
-  setSummary: (summary) => set({ summary }),
-  setGreeks: (greeks) => set({ greeks }),
+  setSummary: (summary) => set({ summary, snapshotAt: Date.now(), snapshotSource: "manual" }),
+  setGreeks: (greeks) => set({ greeks, snapshotAt: Date.now(), snapshotSource: "manual" }),
+  setSnapshot: (snapshot, meta) => {
+    const timestamp = meta?.timestamp ?? Date.now();
+    const source = meta?.source ?? "manual";
+    set((state) => ({
+      positions: snapshot.positions ?? state.positions,
+      orders: snapshot.orders ?? state.orders,
+      summary: snapshot.summary ?? state.summary,
+      greeks: snapshot.greeks ?? state.greeks,
+      snapshotAt: timestamp,
+      snapshotSource: source,
+    }));
+    broadcastPortfolioSnapshot(snapshot, { source, timestamp });
+  },
   setBrokerDegraded: (degraded, meta) =>
     set({
       brokerDegraded: degraded,
@@ -89,3 +140,28 @@ export const usePortfolioStore = create<PortfolioState>((set) => ({
       brokerDegradedAt: degraded ? meta?.timestamp ?? Date.now() : null,
     }),
 }));
+
+if (typeof window !== "undefined" && typeof BroadcastChannel !== "undefined") {
+  try {
+    const channel = new BroadcastChannel(PORTFOLIO_SNAPSHOT_CHANNEL);
+    channel.onmessage = (event: MessageEvent) => {
+      const data = event.data as {
+        snapshot?: PortfolioSnapshotPayload;
+        meta?: { source?: PortfolioSnapshotSource; timestamp?: number };
+      };
+      const snapshot = data?.snapshot;
+      const timestamp = data?.meta?.timestamp;
+      if (!snapshot || !Number.isFinite(timestamp)) return;
+      usePortfolioStore.setState((state) => ({
+        positions: Array.isArray(snapshot.positions) ? snapshot.positions : state.positions,
+        orders: Array.isArray(snapshot.orders) ? snapshot.orders : state.orders,
+        summary: snapshot.summary ?? state.summary,
+        greeks: snapshot.greeks ?? state.greeks,
+        snapshotAt: timestamp!,
+        snapshotSource: data.meta?.source ?? "rest",
+      }));
+    };
+  } catch {
+    // Older browsers/tests without BroadcastChannel keep per-tab state.
+  }
+}

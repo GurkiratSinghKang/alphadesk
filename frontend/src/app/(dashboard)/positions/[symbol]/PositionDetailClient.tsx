@@ -8,7 +8,8 @@ import EmptyState from "@/components/primitives/EmptyState";
 import AgentChip from "@/components/primitives/AgentChip";
 import StatusDot from "@/components/primitives/StatusDot";
 import { useAgents } from "@/hooks/useAgents";
-import { getPositions } from "@/lib/api";
+import { fetchPortfolioData } from "@/hooks/useDataPipeline";
+import { usePortfolioStore } from "@/stores/portfolio";
 import { cn } from "@/lib/utils";
 import type { Position } from "@/types";
 import type { Agent, AgentArchetype } from "@/lib/types/agents";
@@ -27,46 +28,26 @@ function normalizePositionSymbol(value: string): string {
  * the agents whose `ownerStrategy` matches, and surfaces them as chips
  * that link into /agents/[id].
  *
- * Data: live `/api/v1/trades/positions` via api.ts (mocked in dev).
+ * Data: canonical portfolio store populated by DataPipelineBridge.
  * Trade log + scale-out + risk numbers are deterministic synthesis
  * until backend B.4 ships per-position lot history.
  */
 export default function PositionDetailClient({ symbol }: { symbol: string }) {
-  const [positions, setPositions] = React.useState<Position[] | null>(null);
-  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const positions = usePortfolioStore((s) => s.positions);
+  const snapshotAt = usePortfolioStore((s) => s.snapshotAt);
+  const snapshotSource = usePortfolioStore((s) => s.snapshotSource);
   const { data: agents = [] } = useAgents();
 
   React.useEffect(() => {
-    let cancelled = false;
-    getPositions()
-      .then((rows) => {
-        if (!cancelled) setPositions(rows ?? []);
-      })
-      .catch((err: Error) => {
-        if (!cancelled) setLoadError(err?.message ?? "Failed to load positions");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (!snapshotAt) void fetchPortfolioData();
+  }, [snapshotAt]);
 
   const position = React.useMemo<Position | null>(() => {
-    if (!positions) return null;
     const requested = normalizePositionSymbol(symbol);
     return positions.find((p) => normalizePositionSymbol(p.symbol) === requested) ?? null;
   }, [positions, symbol]);
 
-  if (loadError) {
-    return (
-      <main className="px-6 pt-6 pb-12 max-w-screen-2xl mx-auto">
-        <Section eyebrow={`POSITION · ${symbol}`} title="Couldn't load positions" level={1}>
-          <EmptyState eyebrow="ERROR" title="Position lookup failed." description={loadError} />
-        </Section>
-      </main>
-    );
-  }
-
-  if (!positions) {
+  if (!snapshotAt) {
     return (
       <main className="px-6 pt-6 pb-12 max-w-screen-2xl mx-auto">
         <Section eyebrow={`POSITION · ${symbol}`} title="Loading…" level={1}>
@@ -121,6 +102,7 @@ export default function PositionDetailClient({ symbol }: { symbol: string }) {
   const log = synthesizeTradeLog(position);
   const scaleOut = synthesizeScaleOut(position);
   const owners = ownersFor(position, agents);
+  const snapshotLabel = `${snapshotSource ?? "portfolio"} · ${new Date(snapshotAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
 
   return (
     <main className="px-6 pt-6 pb-12 max-w-screen-2xl mx-auto space-y-6">
@@ -154,7 +136,7 @@ export default function PositionDetailClient({ symbol }: { symbol: string }) {
             className="font-display italic text-fg-dim"
             style={{ fontSize: 16, marginTop: 4 }}
           >
-            Market value ${mv.toLocaleString()} · cost ${cost.toLocaleString()}
+            Market value ${mv.toLocaleString()} · cost ${cost.toLocaleString()} · {snapshotLabel}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
