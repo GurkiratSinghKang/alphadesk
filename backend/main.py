@@ -421,6 +421,96 @@ async def enforce_origin_on_state_changes(request: Request, call_next):  # type:
                 )
     return await call_next(request)
 
+
+# BUG-078 (audit 2026-05-11, M1-03): authed data routes had NO per-IP rate
+# limit. M1 demonstrated this by firing 50 GETs to /portfolio/summary in 8
+# seconds with all 200 OKs. A credential-stuffing-style enumeration or a
+# runaway script could pin a backend worker indefinitely.
+#
+# This middleware adds a loose, in-process sliding-window per-IP cap on
+# /api/v1/* requests. The threshold is intentionally generous (default
+# 600 requests / 60s = 10 req/s) so legitimate dashboard polling (BUG-069
+# = 41 calls on first paint, plus 1 Hz refreshes) is unaffected; the cap
+# only catches genuine abuse.
+#
+# Per-endpoint stricter caps stack on top — see backend/api/routes/
+# _rate_limit.py for the Claude/full-research/detail/analysis buckets,
+# and auth.py's login lockout. Those tighter buckets still apply for
+# expensive endpoints.
+#
+# Exemptions: same as CSRF (webhooks + CSP report) plus the web-vitals
+# beacon (browsers fire one per page-nav and we want every signal) and
+# health endpoints (load-balancer probes can't authenticate).
+#
+# Storage: in-process deque per IP, guarded by an asyncio lock. -w 1 in
+# prod (BUG-091) means this is fine until horizontal scaling lands; at
+# that point swap to Redis (same pattern as _rate_limit.py's B-50
+# follow-up).
+import asyncio as _rl_asyncio
+import time as _rl_time
+from collections import defaultdict as _rl_defaultdict, deque as _rl_deque
+
+_GLOBAL_RATE_LIMIT_PATH_PREFIX = "/api/v1/"
+_GLOBAL_RATE_LIMIT_EXEMPT_PREFIXES = (
+    "/api/v1/webhooks/",
+    "/api/v1/security/csp-report",
+    "/api/v1/metrics/vitals",
+    "/api/v1/auth/login",  # already has its own stricter cap
+    "/api/v1/auth/refresh",
+    "/api/v1/auth/logout",
+)
+_GLOBAL_RATE_LIMIT_MAX = int(os.environ.get("API_GLOBAL_RATE_LIMIT_MAX", "600"))
+_GLOBAL_RATE_LIMIT_WINDOW = float(os.environ.get("API_GLOBAL_RATE_LIMIT_WINDOW_SECONDS", "60"))
+_global_rate_history: dict[str, "_rl_deque[float]"] = _rl_defaultdict(_rl_deque)
+_global_rate_lock = _rl_asyncio.Lock()
+
+
+def _global_rate_client_key(request: Request) -> str:
+    """Per-request bucket key. Use client.host (post-ProxyHeadersMiddleware)
+    so the real caller IP is the bucket key, not Caddy's bridge address."""
+    return (request.client.host if request.client else None) or "unknown"
+
+
+@app.middleware("http")
+async def enforce_global_rate_limit(request: Request, call_next):  # type: ignore[no-untyped-def]
+    """Loose per-IP rate limit on /api/v1/* to catch runaway clients."""
+    path = request.url.path
+    if not path.startswith(_GLOBAL_RATE_LIMIT_PATH_PREFIX):
+        return await call_next(request)
+    if any(path.startswith(p) for p in _GLOBAL_RATE_LIMIT_EXEMPT_PREFIXES):
+        return await call_next(request)
+
+    key = _global_rate_client_key(request)
+    now = _rl_time.monotonic()
+    window_start = now - _GLOBAL_RATE_LIMIT_WINDOW
+
+    async with _global_rate_lock:
+        bucket = _global_rate_history[key]
+        while bucket and bucket[0] < window_start:
+            bucket.popleft()
+        if len(bucket) >= _GLOBAL_RATE_LIMIT_MAX:
+            from core.logging import REQUEST_ID  # local import: avoid cycle
+            import logging
+            logging.getLogger("alphadesk.ratelimit").warning(
+                "global rate limit exceeded",
+                extra={
+                    "event": "global_rate_limit_exceeded",
+                    "path": path,
+                    "client_key": key,
+                    "bucket_size": len(bucket),
+                    "window_s": _GLOBAL_RATE_LIMIT_WINDOW,
+                    "request_id": REQUEST_ID.get(),
+                },
+            )
+            retry_after = max(1, int(_GLOBAL_RATE_LIMIT_WINDOW - (now - bucket[0])))
+            return JSONResponse(
+                {"detail": "Too many requests. Slow down."},
+                status_code=429,
+                headers={"Retry-After": str(retry_after)},
+            )
+        bucket.append(now)
+    return await call_next(request)
+
 # Only trust X-Forwarded-For from Caddy and the loopback. Caddy lives in the
 # ``alphadesk`` user bridge network (172.18+.0.0/16 range, depending on Docker
 # assignment). ``trusted_hosts=["*"]`` let any client rotate X-Forwarded-For
