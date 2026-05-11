@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
 import pytest
 
 
@@ -15,12 +16,13 @@ class _Resp:
 
 
 class _Client:
-    def __init__(self, open_orders: list[dict] | None = None) -> None:
+    def __init__(self, open_orders: list[dict] | None = None, order_status: int = 200) -> None:
         self.open_orders = open_orders or []
+        self.order_status = order_status
         self.deleted: list[str] = []
 
     async def get(self, *args: Any, **kwargs: Any) -> _Resp:
-        return _Resp(self.open_orders)
+        return _Resp(self.open_orders, status_code=self.order_status)
 
     async def delete(self, url: str, *args: Any, **kwargs: Any) -> _Resp:
         self.deleted.append(url)
@@ -105,6 +107,174 @@ async def test_ensure_stop_orders_uses_buy_stop_for_short(monkeypatch: pytest.Mo
 
     assert placed == [{"symbol": "TSLA", "qty": 10, "stop_price": 105.0, "side": "buy", "strategy": "pairs_trading"}]
     assert result[0]["side"] == "buy"
+
+
+@pytest.mark.asyncio
+async def test_ensure_stop_orders_skips_matching_live_stop(monkeypatch: pytest.MonkeyPatch) -> None:
+    from data.ingestion import daily_pipeline as dp
+
+    placed: list[dict] = []
+
+    class _Ledger:
+        def get_open_positions(self) -> list[dict]:
+            return [{
+                "symbol": "AVGO",
+                "shares": 15,
+                "entry_price": 405.12,
+                "stop_loss": 384.86,
+                "side": "long",
+                "strategy": "pead",
+            }]
+
+    async def _stop(*args: Any, **kwargs: Any) -> dict:
+        placed.append({"called": True})
+        return {"id": "duplicate-stop"}
+
+    monkeypatch.setattr(dp, "_place_stop_order", _stop)
+
+    result = await dp._ensure_stop_orders(
+        _Client(open_orders=[{
+            "id": "existing-stop",
+            "symbol": "AVGO",
+            "qty": "15",
+            "side": "sell",
+            "type": "stop",
+            "stop_price": "384.86",
+            "status": "open",
+        }]),
+        _Ledger(),
+    )
+
+    assert placed == []
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_ensure_stop_orders_skips_when_open_order_query_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from data.ingestion import daily_pipeline as dp
+
+    placed: list[dict] = []
+
+    class _Ledger:
+        def get_open_positions(self) -> list[dict]:
+            return [{
+                "symbol": "QQQ",
+                "shares": 1,
+                "entry_price": 714.81,
+                "stop_loss": 679.07,
+                "side": "long",
+                "strategy": "trend",
+            }]
+
+    async def _stop(*args: Any, **kwargs: Any) -> dict:
+        placed.append({"called": True})
+        return {"id": "unsafe-stop"}
+
+    monkeypatch.setattr(dp, "_place_stop_order", _stop)
+
+    result = await dp._ensure_stop_orders(_Client(order_status=429), _Ledger())
+
+    assert placed == []
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_check_exits_trailing_stop_skips_matching_live_stop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from data.ingestion import daily_pipeline as dp
+
+    updates: list[tuple[int, dict[str, float]]] = []
+    placed: list[dict] = []
+
+    class _Ledger:
+        def get_open_positions(self) -> list[dict]:
+            return [{
+                "id": 7,
+                "symbol": "AVGO",
+                "shares": 15,
+                "entry_price": 381.05,
+                "stop_loss": 360.00,
+                "take_profit": None,
+                "side": "long",
+                "strategy": "pead",
+            }]
+
+        def update(self, trade_id: int, patch: dict[str, float]) -> bool:
+            updates.append((trade_id, patch))
+            return True
+
+    async def _positions(client: Any, **kwargs: Any) -> list[dict]:
+        return [{"symbol": "AVGO", "current_price": "401.00"}]
+
+    async def _stop(*args: Any, **kwargs: Any) -> dict:
+        placed.append({"called": True})
+        return {"id": "duplicate-stop"}
+
+    monkeypatch.setattr(dp, "_get_positions", _positions)
+    monkeypatch.setattr(dp, "_place_stop_order", _stop)
+
+    client = _Client(open_orders=[{
+        "id": "existing-stop",
+        "symbol": "AVGO",
+        "qty": "15",
+        "side": "sell",
+        "type": "stop",
+        "stop_price": "384.86",
+        "status": "open",
+    }])
+
+    closed = await dp._check_exits(client, _Ledger())
+
+    assert closed == []
+    assert placed == []
+    assert client.deleted == []
+    assert updates == [(7, {"stop_loss": 384.86})]
+
+
+@pytest.mark.asyncio
+async def test_stop_order_429_marks_rate_limit_bucket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from data.ingestion import daily_pipeline as dp
+
+    request = httpx.Request("POST", "https://broker.example/v2/orders")
+    response = httpx.Response(429, request=request)
+
+    class _RateLimitedResp:
+        status_code = 429
+
+        def raise_for_status(self) -> None:
+            raise httpx.HTTPStatusError(
+                "too many requests",
+                request=request,
+                response=response,
+            )
+
+    class _PostClient:
+        async def post(self, *args: Any, **kwargs: Any) -> _RateLimitedResp:
+            return _RateLimitedResp()
+
+    async def _creds(username: str | None = None) -> tuple[dict[str, str], str]:
+        return {}, "https://broker.example"
+
+    dp._stop_order_rate_limited_until.clear()
+    monkeypatch.setattr(dp, "_alpaca_creds_for_user", _creds)
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await dp._place_stop_order(
+            _PostClient(),
+            "AVGO",
+            15,
+            384.86,
+            side="sell",
+            strategy="pead",
+        )
+
+    assert dp._is_stop_order_rate_limited(None, "AVGO", "sell", 15, 384.86)
+    dp._stop_order_rate_limited_until.clear()
 
 
 @pytest.mark.asyncio

@@ -53,6 +53,132 @@ LOG_DIR = Path(__file__).resolve().parent.parent / "pipeline_logs"
 
 _VIX_CACHE_KEY = "pipeline:last_vix_level"
 _VIX_CACHE_TTL_SECONDS = 60 * 60 * 24 * 7  # one week
+_STOP_ORDER_429_COOLDOWN_SECONDS = 5 * 60
+_stop_order_rate_limited_until: dict[str, float] = {}
+
+
+def _to_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalise_order_symbol(symbol: Any) -> str:
+    return str(symbol or "").strip().upper()
+
+
+def _stop_order_cache_key(
+    username: str | None,
+    symbol: str,
+    side: str,
+    qty: int | float,
+    stop_price: float,
+) -> str:
+    user_key = re.sub(r"[^A-Za-z0-9_.:-]", "_", username or "env")
+    qty_value = _to_float(qty) or 0.0
+    return (
+        f"{user_key}:{_normalise_order_symbol(symbol)}:"
+        f"{str(side or '').lower()}:{qty_value:.6f}:{round(float(stop_price), 2):.2f}"
+    )
+
+
+def _mark_stop_order_rate_limited(
+    username: str | None,
+    symbol: str,
+    side: str,
+    qty: int | float,
+    stop_price: float,
+) -> None:
+    key = _stop_order_cache_key(username, symbol, side, qty, stop_price)
+    _stop_order_rate_limited_until[key] = time.time() + _STOP_ORDER_429_COOLDOWN_SECONDS
+
+
+def _is_stop_order_rate_limited(
+    username: str | None,
+    symbol: str,
+    side: str,
+    qty: int | float,
+    stop_price: float,
+) -> bool:
+    key = _stop_order_cache_key(username, symbol, side, qty, stop_price)
+    until = _stop_order_rate_limited_until.get(key, 0)
+    if until <= time.time():
+        _stop_order_rate_limited_until.pop(key, None)
+        return False
+    return True
+
+
+def _order_stop_price(order: dict[str, Any]) -> float | None:
+    stop_price = order.get("stop_price")
+    if stop_price is None and isinstance(order.get("stop_loss"), dict):
+        stop_price = order["stop_loss"].get("stop_price")
+    return _to_float(stop_price)
+
+
+def _open_orders_payload(payload: Any) -> list[dict[str, Any]]:
+    if isinstance(payload, list):
+        return [o for o in payload if isinstance(o, dict)]
+    if isinstance(payload, dict) and isinstance(payload.get("orders"), list):
+        return [o for o in payload["orders"] if isinstance(o, dict)]
+    return []
+
+
+def _is_open_stop_order(order: dict[str, Any]) -> bool:
+    order_type = str(order.get("type") or order.get("order_type") or "").lower()
+    status = str(order.get("status") or "open").lower()
+    return order_type == "stop" and status not in {
+        "canceled",
+        "cancelled",
+        "expired",
+        "filled",
+        "rejected",
+    }
+
+
+def _stop_order_matches(
+    order: dict[str, Any],
+    symbol: str,
+    side: str,
+    qty: int | float,
+    stop_price: float,
+) -> bool:
+    if not _is_open_stop_order(order):
+        return False
+    if _normalise_order_symbol(order.get("symbol")) != _normalise_order_symbol(symbol):
+        return False
+    if str(order.get("side") or "").lower() != str(side or "").lower():
+        return False
+
+    order_qty = _to_float(order.get("qty") if order.get("qty") is not None else order.get("quantity"))
+    target_qty = _to_float(qty)
+    if order_qty is None or target_qty is None:
+        return False
+    if not math.isclose(order_qty, target_qty, rel_tol=0, abs_tol=1e-6):
+        return False
+
+    order_price = _order_stop_price(order)
+    target_price = _to_float(stop_price)
+    if order_price is None or target_price is None:
+        return False
+    return math.isclose(
+        round(order_price, 2),
+        round(target_price, 2),
+        rel_tol=0,
+        abs_tol=0.005,
+    )
+
+
+def _has_matching_stop_order(
+    orders: list[dict[str, Any]],
+    symbol: str,
+    side: str,
+    qty: int | float,
+    stop_price: float,
+) -> bool:
+    return any(_stop_order_matches(o, symbol, side, qty, stop_price) for o in orders)
 
 
 async def _get_vix_level(client: httpx.AsyncClient) -> float | None:
@@ -802,7 +928,12 @@ async def _place_stop_order(
         headers=headers,
         json=body,
     )
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 429:
+            _mark_stop_order_rate_limited(username, symbol, side, qty, stop_price)
+        raise
     order = resp.json()
     logger.info(
         "Stop-loss order placed: %s %s %d shares @ $%.2f  strategy=%s  order_id=%s",
@@ -875,19 +1006,18 @@ async def _ensure_stop_orders(
     # Get existing orders to avoid duplicates
     headers, base_url = await _alpaca_creds_for_user(username)
     resp = await client.get(f"{base_url}/v2/orders?status=open", headers=headers)
-    existing_orders = resp.json() if resp.status_code == 200 else []
-    symbols_with_stops = {
-        (o.get("symbol"), o.get("side"))
-        for o in existing_orders
-        if o.get("type") == "stop"
-    }
+    if resp.status_code != 200:
+        logger.warning(
+            "Skipping stop-order ensure: open-order query returned HTTP %s",
+            resp.status_code,
+        )
+        return placed
+    existing_orders = _open_orders_payload(resp.json())
 
     for trade in open_positions:
         sym = trade["symbol"]
         is_short = str(trade.get("side") or "long").lower() in {"short", "sell", "s"}
         protective_side = "buy" if is_short else "sell"
-        if (sym, protective_side) in symbols_with_stops:
-            continue  # already has a stop
 
         stop_price = trade.get("signal", {}).get("stop_loss") or trade.get("stop_loss")
         if not stop_price:
@@ -895,9 +1025,22 @@ async def _ensure_stop_orders(
             stop_price = trade.get("entry_price", 0) * (1.05 if is_short else 0.95)
 
         if stop_price and stop_price > 0:
+            shares = trade["shares"]
+            if _has_matching_stop_order(
+                existing_orders, sym, protective_side, shares, float(stop_price)
+            ):
+                continue
+            if _is_stop_order_rate_limited(
+                username, sym, protective_side, shares, float(stop_price)
+            ):
+                logger.warning(
+                    "Skipping duplicate stop placement for %s during Alpaca 429 cooldown",
+                    sym,
+                )
+                continue
             try:
                 order = await _place_stop_order(
-                    client, sym, trade["shares"], stop_price,
+                    client, sym, shares, stop_price,
                     side=protective_side,
                     strategy=trade.get("strategy", "unknown"),
                     username=username,
@@ -2686,15 +2829,46 @@ async def _check_exits(
                         f"{base_url}/v2/orders?status=open&symbols={sym}",
                         headers=headers,
                     )
-                    if resp.status_code == 200:
-                        for existing_order in resp.json():
-                            if existing_order.get("type") == "stop" and existing_order.get("side") == exit_side:
-                                await client.delete(
-                                    f"{base_url}/v2/orders/{existing_order['id']}",
-                                    headers=headers,
-                                )
+                    if resp.status_code != 200:
+                        logger.warning(
+                            "Trailing stop for %s skipped: open-order query returned HTTP %s",
+                            sym, resp.status_code,
+                        )
+                        continue
+
+                    existing_orders = _open_orders_payload(resp.json())
+                    shares = trade["shares"]
+                    if _has_matching_stop_order(
+                        existing_orders, sym, exit_side, shares, rounded_new_stop
+                    ):
+                        logger.info(
+                            "Trailing stop for %s already open at $%.2f; skipping broker replace",
+                            sym, rounded_new_stop,
+                        )
+                        continue
+
+                    for existing_order in existing_orders:
+                        if (
+                            _is_open_stop_order(existing_order)
+                            and _normalise_order_symbol(existing_order.get("symbol"))
+                            == _normalise_order_symbol(sym)
+                            and str(existing_order.get("side") or "").lower() == exit_side
+                            and existing_order.get("id")
+                        ):
+                            await client.delete(
+                                f"{base_url}/v2/orders/{existing_order['id']}",
+                                headers=headers,
+                            )
+                    if _is_stop_order_rate_limited(
+                        username, sym, exit_side, shares, rounded_new_stop
+                    ):
+                        logger.warning(
+                            "Trailing stop for %s skipped during Alpaca 429 cooldown",
+                            sym,
+                        )
+                        continue
                     await _place_stop_order(
-                        client, sym, trade["shares"], rounded_new_stop,
+                        client, sym, shares, rounded_new_stop,
                         side=exit_side,
                         strategy=trade.get("strategy", "unknown"),
                         username=username,
