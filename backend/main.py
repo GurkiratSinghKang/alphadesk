@@ -363,6 +363,64 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Idempotency-Key"],
 )
 
+# BUG-077 (audit 2026-05-11, M1-10 / P8-04 / M4-08): CORSMiddleware above
+# rejects preflighted requests from disallowed origins, but it does NOT
+# reject "simple" POSTs (Content-Type: text/plain + JSON body, etc.) and
+# our auth cookie is SameSite=Lax which permits the cookie to ride on
+# top-level POST navigations from third-party origins. Net effect: a
+# malicious page could POST to /api/v1/trades/orders with a JSON-as-
+# text/plain body and the browser would attach the user's session.
+#
+# This middleware adds a second wall: for state-changing methods on
+# /api/v1/*, reject any request whose `Origin` header is set and is NOT
+# in the allowed list. Requests WITHOUT an `Origin` header are server-
+# to-server (curl, webhooks, internal cron) and are allowed through —
+# they don't carry a browser cookie by definition.
+#
+# Exemptions: webhook endpoints (where the caller has no notion of
+# Origin) and `/api/v1/security/csp-report` (browsers POST CSP reports
+# without an `Origin` matching ours, intentionally). Add paths here as
+# new external POSTs land.
+_CSRF_EXEMPT_PREFIXES = (
+    "/api/v1/webhooks/",
+    "/api/v1/security/csp-report",
+)
+_CSRF_PROTECTED_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+_CSRF_ALLOWED_ORIGINS = frozenset(cors_origins)
+
+
+@app.middleware("http")
+async def enforce_origin_on_state_changes(request: Request, call_next):  # type: ignore[no-untyped-def]
+    """Reject browser-driven cross-origin state changes (CSRF defense)."""
+    method = request.method.upper()
+    if method in _CSRF_PROTECTED_METHODS:
+        path = request.url.path
+        if path.startswith("/api/v1/") and not any(
+            path.startswith(p) for p in _CSRF_EXEMPT_PREFIXES
+        ):
+            origin = request.headers.get("origin")
+            if origin and origin not in _CSRF_ALLOWED_ORIGINS:
+                from core.logging import REQUEST_ID  # local import: avoid cycle
+                # Log at WARNING with request_id so a single grep correlates
+                # to the Caddy access entry. Don't echo the Origin verbatim
+                # to client to avoid reflective-content concerns.
+                import logging
+                logging.getLogger("alphadesk.csrf").warning(
+                    "csrf rejected: cross-origin state change",
+                    extra={
+                        "event": "csrf_reject",
+                        "method": method,
+                        "path": path,
+                        "origin": origin,
+                        "request_id": REQUEST_ID.get(),
+                    },
+                )
+                return JSONResponse(
+                    {"detail": "Origin not allowed for state-changing request"},
+                    status_code=403,
+                )
+    return await call_next(request)
+
 # Only trust X-Forwarded-For from Caddy and the loopback. Caddy lives in the
 # ``alphadesk`` user bridge network (172.18+.0.0/16 range, depending on Docker
 # assignment). ``trusted_hosts=["*"]`` let any client rotate X-Forwarded-For
