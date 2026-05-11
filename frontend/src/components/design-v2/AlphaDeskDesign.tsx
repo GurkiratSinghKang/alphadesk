@@ -415,11 +415,15 @@ const __LAYOUT_GUARD_STYLE = `
   [data-ad-main] [style*="font-size: 8.5px"],
   [data-ad-main] [style*="font-size: 9px"],
   [data-ad-main] [style*="font-size: 9.5px"],
+  [data-ad-main] [style*="font-size: 10px"],
+  [data-ad-main] [style*="font-size: 10.5px"],
   [data-ad-topbar] [style*="font-size: 8px"],
   [data-ad-topbar] [style*="font-size: 8.5px"],
   [data-ad-topbar] [style*="font-size: 9px"],
-  [data-ad-topbar] [style*="font-size: 9.5px"] {
-    font-size: 10.5px !important;
+  [data-ad-topbar] [style*="font-size: 9.5px"],
+  [data-ad-topbar] [style*="font-size: 10px"],
+  [data-ad-topbar] [style*="font-size: 10.5px"] {
+    font-size: 11px !important;
     line-height: 1.35 !important;
   }
 

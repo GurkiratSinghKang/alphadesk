@@ -314,7 +314,7 @@ function PayoffChart({ summary, compact = false }: { summary: PayoffSummary; com
               x={chart.padding - 4}
               y={tick.y + 3}
               textAnchor="end"
-              fontSize="9"
+              fontSize="11"
               fill="var(--fg-hint)"
             >
               {tick.label}
@@ -344,7 +344,7 @@ function PayoffChart({ summary, compact = false }: { summary: PayoffSummary; com
                       x={leader.labelX}
                       y={leader.labelY}
                       textAnchor="middle"
-                      fontSize="9"
+                      fontSize="11"
                       fill="var(--fg-muted)"
                     >
                       {`BE ${formatCurrency(breakeven)}`}
@@ -367,7 +367,7 @@ function PayoffChart({ summary, compact = false }: { summary: PayoffSummary; com
                 x={chart.maxProfitCoord.x}
                 y={chart.maxProfitCoord.y - 8}
                 textAnchor="middle"
-                fontSize="9"
+                fontSize="11"
                 fill="var(--profit)"
                 fontWeight="600"
               >
@@ -384,7 +384,7 @@ function PayoffChart({ summary, compact = false }: { summary: PayoffSummary; com
                 x={chart.maxLossCoord.x}
                 y={chart.maxLossCoord.y + 14}
                 textAnchor="middle"
-                fontSize="9"
+                fontSize="11"
                 fill="var(--loss)"
                 fontWeight="600"
               >
@@ -421,7 +421,7 @@ function PayoffChart({ summary, compact = false }: { summary: PayoffSummary; com
       </div>
       <div className={cn(
         "mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-eyebrow text-fg-muted",
-        compact && "gap-x-2 text-[10px]",
+        compact && "gap-x-2 text-[11px]",
       )}>
         <span>At expiration</span>
         {summary.spotPrice != null ? <span>Spot {formatCurrency(summary.spotPrice)}</span> : null}
