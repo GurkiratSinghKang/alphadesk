@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Question, EnvelopeSimple, ShieldCheck, Book, ChatCircle } from "@phosphor-icons/react";
+import { Question, EnvelopeSimple, ShieldCheck, Book, ChatCircle, PaperPlaneTilt } from "@phosphor-icons/react";
 
 import {
   Popover,
@@ -30,15 +30,62 @@ import { cn } from "@/lib/utils";
  */
 export default function HelpMenu({ className }: { className?: string }) {
   const [open, setOpen] = React.useState(false);
-  // Pre-fill the "report an issue" subject with the current path so
-  // the operator and support both share the same context. We avoid
-  // pulling username here because it requires a network call and the
-  // help button must render before auth resolves on first paint.
-  const subject =
-    typeof window !== "undefined"
-      ? `AlphaDesk feedback — ${window.location.pathname}`
-      : "AlphaDesk feedback";
-  const supportHref = `mailto:support@tradingalpha.net?subject=${encodeURIComponent(subject)}`;
+  // BUG-088 (audit 2026-05-11): in-app feedback form posts to
+  // POST /api/v1/support/tickets (backend `api/routes/support.py`).
+  // Subject pre-filled with the current path; body is the operator's
+  // message. Submit handler keeps mailto as a fallback if the POST
+  // fails so the operator never loses their text.
+  const [showForm, setShowForm] = React.useState(false);
+  const [body, setBody] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
+  const [submitState, setSubmitState] = React.useState<"idle" | "ok" | "error">("idle");
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+  const pageUrl = typeof window !== "undefined" ? window.location.href : "";
+  const pageSubject = typeof window !== "undefined"
+    ? `AlphaDesk feedback — ${window.location.pathname}`
+    : "AlphaDesk feedback";
+  const supportHref = `mailto:support@tradingalpha.net?subject=${encodeURIComponent(pageSubject)}`;
+
+  async function submitTicket(e: React.FormEvent) {
+    e.preventDefault();
+    if (submitting) return;
+    if (body.trim().length < 5) {
+      setErrorMessage("Please include a few sentences so we can route this.");
+      setSubmitState("error");
+      return;
+    }
+    setSubmitting(true);
+    setSubmitState("idle");
+    setErrorMessage(null);
+    try {
+      const r = await fetch("/api/v1/support/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          category: "support",
+          subject: pageSubject,
+          body: body.trim(),
+          page_url: pageUrl,
+        }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setSubmitState("ok");
+      setBody("");
+    } catch (err) {
+      setErrorMessage(String((err as Error)?.message ?? err ?? "Unknown error"));
+      setSubmitState("error");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function reset() {
+    setShowForm(false);
+    setSubmitState("idle");
+    setErrorMessage(null);
+    setBody("");
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -55,7 +102,7 @@ export default function HelpMenu({ className }: { className?: string }) {
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-72 border-border bg-bg-elev-1 p-0 text-fg"
+        className="w-80 border-border bg-bg-elev-1 p-0 text-fg"
         role="dialog"
         aria-label="Help and support menu"
       >
@@ -64,10 +111,66 @@ export default function HelpMenu({ className }: { className?: string }) {
             Help & support
           </div>
           <div className="mt-0.5 text-body-sm text-fg-muted">
-            Pick the channel — we route accordingly.
+            {showForm ? "Tell us what's going on; we'll get back to you." : "Pick the channel — we route accordingly."}
           </div>
         </div>
+        {showForm && (
+          <form onSubmit={submitTicket} className="flex flex-col gap-2 border-b border-border-hair px-3 py-3" aria-label="Submit support ticket">
+            <label className="font-mono text-eyebrow uppercase tracking-[0.12em] text-fg-hint" htmlFor="support-ticket-body">
+              Your message
+            </label>
+            <textarea
+              id="support-ticket-body"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="What happened, when, and what you tried…"
+              rows={4}
+              maxLength={10_000}
+              required
+              minLength={5}
+              className="w-full resize-y rounded-sm border border-border bg-bg px-2 py-1.5 text-body-sm text-fg focus:border-brand focus:outline-none"
+            />
+            <div className="text-eyebrow text-fg-hint">
+              Includes your current page ({typeof window !== "undefined" ? window.location.pathname : "—"}), username, and request id.
+            </div>
+            {submitState === "ok" && (
+              <div role="status" className="rounded-sm border border-profit/40 bg-profit/10 px-2 py-1.5 text-body-sm text-profit">
+                Ticket received. Support will reply by email.
+              </div>
+            )}
+            {submitState === "error" && (
+              <div role="alert" className="rounded-sm border border-loss/40 bg-loss/10 px-2 py-1.5 text-body-sm text-loss">
+                Couldn't send ({errorMessage ?? "unknown error"}). Try the mailto link below.
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={reset}>
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={submitting}>
+                {submitting ? "Sending…" : "Send"}
+              </Button>
+            </div>
+          </form>
+        )}
         <ul className="flex flex-col py-1">
+          {!showForm && (
+            <li>
+              <button
+                type="button"
+                onClick={() => setShowForm(true)}
+                className="flex w-full items-baseline gap-2 px-3 py-2 text-left text-body-sm hover:bg-bg-elev-2"
+              >
+                <PaperPlaneTilt className="h-4 w-4 shrink-0 self-center text-brand" weight="bold" />
+                <div className="flex-1">
+                  <div className="font-semibold">Send in-app feedback</div>
+                  <div className="text-fg-muted">
+                    POST /api/v1/support/tickets · attached to your account
+                  </div>
+                </div>
+              </button>
+            </li>
+          )}
           <li>
             <a
               href={supportHref}
@@ -75,9 +178,9 @@ export default function HelpMenu({ className }: { className?: string }) {
             >
               <ChatCircle className="h-4 w-4 shrink-0 self-center text-fg-muted" weight="bold" />
               <div className="flex-1">
-                <div className="font-semibold">Report an issue</div>
+                <div className="font-semibold">Email support</div>
                 <div className="text-fg-muted">
-                  support@tradingalpha.net · pre-filled with this page
+                  support@tradingalpha.net · opens your mail client
                 </div>
               </div>
             </a>
