@@ -643,13 +643,23 @@ function MKAgents() {
                   {a.n}
                 </span>
               </div>
+              {/* BUG-084 (audit 2026-05-11, M3-01): the role label
+                  previously used `a.color` as text color — four of the six
+                  agent palette entries (#5B4767 plum 2.28:1, #A64B2A rust
+                  3.29:1, #5D6E3E moss 3.39:1, #A86B5C 4.43:1) failed WCAG
+                  1.4.3 AA (4.5:1) against the card background. The agent
+                  identity is already carried by the colored left border
+                  above and the agent name on the same row — moving role
+                  text to `--fg-muted` (high-contrast text token) keeps
+                  the visual hierarchy and brings every role chip above
+                  AA. The decorative color is preserved as the border. */}
               <div
                 className="italic"
                 style={{
                   marginTop: 4,
                   fontFamily: "var(--font-display)",
                   fontSize: 13,
-                  color: a.color,
+                  color: "var(--fg-muted)",
                 }}
               >
                 {a.role}
