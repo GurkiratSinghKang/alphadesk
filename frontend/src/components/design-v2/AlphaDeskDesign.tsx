@@ -2465,34 +2465,37 @@ const Dashboard = ({ tweaks, onNav, onPickTicker }) => {
       {/* ═══ Hero band — three big numbers, editorial ═══ */}
       <div style={{ padding: "28px 32px 28px", background: "var(--ink-100)", borderBottom: "1px solid var(--border)", boxShadow: "inset 0 -1px 0 rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.025)", position: "relative", overflow: "hidden" }}>
         <HeroPulse />
-        <DashHero layout={layout} />
+        <DashHero layout={layout} onNav={onNav} />
       </div>
 
-      {/* ═══ Briefing strip ═══ */}
-      <div style={{ padding: "0 32px" }}>
-        <BriefingStrip onPickTicker={onPickTicker} />
-      </div>
+      {/* 2026-05-10 — operator-requested layout. Briefing strip removed
+          (it duplicated context already in the hero / regime panels);
+          Strategies + Alerts mini-grid removed (full pages exist for
+          both — the dashboard is for *now*, not *configuration*). What
+          replaces them is the Orders block: Open + Filled-today, the
+          two states an active operator actually scans for between
+          fills. */}
 
       {/* ═══ 3-column body: regime · movers · positions ═══ */}
       <div style={{ display: "grid", gridTemplateColumns: "1.05fr 1.2fr 1fr", gap: 1, background: "var(--border)", borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>
         <div style={{ background: "var(--bg)", padding: "24px 28px 28px" }}>
-          <RegimePanel />
+          <RegimePanel onPickTicker={onPickTicker} />
         </div>
         <div style={{ background: "var(--bg)", padding: "24px 28px 28px" }}>
           <MoversPanel onPickTicker={onPickTicker} />
         </div>
         <div style={{ background: "var(--bg)", padding: "24px 28px 28px" }}>
-          <BookSnapshot onNav={onNav} />
+          <BookSnapshot onNav={onNav} onPickTicker={onPickTicker} />
         </div>
       </div>
 
-      {/* ═══ Strategies + alerts row ═══ */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 1, background: "var(--border)", borderBottom: "1px solid var(--border)" }}>
+      {/* ═══ Orders row: Open · Filled today ═══ */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, background: "var(--border)", borderBottom: "1px solid var(--border)" }}>
         <div style={{ background: "var(--bg)", padding: "24px 28px 28px" }}>
-          <StrategiesMini onNav={onNav} />
+          <OrdersPanel mode="open" onNav={onNav} onPickTicker={onPickTicker} />
         </div>
         <div style={{ background: "var(--bg)", padding: "24px 28px 28px" }}>
-          <AlertsMini />
+          <OrdersPanel mode="filled" onNav={onNav} onPickTicker={onPickTicker} />
         </div>
       </div>
 
@@ -2503,7 +2506,14 @@ const Dashboard = ({ tweaks, onNav, onPickTicker }) => {
 
 // ─── hero band ───────────────────────────────────────────────────────────────
 
-function DashHero({ layout }) {
+function DashHero({ layout, onNav }) {
+  // Direct router push for routes that the design router can't model
+  // cleanly. The book counts (open positions, working orders) want to
+  // jump to the live ops surfaces — but DESIGN_PAGE_ROUTES.positions
+  // is keyed per-symbol (`/positions/NVDA`), and there is no all-
+  // positions route. /risk-dashboard is the closest "every position
+  // in one place" view today, so use that.
+  const router = useRouter();
   const live = useDesignLiveData();
   const summary = live.portfolio;
   const r = live.regime?.regime || {};
@@ -2525,6 +2535,7 @@ function DashHero({ layout }) {
   const regimeLabel = r.label || r.regime || "Live market regime";
   const regimeConfidence = Number(r.confidence ?? 0);
   const vixLevel = Number(r.vix_level ?? 0);
+  const sourceLabel = summary?.source || (live.loading ? "loading" : "live");
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 36, alignItems: "end", position: "relative" }}>
@@ -2546,40 +2557,68 @@ function DashHero({ layout }) {
           <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-hint)" }}>vs yesterday close</span>
         </div>
         <div style={{ display: "flex", gap: 28, marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--border-hair)" }}>
-          <Stat label="Source" value={summary?.source || (live.loading ? "loading" : "live")} />
+          {/* 2026-05-10 — Source is now the broker connection. Click to
+              jump to /settings#broker so the operator can rotate keys
+              or change broker without hand-typing the URL. The Demo
+              flag was duplicative (Source already says "alpaca-paper"
+              when we're paper-trading) so it was retired. */}
+          <ClickStat
+            label="Source"
+            value={sourceLabel}
+            onClick={() => onNav?.("settings")}
+            ariaLabel={`Source: ${sourceLabel} — click to change broker in settings`}
+          />
           <Stat label="Day" value={summary ? fmtPct(summary.dayPnlPct || 0) : "—"} tone={up ? "up" : "down"} />
           <Stat label="Unrealized" value={summary ? fmtMoney(summary.unrealizedPnl || 0, { dec: 0 }) : "—"} tone={(summary?.unrealizedPnl || 0) >= 0 ? "up" : "down"} big />
           <Stat label="Last update" value={summary?.lastUpdated ? "fresh" : "—"} />
-          <Stat label="Demo" value={summary?.is_demo ? "yes" : "no"} />
         </div>
       </div>
 
-      {/* Market regime */}
+      {/* Market regime — 2026-05-10 compaction. The 36px italic regime
+          label + the verbose "conf 0.75 · backend" line + the four
+          bottom stats (VIX / As of / Provider / State) were eating a
+          third of the hero. Now: 22px italic label, the confidence
+          number embedded next to the bar, VIX as the only secondary
+          stat. Provider / State / As-of were either redundant with
+          Source or only useful for debugging. */}
       <div>
         <div className="t-label" style={{ marginBottom: 8 }}>Market regime</div>
-        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 36, color: "var(--ink-1000)", lineHeight: 1.05, letterSpacing: "-0.02em" }}>
-          {regimeLabel}
+        <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
+          <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 22, color: "var(--ink-1000)", lineHeight: 1.05, letterSpacing: "-0.015em" }}>
+            {regimeLabel}
+          </span>
+          <span className="t-mono" style={{ fontSize: 12, color: "var(--fg-muted)", fontVariantNumeric: "tabular-nums" }}>
+            {regimeConfidence ? regimeConfidence.toFixed(2) : "—"}
+          </span>
         </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
+        <div style={{ marginTop: 8 }}>
           <RegimeBar value={regimeConfidence} />
-          <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-muted)" }}>conf {regimeConfidence ? regimeConfidence.toFixed(2) : "—"} · backend</span>
         </div>
-        <div style={{ display: "flex", gap: 22, marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--border-hair)" }}>
+        <div style={{ display: "flex", gap: 22, marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border-hair)" }}>
           <Stat label="VIX" value={vixLevel ? vixLevel.toFixed(1) : "—"} />
-          <Stat label="As of" value={live.regime?.as_of ? "live" : "—"} />
-          <Stat label="Provider" value={live.regime?.is_demo ? "demo" : "backend"} />
           <Stat label="State" value={r.regime || "—"} />
         </div>
       </div>
 
-      {/* Today's brief stat: positions & cash */}
+      {/* Today's brief stat: positions & cash. The two big counts are
+          now click-targets — operators routinely jump from "I see 4
+          open" → the positions list, or from "50 working" → the
+          orders/trade screen. Sub-stats kept inert. */}
       <div>
         <div className="t-label" style={{ marginBottom: 8 }}>Book</div>
         <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", rowGap: 4, columnGap: 18, alignItems: "baseline" }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 28, color: "var(--ink-1000)", fontWeight: 300 }}>{p.positions}</span>
-          <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 16, color: "var(--fg-dim)" }}>open positions</span>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 28, color: "var(--ink-1000)", fontWeight: 300 }}>{p.orders}</span>
-          <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 16, color: "var(--fg-dim)" }}>working orders</span>
+          <ClickCount
+            count={p.positions}
+            label="open positions"
+            onClick={() => router.push("/risk-dashboard")}
+            ariaLabel={`${p.positions} open positions — review concentration on /risk-dashboard`}
+          />
+          <ClickCount
+            count={p.orders}
+            label="working orders"
+            onClick={() => onNav?.("trade")}
+            ariaLabel={`${p.orders} working orders — open order ticket`}
+          />
         </div>
         <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border-hair)", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
           <Stat label="Cash" value={fmtMoney(p.cash, { dec: 0 })} />
@@ -2588,6 +2627,98 @@ function DashHero({ layout }) {
         <ExposureBar long={p.exposureLong} short={p.exposureShort} />
       </div>
     </div>
+  );
+}
+
+/**
+ * 2026-05-10 — clickable variant of <Stat />. Underline on hover so the
+ * affordance reads even before the cursor lands. Used for the Source
+ * cell (→ /settings) so the operator can rotate broker keys without
+ * navigating the menu by hand.
+ */
+function ClickStat({ label, value, onClick, ariaLabel }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      style={{
+        all: "unset",
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+        cursor: "pointer",
+      }}
+      onMouseEnter={(e) => { (e.currentTarget.querySelector("[data-stat-value]") as HTMLElement).style.borderBottomColor = "var(--brand)"; }}
+      onMouseLeave={(e) => { (e.currentTarget.querySelector("[data-stat-value]") as HTMLElement).style.borderBottomColor = "transparent"; }}
+    >
+      <span className="t-label">{label}</span>
+      <span
+        data-stat-value
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 14,
+          color: "var(--ink-1000)",
+          fontVariantNumeric: "tabular-nums",
+          letterSpacing: "-0.005em",
+          borderBottom: "1px solid transparent",
+          transition: "border-bottom-color 120ms",
+          paddingBottom: 1,
+        }}
+      >
+        {value}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * 2026-05-10 — book-count cell rendered as a button so "4 open positions"
+ * and "50 working orders" double as nav links. Visual rhythm matches
+ * the original two-cell layout (giant mono number + italic label) so
+ * the hero doesn't shift.
+ */
+function ClickCount({ count, label, onClick, ariaLabel }) {
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={ariaLabel}
+        style={{
+          all: "unset",
+          fontFamily: "var(--font-mono)",
+          fontSize: 28,
+          color: "var(--ink-1000)",
+          fontWeight: 300,
+          cursor: "pointer",
+          transition: "color 120ms",
+        }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--brand)"; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--ink-1000)"; }}
+      >
+        {count}
+      </button>
+      <button
+        type="button"
+        onClick={onClick}
+        aria-hidden="true"
+        tabIndex={-1}
+        style={{
+          all: "unset",
+          fontFamily: "var(--font-display)",
+          fontStyle: "italic",
+          fontSize: 16,
+          color: "var(--fg-dim)",
+          cursor: "pointer",
+          transition: "color 120ms",
+        }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--brand)"; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--fg-dim)"; }}
+      >
+        {label}
+      </button>
+    </>
   );
 }
 
@@ -2626,43 +2757,14 @@ function ExposureBar({ long, short }) {
 }
 
 // ─── briefing strip ──────────────────────────────────────────────────────────
-
-function BriefingStrip({ onPickTicker }) {
-  const { morningBrief, loading } = useDesignLiveData();
-  const rows = morningBrief
-    ? [
-        ...(morningBrief.ai_summary ? [{ time: "NOW", tone: "neutral", text: morningBrief.ai_summary }] : []),
-        ...(morningBrief.catalysts || []).slice(0, 4).map((text, i) => ({
-          time: `CAT ${i + 1}`,
-          tone: "neutral",
-          text,
-        })),
-      ]
-    : [];
-  return (
-    <div style={{ borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)", padding: "20px 0", display: "grid", gridTemplateColumns: "200px 1fr", gap: 32, alignItems: "start" }}>
-      <div>
-        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 24, color: "var(--brand)", lineHeight: 1.05, letterSpacing: "-0.02em" }}>
-          Since you<br/>last logged in
-        </div>
-        <div className="t-label" style={{ marginTop: 10 }}>{morningBrief ? `Briefing · ${morningBrief.date || "today"}` : loading ? "Briefing · loading" : "Briefing · unavailable"}</div>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        {(rows.length ? rows : [{ time: "—", tone: "neutral", text: "Morning brief is not available from the backend yet." }]).map((b, i, arr) => (
-          <div key={i} style={{ display: "grid", gridTemplateColumns: "auto auto 1fr", gap: 14, padding: "10px 0", borderBottom: i < arr.length - 1 ? "1px solid var(--border-hair)" : "none", alignItems: "baseline" }}>
-            <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", letterSpacing: "0.04em" }}>{b.time}</span>
-            <StatusDot tone={b.tone === "up" ? "up" : b.tone === "down" ? "down" : "neutral"} size={6} />
-            <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 15.5, color: "var(--ink-900)", lineHeight: 1.45, letterSpacing: "-0.005em" }}>{b.text}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+// Removed 2026-05-10 (operator request) — duplicated context already
+// in the hero/regime panels. Morning brief is still available from
+// the backend; if a future surface needs it, prefer a /briefing route
+// over re-mounting it on the dashboard.
 
 // ─── regime panel ────────────────────────────────────────────────────────────
 
-function RegimePanel() {
+function RegimePanel({ onPickTicker }) {
   const live = useDesignLiveData();
   const r = live.regime?.regime || {};
   const q = live.quotes || {};
@@ -2708,7 +2810,13 @@ function RegimePanel() {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "1px", background: "var(--border-hair)" }}>
         {indices.map(ix => (
-          <div key={ix.sym} style={{ background: "var(--bg)", padding: "9px 12px", display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, alignItems: "baseline" }}>
+          <div
+            key={ix.sym}
+            onClick={() => onPickTicker?.(ix.sym)}
+            style={{ background: "var(--bg)", padding: "9px 12px", display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, alignItems: "baseline", cursor: "pointer", transition: "background 120ms" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-elev-1)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "var(--bg)"; }}
+          >
             <span style={{ fontFamily: "var(--font-ui)", fontWeight: 600, fontSize: 11, color: "var(--fg-dim)", letterSpacing: "0.08em" }}>{ix.sym}</span>
             <span className="t-mono" style={{ fontSize: 13, color: "var(--ink-1000)", textAlign: "right" }}>
               {ix.v == null ? "—" : ix.v >= 1000 ? ix.v.toLocaleString() : ix.v.toFixed(2)}
@@ -2788,7 +2896,7 @@ function MoversPanel({ onPickTicker }) {
 
 // ─── book snapshot ────────────────────────────────────────────────────────
 
-function BookSnapshot({ onNav }) {
+function BookSnapshot({ onNav, onPickTicker }) {
   const live = useDesignLiveData();
   const top = [...(live.positions || [])]
     .sort((a, b) => Math.abs(b.unrealizedPnl || 0) - Math.abs(a.unrealizedPnl || 0))
@@ -2812,7 +2920,13 @@ function BookSnapshot({ onNav }) {
           </div>
         )}
         {top.map((p, i) => (
-          <div key={p.sym} style={{ display: "grid", gridTemplateColumns: "55px 1fr auto", gap: 10, padding: "10px 0", borderBottom: i < top.length - 1 ? "1px solid var(--border-hair)" : "none", alignItems: "center" }}>
+          <div
+            key={p.sym}
+            onClick={() => p.sym && onPickTicker?.(p.sym)}
+            style={{ display: "grid", gridTemplateColumns: "55px 1fr auto", gap: 10, padding: "10px 0", borderBottom: i < top.length - 1 ? "1px solid var(--border-hair)" : "none", alignItems: "center", cursor: p.sym ? "pointer" : "default", borderLeft: "2px solid transparent", transition: "border-color 120ms, background 120ms" }}
+            onMouseEnter={(e) => { if (!p.sym) return; e.currentTarget.style.background = "var(--bg-elev-1)"; e.currentTarget.style.borderLeftColor = "var(--brand)"; }}
+            onMouseLeave={(e) => { if (!p.sym) return; e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderLeftColor = "transparent"; }}
+          >
             <div>
               <div style={{ fontFamily: "var(--font-ui)", fontWeight: 500, fontSize: 12.5, color: "var(--ink-1000)" }}>{p.sym}</div>
               <div className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)", marginTop: 2 }}>{p.side === "short" ? "−" : ""}{p.qty}</div>
@@ -2843,82 +2957,223 @@ function BookSnapshot({ onNav }) {
 }
 
 // ─── strategies mini ──────────────────────────────────────────────────────
-
-function StrategiesMini({ onNav }) {
-  const { strategies } = useDesignLiveData();
-  const rows = (strategies || []).slice(0, 6).map((s, i) => ({
-    num: String(i + 1).padStart(2, "0"),
-    name: s.name,
-    style: s.status || "backend",
-    pct: Number(s.total_return_pct || 0),
-    sharpe: Number(s.sharpe_ratio || 0),
-    dd: 0,
-    positions: Number(s.active_positions_count || 0),
-    allocPct: 0,
-    active: s.status === "live" || s.status === "active",
-  }));
-  return (
-    <Section eyebrow="04" title="Strategies"
-      right={<a onClick={() => onNav("strategies")} style={{ fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--brand)", cursor: "default" }}>All →</a>}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, background: "var(--border-hair)" }}>
-        {rows.length === 0 && (
-          <div style={{ gridColumn: "1 / -1", background: "var(--bg)", padding: "18px 16px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)" }}>
-            Strategy data is loading from the backend.
-          </div>
-        )}
-        {rows.map((s) => (
-          <div key={s.num} style={{ background: "var(--bg)", padding: "14px 16px 16px", borderLeft: s.active ? "2px solid var(--brand)" : "2px solid var(--ink-300)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--ink-1000)", letterSpacing: "-0.01em" }}>{s.name}</span>
-              <span className="t-mono" style={{ fontSize: 9, color: "var(--fg-hint)" }}>{s.num}</span>
-            </div>
-            <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-muted)", marginTop: 1 }}>{s.style}</div>
-            <div style={{ display: "flex", gap: 12, marginTop: 12, alignItems: "baseline" }}>
-              <Delta value={s.pct} dec={2} style={{ fontSize: 14, fontWeight: 500 }} />
-              {/* 2026-05-10 (round 2 honest empty-state): the registry's
-               * `total_return_pct` field is lifetime return, not a
-               * 30-day return; the previous "30d" tag was misleading.
-               * Drawdown isn't returned by /api/v1/strategies either,
-               * so don't render an "DD 0.0%" pill that suggests we
-               * measured drawdown. Allocation % similarly hidden until
-               * the registry exposes it. */}
-              <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>lifetime</span>
-            </div>
-            <div style={{ display: "flex", gap: 14, marginTop: 8, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-muted)" }}>
-              <span>SR {s.sharpe.toFixed(2)}</span>
-              <span>{s.positions} live</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </Section>
-  );
-}
+// Removed 2026-05-10 (operator request). Strategy management belongs
+// on /strategies, not on the dashboard hero — the dashboard is for
+// *now* (P&L, regime, orders), not configuration. The previous
+// component honestly labeled `total_return_pct` as "lifetime" rather
+// than "30d" (an upstream honest-empty-state fix); that nuance moves
+// with it to /strategies.
 
 // ─── alerts mini ─────────────────────────────────────────────────────────────
+// Removed 2026-05-10 (operator request). Alerts already get a top-bar
+// notifications bell + a dedicated /alerts page. Mounting them on the
+// dashboard duplicated the surface without adding signal.
 
-function AlertsMini() {
-  const { alerts } = useDesignLiveData();
-  const rows = (alerts || []).slice(0, 6).map((a) => ({
-    ts: a.triggered_at ? new Date(a.triggered_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "open",
-    tone: a.triggered ? "down" : "neutral",
-    text: `${a.symbol} ${a.condition?.replaceAll("_", " ") || "alert"} ${a.price ?? ""}`.trim(),
-  }));
+// ─── orders panel (open · filled today) ──────────────────────────────────────
+
+/**
+ * Replaces the old StrategiesMini + AlertsMini row. Two modes share one
+ * component because the cell visuals (symbol · qty/side · status/time)
+ * are identical — only the filter and the empty-state copy differ.
+ *
+ *   mode="open"   → status NOT in {"filled", "canceled", "rejected"}
+ *   mode="filled" → status === "filled" AND filledAt is today (NY)
+ *
+ * Each row jumps to the symbol page (`onPickTicker`) so the operator
+ * can drill into the underlying. The section header right-link routes
+ * to /trade for "open" (where the order ticket lives) and /reports for
+ * "filled" (the receipts surface).
+ */
+function OrdersPanel({ mode, onNav, onPickTicker }) {
+  const live = useDesignLiveData();
+  const orders = live.orders || [];
+
+  // "Today" = NY market date — using local Date is fine here since the
+  // backend already emits filled_at in ISO with timezone.
+  const todayKey = new Date().toISOString().slice(0, 10);
+
+  const rows = useMemo(() => {
+    const filtered = orders.filter((o) => {
+      const status = String(o.status || "").toLowerCase();
+      if (mode === "filled") {
+        if (status !== "filled") return false;
+        if (!o.filledAt) return false;
+        return String(o.filledAt).slice(0, 10) === todayKey;
+      }
+      // "open" = anything still working in the broker's book.
+      const closed = status === "filled" || status === "canceled" || status === "rejected" || status === "expired";
+      return !closed;
+    });
+    // Most-recent first; created at fallback for orders without filled_at.
+    return filtered
+      .slice()
+      .sort((a, b) => {
+        const aT = String(mode === "filled" ? a.filledAt || a.createdAt : a.createdAt || "");
+        const bT = String(mode === "filled" ? b.filledAt || b.createdAt : b.createdAt || "");
+        return bT.localeCompare(aT);
+      })
+      .slice(0, 8);
+  }, [orders, mode, todayKey]);
+
+  const isOpen = mode === "open";
+  const eyebrow = isOpen ? "04" : "05";
+  const title = isOpen ? "Open orders" : "Filled today";
+  const rightLabel = isOpen ? "Order ticket →" : "All receipts →";
+  const rightTarget = isOpen ? "trade" : "reports";
+  const emptyCopy = isOpen
+    ? "No working orders in the broker's book right now."
+    : "Nothing filled today yet — the desk has been quiet.";
+
   return (
-    <Section eyebrow="05" title="Alerts" right={<span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>{alerts?.length || 0} live</span>}>
+    <Section
+      eyebrow={eyebrow}
+      title={title}
+      right={
+        <a
+          onClick={() => onNav?.(rightTarget)}
+          style={{
+            fontFamily: "var(--font-ui)",
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+            color: "var(--brand)",
+            cursor: "pointer",
+          }}
+        >
+          {rightLabel}
+        </a>
+      }
+    >
       <div>
         {rows.length === 0 && (
-          <div style={{ padding: "18px 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14 }}>
-            No live alerts returned by the backend.
+          <div
+            style={{
+              padding: "18px 0",
+              fontFamily: "var(--font-display)",
+              fontStyle: "italic",
+              fontSize: 14,
+              color: "var(--fg-muted)",
+            }}
+          >
+            {emptyCopy}
           </div>
         )}
-        {rows.map((a, i) => (
-          <div key={i} style={{ display: "grid", gridTemplateColumns: "auto auto 1fr", gap: 12, padding: "10px 0", borderBottom: i < rows.length - 1 ? "1px solid var(--border-hair)" : "none", alignItems: "baseline" }}>
-            <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", letterSpacing: "0.04em" }}>{a.ts}</span>
-            <StatusDot tone={a.tone === "up" ? "up" : a.tone === "down" ? "down" : "neutral"} size={6} />
-            <span style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--fg)", lineHeight: 1.4 }}>{a.text}</span>
-          </div>
-        ))}
+        {rows.map((o, i) => {
+          const sym = (o.symbol || "").toUpperCase();
+          const status = String(o.status || "").toLowerCase();
+          const tone = status === "filled" ? "up" : status === "rejected" ? "down" : "neutral";
+          const side = String(o.side || "").toLowerCase();
+          const sideTone = side === "sell" ? "var(--down-500)" : "var(--up-500)";
+          const px = o.price != null ? Number(o.price).toFixed(2) : "mkt";
+          const tsRaw = isOpen ? o.createdAt : o.filledAt;
+          const ts = tsRaw
+            ? new Date(tsRaw).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            : "—";
+          return (
+            <div
+              key={o.id || `${sym}-${i}`}
+              onClick={() => sym && onPickTicker?.(sym)}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "60px 64px 1fr 70px 56px",
+                gap: 12,
+                padding: "10px 0",
+                borderBottom: i < rows.length - 1 ? "1px solid var(--border-hair)" : "none",
+                alignItems: "center",
+                cursor: sym ? "pointer" : "default",
+                borderLeft: "2px solid transparent",
+                transition: "border-color 120ms, background 120ms",
+              }}
+              onMouseEnter={(e) => {
+                if (!sym) return;
+                e.currentTarget.style.background = "var(--bg-elev-1)";
+                e.currentTarget.style.borderLeftColor = "var(--brand)";
+              }}
+              onMouseLeave={(e) => {
+                if (!sym) return;
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.borderLeftColor = "transparent";
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: "var(--font-ui)",
+                  fontSize: 12.5,
+                  color: "var(--ink-1000)",
+                  fontWeight: 500,
+                  letterSpacing: "0.02em",
+                }}
+              >
+                {sym || "—"}
+              </span>
+              <span
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 11,
+                  color: sideTone,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                {side || "—"} {o.quantity || ""}
+              </span>
+              <span
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontStyle: "italic",
+                  fontSize: 12,
+                  color: "var(--fg-muted)",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {o.strategy ? o.strategy : o.type || "manual"}
+                {o.comboType ? ` · ${o.comboType}` : ""}
+              </span>
+              <span
+                className="t-mono"
+                style={{
+                  fontSize: 11.5,
+                  color: tone === "down" ? "var(--down-500)" : "var(--ink-1000)",
+                  textAlign: "right",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {px}
+              </span>
+              <span
+                className="t-mono"
+                style={{
+                  fontSize: 10.5,
+                  color: "var(--fg-hint)",
+                  textAlign: "right",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                {ts}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div
+        style={{
+          marginTop: 14,
+          paddingTop: 12,
+          borderTop: "1px solid var(--border-hair)",
+          display: "flex",
+          justifyContent: "space-between",
+          fontFamily: "var(--font-mono)",
+          fontSize: 11,
+          color: "var(--fg-muted)",
+        }}
+      >
+        <span>{rows.length} shown</span>
+        <span style={{ color: "var(--fg-hint)" }}>
+          {isOpen ? "live · broker book" : `today · ${todayKey}`}
+        </span>
       </div>
     </Section>
   );
