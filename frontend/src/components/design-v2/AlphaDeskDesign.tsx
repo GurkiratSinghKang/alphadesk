@@ -406,6 +406,10 @@ const __LAYOUT_GUARD_STYLE = `
     white-space: nowrap;
   }
 
+  [data-ad-statusbar] {
+    font-size: 11.5px !important;
+  }
+
   [data-ad-mobile-menu-trigger],
   [data-ad-mobile-menu] {
     display: none;
@@ -417,13 +421,15 @@ const __LAYOUT_GUARD_STYLE = `
   [data-ad-main] [style*="font-size: 9.5px"],
   [data-ad-main] [style*="font-size: 10px"],
   [data-ad-main] [style*="font-size: 10.5px"],
+  [data-ad-main] [style*="font-size: 10.75px"],
   [data-ad-topbar] [style*="font-size: 8px"],
   [data-ad-topbar] [style*="font-size: 8.5px"],
   [data-ad-topbar] [style*="font-size: 9px"],
   [data-ad-topbar] [style*="font-size: 9.5px"],
   [data-ad-topbar] [style*="font-size: 10px"],
-  [data-ad-topbar] [style*="font-size: 10.5px"] {
-    font-size: 11px !important;
+  [data-ad-topbar] [style*="font-size: 10.5px"],
+  [data-ad-topbar] [style*="font-size: 10.75px"] {
+    font-size: 11.5px !important;
     line-height: 1.35 !important;
   }
 
@@ -516,7 +522,7 @@ const __LAYOUT_GUARD_STYLE = `
     [data-ad-mode-toggle] button {
       min-height: 32px !important;
       padding: 0 12px !important;
-      font-size: 10.5px !important;
+      font-size: 11.5px !important;
     }
 
     [data-ad-icon-button],
@@ -560,13 +566,15 @@ const __LAYOUT_GUARD_STYLE = `
     [data-ad-main] [style*="font-size: 9.5px"],
     [data-ad-main] [style*="font-size: 10px"],
     [data-ad-main] [style*="font-size: 10.5px"],
+    [data-ad-main] [style*="font-size: 10.75px"],
     [data-ad-topbar] [style*="font-size: 8px"],
     [data-ad-topbar] [style*="font-size: 8.5px"],
     [data-ad-topbar] [style*="font-size: 9px"],
     [data-ad-topbar] [style*="font-size: 9.5px"],
     [data-ad-topbar] [style*="font-size: 10px"],
-    [data-ad-topbar] [style*="font-size: 10.5px"] {
-      font-size: 11px !important;
+    [data-ad-topbar] [style*="font-size: 10.5px"],
+    [data-ad-topbar] [style*="font-size: 10.75px"] {
+      font-size: 11.5px !important;
       line-height: 1.35 !important;
     }
 
@@ -591,7 +599,7 @@ const __LAYOUT_GUARD_STYLE = `
       padding: 0 12px !important;
       overflow-x: hidden !important;
       overflow-y: hidden !important;
-      font-size: 10.5px !important;
+      font-size: 11.5px !important;
     }
 
     [data-ad-statusbar] span:nth-of-type(n+6) {

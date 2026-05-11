@@ -225,7 +225,7 @@ function DefaultBriefingCard({ shortDate }: { shortDate: string }) {
     >
       <div
         className="t-eyebrow-italic"
-        style={{ color: "var(--brand)", letterSpacing: "0.18em", fontSize: 10.75, lineHeight: 1.35 }}
+        style={{ color: "var(--brand)", letterSpacing: "0.18em", fontSize: 11.5, lineHeight: 1.35 }}
       >
         BEFORE THE BELL · {shortDate}
       </div>
@@ -260,7 +260,7 @@ function DefaultBriefingCard({ shortDate }: { shortDate: string }) {
                 style={{
                   marginTop: 1,
                   fontFamily: "var(--font-mono)",
-                  fontSize: 10.5,
+                  fontSize: 11.5,
                   color: "var(--fg-muted)",
                 }}
               >
@@ -298,7 +298,7 @@ export function ApplyBrandCard() {
     >
       <div
         className="t-eyebrow-italic"
-        style={{ color: "var(--brand)", letterSpacing: "0.18em", fontSize: 10.75, lineHeight: 1.35 }}
+        style={{ color: "var(--brand)", letterSpacing: "0.18em", fontSize: 11.5, lineHeight: 1.35 }}
       >
         AFTER YOU APPLY
       </div>
@@ -333,7 +333,7 @@ export function ApplyBrandCard() {
                 style={{
                   marginTop: 1,
                   fontFamily: "var(--font-mono)",
-                  fontSize: 10.5,
+                  fontSize: 11.5,
                   color: "var(--fg-muted)",
                 }}
               >
@@ -402,7 +402,7 @@ function AuthFormPane({
                   key={state}
                   className="t-mono rounded-[2px]"
                   style={{
-                    fontSize: 10.5,
+                    fontSize: 11.5,
                     padding: "4px 8px",
                     lineHeight: 1.25,
                     background: state === "signin" ? "var(--bg-elev-2)" : "transparent",
@@ -418,7 +418,7 @@ function AuthFormPane({
             </div>
             <span
               className="t-mono"
-              style={{ fontSize: 10.5, color: "var(--fg-hint)", letterSpacing: "0.05em", lineHeight: 1.35 }}
+              style={{ fontSize: 11.5, color: "var(--fg-hint)", letterSpacing: "0.05em", lineHeight: 1.35 }}
             >
               DEMO · STATE PICKER
             </span>
@@ -427,13 +427,13 @@ function AuthFormPane({
           <>
             <span
               className="t-mono"
-              style={{ fontSize: 10.5, color: "var(--fg-hint)", letterSpacing: "0.05em", lineHeight: 1.35 }}
+              style={{ fontSize: 11.5, color: "var(--fg-hint)", letterSpacing: "0.05em", lineHeight: 1.35 }}
             >
               {footerLeft}
             </span>
             <span
               className="t-mono"
-              style={{ fontSize: 10.5, color: "var(--fg-hint)", letterSpacing: "0.05em", lineHeight: 1.35 }}
+              style={{ fontSize: 11.5, color: "var(--fg-hint)", letterSpacing: "0.05em", lineHeight: 1.35 }}
             >
               {footerRight}
             </span>

@@ -903,7 +903,7 @@ function MKFooter() {
         <span
           className="t-mono"
           style={{
-            fontSize: 10.5,
+            fontSize: 11.5,
             color: "var(--fg-hint)",
             letterSpacing: "0.05em",
           }}
@@ -913,7 +913,7 @@ function MKFooter() {
         <span
           className="t-mono"
           style={{
-            fontSize: 10.5,
+            fontSize: 11.5,
             color: "var(--fg-hint)",
             letterSpacing: "0.05em",
             maxWidth: 700,

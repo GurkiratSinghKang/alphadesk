@@ -1004,8 +1004,16 @@ export default function ChartPane({
           appear half-hidden. With the chrome above and the rail below,
           every drawing button is fully visible and unambiguously
           clickable. */}
-      <div className="flex min-h-10 flex-wrap items-center gap-1.5 overflow-visible border-b border-border-hair bg-bg-elev-1/30 px-3 py-1.5 shrink-0">
-          <div aria-label="Chart type" className="flex gap-0.5">
+      <div
+        data-chart-toolbar=""
+        className={cn(
+          "grid min-h-10 grid-cols-3 items-center gap-1.5 overflow-visible border-b border-border-hair bg-bg-elev-1/30 px-3 py-1.5 shrink-0",
+          "sm:flex sm:flex-wrap",
+          "[&>button]:w-full [&>button]:justify-center [&>div>button]:w-full [&>div>button]:justify-center",
+          "sm:[&>button]:w-auto sm:[&>button]:justify-start sm:[&>div>button]:w-auto sm:[&>div>button]:justify-start",
+        )}
+      >
+          <div aria-label="Chart type" className="contents sm:flex sm:gap-0.5">
             {TYPES.map((t) => {
               const active = chartType === t.id;
               return (
