@@ -386,8 +386,14 @@ class Settings(BaseSettings):
     CLAUDE_OPUS_COST_PER_CALL_USD: float = 0.30
 
     # --- FMP cache TTLs (Batch U — A-4, A-5) ---
-    FMP_CALENDAR_CACHE_TTL_SECONDS: int = 300
-    FMP_RESCUE_CACHE_TTL_SECONDS: int = 300
+    # BUG-071 (audit 2026-05-11, M2-03): /api/v1/earnings/calendar peaked
+    # at 12.8 s tail (p95 4.2 s) — every cache miss fanned out to FMP +
+    # per-symbol hydrators. Earnings windows don't change minute-to-minute,
+    # so a 5-min cache was undersized. Bump to 15 min (calendar) / 15 min
+    # (rescue, used for per-symbol re-fetch on a watchlist hit not in the
+    # bulk pull). Override via env if a deploy needs fresher data.
+    FMP_CALENDAR_CACHE_TTL_SECONDS: int = 900
+    FMP_RESCUE_CACHE_TTL_SECONDS: int = 900
 
     # --- Rate-limit caps (Batch U — A-6 through A-9) ---
     RATE_LIMIT_FULL_RESEARCH_MAX: int = 5
