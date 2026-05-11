@@ -7622,6 +7622,19 @@ const ReportsPage = ({ tweaks, onNav }) => {
         ))}
       </div>
 
+      {/* BUG-076 (audit 2026-05-11, P4-03 / continues BUG-029): every P&L
+          and tax-shaped surface ships a clear "not tax advice — consult a
+          professional" disclaimer. The "BACKEND ONLY" banner already
+          explained that realized-P&L widgets are off; this stacks the
+          tax-advice disclaimer on top so the order table below isn't
+          mistaken for a substitute. */}
+      <div style={{ background: "rgba(201,166,107,0.08)", border: "1px solid var(--gold-300)", borderLeft: "2px solid var(--gold-500)", borderRadius: 4, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "baseline", gap: 12 }}>
+        <span className="t-mono" style={{ fontSize: 10.5, color: "var(--gold-500)", padding: "2px 7px", border: "1px solid var(--gold-500)", borderRadius: 2, letterSpacing: "0.05em", fontWeight: 600 }}>NOT TAX ADVICE</span>
+        <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg)", lineHeight: 1.5 }}>
+          Figures shown are calculated from your trade history and are <strong>informational only</strong>, not tax advice. Final 1099-B from Alpaca governs your return — wash-sale and corporate-action adjustments may differ. Consult a qualified tax professional before filing.
+        </span>
+      </div>
+
       <div style={{ background: "rgba(201,166,107,0.08)", border: "1px solid var(--gold-300)", borderLeft: "2px solid var(--gold-500)", borderRadius: 4, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "baseline", gap: 12 }}>
         <span className="t-mono" style={{ fontSize: 10.5, color: "var(--gold-500)", padding: "2px 7px", border: "1px solid var(--gold-500)", borderRadius: 2, letterSpacing: "0.05em", fontWeight: 600 }}>BACKEND ONLY</span>
         <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg)", lineHeight: 1.5 }}>
