@@ -136,6 +136,10 @@ import {
   // see pre-earnings IV runup + post-earnings drift candidates one
   // glance away from the dashboard.
   getEarningsCalendar,
+  // 2026-05-11 (round 12): Strategies index leaderboard chips —
+  // /api/v1/strategies/leaderboard surfaces top return + best sharpe
+  // + worst performer.
+  getStrategyLeaderboard,
 } from "@/lib/api";
 import type {
   NotificationPrefType,
@@ -7571,6 +7575,28 @@ const StrategiesPage = ({ tweaks, onNav }) => {
 // ─── header ──────────────────────────────────────────────────────────────
 
 function SPHeader({ counts }) {
+  // 2026-05-11 (round 12): leaderboard chips on the strategies index.
+  // /api/v1/strategies/leaderboard returns top-ranked by return_pct
+  // with sharpe + plus best_sharpe / worst_performer ids. We render
+  // 3 chips: TOP RETURN / BEST SHARPE / WORST so an operator's
+  // glance lands on which strategies need attention.
+  const [leaderboard, setLeaderboard] = useState<Awaited<ReturnType<typeof getStrategyLeaderboard>> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getStrategyLeaderboard();
+        if (!cancelled) setLeaderboard(res);
+      } catch { /* hide chips on failure */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const top = leaderboard?.leaderboard?.[0] || null;
+  const bestSharpeId = leaderboard?.best_sharpe || null;
+  const bestSharpeRow = leaderboard?.leaderboard?.find((e) => e.id === bestSharpeId) || null;
+  const worstId = leaderboard?.worst_performer || null;
+  const worstRow = leaderboard?.leaderboard?.find((e) => e.id === worstId) || null;
+
   return (
     <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 14px", borderBottom: "1px solid var(--border-hair)", marginBottom: 18 }}>
       <div>
@@ -7581,6 +7607,24 @@ function SPHeader({ counts }) {
         <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, maxWidth: 640 }}>
           {counts.total} catalogued · {counts.live} live · {counts.paper} paper-only · {counts.research} research · {counts.planned} coming soon. Click any card to open its playbook.
         </div>
+        {/* Leaderboard chips — only render when we have data. */}
+        {top && (
+          <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>
+            <span title={`+${(top.return_pct * 100).toFixed(2)}% lifetime`} style={{ padding: "3px 10px", border: "1px solid var(--up-500)", color: "var(--up-500)", borderRadius: 999, letterSpacing: "0.04em" }}>
+              TOP RETURN · {top.name}
+            </span>
+            {bestSharpeRow && bestSharpeRow.id !== top.id && (
+              <span title={`Sharpe ${bestSharpeRow.sharpe.toFixed(2)}`} style={{ padding: "3px 10px", border: "1px solid var(--brand)", color: "var(--brand)", borderRadius: 999, letterSpacing: "0.04em" }}>
+                BEST SHARPE · {bestSharpeRow.name}
+              </span>
+            )}
+            {worstRow && worstRow.id !== top.id && (
+              <span title={`${(worstRow.return_pct * 100).toFixed(2)}% lifetime`} style={{ padding: "3px 10px", border: "1px solid var(--down-500)", color: "var(--down-500)", borderRadius: 999, letterSpacing: "0.04em" }}>
+                WORST · {worstRow.name}
+              </span>
+            )}
+          </div>
+        )}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
         <StatusDot tone="up" size={6} />

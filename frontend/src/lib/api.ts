@@ -415,6 +415,28 @@ export function getStrategyCatalog() {
   return apiFetch<StrategyCatalogEntry[]>(`/api/v1/strategies/catalog`);
 }
 
+// 2026-05-11 (round 12): /api/v1/strategies/leaderboard returns
+// strategies ranked by total_return_pct with Sharpe + rank + plus
+// best_sharpe / worst_performer convenience ids. Cached 60s on the
+// backend; safe to poll.
+export interface StrategyLeaderboardEntry {
+  id: string;
+  name: string;
+  return_pct: number;
+  sharpe: number;
+  rank: number;
+}
+
+export interface StrategyLeaderboardResponse {
+  leaderboard: StrategyLeaderboardEntry[];
+  worst_performer: string | null;
+  best_sharpe: string | null;
+}
+
+export function getStrategyLeaderboard() {
+  return apiFetch<StrategyLeaderboardResponse>(`/api/v1/strategies/leaderboard`);
+}
+
 export function getIndexSparklines() {
   return apiFetch<{ sparklines: Record<string, number[]>; as_of: string }>(
     `/api/v1/market-overview/indices/sparklines`
