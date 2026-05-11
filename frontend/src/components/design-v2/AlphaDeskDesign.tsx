@@ -95,6 +95,13 @@ import {
   emergencyDisableStrategy,
   getStrategyDisabledEvents,
   reEnableStrategy,
+  // 2026-05-11 (round 5h): Analytics gets per-strategy P&L
+  // attribution from /strategies/contribution; Risk page gets the
+  // admin-only risk-monitor toggle from /strategies/admin/risk-
+  // monitor (GET state, POST set).
+  getStrategyContribution,
+  getRiskMonitorState,
+  setRiskMonitorState,
 } from "@/lib/api";
 import type {
   NotificationPrefType,
@@ -6632,6 +6639,10 @@ const AnalyticsPage = () => {
   const [perf, setPerf] = useState<Awaited<ReturnType<typeof getPortfolioPerformance>> | null>(null);
   const [calendar, setCalendar] = useState<Awaited<ReturnType<typeof getPortfolioCalendar>> | null>(null);
   const [journal, setJournal] = useState<Awaited<ReturnType<typeof getPortfolioJournal>>>([]);
+  // 2026-05-11 (round 5h): per-strategy P&L attribution from
+  // /api/v1/strategies/contribution — today / MTD / lifetime buckets
+  // with invested + closed-trade counts.
+  const [contribution, setContribution] = useState<Awaited<ReturnType<typeof getStrategyContribution>> | null>(null);
   const [perfErr, setPerfErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -6641,12 +6652,14 @@ const AnalyticsPage = () => {
         getPortfolioPerformance(period),
         getPortfolioCalendar(),
         getPortfolioJournal({ limit: 12 }),
+        getStrategyContribution(),
       ]);
       if (cancelled) return;
       if (results[0].status === "fulfilled") setPerf(results[0].value);
       else setPerfErr(results[0].reason instanceof Error ? results[0].reason.message : "Performance unavailable.");
       if (results[1].status === "fulfilled") setCalendar(results[1].value);
       if (results[2].status === "fulfilled") setJournal(results[2].value);
+      if (results[3].status === "fulfilled") setContribution(results[3].value);
     })();
     return () => { cancelled = true; };
   }, [period]);
@@ -6873,6 +6886,78 @@ const AnalyticsPage = () => {
           ))}
         </div>
       </div>
+
+      {/* Per-strategy P&L attribution — from /strategies/contribution.
+       *
+       * Three buckets per strategy: today / MTD / lifetime. Bar chart
+       * scaled to the largest absolute total_pnl across the set so the
+       * relative contribution reads at a glance. Header totals echo
+       * the endpoint's `total_today / total_mtd / total_lifetime`. */}
+      {contribution && Array.isArray(contribution.contributions) && contribution.contributions.length > 0 && (() => {
+        const sorted = [...contribution.contributions].sort((a, b) => Math.abs(b.total_pnl) - Math.abs(a.total_pnl));
+        const maxAbs = sorted.reduce((m, c) => Math.max(m, Math.abs(c.total_pnl)), 1);
+        return (
+          <div style={{ marginBottom: 22, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <div>
+                <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>STRATEGY CONTRIBUTION · LIFETIME</div>
+                <h2 style={{ margin: "2px 0 12px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>
+                  {sorted.length} strateg{sorted.length === 1 ? "y" : "ies"} attributed
+                </h2>
+              </div>
+              <div style={{ display: "flex", gap: 18, fontFamily: "var(--font-mono)", fontSize: 11 }}>
+                <div>
+                  <div style={{ color: "var(--fg-hint)", fontSize: 9, letterSpacing: "0.18em" }}>TODAY</div>
+                  <div style={{ color: contribution.total_today >= 0 ? "var(--up-500)" : "var(--down-500)", marginTop: 2 }}>{fmtMoney(contribution.total_today, { sign: true, dec: 0 })}</div>
+                </div>
+                <div>
+                  <div style={{ color: "var(--fg-hint)", fontSize: 9, letterSpacing: "0.18em" }}>MTD</div>
+                  <div style={{ color: contribution.total_mtd >= 0 ? "var(--up-500)" : "var(--down-500)", marginTop: 2 }}>{fmtMoney(contribution.total_mtd, { sign: true, dec: 0 })}</div>
+                </div>
+                <div>
+                  <div style={{ color: "var(--fg-hint)", fontSize: 9, letterSpacing: "0.18em" }}>LIFETIME</div>
+                  <div style={{ color: contribution.total_lifetime >= 0 ? "var(--up-500)" : "var(--down-500)", marginTop: 2 }}>{fmtMoney(contribution.total_lifetime, { sign: true, dec: 0 })}</div>
+                </div>
+              </div>
+            </div>
+            <div>
+              {sorted.slice(0, 12).map((c) => {
+                const pct = Math.min(100, (Math.abs(c.total_pnl) / maxAbs) * 100);
+                const tone = c.total_pnl >= 0 ? "var(--up-500)" : "var(--down-500)";
+                return (
+                  <div key={c.strategy} style={{ display: "grid", gridTemplateColumns: "1fr 100px 80px 80px 110px", gap: 14, padding: "10px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--ink-1000)", fontWeight: 500, minWidth: 160 }}>{c.strategy}</span>
+                      <div style={{ flex: 1, height: 4, background: "var(--ink-300)", borderRadius: 1, position: "relative" }}>
+                        <div style={{ height: "100%", width: `${pct}%`, background: tone }} />
+                      </div>
+                    </div>
+                    <span className="t-mono" style={{ fontSize: 11, color: c.today_pnl >= 0 ? "var(--up-500)" : "var(--down-500)", textAlign: "right" }}>
+                      {c.today_pnl === 0 ? "—" : fmtMoney(c.today_pnl, { sign: true, dec: 0 })}
+                    </span>
+                    <span className="t-mono" style={{ fontSize: 11, color: c.mtd_pnl >= 0 ? "var(--up-500)" : "var(--down-500)", textAlign: "right" }}>
+                      {c.mtd_pnl === 0 ? "—" : fmtMoney(c.mtd_pnl, { sign: true, dec: 0 })}
+                    </span>
+                    <span className="t-mono" style={{ fontSize: 11, color: tone, textAlign: "right", fontWeight: 600 }}>
+                      {fmtMoney(c.total_pnl, { sign: true, dec: 0 })}
+                    </span>
+                    <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-muted)", textAlign: "right" }}>
+                      {c.closed_count} closed{c.invested > 0 ? ` · ${fmtMoney(c.invested, { dec: 0 })} in` : ""}
+                    </span>
+                  </div>
+                );
+              })}
+              <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr 100px 80px 80px 110px", gap: 14, fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--fg-hint)", letterSpacing: "0.06em" }}>
+                <span style={{ marginLeft: 170 }}>STRATEGY · BAR SCALED TO MAX LIFETIME</span>
+                <span style={{ textAlign: "right" }}>TODAY</span>
+                <span style={{ textAlign: "right" }}>MTD</span>
+                <span style={{ textAlign: "right" }}>LIFETIME</span>
+                <span style={{ textAlign: "right" }}>TRADES · INVESTED</span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Trade journal — last 12 entries from /portfolio/journal */}
       {journal.length > 0 && (
@@ -11029,6 +11114,36 @@ const RiskPage = ({ tweaks, onNav, onPickTicker }) => {
   const equity = asFiniteNumber(live.portfolio?.equity, 0) || 0;
   const cash = asFiniteNumber(live.portfolio?.cash, 0) || 0;
   const positions = live.positions || [];
+  // 2026-05-11 (round 5h): admin-only Risk Monitor toggle. Wraps the
+  // /api/v1/strategies/admin/risk-monitor GET+POST pair. The monitor
+  // is a global flag — when off, the auto-disable-by-drawdown layer
+  // (L1 of the kill-switch) is bypassed. Surfaces in the Risk header
+  // for admins so the global state is visible and toggleable from
+  // where it matters.
+  const currentUser = useCurrentUser();
+  const userRole = currentUser.data?.role || "";
+  const isAdmin = userRole === "admin" || userRole === "operator";
+  const [riskMonitor, setRiskMonitor] = useState<Awaited<ReturnType<typeof getRiskMonitorState>> | null>(null);
+  const [riskMonitorBusy, setRiskMonitorBusy] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getRiskMonitorState();
+        if (!cancelled) setRiskMonitor(res);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const toggleRiskMonitor = async () => {
+    if (!isAdmin || !riskMonitor || riskMonitorBusy) return;
+    setRiskMonitorBusy(true);
+    try {
+      const next = await setRiskMonitorState(!riskMonitor.enabled);
+      setRiskMonitor(next);
+    } catch { /* ignore — keep prior state */ }
+    finally { setRiskMonitorBusy(false); }
+  };
   const rows = positions.map((p) => {
     const symbol = String(p.symbol || p.sym || "").toUpperCase();
     const qty = asFiniteNumber(p.quantity ?? p.qty, 0) || 0;
@@ -11060,9 +11175,41 @@ const RiskPage = ({ tweaks, onNav, onPickTicker }) => {
             Live account, position exposure, and risk-engine output. Stress scenarios and correlation stay blank until those endpoints expose model output.
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
-          <StatusDot tone={live.error ? "down" : "up"} size={6} />
-          <span>{live.error ? "Backend error" : "Backend positions"} · {formatLiveDate(live.refreshedAt)}</span>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+            <StatusDot tone={live.error ? "down" : "up"} size={6} />
+            <span>{live.error ? "Backend error" : "Backend positions"} · {formatLiveDate(live.refreshedAt)}</span>
+          </div>
+          {/* 2026-05-11 (round 5h): admin risk-monitor toggle.
+           * Off-state surfaces a small warning pill since auto-disable
+           * by drawdown is gated by this flag. */}
+          {riskMonitor && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11 }}>
+              <span style={{ color: "var(--fg-hint)", letterSpacing: "0.04em" }}>RISK MONITOR</span>
+              <span style={{ padding: "2px 8px", border: `1px solid ${riskMonitor.enabled ? "var(--up-500)" : "var(--down-500)"}`, color: riskMonitor.enabled ? "var(--up-500)" : "var(--down-500)", borderRadius: 999, fontSize: 10, fontWeight: 600, letterSpacing: "0.04em" }}>
+                {riskMonitor.enabled ? "ENABLED" : "DISABLED"}
+              </span>
+              {isAdmin && (
+                <button
+                  onClick={toggleRiskMonitor}
+                  disabled={riskMonitorBusy}
+                  style={{
+                    padding: "3px 10px",
+                    background: riskMonitor.enabled ? "rgba(224,120,86,0.08)" : "var(--brand)",
+                    color: riskMonitor.enabled ? "var(--down-500)" : "var(--brand-on)",
+                    border: `1px solid ${riskMonitor.enabled ? "var(--down-500)" : "var(--brand)"}`,
+                    borderRadius: 3,
+                    fontFamily: "var(--font-ui)",
+                    fontSize: 10.5,
+                    cursor: riskMonitorBusy ? "wait" : "pointer",
+                    opacity: riskMonitorBusy ? 0.5 : 1,
+                  }}
+                >
+                  {riskMonitorBusy ? "…" : riskMonitor.enabled ? "Disable" : "Enable"}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </header>
 
