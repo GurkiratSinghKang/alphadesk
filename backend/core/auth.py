@@ -216,11 +216,35 @@ async def _atomic_seed_and_incr(redis_client: Any, key: str) -> int:
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return bcrypt.checkpw(plain.encode(), hashed.encode())
+    """Constant-time bcrypt verify with safe handling of the 72-byte limit.
+
+    BUG-090 (audit 2026-05-11, M5-09): bcrypt 4.x raises ``ValueError`` when
+    given a plaintext longer than 72 bytes. The caller logged ``exc_info=True``
+    on the catch and emitted the full traceback — visible noise in the log
+    aggregator, and a faint timing/error side-channel ("which inputs make us
+    crash"). We bound the input here so ``bcrypt.checkpw`` never raises on
+    the size axis. A genuinely-long password is correctly rejected because
+    bcrypt's domain is the first 72 bytes by construction — a stored hash
+    from a >72-byte password matches only the first 72 bytes, so truncating
+    the candidate is the correct comparison for the legacy schema.
+    """
+    pw_bytes = plain.encode()
+    if len(pw_bytes) > 72:
+        pw_bytes = pw_bytes[:72]
+    return bcrypt.checkpw(pw_bytes, hashed.encode())
 
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    """Mint a bcrypt hash for the given password.
+
+    Mirrors ``verify_password``'s 72-byte truncation so the algorithm sees
+    the same prefix in both code paths (otherwise users with long passwords
+    could create hashes that won't validate on this side).
+    """
+    pw_bytes = password.encode()
+    if len(pw_bytes) > 72:
+        pw_bytes = pw_bytes[:72]
+    return bcrypt.hashpw(pw_bytes, bcrypt.gensalt()).decode()
 
 
 def create_access_token(
