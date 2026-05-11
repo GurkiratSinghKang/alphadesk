@@ -2991,6 +2991,67 @@ export function getPortfolioPerformance(period: string = "30d") {
   return apiFetch<PerformanceMetrics>(`/api/v1/portfolio/performance?period=${encodeURIComponent(period)}`);
 }
 
+// ─── Portfolio journal + calendar (round 5e) ───────────────────────
+//
+// /api/v1/portfolio/journal returns trade journal entries; the design's
+// Analytics + Reports pages render notes per trade. Calendar returns
+// per-day P&L + best/worst trading day for the month-cell heatmap.
+export interface JournalEntry {
+  id: number;
+  trade_id: number | null;
+  symbol: string | null;
+  entry_date: string;
+  entry_type: string;
+  content: string;
+  tags: string[];
+  attachments?: string[];
+}
+
+export function getPortfolioJournal(opts?: { limit?: number; symbol?: string }) {
+  const qs = new URLSearchParams();
+  if (opts?.limit) qs.set("limit", String(opts.limit));
+  if (opts?.symbol) qs.set("symbol", opts.symbol);
+  const tail = qs.toString() ? `?${qs.toString()}` : "";
+  return apiFetch<JournalEntry[]>(`/api/v1/portfolio/journal${tail}`);
+}
+
+// 2026-05-11 (round 5e): the earnings module already exports a
+// `CalendarResponse` for the earnings-events calendar. The portfolio
+// daily-P&L calendar is a different shape — keep them distinct.
+export interface PortfolioCalendarDay {
+  date: string;
+  pnl: number;
+  trades: number;
+  win_rate: number;
+}
+
+export interface PortfolioCalendarBestWorst {
+  date: string;
+  pnl: number;
+}
+
+export interface PortfolioCalendarResponse {
+  month: number;
+  year: number;
+  days: PortfolioCalendarDay[];
+  month_total: number;
+  trading_days: number;
+  winning_days: number;
+  losing_days: number;
+  best_day: PortfolioCalendarBestWorst | null;
+  worst_day: PortfolioCalendarBestWorst | null;
+  is_demo: boolean;
+  has_data: boolean;
+}
+
+export function getPortfolioCalendar(month?: number, year?: number) {
+  const qs = new URLSearchParams();
+  if (month) qs.set("month", String(month));
+  if (year) qs.set("year", String(year));
+  const tail = qs.toString() ? `?${qs.toString()}` : "";
+  return apiFetch<PortfolioCalendarResponse>(`/api/v1/portfolio/calendar${tail}`);
+}
+
 // ─── Morning Brief ────────────────────────────────────────────
 
 export interface MorningBriefMover {
