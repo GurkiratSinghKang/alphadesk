@@ -6361,13 +6361,21 @@ const PipelinePage = () => {
   const isRunning = !!status?.running;
   const stageMap: Record<string, typeof stages[number] | undefined> = {};
   for (const s of stages) stageMap[s.stage] = s;
-  // Map progress dict to ordered counters for the funnel band.
+  // 2026-05-11 (round 5d follow-up): the funnel originally assumed
+  // /pipeline/summary returned universe/candidates/staged/live/filled.
+  // It doesn't — that endpoint returns aggregate run stats. Re-map to
+  // the actual fields the backend emits: total_runs, total_trades_
+  // placed, total_trades_rejected, approval_rate. Universe count for
+  // the day comes from /pipeline/universe (already fetched elsewhere
+  // if needed; the design's "universe" hero is the dashboard's, not
+  // this page's). Each cell renders em-dash when null.
+  const approvalPct = summary?.approval_rate != null ? Math.round(summary.approval_rate * 100) : null;
   const funnelCells: { label: string; value: number | null; sub?: string | null }[] = [
-    { label: "UNIVERSE", value: asFiniteNumber(summary?.universe, null), sub: schedule ? `${schedule.windows?.length || 0} windows/day` : null },
-    { label: "CANDIDATES", value: asFiniteNumber(summary?.candidates, null), sub: null },
-    { label: "STAGED", value: asFiniteNumber(summary?.staged, null), sub: null },
-    { label: "LIVE", value: asFiniteNumber(summary?.live, null), sub: null },
-    { label: "FILLED", value: asFiniteNumber(summary?.filled, null), sub: null },
+    { label: "RUNS · TOTAL", value: asFiniteNumber(summary?.total_runs, null), sub: schedule ? `${schedule.windows?.length || 0} windows/day` : null },
+    { label: "TRADES PLACED", value: asFiniteNumber(summary?.total_trades_placed, null), sub: summary?.most_active_strategy || null },
+    { label: "TRADES REJECTED", value: asFiniteNumber(summary?.total_trades_rejected, null), sub: summary?.most_rejected_reason || null },
+    { label: "APPROVAL RATE", value: approvalPct, sub: approvalPct != null ? "% of attempted" : null },
+    { label: "ACTIVE SETUPS", value: setups.length, sub: setups.length ? "from realtime scanner" : null },
   ];
 
   return (
@@ -6531,14 +6539,20 @@ const PipelinePage = () => {
         </div>
       )}
 
-      {/* Staged candidates — pulled from realtime-setups. */}
+      {/* Realtime setups — from the live scanner via /realtime-setups.
+       *
+       * Backend wire shape is `{symbol, strategy, type, trigger_price,
+       * direction, expires}` — not the conviction/rationale-rich shape
+       * the design originally assumed. The page now renders those real
+       * fields. A deeper "Stage / Skip" decision UI lives one click
+       * away in the staged-candidates drawer (separate endpoint). */}
       <div style={{ marginBottom: 22, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
-        <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>STAGED · AWAITING YOUR REVIEW</div>
-        {setups.length === 0 ? (
+        <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>REALTIME SETUPS · LIVE SCANNER</div>
+        {!Array.isArray(setups) || setups.length === 0 ? (
           <>
-            <h2 className="t-h3" style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>No candidates awaiting review right now.</h2>
+            <h2 className="t-h3" style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>No active setups right now.</h2>
             <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, lineHeight: 1.55 }}>
-              The next pipeline run will surface candidates here. Each card will get a row with the thesis, conviction score, and a Stage / Skip decision before it touches capital.
+              The realtime scanner publishes setups as they form (ORB, VWAP rejection, VCP breakout, KAMA, pairs zscore). Each row shows trigger / direction / expiry. None active for the current session.
             </div>
           </>
         ) : (
@@ -6550,16 +6564,16 @@ const PipelinePage = () => {
                   <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-muted)" }}>{c.strategy || "—"}</span>
                 </div>
                 <div style={{ marginTop: 4, fontFamily: "var(--font-ui)", fontSize: 11.5, color: "var(--ink-1000)" }}>
-                  {c.signal || "—"} {c.conviction != null && <span style={{ color: "var(--brand)" }}>· conv {(c.conviction * 100).toFixed(0)}%</span>}
+                  {c.type || "—"}{c.direction ? <span style={{ color: c.direction.toLowerCase() === "long" ? "var(--up-500)" : "var(--down-500)" }}>{" · " + c.direction}</span> : null}
                 </div>
-                {c.entry_price != null && (
+                {typeof c.trigger_price === "number" && c.trigger_price > 0 && (
                   <div style={{ marginTop: 2, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
-                    entry {fmtMoney(c.entry_price, { dec: 2 })}
+                    trigger {fmtMoney(c.trigger_price, { dec: 2 })}
                   </div>
                 )}
-                {c.rationale && (
-                  <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg)", lineHeight: 1.45 }}>
-                    {c.rationale.length > 140 ? c.rationale.slice(0, 140) + "…" : c.rationale}
+                {c.expires && (
+                  <div style={{ marginTop: 4, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-hint)" }}>
+                    expires {c.expires}
                   </div>
                 )}
               </div>
