@@ -42,7 +42,7 @@ export default function AboutPage() {
             className="font-mono text-label uppercase text-fg-hint"
             style={{ letterSpacing: "0.18em" }}
           >
-            Last updated &middot; 2026-04-19
+            Last updated &middot; 2026-05-11
           </p>
         </header>
 
