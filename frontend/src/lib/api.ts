@@ -416,6 +416,28 @@ export function getStrategyCatalog() {
   return apiFetch<StrategyCatalogEntry[]>(`/api/v1/strategies/catalog`);
 }
 
+// 2026-05-11 (round 12): /api/v1/strategies/leaderboard returns
+// strategies ranked by total_return_pct with Sharpe + rank + plus
+// best_sharpe / worst_performer convenience ids. Cached 60s on the
+// backend; safe to poll.
+export interface StrategyLeaderboardEntry {
+  id: string;
+  name: string;
+  return_pct: number;
+  sharpe: number;
+  rank: number;
+}
+
+export interface StrategyLeaderboardResponse {
+  leaderboard: StrategyLeaderboardEntry[];
+  worst_performer: string | null;
+  best_sharpe: string | null;
+}
+
+export function getStrategyLeaderboard() {
+  return apiFetch<StrategyLeaderboardResponse>(`/api/v1/strategies/leaderboard`);
+}
+
 export function getIndexSparklines() {
   return apiFetch<{ sparklines: Record<string, number[]>; as_of: string }>(
     `/api/v1/market-overview/indices/sparklines`
@@ -746,6 +768,11 @@ export interface ToggleStrategyResponse {
 export function toggleStrategy(strategyId: string) {
   return apiFetch<ToggleStrategyResponse>(`/api/v1/strategies/${strategyId}/toggle`, { method: "POST" });
 }
+
+// 2026-05-11 (round 5g): kill-switch clients (getStrategyDisabledEvents
+// + emergencyDisableStrategy + reEnableStrategy) already live further
+// below in this file (Plan B.5 section). The Strategy Playbook UI now
+// consumes them — no new client code needed here. See line ~860.
 
 export interface StrategyAnalytics {
   strategy_id: string;
@@ -1974,6 +2001,28 @@ export function getScreenerPresets() {
   );
 }
 
+// 2026-05-11 (round 5g): backend exposes POST /api/v1/screener/presets
+// for saving a screener preset. ``filters`` is the same
+// ScreenerFilter[] shape ``POST /screen`` accepts (field/op/value).
+// The wire response includes id + created_at so a callsite can render
+// the new preset in the picker immediately.
+export interface SavedScreenerPreset {
+  id: number;
+  name: string;
+  filters: Array<{ field: string; op: string; value: number | number[] | string[] }>;
+  created_at: string;
+}
+
+export function saveScreenerPreset(
+  name: string,
+  filters: Array<{ field: string; op: string; value: number | number[] | string[] }>,
+) {
+  return apiFetch<SavedScreenerPreset>(`/api/v1/screener/presets`, {
+    method: "POST",
+    body: JSON.stringify({ name, filters }),
+  });
+}
+
 export interface RiskMonitorState {
   enabled: boolean;
   message: string;
@@ -2438,6 +2487,93 @@ export async function haltTrading(opts?: { flatten?: boolean; reason?: string })
 
 export async function resumeTrading(): Promise<{ halted: boolean; message: string }> {
   return apiFetch(`/api/v1/halt/resume`, { method: "POST" });
+}
+
+// 2026-05-11 (round 6): standalone flatten — closes every open
+// position at market WITHOUT setting the halt flag. Use when an
+// operator wants to de-risk but keep trading enabled. Admin-only.
+// Backend audit-logs the call.
+export interface FlattenAllSummary {
+  flatten_attempts: number;
+  flatten_successes: number;
+  failures?: Array<{ symbol: string; error: string }>;
+  [key: string]: unknown;
+}
+
+export async function flattenAllPositions(): Promise<{
+  message: string;
+  summary: FlattenAllSummary;
+}> {
+  return apiFetch(`/api/v1/trades/flatten_all`, { method: "POST" });
+}
+
+// ─── Strategy alloc-capital (kill-switch Layer 2) ─────────────────
+//
+// /api/v1/trades/strategy-alloc-capital exposes the per-strategy
+// notional cap Layer-2 (daily-PnL ratio) compares realized_today
+// against. Returns 4-field resolution: default, env, overlay, and
+// effective (resolved value the gate reads).
+//
+// PATCH is admin-only. Body is a {set: {name: value}, clear: [name]}
+// shape — `set` adds/updates overlays, `clear` drops them and falls
+// back to env/default.
+export interface StrategyAllocCapitalResponse {
+  default: number;
+  env: Record<string, number>;
+  overlay: Record<string, number>;
+  effective: Record<string, number>;
+}
+
+export interface StrategyAllocCapitalPatchBody {
+  set?: Record<string, number>;
+  clear?: string[];
+}
+
+export function getStrategyAllocCapital() {
+  return apiFetch<StrategyAllocCapitalResponse>(`/api/v1/trades/strategy-alloc-capital`);
+}
+
+export function patchStrategyAllocCapital(body: StrategyAllocCapitalPatchBody) {
+  return apiFetch<{ ok: boolean; overlay: Record<string, number> }>(
+    `/api/v1/trades/strategy-alloc-capital`,
+    { method: "PATCH", body: JSON.stringify(body) },
+  );
+}
+
+// ─── Strategy kill-switch thresholds (Layer 1 + Layer 2) ──────────
+//
+// Layer 1 = drawdown threshold (default -8%).
+// Layer 2 = daily-PnL ratio threshold (default -2%).
+// Both are NEGATIVE fractions; positive values are rejected with 422.
+//
+// Each layer has independent {set, clear} blocks so an admin can
+// edit Layer-1 overrides without touching Layer-2.
+export interface KillSwitchLayerThresholdSet {
+  layer1: Record<string, number>;
+  layer2: Record<string, number>;
+}
+
+export interface KillSwitchThresholdsResponse {
+  default: { layer1: number; layer2: number };
+  env: KillSwitchLayerThresholdSet;
+  overlay: KillSwitchLayerThresholdSet;
+  effective: Record<string, { layer1: number; layer2: number }>;
+}
+
+export interface KillSwitchThresholdsPatchBody {
+  layer1?: { set?: Record<string, number>; clear?: string[] };
+  layer2?: { set?: Record<string, number>; clear?: string[] };
+}
+
+export function getKillSwitchThresholds() {
+  return apiFetch<KillSwitchThresholdsResponse>(`/api/v1/trades/strategy-kill-switch-thresholds`);
+}
+
+export function patchKillSwitchThresholds(body: KillSwitchThresholdsPatchBody) {
+  return apiFetch<{ ok: boolean; overlay: KillSwitchLayerThresholdSet }>(
+    `/api/v1/trades/strategy-kill-switch-thresholds`,
+    { method: "PATCH", body: JSON.stringify(body) },
+  );
 }
 
 export async function getOrders(status?: string): Promise<Order[]> {
@@ -2966,6 +3102,51 @@ export function deletePriceAlert(alertId: string) {
   });
 }
 
+// 2026-05-11 (round 5i): the alert-ack endpoint marks an alert as
+// "acknowledged" (operator saw it; don't re-fire). Different from
+// delete — the row stays around for audit.
+export function ackPriceAlert(alertId: string) {
+  return apiFetch<{ ok: boolean }>(`/api/v1/trades/alerts/${alertId}/ack`, {
+    method: "POST",
+  });
+}
+
+// ─── Per-agent control (Plan B.2, round 5i) ─────────────────────────
+//
+// Four archetypes (research / signal / risk / exec). Each row has a
+// pause flag, an optional daily-spend cap in USD, and audit metadata
+// (paused_by, paused_at, reason). Phase B seeds one wildcard row per
+// archetype with a $50/day default cap.
+export interface AgentControl {
+  id: number;
+  archetype: "research" | "signal" | "risk" | "exec" | string;
+  model: string | null;
+  provider: string | null;
+  is_paused: boolean;
+  daily_spend_cap_usd: number | null;
+  paused_by: string | null;
+  paused_at: string | null;
+  reason: string | null;
+  updated_at: string | null;
+}
+
+export interface AgentControlPatch {
+  is_paused?: boolean;
+  daily_spend_cap_usd?: number;
+  reason?: string;
+}
+
+export function getAgentControls() {
+  return apiFetch<AgentControl[]>(`/api/v1/agents/controls`);
+}
+
+export function patchAgentControl(controlId: number, patch: AgentControlPatch) {
+  return apiFetch<AgentControl>(`/api/v1/agents/controls/${controlId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
 // ─── Portfolio Performance ──────────────────────────────────
 
 /**
@@ -3020,6 +3201,67 @@ export interface PerformanceMetrics {
 
 export function getPortfolioPerformance(period: string = "30d") {
   return apiFetch<PerformanceMetrics>(`/api/v1/portfolio/performance?period=${encodeURIComponent(period)}`);
+}
+
+// ─── Portfolio journal + calendar (round 5e) ───────────────────────
+//
+// /api/v1/portfolio/journal returns trade journal entries; the design's
+// Analytics + Reports pages render notes per trade. Calendar returns
+// per-day P&L + best/worst trading day for the month-cell heatmap.
+export interface JournalEntry {
+  id: number;
+  trade_id: number | null;
+  symbol: string | null;
+  entry_date: string;
+  entry_type: string;
+  content: string;
+  tags: string[];
+  attachments?: string[];
+}
+
+export function getPortfolioJournal(opts?: { limit?: number; symbol?: string }) {
+  const qs = new URLSearchParams();
+  if (opts?.limit) qs.set("limit", String(opts.limit));
+  if (opts?.symbol) qs.set("symbol", opts.symbol);
+  const tail = qs.toString() ? `?${qs.toString()}` : "";
+  return apiFetch<JournalEntry[]>(`/api/v1/portfolio/journal${tail}`);
+}
+
+// 2026-05-11 (round 5e): the earnings module already exports a
+// `CalendarResponse` for the earnings-events calendar. The portfolio
+// daily-P&L calendar is a different shape — keep them distinct.
+export interface PortfolioCalendarDay {
+  date: string;
+  pnl: number;
+  trades: number;
+  win_rate: number;
+}
+
+export interface PortfolioCalendarBestWorst {
+  date: string;
+  pnl: number;
+}
+
+export interface PortfolioCalendarResponse {
+  month: number;
+  year: number;
+  days: PortfolioCalendarDay[];
+  month_total: number;
+  trading_days: number;
+  winning_days: number;
+  losing_days: number;
+  best_day: PortfolioCalendarBestWorst | null;
+  worst_day: PortfolioCalendarBestWorst | null;
+  is_demo: boolean;
+  has_data: boolean;
+}
+
+export function getPortfolioCalendar(month?: number, year?: number) {
+  const qs = new URLSearchParams();
+  if (month) qs.set("month", String(month));
+  if (year) qs.set("year", String(year));
+  const tail = qs.toString() ? `?${qs.toString()}` : "";
+  return apiFetch<PortfolioCalendarResponse>(`/api/v1/portfolio/calendar${tail}`);
 }
 
 // ─── Morning Brief ────────────────────────────────────────────
@@ -3416,6 +3658,192 @@ export function markAllNotificationsRead() {
   return apiFetch<void>(`/api/v1/notifications/read-all`, {
     method: "POST",
   });
+}
+
+// ─── Notification preferences (round 5d backend wiring) ────────────
+//
+// Settings → Notifications drives 6 backend channel types: fill /
+// agent / risk / system / billing / support. Each row carries email
+// + push + slack toggles plus quiet-hours + min-severity. The
+// /preferences/{type} PATCH auto-creates a default row on first edit,
+// so the FE can fire off PATCHes for any type without an explicit
+// provisioning step.
+export type NotificationPrefType = "fill" | "agent" | "risk" | "system" | "billing" | "support";
+
+export interface NotificationPreference {
+  type: NotificationPrefType;
+  channel_email: boolean;
+  channel_push: boolean;
+  channel_slack: boolean;
+  quiet_hours_start: string | null;
+  quiet_hours_end: string | null;
+  quiet_hours_tz: string | null;
+  min_severity: "info" | "warning" | "error";
+}
+
+export interface NotificationPreferencePatch {
+  channel_email?: boolean;
+  channel_push?: boolean;
+  channel_slack?: boolean;
+  quiet_hours_start?: string | null;
+  quiet_hours_end?: string | null;
+  quiet_hours_tz?: string | null;
+  min_severity?: "info" | "warning" | "error";
+}
+
+export function getNotificationPreferences() {
+  return apiFetch<NotificationPreference[]>(`/api/v1/notifications/preferences`);
+}
+
+export function patchNotificationPreference(
+  type: NotificationPrefType,
+  patch: NotificationPreferencePatch,
+) {
+  return apiFetch<NotificationPreference>(`/api/v1/notifications/preferences/${type}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+// ─── Pipeline stages v2 (round 5d) ────────────────────────────────
+//
+// B.1 per-stage pause/resume. Replaces the global-halt model with 5
+// stages: ingest / enrich / score / risk / execute. Admin-only on
+// pause+resume; list is for any authed user so the operator sees the
+// state badge from non-admin surfaces.
+export type PipelineStageName = "ingest" | "enrich" | "score" | "risk" | "execute";
+
+export interface PipelineStage {
+  stage: PipelineStageName;
+  is_paused: boolean;
+  paused_by: string | null;
+  paused_at: string | null;
+  reason: string | null;
+  last_run_started_at: string | null;
+  last_run_finished_at: string | null;
+  last_run_status: string | null;
+  queue_depth: number;
+}
+
+export function getPipelineStages() {
+  return apiFetch<PipelineStage[]>(`/api/v1/pipeline/stages`);
+}
+
+export function pausePipelineStage(stage: PipelineStageName, reason: string) {
+  return apiFetch<PipelineStage>(`/api/v1/pipeline/stages/${stage}/pause`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function resumePipelineStage(stage: PipelineStageName) {
+  return apiFetch<PipelineStage>(`/api/v1/pipeline/stages/${stage}/resume`, {
+    method: "POST",
+  });
+}
+
+// ─── Pipeline operations (round 5d) ───────────────────────────────
+//
+// Wraps the trigger / cancel / scheduler / schedule / summary endpoints
+// the design's Pipeline page surfaces but didn't actually call.
+export interface PipelineSchedulerState {
+  last_premarket?: string;
+  last_open?: string;
+  last_midday?: string;
+  last_close?: string;
+  last_heartbeat?: string | null;
+  next_scheduled_run?: string | null;
+  missed_runs?: number;
+}
+
+// 2026-05-11 (round 5d follow-up): the original /schedule + /summary
+// + /realtime-setups types were wishful — they didn't match the
+// backend's actual wire shapes. PR #174 shipped with these guesses,
+// which crashed Pipeline page in prod ("x.slice is not a function"
+// because /realtime-setups returns {summary, setups} not an array).
+// Updated to the real shapes the backend emits.
+
+export interface PipelineScheduleWindow {
+  time: string;     // "06:00 ET" / "15:30 Fri"
+  name: string;     // "Pre-market scan" / "Market open execution"
+  strategies: string[];
+  frequency: string; // "daily" / "weekly (Friday)" / etc.
+}
+
+export interface PipelineSchedule {
+  windows: PipelineScheduleWindow[];
+  realtime: {
+    strategies: string[];
+    description: string;
+  };
+}
+
+// `/pipeline/summary` returns an aggregate-stats blob. None of the
+// fields I originally assumed (universe / candidates / staged / live /
+// filled) exist on the backend — those numbers come from staged + live
+// state, not the summary endpoint. Real shape mirrors the FastAPI
+// handler verbatim.
+export interface PipelineSummary {
+  total_runs: number;
+  total_trades_placed: number;
+  total_trades_rejected: number;
+  approval_rate: number;
+  most_active_strategy: string | null;
+  most_rejected_reason: string | null;
+  last_run: string | null;
+  portfolio_since_start: {
+    starting_equity: number;
+    current_equity: number;
+    total_return_pct: number;
+  };
+  closed_trade_metrics: Record<string, unknown>;
+}
+
+// `/realtime-setups` returns `{summary, setups[]}` where summary is
+// the scanner's aggregate and setups is the per-symbol active list.
+// PipelinePage cares about the `setups` array; we unwrap here so
+// callers can `.slice/.map` on the return value without defensive
+// guards everywhere.
+export interface PipelineRealtimeSetup {
+  symbol: string;
+  strategy: string;
+  type: string;
+  trigger_price: number;
+  direction: string;
+  expires: string;
+}
+
+export interface PipelineRealtimeSetupsResponse {
+  summary: Record<string, unknown>;
+  setups: PipelineRealtimeSetup[];
+}
+
+export function getPipelineSchedule() {
+  return apiFetch<PipelineSchedule>(`/api/v1/pipeline/schedule`);
+}
+
+export function getPipelineSchedulerState() {
+  return apiFetch<PipelineSchedulerState>(`/api/v1/pipeline/scheduler_state`);
+}
+
+export function getPipelineSummary() {
+  return apiFetch<PipelineSummary>(`/api/v1/pipeline/summary`);
+}
+
+export function cancelPipelineRun() {
+  return apiFetch<{ cancelled: boolean; reason?: string }>(`/api/v1/pipeline/cancel`, {
+    method: "POST",
+  });
+}
+
+/** Returns ONLY the setups[] array — backend wraps it in {summary, setups}. */
+export async function getPipelineRealtimeSetups(): Promise<PipelineRealtimeSetup[]> {
+  const res = await apiFetch<PipelineRealtimeSetupsResponse | PipelineRealtimeSetup[]>(
+    `/api/v1/pipeline/realtime-setups`,
+  );
+  // Defensive: if backend ever flattens, accept both shapes.
+  if (Array.isArray(res)) return res;
+  return Array.isArray(res?.setups) ? res.setups : [];
 }
 
 export async function getPipelineRun(date: string): Promise<PipelineRun> {

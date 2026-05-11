@@ -15,6 +15,7 @@ import { usePathname, useRouter } from "next/navigation";
 // consistent across the app.
 import { useUIStore } from "@/stores/ui";
 import { usePortfolioStore } from "@/stores/portfolio";
+import { useCurrentUser } from "@/hooks/useQueries";
 import { env } from "@/env";
 import { clearPersistedStores } from "@/lib/auth/clearPersistedStores";
 import {
@@ -60,6 +61,92 @@ import {
   placeOrder,
   previewOrder,
   previewUserErase,
+  // 2026-05-11 (round 5d): Settings → Notifications wired to the
+  // 6-type backend preference table (fill / agent / risk / system
+  // / billing / support). Each row has email/push/slack + quiet
+  // hours + min-severity. PATCH auto-creates on first edit so no
+  // upfront provisioning is needed.
+  getNotificationPreferences,
+  patchNotificationPreference,
+  // 2026-05-11 (round 5d): Pipeline page wired to real backend
+  // status / scheduler / summary endpoints + admin trigger + cancel.
+  cancelPipelineRun,
+  getPipelineSchedule,
+  getPipelineSchedulerState,
+  getPipelineStages,
+  getPipelineStatus,
+  getPipelineSummary,
+  getPipelineRealtimeSetups,
+  pausePipelineStage,
+  resumePipelineStage,
+  triggerPipeline,
+  // 2026-05-11 (round 5e): Analytics page wired to /portfolio/
+  // performance + journal + calendar for real Sharpe + equity curve
+  // + monthly P&L heatmap + trade journal.
+  getPortfolioPerformance,
+  getPortfolioJournal,
+  getPortfolioCalendar,
+  // 2026-05-11 (round 5f): Reports + Settings → Broker tab consume
+  // the real broker reconciliation surface (state + run).
+  getReconciliationState,
+  runBrokerReconciliation,
+  // 2026-05-11 (round 5g): Strategy Playbook surfaces the layered
+  // kill-switch (Layer-3 manual disable + history) so an admin can
+  // halt a strategy without flipping the per-strategy active flag.
+  emergencyDisableStrategy,
+  getStrategyDisabledEvents,
+  reEnableStrategy,
+  // 2026-05-11 (round 5h): Analytics gets per-strategy P&L
+  // attribution from /strategies/contribution; Risk page gets the
+  // admin-only risk-monitor toggle from /strategies/admin/risk-
+  // monitor (GET state, POST set).
+  getStrategyContribution,
+  getRiskMonitorState,
+  setRiskMonitorState,
+  // 2026-05-11 (round 5i): admin AdminPage gets per-agent pause +
+  // spend-cap from Plan B.2 (/api/v1/agents/controls). Alert ack
+  // wires the "acknowledged" state alongside delete on the alerts
+  // workflow.
+  ackPriceAlert,
+  getAgentControls,
+  patchAgentControl,
+  // 2026-05-11 (round 6): emergency trading controls (halt + flatten
+  // + resume) plus the per-strategy alloc-capital and kill-switch
+  // threshold editors. All four PATCH/POST endpoints are admin-only.
+  flattenAllPositions,
+  getHaltStatus,
+  haltTrading,
+  resumeTrading,
+  getStrategyAllocCapital,
+  patchStrategyAllocCapital,
+  getKillSwitchThresholds,
+  patchKillSwitchThresholds,
+  // 2026-05-11 (round 8): dashboard RegimePanel enrichment —
+  // 20-day index sparklines + sector winners/losers strip.
+  getIndexSparklines,
+  getMarketSectors,
+  // 2026-05-11 (round 9): Analytics page slippage analytics —
+  // execution-quality metrics by strategy and structure-type.
+  getSlippageSummary,
+  // 2026-05-11 (round 10): Reports page closed-trade ledger from
+  // /api/v1/trades/history. Replaces the "realized P&L hidden"
+  // placeholder with the real ledger.
+  getTradeHistory,
+  // 2026-05-11 (round 11): Dashboard "Earnings ahead" strip pulls
+  // upcoming earnings from /api/v1/earnings/calendar so operators
+  // see pre-earnings IV runup + post-earnings drift candidates one
+  // glance away from the dashboard.
+  getEarningsCalendar,
+  // 2026-05-11 (round 12): Strategies index leaderboard chips —
+  // /api/v1/strategies/leaderboard surfaces top return + best sharpe
+  // + worst performer.
+  getStrategyLeaderboard,
+} from "@/lib/api";
+import type {
+  NotificationPrefType,
+  NotificationPreference,
+  NotificationPreferencePatch,
+  PipelineStageName,
 } from "@/lib/api";
 // 2026-05-10 (chart wiring): swap the design's hand-rolled SVG HeroChart
 // for the real lightweight-charts engine via a thin wrapper. The mock
@@ -2574,10 +2661,101 @@ const Dashboard = ({ tweaks, onNav, onPickTicker }) => {
         </div>
       </div>
 
+      {/* 2026-05-11 (round 11): upcoming earnings — top 6 reports
+       * within the default window from /api/v1/earnings/calendar.
+       * Compact strip below the orders row. Operators care about
+       * pre-earnings IV runup and post-earnings drift; surfacing the
+       * calendar at the front door keeps that signal one glance away
+       * instead of buried inside a dedicated screener. */}
+      <EarningsAheadStrip onPickTicker={onPickTicker} />
+
       <DashFooter />
     </div>
   );
 };
+
+function EarningsAheadStrip({ onPickTicker }: { onPickTicker?: (sym: string) => void }) {
+  const [rows, setRows] = useState<Awaited<ReturnType<typeof getEarningsCalendar>>["earnings"]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getEarningsCalendar({ window: "next_5_days" });
+        if (cancelled) return;
+        const sorted = (res.earnings || [])
+          .filter((r: any) => Number.isFinite(r?.daysUntil))
+          .slice()
+          .sort((a: any, b: any) => a.daysUntil - b.daysUntil);
+        setRows(sorted.slice(0, 6));
+      } catch { /* silent — hide section */ }
+      finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading || rows.length === 0) return null;
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 1, background: "var(--border)", borderBottom: "1px solid var(--border)" }}>
+      <div style={{ background: "var(--bg)", padding: "20px 28px 22px" }}>
+        <Section
+          eyebrow="05"
+          title="Earnings · ahead"
+          right={
+            <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>
+              {rows.length} report{rows.length === 1 ? "" : "s"} · next 5 days
+            </span>
+          }
+        >
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8 }}>
+            {rows.map((r: any) => (
+              <div
+                key={r.symbol}
+                onClick={() => onPickTicker?.(r.symbol)}
+                style={{
+                  padding: 10,
+                  border: "1px solid var(--border-hair)",
+                  background: "var(--bg-elev-1)",
+                  borderRadius: 3,
+                  cursor: "pointer",
+                  transition: "border-color 120ms",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--brand)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border-hair)"; }}
+              >
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+                  <span className="t-mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-1000)" }}>{r.symbol}</span>
+                  <span className="t-mono" style={{ fontSize: 9, color: "var(--brand)", padding: "1px 5px", border: "1px solid var(--gold-500)", borderRadius: 2, letterSpacing: "0.04em" }}>
+                    {r.reportTime === "bmo" ? "BMO" : r.reportTime === "amc" ? "AMC" : "—"}
+                  </span>
+                </div>
+                <div style={{ marginTop: 3, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.company}>
+                  {r.company}
+                </div>
+                <div style={{ marginTop: 5, display: "flex", justifyContent: "space-between", alignItems: "baseline", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>
+                  <span style={{ color: "var(--fg-hint)" }}>{r.daysUntil}d</span>
+                  {r.ivRank != null && (
+                    <span style={{ color: r.ivRank > 0.6 ? "var(--gold-300)" : "var(--fg-muted)" }}>
+                      IV {(r.ivRank * 100).toFixed(0)}
+                    </span>
+                  )}
+                </div>
+                {r.expectedMovePct != null && (
+                  <div style={{ marginTop: 2, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-hint)" }}>
+                    exp ±{(r.expectedMovePct * 100).toFixed(1)}%
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </Section>
+      </div>
+    </div>
+  );
+}
 
 // ─── hero band ───────────────────────────────────────────────────────────────
 
@@ -2843,12 +3021,34 @@ function RegimePanel({ onPickTicker }) {
   const live = useDesignLiveData();
   const r = live.regime?.regime || {};
   const q = live.quotes || {};
+  // 2026-05-11 (round 8): pull real 20-day sparklines for SPY/QQQ/
+  // IWM/DIA from /market-overview/indices/sparklines, and sector
+  // performance from /market-overview/sectors. Both fall back to
+  // null cleanly when the endpoints are unreachable; the panel
+  // continues to render quote rows from live.quotes regardless.
+  const [sparklines, setSparklines] = useState<Record<string, number[]>>({});
+  const [sectors, setSectors] = useState<Awaited<ReturnType<typeof getMarketSectors>> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [spk, sec] = await Promise.allSettled([
+        getIndexSparklines(),
+        getMarketSectors(),
+      ]);
+      if (cancelled) return;
+      if (spk.status === "fulfilled") setSparklines(spk.value.sparklines || {});
+      if (sec.status === "fulfilled") setSectors(sec.value);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const quoteRow = (sym) => {
     const quote = q[sym];
     return {
       sym,
       v: quote ? quoteLast(quote) : null,
       d: quote ? quoteChangePct(quote) : null,
+      spk: sparklines[sym] || null,
     };
   };
   const indices = [
@@ -2862,6 +3062,15 @@ function RegimePanel({ onPickTicker }) {
     quoteRow("META"),
   ];
   const confidence = Number(r.confidence ?? 0);
+
+  // Sector strip: top 3 winners + top 3 losers by change_pct.
+  const sectorList = Array.isArray(sectors?.sectors) ? sectors.sectors : [];
+  const topSectors = sectorList
+    .filter((s) => Number.isFinite(s?.change_pct))
+    .slice()
+    .sort((a, b) => b.change_pct - a.change_pct);
+  const sectorTop = topSectors.slice(0, 3);
+  const sectorBottom = topSectors.slice(-3).reverse();
 
   return (
     <Section eyebrow="01" title="Market" right={<span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>{live.refreshedAt ? "Live · backend" : "Loading"}</span>}>
@@ -2888,7 +3097,7 @@ function RegimePanel({ onPickTicker }) {
           <div
             key={ix.sym}
             onClick={() => onPickTicker?.(ix.sym)}
-            style={{ background: "var(--bg)", padding: "9px 12px", display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, alignItems: "baseline", cursor: "pointer", transition: "background 120ms" }}
+            style={{ background: "var(--bg)", padding: "9px 12px", display: "grid", gridTemplateColumns: "auto 1fr 40px auto", gap: 10, alignItems: "baseline", cursor: "pointer", transition: "background 120ms" }}
             onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-elev-1)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = "var(--bg)"; }}
           >
@@ -2896,10 +3105,66 @@ function RegimePanel({ onPickTicker }) {
             <span className="t-mono" style={{ fontSize: 13, color: "var(--ink-1000)", textAlign: "right" }}>
               {ix.v == null ? "—" : ix.v >= 1000 ? ix.v.toLocaleString() : ix.v.toFixed(2)}
             </span>
+            {/* 2026-05-11 (round 8): mini 20-day sparkline from
+             * /market-overview/indices/sparklines. Only SPY/QQQ/IWM/
+             * DIA have data; the rest stay blank. Color tracks the
+             * daily change direction (green up, red down). */}
+            {ix.spk && ix.spk.length >= 4 ? (() => {
+              const min = Math.min(...ix.spk);
+              const max = Math.max(...ix.spk);
+              const range = Math.max(1e-6, max - min);
+              const pts = ix.spk.map((v, i) => `${(i / (ix.spk.length - 1)) * 40},${10 - ((v - min) / range) * 10}`).join(" ");
+              const tone = ix.d == null ? "var(--fg-hint)" : ix.d >= 0 ? "var(--up-500)" : "var(--down-500)";
+              return (
+                <svg width="40" height="10" viewBox="0 0 40 10" preserveAspectRatio="none" style={{ alignSelf: "center" }}>
+                  <polyline fill="none" stroke={tone} strokeWidth="1" vectorEffect="non-scaling-stroke" points={pts} />
+                </svg>
+              );
+            })() : <span />}
             {ix.d == null ? <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-hint)", textAlign: "right" }}>—</span> : <Delta value={ix.d} dec={2} suffix="%" />}
           </div>
         ))}
       </div>
+
+      {/* 2026-05-11 (round 8): sector performance strip from
+       * /market-overview/sectors. Shows top-3 winners + top-3 losers
+       * by change_pct so a glance at the dashboard shows where the
+       * market is rotating. Hidden when the endpoint returns no rows
+       * (e.g. weekend / pre-market with stale data). */}
+      {sectorList.length > 0 && (
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border-hair)" }}>
+          <div className="t-label" style={{ marginBottom: 6, color: "var(--fg-hint)" }}>Sectors · today</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            <div>
+              <div className="t-mono" style={{ fontSize: 9, color: "var(--fg-hint)", letterSpacing: "0.08em", marginBottom: 3 }}>WINNERS</div>
+              {sectorTop.map((s) => (
+                <div key={s.sector} title={`Top: ${s.leader} ${s.leader_change_pct >= 0 ? "+" : ""}${s.leader_change_pct.toFixed(2)}%`} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, fontSize: 11, padding: "2px 0", alignItems: "baseline" }}>
+                  <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.sector}</span>
+                  <span className="t-mono" style={{ color: s.change_pct >= 0 ? "var(--up-500)" : "var(--down-500)" }}>
+                    {s.change_pct >= 0 ? "+" : ""}{s.change_pct.toFixed(2)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div>
+              <div className="t-mono" style={{ fontSize: 9, color: "var(--fg-hint)", letterSpacing: "0.08em", marginBottom: 3 }}>LOSERS</div>
+              {sectorBottom.map((s) => (
+                <div key={s.sector} title={`Top: ${s.leader} ${s.leader_change_pct >= 0 ? "+" : ""}${s.leader_change_pct.toFixed(2)}%`} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, fontSize: 11, padding: "2px 0", alignItems: "baseline" }}>
+                  <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.sector}</span>
+                  <span className="t-mono" style={{ color: s.change_pct >= 0 ? "var(--up-500)" : "var(--down-500)" }}>
+                    {s.change_pct >= 0 ? "+" : ""}{s.change_pct.toFixed(2)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {sectors?.is_demo && (
+            <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 10.5, color: "var(--gold-500)" }}>
+              demo data · backend reported is_demo=true
+            </div>
+          )}
+        </div>
+      )}
     </Section>
   );
 }
@@ -6459,13 +6724,132 @@ const LegacyStrategiesPage = ({ tweaks, onNav }) => {
 // a fake 6-stage funnel with hardcoded `Universe 4,823 → Filtered 412
 // → Ranked 38 → Candidates 12 → Staged 3 → Live 2` plus 4 fake
 // candidate cards (AMD/META/ASML/JNJ with hand-written thesis copy).
-// None of those numbers came from the backend pipeline run; they're
-// straight from `MOCK_PIPELINE`. This page now shows real account state
-// + a clear "no live pipeline output" message until the backend
-// publishes a `pipeline.run` artifact through `/api/v1/pipeline/staged`
-// or equivalent.
+// 2026-05-11 (round 5d backend wiring): the page now consumes the
+// real /api/v1/pipeline/* surface — status, scheduler_state, summary,
+// stages (B.1 5-row pause/resume), staged candidates, realtime-setups,
+// and the admin trigger + cancel verbs. Numbers that come back null
+// render em-dashes. The 5-stage pause/resume strip exposes B.1
+// directly so an admin can stop the ingest stage without halting all
+// of trading.
+type PipelineLiveStatus = {
+  running: boolean;
+  stage?: string | null;
+  progress?: Record<string, number> | null;
+  started_at?: string | null;
+  run_id?: string | null;
+  current_strategy?: string | null;
+  last_run?: string | null;
+  last_result?: string | null;
+};
+
+const PIPELINE_STAGES: PipelineStageName[] = ["ingest", "enrich", "score", "risk", "execute"];
+
 const PipelinePage = () => {
   const live = useDesignLiveData();
+  // Admin-only operations show only to admin users. The /readyz-full
+  // surface tags admins explicitly. We read from /api/v1/user/me
+  // through React Query so the admin badge propagates without leaking
+  // role state into the LiveDataProvider context.
+  const currentUser = useCurrentUser();
+  const role = currentUser.data?.role || "";
+  const isAdmin = role === "admin" || role === "operator";
+
+  const [status, setStatus] = useState<PipelineLiveStatus | null>(null);
+  const [scheduler, setScheduler] = useState<Awaited<ReturnType<typeof getPipelineSchedulerState>> | null>(null);
+  const [summary, setSummary] = useState<Awaited<ReturnType<typeof getPipelineSummary>> | null>(null);
+  const [schedule, setSchedule] = useState<Awaited<ReturnType<typeof getPipelineSchedule>> | null>(null);
+  const [stages, setStages] = useState<Awaited<ReturnType<typeof getPipelineStages>>>([]);
+  const [setups, setSetups] = useState<Awaited<ReturnType<typeof getPipelineRealtimeSetups>>>([]);
+  const [loadingErr, setLoadingErr] = useState<string | null>(null);
+  const [actionStatus, setActionStatus] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const refresh = React.useCallback(async () => {
+    setLoadingErr(null);
+    const results = await Promise.allSettled([
+      getPipelineStatus(),
+      getPipelineSchedulerState(),
+      getPipelineSummary(),
+      getPipelineSchedule(),
+      getPipelineStages(),
+      getPipelineRealtimeSetups(),
+    ]);
+    if (results[0].status === "fulfilled") setStatus(results[0].value as PipelineLiveStatus);
+    if (results[1].status === "fulfilled") setScheduler(results[1].value);
+    if (results[2].status === "fulfilled") setSummary(results[2].value);
+    if (results[3].status === "fulfilled") setSchedule(results[3].value);
+    if (results[4].status === "fulfilled") setStages(results[4].value);
+    if (results[5].status === "fulfilled") setSetups(results[5].value);
+
+    const firstErr = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
+    if (firstErr) setLoadingErr(firstErr.reason instanceof Error ? firstErr.reason.message : String(firstErr.reason));
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    // Poll status every 5s while the pipeline is running so the operator
+    // sees progress without manually clicking refresh.
+    const id = window.setInterval(() => { void refresh(); }, 10_000);
+    return () => window.clearInterval(id);
+  }, [refresh]);
+
+  const handleTrigger = async () => {
+    if (!isAdmin) return;
+    if (!window.confirm("Trigger a full pipeline run? This kicks off ingest → enrich → score → risk → execute and may place orders.")) return;
+    setActionLoading(true);
+    setActionStatus(null);
+    try {
+      const res = await triggerPipeline();
+      setActionStatus({ tone: "ok", text: `Run ${res.run_id} started.` });
+      await refresh();
+    } catch (e) {
+      setActionStatus({ tone: "err", text: e instanceof Error ? e.message : "Trigger failed." });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+  const handleCancel = async () => {
+    if (!isAdmin) return;
+    setActionLoading(true);
+    setActionStatus(null);
+    try {
+      const res = await cancelPipelineRun();
+      setActionStatus({ tone: res.cancelled ? "ok" : "err", text: res.cancelled ? "Cancel requested — pipeline will exit at next stage boundary." : (res.reason === "no_run" ? "No pipeline run is currently in flight." : "Cancel rejected.") });
+      await refresh();
+    } catch (e) {
+      setActionStatus({ tone: "err", text: e instanceof Error ? e.message : "Cancel failed." });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleStageToggle = async (stage: PipelineStageName, currentlyPaused: boolean) => {
+    if (!isAdmin) return;
+    if (currentlyPaused) {
+      setActionLoading(true);
+      try {
+        await resumePipelineStage(stage);
+        await refresh();
+      } catch (e) {
+        setActionStatus({ tone: "err", text: e instanceof Error ? e.message : `Resume ${stage} failed.` });
+      } finally {
+        setActionLoading(false);
+      }
+    } else {
+      const reason = window.prompt(`Reason for pausing the ${stage} stage? (audit trail will record this)`, "");
+      if (!reason || !reason.trim()) return;
+      setActionLoading(true);
+      try {
+        await pausePipelineStage(stage, reason.trim());
+        await refresh();
+      } catch (e) {
+        setActionStatus({ tone: "err", text: e instanceof Error ? e.message : `Pause ${stage} failed.` });
+      } finally {
+        setActionLoading(false);
+      }
+    }
+  };
+
   const positions = (live.positions || []).map((p) => ({
     symbol: normalizeBookSymbol(p.symbol || p.sym),
     qty: asFiniteNumber(p.shares ?? p.quantity ?? p.qty, 0) || 0,
@@ -6474,28 +6858,228 @@ const PipelinePage = () => {
     stopLoss: getPositionStopLoss(p),
   }));
 
+  const isRunning = !!status?.running;
+  const stageMap: Record<string, typeof stages[number] | undefined> = {};
+  for (const s of stages) stageMap[s.stage] = s;
+  // 2026-05-11 (round 5d follow-up): the funnel originally assumed
+  // /pipeline/summary returned universe/candidates/staged/live/filled.
+  // It doesn't — that endpoint returns aggregate run stats. Re-map to
+  // the actual fields the backend emits: total_runs, total_trades_
+  // placed, total_trades_rejected, approval_rate. Universe count for
+  // the day comes from /pipeline/universe (already fetched elsewhere
+  // if needed; the design's "universe" hero is the dashboard's, not
+  // this page's). Each cell renders em-dash when null.
+  const approvalPct = summary?.approval_rate != null ? Math.round(summary.approval_rate * 100) : null;
+  const funnelCells: { label: string; value: number | null; sub?: string | null }[] = [
+    { label: "RUNS · TOTAL", value: asFiniteNumber(summary?.total_runs, null), sub: schedule ? `${schedule.windows?.length || 0} windows/day` : null },
+    { label: "TRADES PLACED", value: asFiniteNumber(summary?.total_trades_placed, null), sub: summary?.most_active_strategy || null },
+    { label: "TRADES REJECTED", value: asFiniteNumber(summary?.total_trades_rejected, null), sub: summary?.most_rejected_reason || null },
+    { label: "APPROVAL RATE", value: approvalPct, sub: approvalPct != null ? "% of attempted" : null },
+    { label: "ACTIVE SETUPS", value: setups.length, sub: setups.length ? "from realtime scanner" : null },
+  ];
+
   return (
     <div style={{ overflow: "auto", height: "100%", padding: "24px 32px 60px" }}>
       <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 14px", borderBottom: "1px solid var(--border-hair)", marginBottom: 18 }}>
         <div>
           <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>PIPELINE / LIVE QUEUE</div>
-          <h1 style={{ margin: "6px 0 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 32, fontWeight: 400, letterSpacing: "-0.02em" }}>Universe → live</h1>
+          <h1 style={{ margin: "6px 0 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 32, fontWeight: 400, letterSpacing: "-0.02em" }}>
+            Universe → live
+            {isRunning && (
+              <span style={{ marginLeft: 14, fontSize: 14, fontStyle: "normal", fontFamily: "var(--font-mono)", color: "var(--up-500)", letterSpacing: "0.04em" }}>
+                ● RUNNING · {status?.stage || "—"}{status?.current_strategy ? ` · ${status.current_strategy}` : ""}
+              </span>
+            )}
+          </h1>
           <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14 }}>
-            The funnel renders only what a real pipeline run publishes. Universe / Filtered / Ranked / Candidates / Staged / Live counts and candidate cards are hidden until the backend pipeline artifact is exposed to the frontend.
+            Live pipeline state from <span className="t-mono" style={{ fontSize: 11.5, fontStyle: "normal" }}>/api/v1/pipeline/&#123;status,scheduler_state,summary,schedule,stages,realtime-setups&#125;</span>. Polls every 10s.
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
-          <StatusDot tone={live.error ? "down" : "up"} size={6} />
-          <span>{live.error ? "Backend error" : "Live book"} · {formatLiveDate(live.refreshedAt)}</span>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+            <StatusDot tone={loadingErr ? "down" : isRunning ? "up" : "neutral"} size={6} />
+            <span>{loadingErr ? "Backend error" : isRunning ? "Running" : "Idle"} · last {formatLiveDate(status?.last_run || scheduler?.last_heartbeat || null)}</span>
+          </div>
+          {isAdmin && (
+            <div style={{ display: "inline-flex", gap: 6 }}>
+              <button
+                onClick={handleTrigger}
+                disabled={actionLoading || isRunning}
+                style={{
+                  padding: "6px 14px",
+                  background: "var(--brand)",
+                  color: "var(--brand-on)",
+                  border: "1px solid var(--brand)",
+                  borderRadius: 3,
+                  fontFamily: "var(--font-ui)",
+                  fontSize: 11.5,
+                  cursor: actionLoading || isRunning ? "not-allowed" : "pointer",
+                  opacity: actionLoading || isRunning ? 0.5 : 1,
+                }}
+              >
+                {actionLoading ? "Working…" : "Trigger run"}
+              </button>
+              <button
+                onClick={handleCancel}
+                disabled={actionLoading || !isRunning}
+                style={{
+                  padding: "6px 14px",
+                  background: "rgba(224,120,86,0.10)",
+                  color: "var(--down-500)",
+                  border: "1px solid var(--down-500)",
+                  borderRadius: 3,
+                  fontFamily: "var(--font-ui)",
+                  fontSize: 11.5,
+                  cursor: actionLoading || !isRunning ? "not-allowed" : "pointer",
+                  opacity: actionLoading || !isRunning ? 0.5 : 1,
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          {actionStatus && (
+            <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: actionStatus.tone === "ok" ? "var(--up-500)" : "var(--down-500)" }}>{actionStatus.text}</div>
+          )}
         </div>
       </header>
 
-      <div style={{ marginBottom: 22, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
-        <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>STAGED · AWAITING YOUR REVIEW</div>
-        <h2 className="t-h3" style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>No candidates awaiting review right now.</h2>
-        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, lineHeight: 1.55 }}>
-          The next pipeline run will surface candidates here. Each card will get a row with the thesis, conviction score, and a Stage / Skip decision before it touches capital.
+      {/* Funnel band — values from /pipeline/summary; null cells render em-dash. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 1, background: "var(--border)", border: "1px solid var(--border)", borderRadius: 4, marginBottom: 22 }}>
+        {funnelCells.map((c) => (
+          <div key={c.label} style={{ padding: "14px 16px", background: "var(--ink-100)" }}>
+            <div className="t-label" style={{ color: "var(--fg-hint)" }}>{c.label}</div>
+            <div className="t-mono" style={{ marginTop: 4, fontSize: 22, color: "var(--ink-1000)", fontWeight: 500 }}>
+              {c.value == null ? "—" : c.value.toLocaleString()}
+            </div>
+            {c.sub && <div className="t-body-sm" style={{ marginTop: 2, color: "var(--fg-muted)", fontFamily: "var(--font-display)", fontStyle: "italic" }}>{c.sub}</div>}
+          </div>
+        ))}
+      </div>
+
+      {/* Stage pause/resume strip — B.1 per-stage control. Admin can toggle any. */}
+      {stages.length > 0 && (
+        <div style={{ marginBottom: 22 }}>
+          <div className="t-label" style={{ marginBottom: 10 }}>5-stage pipeline · per-stage pause/resume</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+            {PIPELINE_STAGES.map((name) => {
+              const s = stageMap[name];
+              if (!s) return (
+                <div key={name} style={{ padding: 12, border: "1px solid var(--border-hair)", background: "var(--ink-100)", borderRadius: 3 }}>
+                  <div className="t-eyebrow-italic" style={{ color: "var(--fg-hint)", letterSpacing: "0.16em", fontSize: 9.5 }}>{name.toUpperCase()}</div>
+                  <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)" }}>No row.</div>
+                </div>
+              );
+              const paused = s.is_paused;
+              return (
+                <div key={name} style={{ padding: 12, border: paused ? "1px solid var(--down-500)" : "1px solid var(--border)", background: "var(--ink-100)", borderRadius: 3 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                    <div className="t-eyebrow-italic" style={{ color: paused ? "var(--down-500)" : "var(--brand)", letterSpacing: "0.16em", fontSize: 9.5 }}>{name.toUpperCase()}</div>
+                    <StatusDot tone={paused ? "down" : "up"} size={5} />
+                  </div>
+                  <div className="t-mono" style={{ marginTop: 6, fontSize: 11.5, color: "var(--ink-1000)" }}>
+                    {paused ? "PAUSED" : s.last_run_status?.toUpperCase() || "READY"}
+                  </div>
+                  <div style={{ marginTop: 2, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-muted)" }}>
+                    queue {s.queue_depth.toLocaleString()}
+                  </div>
+                  {paused && s.reason && (
+                    <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 10.5, color: "var(--down-500)" }} title={s.reason}>
+                      {s.reason.slice(0, 56)}{s.reason.length > 56 ? "…" : ""}
+                    </div>
+                  )}
+                  {isAdmin && (
+                    <button
+                      onClick={() => handleStageToggle(name, paused)}
+                      disabled={actionLoading}
+                      style={{
+                        marginTop: 8,
+                        width: "100%",
+                        padding: "4px 8px",
+                        background: paused ? "var(--brand)" : "rgba(224,120,86,0.10)",
+                        color: paused ? "var(--brand-on)" : "var(--down-500)",
+                        border: `1px solid ${paused ? "var(--brand)" : "var(--down-500)"}`,
+                        borderRadius: 3,
+                        fontFamily: "var(--font-ui)",
+                        fontSize: 10.5,
+                        cursor: actionLoading ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {paused ? "Resume" : "Pause…"}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
+      )}
+
+      {/* Scheduler state — surfaces the cron heartbeat + next scheduled run. */}
+      {scheduler && (
+        <div style={{ marginBottom: 22, padding: "14px 18px", border: "1px solid var(--border-hair)", background: "var(--ink-100)", borderRadius: 3, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 18 }}>
+          <div>
+            <div className="t-label" style={{ color: "var(--fg-hint)" }}>Last heartbeat</div>
+            <div className="t-mono" style={{ marginTop: 4, fontSize: 13, color: "var(--ink-1000)" }}>
+              {scheduler.last_heartbeat ? formatLiveDate(scheduler.last_heartbeat) : "—"}
+            </div>
+          </div>
+          <div>
+            <div className="t-label" style={{ color: "var(--fg-hint)" }}>Next scheduled run</div>
+            <div className="t-mono" style={{ marginTop: 4, fontSize: 13, color: "var(--ink-1000)" }}>
+              {scheduler.next_scheduled_run ? formatLiveDate(scheduler.next_scheduled_run) : "—"}
+            </div>
+          </div>
+          <div>
+            <div className="t-label" style={{ color: "var(--fg-hint)" }}>Missed runs (today)</div>
+            <div className="t-mono" style={{ marginTop: 4, fontSize: 13, color: scheduler.missed_runs ? "var(--down-500)" : "var(--ink-1000)" }}>
+              {scheduler.missed_runs ?? 0}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Realtime setups — from the live scanner via /realtime-setups.
+       *
+       * Backend wire shape is `{symbol, strategy, type, trigger_price,
+       * direction, expires}` — not the conviction/rationale-rich shape
+       * the design originally assumed. The page now renders those real
+       * fields. A deeper "Stage / Skip" decision UI lives one click
+       * away in the staged-candidates drawer (separate endpoint). */}
+      <div style={{ marginBottom: 22, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+        <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>REALTIME SETUPS · LIVE SCANNER</div>
+        {!Array.isArray(setups) || setups.length === 0 ? (
+          <>
+            <h2 className="t-h3" style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>No active setups right now.</h2>
+            <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, lineHeight: 1.55 }}>
+              The realtime scanner publishes setups as they form (ORB, VWAP rejection, VCP breakout, KAMA, pairs zscore). Each row shows trigger / direction / expiry. None active for the current session.
+            </div>
+          </>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, marginTop: 10 }}>
+            {setups.slice(0, 8).map((c, i) => (
+              <div key={`${c.symbol}-${i}`} style={{ padding: 14, border: "1px solid var(--border-hair)", borderRadius: 3, background: "var(--bg)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <span className="t-mono" style={{ fontSize: 14, color: "var(--ink-1000)", fontWeight: 600 }}>{c.symbol}</span>
+                  <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-muted)" }}>{c.strategy || "—"}</span>
+                </div>
+                <div style={{ marginTop: 4, fontFamily: "var(--font-ui)", fontSize: 11.5, color: "var(--ink-1000)" }}>
+                  {c.type || "—"}{c.direction ? <span style={{ color: c.direction.toLowerCase() === "long" ? "var(--up-500)" : "var(--down-500)" }}>{" · " + c.direction}</span> : null}
+                </div>
+                {typeof c.trigger_price === "number" && c.trigger_price > 0 && (
+                  <div style={{ marginTop: 2, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+                    trigger {fmtMoney(c.trigger_price, { dec: 2 })}
+                  </div>
+                )}
+                {c.expires && (
+                  <div style={{ marginTop: 4, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-hint)" }}>
+                    expires {c.expires}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{ marginTop: 24 }}>
@@ -6538,23 +7122,76 @@ const PipelinePage = () => {
 // shows only what's real: current account equity + per-name unrealized
 // P&L from live positions. Historical performance metrics return when a
 // /api/v1/portfolio/equity-curve (or similar ledger endpoint) ships.
+// 2026-05-11 (round 5e backend wiring): AnalyticsPage was an honest
+// empty-state — fake equity curve / Sharpe / monthly heatmap were
+// removed in round 2, leaving only live equity + positions. The real
+// performance endpoint (/api/v1/portfolio/performance) has been live
+// the whole time and returns Sharpe, Sortino, max-drawdown, win-rate,
+// profit-factor, equity-curve, daily-returns, and rolling-30d sharpe.
+// Plus /portfolio/journal (trade notes) and /portfolio/calendar
+// (per-day P&L for the heatmap). Wired now.
 const AnalyticsPage = () => {
   const live = useDesignLiveData();
+  const [period, setPeriod] = useState<string>("30d");
+  const [perf, setPerf] = useState<Awaited<ReturnType<typeof getPortfolioPerformance>> | null>(null);
+  const [calendar, setCalendar] = useState<Awaited<ReturnType<typeof getPortfolioCalendar>> | null>(null);
+  const [journal, setJournal] = useState<Awaited<ReturnType<typeof getPortfolioJournal>>>([]);
+  // 2026-05-11 (round 5h): per-strategy P&L attribution from
+  // /api/v1/strategies/contribution — today / MTD / lifetime buckets
+  // with invested + closed-trade counts.
+  const [contribution, setContribution] = useState<Awaited<ReturnType<typeof getStrategyContribution>> | null>(null);
+  // 2026-05-11 (round 9): execution-quality / slippage analytics
+  // from /api/v1/analytics/slippage — total trades, avg/median/p90
+  // slippage %, dollars leaked, by-strategy + by-structure-type +
+  // fill-mode-comparison breakdowns. Surfaces how much money is
+  // being left on the table by suboptimal fills.
+  const [slippage, setSlippage] = useState<Awaited<ReturnType<typeof getSlippageSummary>> | null>(null);
+  const [perfErr, setPerfErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const results = await Promise.allSettled([
+        getPortfolioPerformance(period),
+        getPortfolioCalendar(),
+        getPortfolioJournal({ limit: 12 }),
+        getStrategyContribution(),
+        getSlippageSummary(),
+      ]);
+      if (cancelled) return;
+      if (results[0].status === "fulfilled") setPerf(results[0].value);
+      else setPerfErr(results[0].reason instanceof Error ? results[0].reason.message : "Performance unavailable.");
+      if (results[1].status === "fulfilled") setCalendar(results[1].value);
+      if (results[2].status === "fulfilled") setJournal(results[2].value);
+      if (results[3].status === "fulfilled") setContribution(results[3].value);
+      if (results[4].status === "fulfilled") setSlippage(results[4].value);
+    })();
+    return () => { cancelled = true; };
+  }, [period]);
+
   const equity = asFiniteNumber(live.portfolio?.equity, 0) || 0;
   const cash = asFiniteNumber(live.portfolio?.cash, 0) || 0;
   const positions = (live.positions || []).map((p) => {
     const symbol = String(p.symbol || p.sym || "").toUpperCase();
     const pnl = asFiniteNumber(p.unrealizedPnl ?? p.unrealized_pnl ?? p.unrealizedPl ?? p.unrealized_pl, null);
-    const pnlPct = asFiniteNumber(p.unrealizedPnlPct ?? p.unrealized_pnl_pct ?? p.unrealizedPlpc ?? p.unrealized_plpc, null);
-    const marketValue = asFiniteNumber(p.marketValue ?? p.market_value ?? p.extendedMarketValue ?? p.extended_market_value, null);
     const strategy = p.strategy || p.asset_class || "manual";
-    return { symbol, pnl, pnlPct, marketValue, strategy };
+    return { symbol, pnl, strategy };
   });
   const winners = [...positions].filter((p) => (p.pnl ?? 0) > 0).sort((a, b) => (b.pnl ?? 0) - (a.pnl ?? 0)).slice(0, 5);
   const losers = [...positions].filter((p) => (p.pnl ?? 0) < 0).sort((a, b) => (a.pnl ?? 0) - (b.pnl ?? 0)).slice(0, 5);
   const totalUnrealized = positions.reduce((s, p) => s + (p.pnl ?? 0), 0);
   const winnersMax = winners.reduce((m, p) => Math.max(m, Math.abs(p.pnl ?? 0)), 1);
   const losersMax = losers.reduce((m, p) => Math.max(m, Math.abs(p.pnl ?? 0)), 1);
+
+  // Equity curve sparkline: backend emits [{timestamp, equity}] points.
+  const equityCurve = (perf?.equity_curve || []).filter((p: any) => Number.isFinite(p?.equity));
+  const equityMin = equityCurve.length ? Math.min(...equityCurve.map((p: any) => p.equity)) : 0;
+  const equityMax = equityCurve.length ? Math.max(...equityCurve.map((p: any) => p.equity)) : 1;
+  const equityRange = Math.max(1, equityMax - equityMin);
+
+  // Demo flag — when backend can't compute (e.g. no broker connected),
+  // it returns is_demo=true. Surface that explicitly.
+  const isDemo = !!perf?.is_demo;
 
   return (
     <div style={{ overflow: "auto", height: "100%", padding: "24px 32px 60px" }}>
@@ -6563,14 +7200,43 @@ const AnalyticsPage = () => {
           <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>ANALYTICS / LIVE BOOK</div>
           <h1 style={{ margin: "6px 0 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 32, fontWeight: 400, letterSpacing: "-0.02em" }}>Performance · review</h1>
           <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14 }}>
-            Live account equity and unrealized P&amp;L by name. Historical equity curve, Sharpe, monthly returns, and strategy attribution are hidden until a performance-ledger endpoint exists.
+            Live performance from <span className="t-mono" style={{ fontSize: 11.5, fontStyle: "normal" }}>/api/v1/portfolio/&#123;performance,calendar,journal&#125;</span> · current equity + positions + winners/losers grid below.
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
-          <StatusDot tone={live.error ? "down" : "up"} size={6} />
-          <span>{live.error ? "Backend error" : "Backend positions"} · {formatLiveDate(live.refreshedAt)}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "inline-flex", border: "1px solid var(--border)", borderRadius: 3, overflow: "hidden" }}>
+            {(["7d", "30d", "90d", "1y", "ytd", "all"] as const).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                style={{
+                  padding: "5px 10px",
+                  background: period === p ? "var(--brand)" : "transparent",
+                  color: period === p ? "var(--brand-on)" : "var(--fg)",
+                  border: "none",
+                  fontFamily: "var(--font-ui)",
+                  fontSize: 11,
+                  cursor: "pointer",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+            <StatusDot tone={live.error || perfErr ? "down" : "up"} size={6} />
+            <span>{live.error || perfErr ? "Backend error" : "Live"} · {formatLiveDate(live.refreshedAt)}</span>
+          </div>
         </div>
       </header>
+
+      {isDemo && (
+        <div style={{ marginBottom: 14, padding: "10px 14px", background: "rgba(201,166,107,0.06)", border: "1px solid var(--gold-500)", borderRadius: 3, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: "var(--gold-500)" }}>
+          Backend returned <span className="t-mono" style={{ fontStyle: "normal" }}>is_demo: true</span> — these numbers are fallback / demo data. Connect a broker in Settings → Brokerage to see real performance.
+        </div>
+      )}
 
       {/* Real account state — equity + cash + unrealized P&L + position count. */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1, background: "var(--border)", border: "1px solid var(--border)", borderRadius: 4, marginBottom: 20 }}>
@@ -6588,17 +7254,108 @@ const AnalyticsPage = () => {
         ))}
       </div>
 
-      {/* Honest empty-state for the historical performance series. */}
-      <div style={{ marginBottom: 22, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
-        <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>PERFORMANCE LEDGER</div>
-        <h2 className="t-h3" style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>Equity curve, Sharpe, monthly returns</h2>
-        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, lineHeight: 1.55 }}>
-          No live equity-history endpoint is currently exposed to the frontend. This page now refuses to fabricate a 90-day curve, drawdown band, monthly returns heatmap, or strategy / sector attribution; it shows only real account state and current positions until the backend publishes ledger output.
-        </div>
+      {/* Performance metrics row — period-scoped. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 1, background: "var(--border)", border: "1px solid var(--border)", borderRadius: 4, marginBottom: 20 }}>
+        {[
+          { label: "TOTAL RETURN", val: perf ? `${(perf.total_return_pct * 100).toFixed(2)}%` : "—", tone: perf && perf.total_return_pct > 0 ? "up" : perf && perf.total_return_pct < 0 ? "down" : null },
+          { label: "SHARPE", val: perf?.sharpe_ratio == null ? "—" : perf.sharpe_ratio.toFixed(2), tone: null },
+          { label: "SORTINO", val: perf?.sortino_ratio == null ? "—" : perf.sortino_ratio.toFixed(2), tone: null },
+          { label: "MAX DD", val: perf?.max_drawdown == null ? "—" : `${(perf.max_drawdown * 100).toFixed(1)}%`, tone: "down" },
+          { label: "WIN RATE", val: perf?.win_rate == null ? "—" : `${(perf.win_rate * 100).toFixed(0)}%`, tone: null },
+          { label: "TRADES", val: perf ? String(perf.total_trades) : "—", tone: null },
+        ].map((m, i) => (
+          <div key={i} style={{ padding: "14px 16px", background: "var(--ink-100)", borderRadius: 4 }}>
+            <div className="t-label" style={{ color: "var(--fg-hint)" }}>{m.label}</div>
+            <div
+              className="t-mono"
+              style={{
+                marginTop: 4,
+                fontSize: 18,
+                fontWeight: 500,
+                color:
+                  m.tone === "up" ? "var(--up-500)" : m.tone === "down" ? "var(--down-500)" : "var(--ink-1000)",
+              }}
+            >
+              {m.val}
+            </div>
+          </div>
+        ))}
       </div>
 
+      {/* Equity curve sparkline */}
+      <div style={{ marginBottom: 22, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <div>
+            <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>EQUITY CURVE · {period.toUpperCase()}</div>
+            <h2 style={{ margin: "2px 0 10px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>
+              {equityCurve.length} datapoints · {perf?.daily_returns?.length ?? 0} daily returns
+            </h2>
+          </div>
+          {equityCurve.length > 0 && (
+            <div style={{ display: "flex", gap: 18, fontFamily: "var(--font-mono)", fontSize: 11 }}>
+              <div>
+                <div style={{ color: "var(--fg-hint)", fontSize: 9, letterSpacing: "0.18em" }}>LOW</div>
+                <div style={{ color: "var(--down-500)", marginTop: 2 }}>{fmtMoney(equityMin, { dec: 0 })}</div>
+              </div>
+              <div>
+                <div style={{ color: "var(--fg-hint)", fontSize: 9, letterSpacing: "0.18em" }}>HIGH</div>
+                <div style={{ color: "var(--up-500)", marginTop: 2 }}>{fmtMoney(equityMax, { dec: 0 })}</div>
+              </div>
+            </div>
+          )}
+        </div>
+        {equityCurve.length >= 4 ? (
+          <svg width="100%" height="120" viewBox={`0 0 ${equityCurve.length} 100`} preserveAspectRatio="none" style={{ marginTop: 10 }}>
+            <polyline
+              fill="none"
+              stroke="var(--brand)"
+              strokeWidth="0.6"
+              vectorEffect="non-scaling-stroke"
+              points={equityCurve
+                .map((p: any, i: number) => `${i},${100 - ((p.equity - equityMin) / equityRange) * 100}`)
+                .join(" ")}
+            />
+          </svg>
+        ) : (
+          <div style={{ marginTop: 10, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 13 }}>
+            Not enough datapoints for a curve. Performance endpoint returned {equityCurve.length} points for the selected period.
+          </div>
+        )}
+      </div>
+
+      {/* Monthly calendar heatmap from /portfolio/calendar */}
+      {calendar && calendar.has_data && calendar.days.length > 0 && (
+        <div style={{ marginBottom: 22, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>CALENDAR · {String(calendar.year)}-{String(calendar.month).padStart(2, "0")}</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <h2 style={{ margin: "2px 0 12px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>
+              {fmtMoney(calendar.month_total, { sign: true, dec: 0 })} · {calendar.winning_days}W / {calendar.losing_days}L
+            </h2>
+            {calendar.best_day && (
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--up-500)" }}>
+                best · {calendar.best_day.date} · {fmtMoney(calendar.best_day.pnl, { sign: true, dec: 0 })}
+              </span>
+            )}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+            {calendar.days.map((d) => {
+              const intensity = Math.min(1, Math.abs(d.pnl) / Math.max(1, Math.abs(calendar.best_day?.pnl ?? 1)));
+              const bg = d.pnl > 0 ? `rgba(83, 173, 95, ${intensity * 0.65 + 0.1})` : d.pnl < 0 ? `rgba(224, 120, 86, ${intensity * 0.65 + 0.1})` : "var(--bg)";
+              return (
+                <div key={d.date} title={`${d.date} · ${fmtMoney(d.pnl, { sign: true, dec: 0 })} · ${d.trades} trades · ${(d.win_rate * 100).toFixed(0)}% win`} style={{ padding: 6, border: "1px solid var(--border-hair)", borderRadius: 2, background: bg, minHeight: 38 }}>
+                  <div className="t-mono" style={{ fontSize: 10, color: "var(--fg-muted)" }}>{d.date.slice(-2)}</div>
+                  <div className="t-mono" style={{ fontSize: 11, color: d.pnl > 0 ? "var(--up-500)" : d.pnl < 0 ? "var(--down-500)" : "var(--fg-muted)" }}>
+                    {fmtMoney(d.pnl, { sign: true, dec: 0 })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Real per-name unrealized P&L from live positions. */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, marginBottom: 22 }}>
         <div>
           <div className="t-label" style={{ marginBottom: 12 }}>Live winners · unrealized</div>
           {winners.length === 0 && (
@@ -6634,6 +7391,187 @@ const AnalyticsPage = () => {
           ))}
         </div>
       </div>
+
+      {/* Per-strategy P&L attribution — from /strategies/contribution.
+       *
+       * Three buckets per strategy: today / MTD / lifetime. Bar chart
+       * scaled to the largest absolute total_pnl across the set so the
+       * relative contribution reads at a glance. Header totals echo
+       * the endpoint's `total_today / total_mtd / total_lifetime`. */}
+      {contribution && Array.isArray(contribution.contributions) && contribution.contributions.length > 0 && (() => {
+        const sorted = [...contribution.contributions].sort((a, b) => Math.abs(b.total_pnl) - Math.abs(a.total_pnl));
+        const maxAbs = sorted.reduce((m, c) => Math.max(m, Math.abs(c.total_pnl)), 1);
+        return (
+          <div style={{ marginBottom: 22, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <div>
+                <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>STRATEGY CONTRIBUTION · LIFETIME</div>
+                <h2 style={{ margin: "2px 0 12px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>
+                  {sorted.length} strateg{sorted.length === 1 ? "y" : "ies"} attributed
+                </h2>
+              </div>
+              <div style={{ display: "flex", gap: 18, fontFamily: "var(--font-mono)", fontSize: 11 }}>
+                <div>
+                  <div style={{ color: "var(--fg-hint)", fontSize: 9, letterSpacing: "0.18em" }}>TODAY</div>
+                  <div style={{ color: contribution.total_today >= 0 ? "var(--up-500)" : "var(--down-500)", marginTop: 2 }}>{fmtMoney(contribution.total_today, { sign: true, dec: 0 })}</div>
+                </div>
+                <div>
+                  <div style={{ color: "var(--fg-hint)", fontSize: 9, letterSpacing: "0.18em" }}>MTD</div>
+                  <div style={{ color: contribution.total_mtd >= 0 ? "var(--up-500)" : "var(--down-500)", marginTop: 2 }}>{fmtMoney(contribution.total_mtd, { sign: true, dec: 0 })}</div>
+                </div>
+                <div>
+                  <div style={{ color: "var(--fg-hint)", fontSize: 9, letterSpacing: "0.18em" }}>LIFETIME</div>
+                  <div style={{ color: contribution.total_lifetime >= 0 ? "var(--up-500)" : "var(--down-500)", marginTop: 2 }}>{fmtMoney(contribution.total_lifetime, { sign: true, dec: 0 })}</div>
+                </div>
+              </div>
+            </div>
+            <div>
+              {sorted.slice(0, 12).map((c) => {
+                const pct = Math.min(100, (Math.abs(c.total_pnl) / maxAbs) * 100);
+                const tone = c.total_pnl >= 0 ? "var(--up-500)" : "var(--down-500)";
+                return (
+                  <div key={c.strategy} style={{ display: "grid", gridTemplateColumns: "1fr 100px 80px 80px 110px", gap: 14, padding: "10px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--ink-1000)", fontWeight: 500, minWidth: 160 }}>{c.strategy}</span>
+                      <div style={{ flex: 1, height: 4, background: "var(--ink-300)", borderRadius: 1, position: "relative" }}>
+                        <div style={{ height: "100%", width: `${pct}%`, background: tone }} />
+                      </div>
+                    </div>
+                    <span className="t-mono" style={{ fontSize: 11, color: c.today_pnl >= 0 ? "var(--up-500)" : "var(--down-500)", textAlign: "right" }}>
+                      {c.today_pnl === 0 ? "—" : fmtMoney(c.today_pnl, { sign: true, dec: 0 })}
+                    </span>
+                    <span className="t-mono" style={{ fontSize: 11, color: c.mtd_pnl >= 0 ? "var(--up-500)" : "var(--down-500)", textAlign: "right" }}>
+                      {c.mtd_pnl === 0 ? "—" : fmtMoney(c.mtd_pnl, { sign: true, dec: 0 })}
+                    </span>
+                    <span className="t-mono" style={{ fontSize: 11, color: tone, textAlign: "right", fontWeight: 600 }}>
+                      {fmtMoney(c.total_pnl, { sign: true, dec: 0 })}
+                    </span>
+                    <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-muted)", textAlign: "right" }}>
+                      {c.closed_count} closed{c.invested > 0 ? ` · ${fmtMoney(c.invested, { dec: 0 })} in` : ""}
+                    </span>
+                  </div>
+                );
+              })}
+              <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr 100px 80px 80px 110px", gap: 14, fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--fg-hint)", letterSpacing: "0.06em" }}>
+                <span style={{ marginLeft: 170 }}>STRATEGY · BAR SCALED TO MAX LIFETIME</span>
+                <span style={{ textAlign: "right" }}>TODAY</span>
+                <span style={{ textAlign: "right" }}>MTD</span>
+                <span style={{ textAlign: "right" }}>LIFETIME</span>
+                <span style={{ textAlign: "right" }}>TRADES · INVESTED</span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 2026-05-11 (round 9): slippage analytics from
+       * /api/v1/analytics/slippage. Renders an honest "how much
+       * money are bad fills costing us" view. Hidden when the
+       * endpoint returns no trades (the analytics service emits
+       * total_trades=0 when no fills exist in the period). */}
+      {slippage && slippage.total_trades > 0 && (
+        <div style={{ marginBottom: 22, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+            <div>
+              <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>EXECUTION QUALITY · SLIPPAGE</div>
+              <h2 style={{ margin: "2px 0 4px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>
+                {slippage.total_trades.toLocaleString()} fill{slippage.total_trades === 1 ? "" : "s"} analyzed
+              </h2>
+              <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: "var(--fg-muted)" }}>
+                Slippage = (fill_price − target) / target. Lower is better.
+              </div>
+            </div>
+            {slippage.trades_without_target > 0 && (
+              <div style={{ padding: "4px 10px", border: "1px solid var(--gold-500)", borderRadius: 999, fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--gold-500)", letterSpacing: "0.04em" }}>
+                {slippage.trades_without_target} without target
+              </div>
+            )}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1, background: "var(--border)", border: "1px solid var(--border)", borderRadius: 3, marginBottom: 12 }}>
+            {[
+              { label: "AVG SLIPPAGE", val: slippage.avg_slippage_pct == null ? "—" : `${(slippage.avg_slippage_pct * 100).toFixed(3)}%` },
+              { label: "MEDIAN", val: slippage.median_slippage_pct == null ? "—" : `${(slippage.median_slippage_pct * 100).toFixed(3)}%` },
+              { label: "P90", val: slippage.p90_slippage_pct == null ? "—" : `${(slippage.p90_slippage_pct * 100).toFixed(3)}%`, tone: "warn" },
+              { label: "$ LEAKED", val: fmtMoney(slippage.total_dollars_leaked, { sign: true, dec: 0 }), tone: slippage.total_dollars_leaked < 0 ? "down" : "neutral" },
+            ].map((m, i) => (
+              <div key={i} style={{ padding: "12px 14px", background: "var(--bg)" }}>
+                <div className="t-label" style={{ color: "var(--fg-hint)" }}>{m.label}</div>
+                <div className="t-mono" style={{ marginTop: 4, fontSize: 16, color: m.tone === "down" ? "var(--down-500)" : m.tone === "warn" ? "var(--gold-300)" : "var(--ink-1000)", fontWeight: 500 }}>
+                  {m.val}
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* By strategy + by structure-type breakdowns — render as a
+           * 2-column grid. Each item shows top-3 by largest absolute
+           * slippage so the worst offenders surface first. */}
+          {(Object.keys(slippage.by_strategy).length > 0 || Object.keys(slippage.by_structure_type).length > 0) && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              {Object.keys(slippage.by_strategy).length > 0 && (
+                <div>
+                  <div className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)", letterSpacing: "0.08em", marginBottom: 4 }}>BY STRATEGY</div>
+                  {Object.entries(slippage.by_strategy)
+                    .filter(([, b]) => Number.isFinite(b?.avg_slippage_pct))
+                    .sort(([, a], [, b]) => Math.abs(b.avg_slippage_pct ?? 0) - Math.abs(a.avg_slippage_pct ?? 0))
+                    .slice(0, 5)
+                    .map(([name, b]: any) => (
+                      <div key={name} style={{ display: "grid", gridTemplateColumns: "1fr 60px 70px", gap: 8, padding: "4px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
+                        <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--ink-1000)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                        <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-muted)", textAlign: "right" }}>{b.count}</span>
+                        <span className="t-mono" style={{ fontSize: 11, color: (b.avg_slippage_pct ?? 0) < 0 ? "var(--down-500)" : "var(--up-500)", textAlign: "right" }}>
+                          {b.avg_slippage_pct == null ? "—" : `${(b.avg_slippage_pct * 100).toFixed(2)}%`}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
+              {Object.keys(slippage.by_structure_type).length > 0 && (
+                <div>
+                  <div className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)", letterSpacing: "0.08em", marginBottom: 4 }}>BY STRUCTURE TYPE</div>
+                  {Object.entries(slippage.by_structure_type)
+                    .filter(([, b]) => Number.isFinite(b?.avg_slippage_pct))
+                    .sort(([, a], [, b]) => Math.abs(b.avg_slippage_pct ?? 0) - Math.abs(a.avg_slippage_pct ?? 0))
+                    .slice(0, 5)
+                    .map(([name, b]: any) => (
+                      <div key={name} style={{ display: "grid", gridTemplateColumns: "1fr 60px 70px", gap: 8, padding: "4px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
+                        <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--ink-1000)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                        <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-muted)", textAlign: "right" }}>{b.count}</span>
+                        <span className="t-mono" style={{ fontSize: 11, color: (b.avg_slippage_pct ?? 0) < 0 ? "var(--down-500)" : "var(--up-500)", textAlign: "right" }}>
+                          {b.avg_slippage_pct == null ? "—" : `${(b.avg_slippage_pct * 100).toFixed(2)}%`}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Trade journal — last 12 entries from /portfolio/journal */}
+      {journal.length > 0 && (
+        <div>
+          <div className="t-label" style={{ marginBottom: 12 }}>Trade journal · last {journal.length}</div>
+          {journal.map((j) => (
+            <div key={j.id} style={{ padding: "12px 0", borderBottom: "1px solid var(--border-hair)" }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+                {j.symbol && (
+                  <span className="t-mono" style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-1000)" }}>{j.symbol}</span>
+                )}
+                <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>
+                  {new Date(j.entry_date).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </span>
+                {j.tags.map((tag) => (
+                  <span key={tag} style={{ fontFamily: "var(--font-ui)", fontSize: 10, color: "var(--brand)", padding: "1px 6px", border: "1px solid var(--gold-500)", borderRadius: 2, letterSpacing: "0.06em" }}>{tag}</span>
+                ))}
+              </div>
+              <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--ink-1000)", lineHeight: 1.45 }}>
+                {j.content}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -6918,6 +7856,28 @@ const StrategiesPage = ({ tweaks, onNav }) => {
 // ─── header ──────────────────────────────────────────────────────────────
 
 function SPHeader({ counts }) {
+  // 2026-05-11 (round 12): leaderboard chips on the strategies index.
+  // /api/v1/strategies/leaderboard returns top-ranked by return_pct
+  // with sharpe + plus best_sharpe / worst_performer ids. We render
+  // 3 chips: TOP RETURN / BEST SHARPE / WORST so an operator's
+  // glance lands on which strategies need attention.
+  const [leaderboard, setLeaderboard] = useState<Awaited<ReturnType<typeof getStrategyLeaderboard>> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getStrategyLeaderboard();
+        if (!cancelled) setLeaderboard(res);
+      } catch { /* hide chips on failure */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const top = leaderboard?.leaderboard?.[0] || null;
+  const bestSharpeId = leaderboard?.best_sharpe || null;
+  const bestSharpeRow = leaderboard?.leaderboard?.find((e) => e.id === bestSharpeId) || null;
+  const worstId = leaderboard?.worst_performer || null;
+  const worstRow = leaderboard?.leaderboard?.find((e) => e.id === worstId) || null;
+
   return (
     <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 14px", borderBottom: "1px solid var(--border-hair)", marginBottom: 18 }}>
       <div>
@@ -6928,6 +7888,24 @@ function SPHeader({ counts }) {
         <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14, maxWidth: 640 }}>
           {counts.total} catalogued · {counts.live} live · {counts.paper} paper-only · {counts.research} research · {counts.planned} coming soon. Click any card to open its playbook.
         </div>
+        {/* Leaderboard chips — only render when we have data. */}
+        {top && (
+          <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>
+            <span title={`+${(top.return_pct * 100).toFixed(2)}% lifetime`} style={{ padding: "3px 10px", border: "1px solid var(--up-500)", color: "var(--up-500)", borderRadius: 999, letterSpacing: "0.04em" }}>
+              TOP RETURN · {top.name}
+            </span>
+            {bestSharpeRow && bestSharpeRow.id !== top.id && (
+              <span title={`Sharpe ${bestSharpeRow.sharpe.toFixed(2)}`} style={{ padding: "3px 10px", border: "1px solid var(--brand)", color: "var(--brand)", borderRadius: 999, letterSpacing: "0.04em" }}>
+                BEST SHARPE · {bestSharpeRow.name}
+              </span>
+            )}
+            {worstRow && worstRow.id !== top.id && (
+              <span title={`${(worstRow.return_pct * 100).toFixed(2)}% lifetime`} style={{ padding: "3px 10px", border: "1px solid var(--down-500)", color: "var(--down-500)", borderRadius: 999, letterSpacing: "0.04em" }}>
+                WORST · {worstRow.name}
+              </span>
+            )}
+          </div>
+        )}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
         <StatusDot tone="up" size={6} />
@@ -6940,42 +7918,116 @@ function SPHeader({ counts }) {
 
 // ─── today's contribution bar ────────────────────────────────────────────
 
+// 2026-05-11 (round 7): SPContribution was computing
+// `invested × (mtd / 100)` as an *estimate* of strategy contribution
+// because no real per-strategy P&L endpoint was wired here. The
+// /api/v1/strategies/contribution endpoint (used on the Analytics
+// page since Round 5h) returns actual realized P&L from closed trades
+// with today / MTD / lifetime buckets. We now consume it directly and
+// fall back to the estimate only when the endpoint is unreachable.
 function SPContribution({ items = [] }) {
-  const liveRows = items.filter(s => s.stage === "live" || s.stage === "manual");
-  // 2026-05-10 (round 2 honest empty-state): the label was "TODAY'S
-  // CONTRIBUTION" but the math reduces `s.invested * (s.mtd / 100)`
-  // where `s.mtd` is sourced from the registry's `total_return_pct`
-  // — that's lifetime, not today. Relabel to "ESTIMATED LIFETIME
-  // CONTRIBUTION" so the readout matches what's computed. A real
-  // intraday contribution view returns when the strategy registry
-  // exposes a `today_return_pct` field.
-  const day = liveRows.reduce((a, s) => a + (s.invested * (s.mtd / 100)), 0);
-  const grossUp = liveRows.filter(s => s.mtd > 0).reduce((a, s) => a + (s.invested * (s.mtd / 100)), 0);
-  const grossDn = liveRows.filter(s => s.mtd < 0).reduce((a, s) => a + (s.invested * (s.mtd / 100)), 0);
+  const [period, setPeriod] = useState<"today" | "mtd" | "lifetime">("lifetime");
+  const [contribution, setContribution] = useState<Awaited<ReturnType<typeof getStrategyContribution>> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getStrategyContribution();
+        if (!cancelled) setContribution(res);
+      } catch { /* fall through to estimate */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const liveRows = items.filter((s: any) => s.stage === "live" || s.stage === "manual");
+  // Map design-side strategy short-name to backend strategy key.
+  const byKey = new Map<string, typeof contribution extends null ? never : NonNullable<typeof contribution>["contributions"][number]>();
+  if (contribution) {
+    for (const row of contribution.contributions) {
+      byKey.set(String(row.strategy).toLowerCase(), row);
+    }
+  }
+  const pickValue = (row: typeof contribution extends null ? never : NonNullable<typeof contribution>["contributions"][number] | undefined, designRow: any): number => {
+    if (row) {
+      if (period === "today") return row.today_pnl;
+      if (period === "mtd") return row.mtd_pnl;
+      return row.total_pnl;
+    }
+    // Fallback estimate (only used when /contribution didn't load).
+    if (period === "lifetime") return designRow.invested * (designRow.mtd / 100);
+    return 0;
+  };
+
+  const rowsWithValue = liveRows.map((s: any) => {
+    const id = String(s.id || s.short || "").toLowerCase();
+    const name = String(s.name || s.short || "").toLowerCase();
+    const row = byKey.get(id) || byKey.get(name);
+    return { s, row, value: pickValue(row, s) };
+  });
+  const total = rowsWithValue.reduce((a, r) => a + r.value, 0);
+  const grossUp = rowsWithValue.filter((r) => r.value > 0).reduce((a, r) => a + r.value, 0);
+  const grossDn = rowsWithValue.filter((r) => r.value < 0).reduce((a, r) => a + r.value, 0);
+  const max = Math.max(1, ...rowsWithValue.map((r) => Math.abs(r.value)));
+
+  const periodLabel = period === "today" ? "TODAY" : period === "mtd" ? "MONTH-TO-DATE" : "LIFETIME";
+  const sourceLabel = contribution
+    ? "Real P&L from closed trades · /api/v1/strategies/contribution"
+    : "Estimated · invested × lifetime return (live endpoint unreachable)";
+
   return (
     <div style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: "16px 18px", marginBottom: 16 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12, gap: 14 }}>
         <div>
-          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>ESTIMATED LIFETIME CONTRIBUTION</div>
-          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 18, color: "var(--ink-1000)", marginTop: 2 }}>Invested capital × lifetime return per strategy</div>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <div className="t-mono" style={{ fontSize: 22, color: day >= 0 ? "var(--up-500)" : "var(--down-500)", fontWeight: 500 }}>
-            {day >= 0 ? "+" : "−"}${Math.abs(day).toLocaleString()}
+          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>STRATEGY CONTRIBUTION · {periodLabel}</div>
+          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 18, color: "var(--ink-1000)", marginTop: 2 }}>
+            {sourceLabel}
           </div>
-          <div className="t-mono" style={{ fontSize: 10, color: "var(--fg-muted)" }}>
-            <span style={{ color: "var(--up-500)" }}>+${grossUp.toLocaleString()}</span> / <span style={{ color: "var(--down-500)" }}>−${Math.abs(grossDn).toLocaleString()}</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          {contribution && (
+            <div style={{ display: "inline-flex", border: "1px solid var(--border)", borderRadius: 3, overflow: "hidden" }}>
+              {(["today", "mtd", "lifetime"] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPeriod(p)}
+                  style={{
+                    padding: "5px 10px",
+                    background: period === p ? "var(--brand)" : "transparent",
+                    color: period === p ? "var(--brand-on)" : "var(--fg)",
+                    border: "none",
+                    fontFamily: "var(--font-ui)",
+                    fontSize: 11,
+                    cursor: "pointer",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
+          <div style={{ textAlign: "right" }}>
+            <div className="t-mono" style={{ fontSize: 22, color: total >= 0 ? "var(--up-500)" : "var(--down-500)", fontWeight: 500 }}>
+              {total >= 0 ? "+" : "−"}${Math.abs(total).toLocaleString()}
+            </div>
+            <div className="t-mono" style={{ fontSize: 10, color: "var(--fg-muted)" }}>
+              <span style={{ color: "var(--up-500)" }}>+${grossUp.toLocaleString()}</span> / <span style={{ color: "var(--down-500)" }}>−${Math.abs(grossDn).toLocaleString()}</span>
+            </div>
           </div>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(liveRows.length, 1)}, 1fr)`, gap: 4, alignItems: "end", height: 90 }}>
-        {liveRows.length === 0 && <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 13 }}>No live strategies returned.</div>}
-        {liveRows.map(s => {
-          const v = s.invested * (s.mtd / 100);
-          const max = Math.max(1, ...liveRows.map((row) => Math.abs(row.invested * (row.mtd / 100))));
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(rowsWithValue.length, 1)}, 1fr)`, gap: 4, alignItems: "end", height: 90 }}>
+        {rowsWithValue.length === 0 && <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 13 }}>No live strategies returned.</div>}
+        {rowsWithValue.map(({ s, row, value }: any) => {
+          const v = value;
           const h = (Math.abs(v) / max) * 100;
+          const tooltip = row
+            ? `${s.short} · today ${row.today_pnl >= 0 ? "+" : "−"}$${Math.abs(row.today_pnl).toLocaleString()} · MTD ${row.mtd_pnl >= 0 ? "+" : "−"}$${Math.abs(row.mtd_pnl).toLocaleString()} · lifetime ${row.total_pnl >= 0 ? "+" : "−"}$${Math.abs(row.total_pnl).toLocaleString()} · ${row.closed_count} closed`
+            : `${s.short} · estimate from invested × lifetime return`;
           return (
-            <div key={s.id} style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", height: "100%", position: "relative", cursor: "default" }}>
+            <div key={s.id} title={tooltip} style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", height: "100%", position: "relative", cursor: "default" }}>
               <div style={{
                 height: `${h}%`,
                 minHeight: 2,
@@ -6984,7 +8036,7 @@ function SPContribution({ items = [] }) {
                 borderRadius: "1px 1px 0 0",
               }} />
               <div className="t-mono" style={{ fontSize: 9.5, color: v >= 0 ? "var(--up-500)" : "var(--down-500)", textAlign: "center", marginTop: 4 }}>
-                {v >= 0 ? "+" : "−"}${Math.abs(v)}
+                {v >= 0 ? "+" : "−"}${Math.abs(Math.round(v)).toLocaleString()}
               </div>
               <div style={{ fontFamily: "var(--font-ui)", fontSize: 9.5, color: "var(--fg-hint)", textAlign: "center", marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.short}</div>
             </div>
@@ -7869,6 +8921,27 @@ const ReportsPage = ({ tweaks, onNav }) => {
   const open = orders.filter((o) => !String(o.status || "").toLowerCase().includes("fill"));
   const equity = asFiniteNumber(live.portfolio?.equity, null);
   const cash = asFiniteNumber(live.portfolio?.cash, null);
+  // 2026-05-11 (round 10): closed-trade history from /api/v1/trades/
+  // history. The Reports page was rendering only broker orders +
+  // saying "realized P&L hidden until backend endpoints exist" —
+  // but the endpoint DOES exist. Now consumed: real closed trades
+  // with entry/exit prices, realized P&L, and pnl_pct.
+  const [tradeHistory, setTradeHistory] = useState<Awaited<ReturnType<typeof getTradeHistory>>>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getTradeHistory(50);
+        if (!cancelled) setTradeHistory(Array.isArray(res) ? res : []);
+      } catch { /* silent — empty state hides section */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const closedTrades = tradeHistory.filter((t) => t.status === "closed" && t.exit_price != null);
+  const realizedPnl = closedTrades.reduce((acc, t) => acc + (asFiniteNumber(t.pnl, 0) || 0), 0);
+  const realizedTradeCount = closedTrades.length;
+  const wins = closedTrades.filter((t) => (t.pnl ?? 0) > 0).length;
+  const winRate = realizedTradeCount > 0 ? wins / realizedTradeCount : null;
 
   return (
     <div style={{ padding: "20px 24px 60px", maxWidth: 1640, margin: "0 auto" }}>
@@ -7903,10 +8976,66 @@ const ReportsPage = ({ tweaks, onNav }) => {
         ))}
       </div>
 
+      {/* 2026-05-11 (round 10): Closed trades section — replaces the
+       * old "realized P&L intentionally hidden" notice. Renders only
+       * trades with status=closed AND exit_price present, so partial
+       * fills don't pollute the realized number. Wash-sale + tax-doc
+       * widgets still gated on B.13. */}
+      {realizedTradeCount > 0 && (
+        <div style={{ marginBottom: 14, padding: 18, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+            <div>
+              <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>CLOSED TRADES · REALIZED P&L</div>
+              <h2 style={{ margin: "2px 0 4px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 20, letterSpacing: "-0.01em", fontWeight: 400 }}>
+                {realizedTradeCount} closed · {fmtMoney(realizedPnl, { sign: true, dec: 0 })} realized
+              </h2>
+            </div>
+            <div style={{ display: "flex", gap: 18, fontFamily: "var(--font-mono)", fontSize: 11 }}>
+              <div>
+                <div style={{ color: "var(--fg-hint)", fontSize: 9, letterSpacing: "0.18em" }}>WINS</div>
+                <div style={{ color: "var(--up-500)", marginTop: 2 }}>{wins}</div>
+              </div>
+              <div>
+                <div style={{ color: "var(--fg-hint)", fontSize: 9, letterSpacing: "0.18em" }}>LOSSES</div>
+                <div style={{ color: "var(--down-500)", marginTop: 2 }}>{realizedTradeCount - wins}</div>
+              </div>
+              <div>
+                <div style={{ color: "var(--fg-hint)", fontSize: 9, letterSpacing: "0.18em" }}>WIN RATE</div>
+                <div style={{ color: "var(--ink-1000)", marginTop: 2 }}>{winRate == null ? "—" : `${(winRate * 100).toFixed(0)}%`}</div>
+              </div>
+            </div>
+          </div>
+          <div style={{ background: "var(--bg)", border: "1px solid var(--border-hair)", borderRadius: 3 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "70px 90px 60px 100px 100px 100px 90px 1fr", gap: 8, padding: "8px 12px", borderBottom: "1px solid var(--border-hair)", background: "var(--bg-elev-1)" }}>
+              {["SYMBOL", "STRATEGY", "SIDE", "ENTRY", "EXIT", "PNL", "PCT", "EXITED"].map((h) => (
+                <span key={h} className="t-label" style={{ color: "var(--fg-hint)" }}>{h}</span>
+              ))}
+            </div>
+            {closedTrades.slice(0, 20).map((t) => (
+              <div key={t.id} onClick={() => onNav?.("ticker", { ticker: t.symbol })} style={{ display: "grid", gridTemplateColumns: "70px 90px 60px 100px 100px 100px 90px 1fr", gap: 8, padding: "8px 12px", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline", cursor: "default" }}>
+                <span className="t-mono" style={{ fontSize: 12.5, color: "var(--ink-1000)", fontWeight: 600 }}>{t.symbol}</span>
+                <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.strategy || "manual"}</span>
+                <span className="t-mono" style={{ fontSize: 11, color: t.side === "buy" || t.side === "long" ? "var(--up-500)" : "var(--down-500)" }}>{(t.side || "").toUpperCase()}</span>
+                <span className="t-mono" style={{ fontSize: 11, color: "var(--fg)" }}>{fmtMoney(t.entry_price, { dec: 2 })}</span>
+                <span className="t-mono" style={{ fontSize: 11, color: "var(--fg)" }}>{t.exit_price == null ? "—" : fmtMoney(t.exit_price, { dec: 2 })}</span>
+                <span className="t-mono" style={{ fontSize: 11.5, color: (t.pnl ?? 0) >= 0 ? "var(--up-500)" : "var(--down-500)", fontWeight: 500 }}>{t.pnl == null ? "—" : fmtMoney(t.pnl, { sign: true, dec: 0 })}</span>
+                <span className="t-mono" style={{ fontSize: 11, color: (t.pnl_pct ?? 0) >= 0 ? "var(--up-500)" : "var(--down-500)" }}>{t.pnl_pct == null ? "—" : `${t.pnl_pct >= 0 ? "+" : ""}${(t.pnl_pct * (Math.abs(t.pnl_pct) <= 1 ? 100 : 1)).toFixed(2)}%`}</span>
+                <span className="t-mono" style={{ fontSize: 10.5, color: "var(--fg-hint)" }}>{formatLiveDate(t.exit_time)}</span>
+              </div>
+            ))}
+            {realizedTradeCount > 20 && (
+              <div style={{ padding: "8px 12px", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-muted)", textAlign: "center" }}>
+                {realizedTradeCount - 20} more closed trades · paginated view comes with the dedicated reports page
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div style={{ background: "rgba(201,166,107,0.08)", border: "1px solid var(--gold-300)", borderLeft: "2px solid var(--gold-500)", borderRadius: 4, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "baseline", gap: 12 }}>
         <span className="t-mono" style={{ fontSize: 10.5, color: "var(--gold-500)", padding: "2px 7px", border: "1px solid var(--gold-500)", borderRadius: 2, letterSpacing: "0.05em", fontWeight: 600 }}>BACKEND ONLY</span>
         <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg)", lineHeight: 1.5 }}>
-          Realized P&amp;L, wash-sale, and tax-document widgets are intentionally hidden until dedicated backend endpoints exist. This table is the broker order feed, not a tax statement.
+          Wash-sale and tax-document widgets are intentionally hidden until B.13 ships. The order feed below + closed-trade table above are the broker reality, not a tax statement.
         </span>
       </div>
 
@@ -7937,7 +9066,33 @@ const ReportsPage = ({ tweaks, onNav }) => {
 
 // ─── header ──────────────────────────────────────────────────────────────
 
+// 2026-05-11 (round 5f backend wiring): the previous RPHeader rendered
+// a hardcoded "Reconciled with Alpaca · 09:14 today" badge — that
+// timestamp was static design copy, not a real reconciliation event.
+// The broker reconciliation backend exposes /api/v1/broker/
+// reconciliation/state with last_reconciled_at + open_issue_count +
+// primary_provider. Now consumed here so the operator sees the actual
+// last sync timestamp + a count of open issues that need review.
 function RPHeader() {
+  const [reconState, setReconState] = useState<Awaited<ReturnType<typeof getReconciliationState>> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getReconciliationState();
+        if (!cancelled) setReconState(res);
+      } catch {
+        // ignore — fall back to em-dash render
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const last = reconState?.last_reconciled_at ? formatLiveDate(reconState.last_reconciled_at) : null;
+  const provider = reconState?.primary_provider || null;
+  const isClean = !!reconState?.is_clean;
+  const issueCount = reconState?.open_issue_count ?? 0;
+
   return (
     <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 14px", borderBottom: "1px solid var(--border-hair)", marginBottom: 16 }}>
       <div>
@@ -7950,8 +9105,18 @@ function RPHeader() {
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
-        <StatusDot tone="up" size={6} />
-        <span>Reconciled with Alpaca · 09:14 today</span>
+        <StatusDot tone={isClean ? "up" : issueCount > 0 ? "down" : "neutral"} size={6} />
+        {reconState ? (
+          <span>
+            {provider ? `Reconciled with ${provider}` : "Reconciliation"}
+            {last ? ` · ${last}` : " · no data"}
+            {issueCount > 0 && (
+              <span style={{ marginLeft: 8, color: "var(--down-500)", fontWeight: 600 }}>· {issueCount} open issue{issueCount === 1 ? "" : "s"}</span>
+            )}
+          </span>
+        ) : (
+          <span>Reconciliation state · loading</span>
+        )}
         <span style={{ marginLeft: 10, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 3, color: "var(--ink-1000)", background: "var(--bg-elev-1)" }}>Export bundle</span>
       </div>
     </header>
@@ -8540,9 +9705,50 @@ function STBroker() {
   // hardcodes account number, linkage date, or "last reconciled 09:14
   // today". Reads the actual portfolio source from the live API and
   // falls through to a clear "No broker linked" state if none is set.
+  // 2026-05-11 (round 5f backend wiring): "Reconcile positions now"
+  // button now hits the actual broker reconciliation endpoint. Open
+  // issues count surfaces inline so the operator can drill in.
   const live = useDesignLiveData();
   const liveSource = String(live.portfolio?.source || "").toLowerCase();
   const active = BROKERS.find((b) => b.id === liveSource) || null;
+  const [reconState, setReconState] = useState<Awaited<ReturnType<typeof getReconciliationState>> | null>(null);
+  const [reconRunning, setReconRunning] = useState(false);
+  const [reconStatus, setReconStatus] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getReconciliationState();
+        if (!cancelled) setReconState(res);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleReconcileNow = async () => {
+    setReconRunning(true);
+    setReconStatus(null);
+    try {
+      const counts = await runBrokerReconciliation();
+      const flagged = (counts.backfilled || 0) + (counts.orphaned || 0);
+      setReconStatus({
+        tone: flagged === 0 ? "ok" : "err",
+        text: flagged === 0
+          ? `Clean — ${counts.matched} matched, no orphans or backfills.`
+          : `${counts.matched} matched · ${counts.backfilled} backfilled · ${counts.orphaned} orphaned. Review open issues below.`,
+      });
+      try {
+        const fresh = await getReconciliationState();
+        setReconState(fresh);
+      } catch { /* ignore */ }
+    } catch (e) {
+      setReconStatus({ tone: "err", text: e instanceof Error ? e.message : "Reconcile failed." });
+    } finally {
+      setReconRunning(false);
+    }
+  };
+
   return (
     <>
     <STCard title="Active broker" sub="Order execution and account data flow through this broker. Each strategy can override per-playbook in the strategy book.">
@@ -8568,6 +9774,42 @@ function STBroker() {
           No broker connection reported by the live portfolio endpoint. Per-user broker linkage is hidden until the backend exposes it.
         </div>
       )}
+      <STField label="Reconciliation" hint="Compares your broker's open positions against AlphaDesk's book and flags discrepancies for review.">
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button
+              onClick={handleReconcileNow}
+              disabled={reconRunning}
+              style={{
+                padding: "6px 14px",
+                background: "var(--brand)",
+                color: "var(--brand-on)",
+                border: "1px solid var(--brand)",
+                borderRadius: 3,
+                fontFamily: "var(--font-ui)",
+                fontSize: 12,
+                cursor: reconRunning ? "wait" : "pointer",
+                opacity: reconRunning ? 0.6 : 1,
+              }}
+            >
+              {reconRunning ? "Reconciling…" : "Reconcile positions now"}
+            </button>
+            {reconState && (
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+                {reconState.last_reconciled_at ? `last · ${formatLiveDate(reconState.last_reconciled_at)}` : "never reconciled"}
+                {reconState.open_issue_count > 0 && (
+                  <span style={{ marginLeft: 8, color: "var(--down-500)", fontWeight: 600 }}>· {reconState.open_issue_count} open</span>
+                )}
+              </span>
+            )}
+          </div>
+          {reconStatus && (
+            <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: reconStatus.tone === "ok" ? "var(--up-500)" : "var(--down-500)" }}>
+              {reconStatus.text}
+            </div>
+          )}
+        </div>
+      </STField>
       <STField label="Daily live-mode approval" hint="Re-confirm live trading once per day with 2FA · applies to all brokers"><STToggle on={true} /></STField>
       <STField label="Test default broker"><STButton>Run paper · then live test</STButton></STField>
     </STCard>
@@ -8743,24 +9985,319 @@ function ConnStat({ k, v, mono, tone }) {
   );
 }
 
-function STNotifications() {
+// 2026-05-11 (round 5d backend wiring): STNotifications was 8 fake
+// hardcoded toggles whose onClick changed nothing — the design's
+// "Email · daily briefing" / "Email · order fills" / "Quiet hours
+// 22:00 → 06:00" copy was decoration, not config.
+//
+// Now wired to the actual /api/v1/notifications/preferences surface
+// (B.4). Backend types are fill / agent / risk / system / billing /
+// support. Each row carries 3 channel toggles (email / push / slack)
+// + quiet-hours window + min-severity threshold. The PATCH endpoint
+// auto-creates the row on first edit so there's no provisioning step.
+// Push/Slack columns render but stay disabled with a footnote until
+// the provider integrations land (push: B.4 web-push wiring; Slack:
+// per-tenant webhook in Settings → Integrations).
+const NOTIFICATION_TYPES: { type: NotificationPrefType; label: string; hint: string }[] = [
+  { type: "fill", label: "Order fills", hint: "Each broker fill / partial / cancel." },
+  { type: "agent", label: "Agent outputs", hint: "AI memos and signal decisions." },
+  { type: "risk", label: "Risk breaches", hint: "Stop-out, drawdown band, concentration warnings." },
+  { type: "system", label: "System halts", hint: "Pipeline pause, broker disconnect, feed drop." },
+  { type: "billing", label: "Billing", hint: "Plan changes, invoice events, payment failures." },
+  { type: "support", label: "Support replies", hint: "Operator → user thread updates." },
+];
+
+const DEFAULT_PREF = (type: NotificationPrefType): NotificationPreference => ({
+  type,
+  channel_email: type === "risk" || type === "system" || type === "billing",
+  channel_push: false,
+  channel_slack: false,
+  quiet_hours_start: null,
+  quiet_hours_end: null,
+  quiet_hours_tz: null,
+  min_severity: "info",
+});
+
+function PrefToggle({ on, onChange, disabled }: { on: boolean; onChange: () => void; disabled?: boolean }) {
   return (
-    <STCard title="Notifications" sub="Where AlphaDesk reaches you. The notification bell in the top bar always shows in-app messages regardless of these settings.">
-      <STField label="Email · daily briefing" hint="Pre-market summary · 06:30 ET"><STToggle on={true} /></STField>
-      <STField label="Email · weekly performance" hint="Friday 17:00 ET · attribution + drawdown"><STToggle on={true} /></STField>
-      <STField label="Email · order fills" hint="One email per fill · noisy on active strategies"><STToggle on={false} /></STField>
-      <STField label="Email · stop-loss triggered" hint="Always sent for risk events"><STToggle on={true} /></STField>
-      <STField label="In-app · agent activity feed" hint="Stream agent decisions in the bell drawer"><STToggle on={true} /></STField>
-      <STField label="In-app · pipeline candidates" hint="When a new candidate enters the pipeline"><STToggle on={true} /></STField>
-      <STField label="SMS · risk events only" hint="Stop-outs · margin calls · feed disconnects"><STToggle on={false} /></STField>
-      <STField label="Quiet hours" hint="Suppress non-critical notifications during these hours">
-        <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-          <STInput value="22:00" mono width={80} />
-          <span style={{ color: "var(--fg-muted)", fontFamily: "var(--font-mono)", fontSize: 11 }}>—</span>
-          <STInput value="06:00" mono width={80} />
-        </span>
-      </STField>
-    </STCard>
+    <button
+      onClick={() => { if (!disabled) onChange(); }}
+      disabled={disabled}
+      style={{
+        width: 38,
+        height: 20,
+        borderRadius: 10,
+        background: on ? "var(--up-500)" : "var(--bg-elev-1)",
+        border: "1px solid var(--border)",
+        padding: 0,
+        position: "relative",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.4 : 1,
+        transition: "background 150ms",
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          top: 1,
+          left: on ? 19 : 1,
+          width: 16,
+          height: 16,
+          borderRadius: "50%",
+          background: "var(--ink-1000)",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
+          transition: "left 150ms",
+        }}
+      />
+    </button>
+  );
+}
+
+function STNotifications() {
+  const [prefs, setPrefs] = useState<Record<string, NotificationPreference>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [savingType, setSavingType] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await getNotificationPreferences();
+        if (cancelled) return;
+        const map: Record<string, NotificationPreference> = {};
+        for (const r of rows) map[r.type] = r;
+        setPrefs(map);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Preferences fetch failed.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const prefOf = (t: NotificationPrefType): NotificationPreference =>
+    prefs[t] ?? DEFAULT_PREF(t);
+
+  const persist = async (
+    t: NotificationPrefType,
+    patch: Partial<NotificationPreference>,
+  ) => {
+    // Optimistic update: render the change immediately, roll back on error.
+    const previous = prefs[t];
+    const optimistic = { ...prefOf(t), ...patch };
+    setPrefs((cur) => ({ ...cur, [t]: optimistic }));
+    setSavingType(t);
+    try {
+      const updated = await patchNotificationPreference(t, patch);
+      setPrefs((cur) => ({ ...cur, [t]: updated }));
+    } catch (e) {
+      setPrefs((cur) => {
+        const next = { ...cur };
+        if (previous) next[t] = previous;
+        else delete next[t];
+        return next;
+      });
+      setError(e instanceof Error ? e.message : "Save failed.");
+    } finally {
+      setSavingType(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <STCard title="Notifications" sub="Loading saved preferences from /api/v1/notifications/preferences…">
+        <div style={{ padding: "20px 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 13 }}>
+          Loading…
+        </div>
+      </STCard>
+    );
+  }
+
+  // Quiet hours + min-severity are per-type rows in the backend; we
+  // surface them once as a single "Defaults" card that PATCHes all
+  // 6 rows in a fan-out. This matches the design's intent ("Suppress
+  // non-critical notifications during these hours") while staying
+  // faithful to the data shape.
+  const allTypes: NotificationPrefType[] = NOTIFICATION_TYPES.map((r) => r.type);
+  // Use the "system" row as the canonical defaults source — it's
+  // present for every user once any pref is edited.
+  const defaultsRow = prefOf("system");
+
+  const applyDefaultsToAll = async (patch: NotificationPreferencePatch) => {
+    setSavingType("__defaults__");
+    try {
+      await Promise.all(allTypes.map((t) => patchNotificationPreference(t, patch)));
+      const refreshed = await getNotificationPreferences();
+      const map: Record<string, NotificationPreference> = {};
+      for (const r of refreshed) map[r.type] = r;
+      setPrefs(map);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Defaults save failed.");
+    } finally {
+      setSavingType(null);
+    }
+  };
+
+  return (
+    <>
+      <STCard
+        title="Notifications"
+        sub="Where AlphaDesk reaches you. The notification bell in the top bar always shows in-app messages regardless of these settings — the channel rows below control out-of-band routing (email / push / Slack)."
+      >
+        {error && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: "10px 14px",
+              background: "rgba(224,120,86,0.08)",
+              border: "1px solid var(--down-500)",
+              borderRadius: 3,
+              fontFamily: "var(--font-display)",
+              fontStyle: "italic",
+              fontSize: 12,
+              color: "var(--down-500)",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 64px 64px 64px",
+            gap: 14,
+            paddingBottom: 8,
+            borderBottom: "1px solid var(--border-hair)",
+          }}
+        >
+          <div />
+          {(["Email", "Push", "Slack"] as const).map((h) => (
+            <div key={h} style={{ textAlign: "center" }}>
+              <div className="t-eyebrow-italic" style={{ color: "var(--fg-hint)", fontSize: 9.5, letterSpacing: "0.18em" }}>
+                {h.toUpperCase()}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {NOTIFICATION_TYPES.map((row) => {
+          const p = prefOf(row.type);
+          const isSaving = savingType === row.type;
+          return (
+            <div
+              key={row.type}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 64px 64px 64px",
+                gap: 14,
+                padding: "12px 0",
+                borderBottom: "1px solid var(--border-hair)",
+                alignItems: "center",
+                opacity: isSaving ? 0.6 : 1,
+              }}
+            >
+              <div>
+                <div style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--ink-1000)", fontWeight: 500 }}>{row.label}</div>
+                <div style={{ marginTop: 3, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-muted)", lineHeight: 1.4 }}>
+                  {row.hint}
+                </div>
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <PrefToggle on={p.channel_email} onChange={() => persist(row.type, { channel_email: !p.channel_email })} />
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <PrefToggle on={p.channel_push} onChange={() => persist(row.type, { channel_push: !p.channel_push })} disabled />
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <PrefToggle on={p.channel_slack} onChange={() => persist(row.type, { channel_slack: !p.channel_slack })} disabled />
+              </div>
+            </div>
+          );
+        })}
+
+        <div
+          style={{
+            marginTop: 12,
+            fontFamily: "var(--font-display)",
+            fontStyle: "italic",
+            fontSize: 11.5,
+            color: "var(--fg-muted)",
+          }}
+        >
+          Push and Slack remain disabled until the web-push (B.4) + per-tenant Slack webhook integrations ship. Email saves immediately on toggle.
+        </div>
+      </STCard>
+
+      <STCard
+        title="Quiet hours · severity floor"
+        sub="Applies to every notification channel above. Saving fans out a PATCH to all 6 backend rows."
+      >
+        <STField label="Quiet hours" hint="HH:MM in your local timezone. Empty = always on.">
+          <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+            <input
+              type="time"
+              value={defaultsRow.quiet_hours_start ?? ""}
+              onChange={(e) => applyDefaultsToAll({ quiet_hours_start: e.target.value || null })}
+              style={{
+                width: 110,
+                padding: "7px 10px",
+                fontFamily: "var(--font-mono)",
+                fontSize: 12.5,
+                color: "var(--ink-1000)",
+                background: "var(--bg-elev-1)",
+                border: "1px solid var(--border)",
+                borderRadius: 3,
+                outline: "none",
+              }}
+            />
+            <span style={{ color: "var(--fg-muted)", fontFamily: "var(--font-mono)", fontSize: 11 }}>—</span>
+            <input
+              type="time"
+              value={defaultsRow.quiet_hours_end ?? ""}
+              onChange={(e) => applyDefaultsToAll({ quiet_hours_end: e.target.value || null })}
+              style={{
+                width: 110,
+                padding: "7px 10px",
+                fontFamily: "var(--font-mono)",
+                fontSize: 12.5,
+                color: "var(--ink-1000)",
+                background: "var(--bg-elev-1)",
+                border: "1px solid var(--border)",
+                borderRadius: 3,
+                outline: "none",
+              }}
+            />
+            {savingType === "__defaults__" && (
+              <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-muted)", marginLeft: 8 }}>Saving…</span>
+            )}
+          </span>
+        </STField>
+        <STField label="Severity floor" hint="info = everything · warning = problems + risk · error = critical only">
+          <select
+            value={defaultsRow.min_severity}
+            onChange={(e) => applyDefaultsToAll({ min_severity: e.target.value as "info" | "warning" | "error" })}
+            style={{
+              width: 200,
+              padding: "7px 10px",
+              fontFamily: "var(--font-ui)",
+              fontSize: 12.5,
+              color: "var(--ink-1000)",
+              background: "var(--bg-elev-1)",
+              border: "1px solid var(--border)",
+              borderRadius: 3,
+              outline: "none",
+            }}
+          >
+            <option value="info">info · everything</option>
+            <option value="warning">warning · problems + risk</option>
+            <option value="error">error · critical only</option>
+          </select>
+        </STField>
+      </STCard>
+    </>
   );
 }
 
@@ -10357,6 +11894,36 @@ const RiskPage = ({ tweaks, onNav, onPickTicker }) => {
   const equity = asFiniteNumber(live.portfolio?.equity, 0) || 0;
   const cash = asFiniteNumber(live.portfolio?.cash, 0) || 0;
   const positions = live.positions || [];
+  // 2026-05-11 (round 5h): admin-only Risk Monitor toggle. Wraps the
+  // /api/v1/strategies/admin/risk-monitor GET+POST pair. The monitor
+  // is a global flag — when off, the auto-disable-by-drawdown layer
+  // (L1 of the kill-switch) is bypassed. Surfaces in the Risk header
+  // for admins so the global state is visible and toggleable from
+  // where it matters.
+  const currentUser = useCurrentUser();
+  const userRole = currentUser.data?.role || "";
+  const isAdmin = userRole === "admin" || userRole === "operator";
+  const [riskMonitor, setRiskMonitor] = useState<Awaited<ReturnType<typeof getRiskMonitorState>> | null>(null);
+  const [riskMonitorBusy, setRiskMonitorBusy] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getRiskMonitorState();
+        if (!cancelled) setRiskMonitor(res);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const toggleRiskMonitor = async () => {
+    if (!isAdmin || !riskMonitor || riskMonitorBusy) return;
+    setRiskMonitorBusy(true);
+    try {
+      const next = await setRiskMonitorState(!riskMonitor.enabled);
+      setRiskMonitor(next);
+    } catch { /* ignore — keep prior state */ }
+    finally { setRiskMonitorBusy(false); }
+  };
   const rows = positions.map((p) => {
     const symbol = String(p.symbol || p.sym || "").toUpperCase();
     const qty = asFiniteNumber(p.quantity ?? p.qty, 0) || 0;
@@ -10388,9 +11955,41 @@ const RiskPage = ({ tweaks, onNav, onPickTicker }) => {
             Live account, position exposure, and risk-engine output. Stress scenarios and correlation stay blank until those endpoints expose model output.
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
-          <StatusDot tone={live.error ? "down" : "up"} size={6} />
-          <span>{live.error ? "Backend error" : "Backend positions"} · {formatLiveDate(live.refreshedAt)}</span>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+            <StatusDot tone={live.error ? "down" : "up"} size={6} />
+            <span>{live.error ? "Backend error" : "Backend positions"} · {formatLiveDate(live.refreshedAt)}</span>
+          </div>
+          {/* 2026-05-11 (round 5h): admin risk-monitor toggle.
+           * Off-state surfaces a small warning pill since auto-disable
+           * by drawdown is gated by this flag. */}
+          {riskMonitor && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11 }}>
+              <span style={{ color: "var(--fg-hint)", letterSpacing: "0.04em" }}>RISK MONITOR</span>
+              <span style={{ padding: "2px 8px", border: `1px solid ${riskMonitor.enabled ? "var(--up-500)" : "var(--down-500)"}`, color: riskMonitor.enabled ? "var(--up-500)" : "var(--down-500)", borderRadius: 999, fontSize: 10, fontWeight: 600, letterSpacing: "0.04em" }}>
+                {riskMonitor.enabled ? "ENABLED" : "DISABLED"}
+              </span>
+              {isAdmin && (
+                <button
+                  onClick={toggleRiskMonitor}
+                  disabled={riskMonitorBusy}
+                  style={{
+                    padding: "3px 10px",
+                    background: riskMonitor.enabled ? "rgba(224,120,86,0.08)" : "var(--brand)",
+                    color: riskMonitor.enabled ? "var(--down-500)" : "var(--brand-on)",
+                    border: `1px solid ${riskMonitor.enabled ? "var(--down-500)" : "var(--brand)"}`,
+                    borderRadius: 3,
+                    fontFamily: "var(--font-ui)",
+                    fontSize: 10.5,
+                    cursor: riskMonitorBusy ? "wait" : "pointer",
+                    opacity: riskMonitorBusy ? 0.5 : 1,
+                  }}
+                >
+                  {riskMonitorBusy ? "…" : riskMonitor.enabled ? "Disable" : "Enable"}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </header>
 
@@ -11028,12 +12627,24 @@ const StrategyPlaybook = ({ tweaks, stratName = "Momentum & Quality", onNav, onB
   const [livePositions, setLivePositions] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [toggling, setToggling] = useState(false);
+  // 2026-05-11 (round 5g): kill-switch state — disabled-events history
+  // + emergency-disable + re-enable. Admin-only buttons surface only
+  // when the current user has admin/operator role.
+  const [disabledEvents, setDisabledEvents] = useState<Awaited<ReturnType<typeof getStrategyDisabledEvents>>>([]);
+  const [killSwitchStatus, setKillSwitchStatus] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  const [killSwitchLoading, setKillSwitchLoading] = useState(false);
+  const currentUser = useCurrentUser();
+  const userRole = currentUser.data?.role || "";
+  const isAdmin = userRole === "admin" || userRole === "operator";
+  const activeDisable = disabledEvents.find((e) => !e.resolved_at) || null;
+
   useEffect(() => {
     let cancelled = false;
     if (!matched?.id && !matched?.slug) {
       setDetail(null);
       setLivePositions(null);
       setAnalytics(null);
+      setDisabledEvents([]);
       return;
     }
     const id = matched.id || matched.slug;
@@ -11041,14 +12652,79 @@ const StrategyPlaybook = ({ tweaks, stratName = "Momentum & Quality", onNav, onB
       getStrategyPerformance(id).catch(() => null),
       getStrategyPositions(id).catch(() => null),
       getStrategyAnalytics(id).catch(() => null),
-    ]).then(([perf, pos, ana]) => {
+      // include_resolved=true so the audit history surfaces, not just
+      // active disables. UI marks resolved rows with a strikethrough
+      // and shows resolved_by + resolved_at.
+      getStrategyDisabledEvents(id, true).catch(() => []),
+    ]).then(([perf, pos, ana, events]) => {
       if (cancelled) return;
       setDetail(perf);
       setLivePositions(pos);
       setAnalytics(ana);
+      setDisabledEvents(Array.isArray(events) ? events : []);
     });
     return () => { cancelled = true; };
   }, [matched?.id, matched?.slug]);
+
+  const refreshDisabledEvents = async () => {
+    if (!strategyId) return;
+    try {
+      const events = await getStrategyDisabledEvents(String(strategyId), true);
+      setDisabledEvents(Array.isArray(events) ? events : []);
+    } catch { /* ignore */ }
+  };
+
+  const handleEmergencyDisable = async () => {
+    if (!strategyId || killSwitchLoading) return;
+    if (!isAdmin) return;
+    const reason = window.prompt(
+      `EMERGENCY DISABLE — ${displayName}\n\nThis is the Layer-3 manual kill-switch. The strategy will stop accepting new signals immediately. Open positions stay open (use a flatten flow to exit). Reason will be recorded in the audit log.\n\nReason for disabling:`,
+      "",
+    );
+    if (!reason || !reason.trim()) return;
+    setKillSwitchLoading(true);
+    setKillSwitchStatus(null);
+    try {
+      const res = await emergencyDisableStrategy(String(strategyId), reason.trim());
+      setKillSwitchStatus({
+        tone: res.success ? "ok" : "err",
+        text: res.success
+          ? `Disabled (event #${res.event_id}). New signals halted.`
+          : res.message === "already_disabled"
+          ? `Strategy is already Layer-3 disabled (event #${res.event_id}). Re-enable first if you want to disable with a new reason.`
+          : `Disable rejected: ${res.message}`,
+      });
+      await refreshDisabledEvents();
+    } catch (e) {
+      setKillSwitchStatus({ tone: "err", text: e instanceof Error ? e.message : "Disable failed." });
+    } finally {
+      setKillSwitchLoading(false);
+    }
+  };
+
+  const handleReEnable = async () => {
+    if (!strategyId || killSwitchLoading) return;
+    if (!isAdmin) return;
+    if (!window.confirm(`Re-enable ${displayName}? This resolves the latest unresolved disable event and resumes signal processing.`)) return;
+    setKillSwitchLoading(true);
+    setKillSwitchStatus(null);
+    try {
+      const res = await reEnableStrategy(String(strategyId));
+      setKillSwitchStatus({
+        tone: res.success ? "ok" : "err",
+        text: res.success
+          ? `Re-enabled (resolved event #${res.resolved_event_id}). Signals resume on next tick.`
+          : res.message === "no_active_disable"
+          ? "No active disable event to resolve."
+          : `Re-enable rejected: ${res.message}`,
+      });
+      await refreshDisabledEvents();
+    } catch (e) {
+      setKillSwitchStatus({ tone: "err", text: e instanceof Error ? e.message : "Re-enable failed." });
+    } finally {
+      setKillSwitchLoading(false);
+    }
+  };
 
   const status = detail?.status || matched?.status || matched?.state || (matched ? "live" : "unknown");
   const invested = asFiniteNumber(detail?.invested_amount ?? matched?.invested ?? matched?.capital_allocated, null);
@@ -11126,9 +12802,55 @@ const StrategyPlaybook = ({ tweaks, stratName = "Momentum & Quality", onNav, onB
           {matched && (
             <button onClick={handleToggle} disabled={toggling} style={{ padding: "4px 10px", border: "1px solid var(--border)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, color: toggling ? "var(--fg-hint)" : "var(--ink-1000)", background: "var(--bg-elev-1)", cursor: toggling ? "wait" : "default" }}>{toggling ? "Toggling…" : status === "active" || status === "live" ? "Pause" : "Resume"}</button>
           )}
+          {/* 2026-05-11 (round 5g kill-switch): Layer-3 manual disable.
+           * Admin-only. When an active disable exists, render
+           * "Re-enable" instead of "Emergency disable" so the flow is
+           * one button at a time. */}
+          {matched && isAdmin && (
+            activeDisable ? (
+              <button
+                onClick={handleReEnable}
+                disabled={killSwitchLoading}
+                style={{
+                  padding: "4px 10px",
+                  border: "1px solid var(--brand)",
+                  borderRadius: 3,
+                  fontFamily: "var(--font-ui)",
+                  fontSize: 12,
+                  color: "var(--brand)",
+                  background: "rgba(201,166,107,0.06)",
+                  cursor: killSwitchLoading ? "wait" : "pointer",
+                }}
+              >
+                {killSwitchLoading ? "Re-enabling…" : "Re-enable strategy"}
+              </button>
+            ) : (
+              <button
+                onClick={handleEmergencyDisable}
+                disabled={killSwitchLoading}
+                style={{
+                  padding: "4px 10px",
+                  border: "1px solid var(--down-500)",
+                  borderRadius: 3,
+                  fontFamily: "var(--font-ui)",
+                  fontSize: 12,
+                  color: "var(--down-500)",
+                  background: "rgba(224,120,86,0.08)",
+                  cursor: killSwitchLoading ? "wait" : "pointer",
+                }}
+              >
+                {killSwitchLoading ? "Working…" : "Emergency disable"}
+              </button>
+            )
+          )}
           <a onClick={() => onBacktest?.()} style={{ padding: "4px 10px", border: "1px solid var(--border)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--ink-1000)", background: "var(--bg-elev-1)", cursor: "default" }}>Backtest workbench →</a>
         </div>
       </header>
+      {killSwitchStatus && (
+        <div style={{ marginBottom: 12, padding: "8px 14px", background: killSwitchStatus.tone === "ok" ? "rgba(83,173,95,0.06)" : "rgba(224,120,86,0.08)", border: `1px solid ${killSwitchStatus.tone === "ok" ? "var(--up-500)" : "var(--down-500)"}`, borderRadius: 3, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: killSwitchStatus.tone === "ok" ? "var(--up-500)" : "var(--down-500)" }}>
+          {killSwitchStatus.text}
+        </div>
+      )}
 
       {/* 2026-05-10 (round 5 backend wiring): per-strategy detail
        * fetched from /api/v1/strategies/{id}/performance. When the
@@ -11257,9 +12979,324 @@ const StrategyPlaybook = ({ tweaks, stratName = "Momentum & Quality", onNav, onB
           </div>
         ))}
       </div>
+
+      {/* 2026-05-11 (round 6): kill-switch threshold + alloc-capital
+       * editor. Admin-only edit buttons that PATCH the in-memory
+       * overlays on /trades/strategy-kill-switch-thresholds and
+       * /trades/strategy-alloc-capital. The card always renders the
+       * effective values (default OR env OR overlay) so a non-admin
+       * can read the current configuration. */}
+      {matched && (
+        <KillSwitchConfigCard
+          strategyId={String(strategyId)}
+          displayName={displayName}
+          isAdmin={isAdmin}
+        />
+      )}
+
+      {/* 2026-05-11 (round 5g): kill-switch audit history. Renders the
+       * latest 6 disable events (resolved + unresolved). Active row
+       * pinned at top with red border; resolved rows muted with the
+       * resolution metadata in line. Empty state hides the whole
+       * section so the playbook stays calm when nothing's been
+       * tripped. */}
+      {disabledEvents.length > 0 && (
+        <div style={{ marginBottom: 20, padding: 18, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <div>
+              <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>KILL-SWITCH · AUDIT HISTORY</div>
+              <h2 style={{ margin: "2px 0 4px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 18, letterSpacing: "-0.01em", fontWeight: 400 }}>
+                {activeDisable
+                  ? `Layer ${activeDisable.layer} disable active`
+                  : `${disabledEvents.length} resolved event${disabledEvents.length === 1 ? "" : "s"}`}
+              </h2>
+            </div>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--fg-hint)", letterSpacing: "0.04em" }}>
+              L1 drawdown · L2 burn · L3 manual
+            </span>
+          </div>
+          <div style={{ marginTop: 10 }}>
+            {disabledEvents.slice(0, 6).map((e) => {
+              const isActive = !e.resolved_at;
+              const layerLabel = e.layer === 1 ? "L1 · DRAWDOWN" : e.layer === 2 ? "L2 · BURN" : "L3 · MANUAL";
+              return (
+                <div
+                  key={e.id}
+                  style={{
+                    padding: "10px 12px",
+                    marginBottom: 6,
+                    borderRadius: 3,
+                    border: isActive ? "1px solid var(--down-500)" : "1px solid var(--border-hair)",
+                    background: isActive ? "rgba(224,120,86,0.06)" : "var(--bg)",
+                    opacity: isActive ? 1 : 0.85,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                    <span className="t-mono" style={{ fontSize: 10, padding: "2px 6px", border: `1px solid ${isActive ? "var(--down-500)" : "var(--border)"}`, color: isActive ? "var(--down-500)" : "var(--fg-muted)", borderRadius: 2, letterSpacing: "0.06em", fontWeight: 600 }}>
+                      {layerLabel}
+                    </span>
+                    <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-hint)" }}>
+                      #{e.id} · {formatLiveDate(e.triggered_at)}
+                    </span>
+                    {e.manual_actor && (
+                      <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-muted)" }}>
+                        by {e.manual_actor}
+                      </span>
+                    )}
+                    {isActive ? (
+                      <span style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--down-500)", letterSpacing: "0.06em", fontWeight: 600 }}>ACTIVE</span>
+                    ) : (
+                      <span style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--up-500)", letterSpacing: "0.06em" }}>
+                        RESOLVED · {formatLiveDate(e.resolved_at)}{e.resolved_by ? ` · ${e.resolved_by}` : ""}
+                      </span>
+                    )}
+                  </div>
+                  {e.reason && (
+                    <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--ink-1000)", lineHeight: 1.4 }}>
+                      {e.reason}
+                    </div>
+                  )}
+                  {(e.peak_nav != null || e.current_nav != null || e.threshold != null) && (
+                    <div style={{ marginTop: 6, display: "flex", gap: 18, fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--fg-muted)" }}>
+                      {e.peak_nav != null && <span>peak {fmtMoney(e.peak_nav, { dec: 0 })}</span>}
+                      {e.current_nav != null && <span>now {fmtMoney(e.current_nav, { dec: 0 })}</span>}
+                      {e.realized_pnl != null && <span>realized {fmtMoney(e.realized_pnl, { sign: true, dec: 0 })}</span>}
+                      {e.threshold != null && <span>threshold {(e.threshold * 100).toFixed(1)}%</span>}
+                      {e.alloc_capital != null && <span>alloc {fmtMoney(e.alloc_capital, { dec: 0 })}</span>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {!isAdmin && (
+            <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-hint)" }}>
+              Read-only. Admin role required to disable / re-enable strategies from this surface.
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
+
+// 2026-05-11 (round 6): per-strategy kill-switch threshold +
+// alloc-capital editor. Reads the global config from /trades/
+// strategy-kill-switch-thresholds and /trades/strategy-alloc-capital,
+// drills into the row for THIS strategy, and lets admin PATCH the
+// overlay. Non-admin sees read-only effective values.
+function KillSwitchConfigCard({
+  strategyId,
+  displayName,
+  isAdmin,
+}: {
+  strategyId: string;
+  displayName: string;
+  isAdmin: boolean;
+}) {
+  const [thresholds, setThresholds] = useState<Awaited<ReturnType<typeof getKillSwitchThresholds>> | null>(null);
+  const [alloc, setAlloc] = useState<Awaited<ReturnType<typeof getStrategyAllocCapital>> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+
+  const refresh = React.useCallback(async () => {
+    const [t, a] = await Promise.allSettled([
+      getKillSwitchThresholds(),
+      getStrategyAllocCapital(),
+    ]);
+    if (t.status === "fulfilled") setThresholds(t.value);
+    if (a.status === "fulfilled") setAlloc(a.value);
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh, strategyId]);
+
+  // Resolve effective values for THIS strategy. Backend returns
+  // sorted maps keyed by strategy name; fall back to default when
+  // unconfigured.
+  const layer1Effective = thresholds?.effective?.[strategyId]?.layer1 ?? thresholds?.default?.layer1 ?? null;
+  const layer2Effective = thresholds?.effective?.[strategyId]?.layer2 ?? thresholds?.default?.layer2 ?? null;
+  const layer1Overlay = thresholds?.overlay?.layer1?.[strategyId] ?? null;
+  const layer2Overlay = thresholds?.overlay?.layer2?.[strategyId] ?? null;
+  const allocEffective = alloc?.effective?.[strategyId] ?? alloc?.default ?? null;
+  const allocOverlay = alloc?.overlay?.[strategyId] ?? null;
+
+  const fmtPct = (v: number | null) =>
+    v == null ? "—" : `${(v * 100).toFixed(2)}%`;
+
+  const editLayerThreshold = async (layer: 1 | 2) => {
+    if (!isAdmin || busy) return;
+    const currentRaw = layer === 1 ? layer1Overlay ?? layer1Effective : layer2Overlay ?? layer2Effective;
+    const promptValue = currentRaw == null ? "" : (currentRaw * 100).toFixed(2);
+    const next = window.prompt(
+      `Layer ${layer} threshold for ${displayName} (negative percent, e.g. -8 for -8% drawdown). ` +
+      `Empty = drop overlay, use default (${layer === 1 ? fmtPct(thresholds?.default?.layer1 ?? null) : fmtPct(thresholds?.default?.layer2 ?? null)}).`,
+      promptValue,
+    );
+    if (next === null) return;
+    const trimmed = next.trim();
+    setBusy(true);
+    setMsg(null);
+    try {
+      if (trimmed === "") {
+        // Clear the overlay so the env/default takes over.
+        await patchKillSwitchThresholds({
+          [layer === 1 ? "layer1" : "layer2"]: { clear: [strategyId] },
+        });
+        setMsg({ tone: "ok", text: `Layer ${layer} overlay cleared.` });
+      } else {
+        const parsed = Number.parseFloat(trimmed);
+        if (!Number.isFinite(parsed) || parsed > 0) {
+          setMsg({ tone: "err", text: "Threshold must be a number ≤ 0 (negative percent, e.g. -8 for -8%)." });
+          setBusy(false);
+          return;
+        }
+        const asFraction = parsed / 100;
+        await patchKillSwitchThresholds({
+          [layer === 1 ? "layer1" : "layer2"]: { set: { [strategyId]: asFraction } },
+        });
+        setMsg({ tone: "ok", text: `Layer ${layer} overlay set to ${fmtPct(asFraction)}.` });
+      }
+      await refresh();
+    } catch (e) {
+      setMsg({ tone: "err", text: e instanceof Error ? e.message : "PATCH failed." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const editAlloc = async () => {
+    if (!isAdmin || busy) return;
+    const currentRaw = allocOverlay ?? allocEffective;
+    const next = window.prompt(
+      `Alloc capital for ${displayName} (USD notional). Empty = drop overlay, use default ($${alloc?.default?.toLocaleString() ?? "—"}).`,
+      currentRaw != null ? String(currentRaw) : "",
+    );
+    if (next === null) return;
+    const trimmed = next.trim();
+    setBusy(true);
+    setMsg(null);
+    try {
+      if (trimmed === "") {
+        await patchStrategyAllocCapital({ clear: [strategyId] });
+        setMsg({ tone: "ok", text: "Alloc-capital overlay cleared." });
+      } else {
+        const parsed = Number.parseFloat(trimmed);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+          setMsg({ tone: "err", text: "Alloc capital must be a non-negative number." });
+          setBusy(false);
+          return;
+        }
+        await patchStrategyAllocCapital({ set: { [strategyId]: parsed } });
+        setMsg({ tone: "ok", text: `Alloc-capital overlay set to $${parsed.toLocaleString()}.` });
+      }
+      await refresh();
+    } catch (e) {
+      setMsg({ tone: "err", text: e instanceof Error ? e.message : "PATCH failed." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!thresholds || !alloc) {
+    return (
+      <div style={{ marginBottom: 20, padding: 18, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 13 }}>
+        Loading kill-switch configuration…
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginBottom: 20, padding: 18, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <div>
+          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>KILL-SWITCH · CONFIGURATION</div>
+          <h2 style={{ margin: "2px 0 4px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 18, letterSpacing: "-0.01em", fontWeight: 400 }}>
+            Drawdown · Daily-PnL ratio · Alloc capital
+          </h2>
+        </div>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--fg-hint)", letterSpacing: "0.04em" }}>
+          per-strategy overlay over global defaults
+        </span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginTop: 12 }}>
+        {[
+          {
+            key: "layer1",
+            label: "LAYER 1 · DRAWDOWN",
+            effective: layer1Effective,
+            overlay: layer1Overlay,
+            defaultVal: thresholds.default.layer1,
+            format: fmtPct,
+            onEdit: () => editLayerThreshold(1),
+          },
+          {
+            key: "layer2",
+            label: "LAYER 2 · DAILY P&L RATIO",
+            effective: layer2Effective,
+            overlay: layer2Overlay,
+            defaultVal: thresholds.default.layer2,
+            format: fmtPct,
+            onEdit: () => editLayerThreshold(2),
+          },
+          {
+            key: "alloc",
+            label: "ALLOC CAPITAL",
+            effective: allocEffective,
+            overlay: allocOverlay,
+            defaultVal: alloc.default,
+            format: (v: number | null) => (v == null ? "—" : `$${v.toLocaleString()}`),
+            onEdit: editAlloc,
+          },
+        ].map((cfg) => (
+          <div key={cfg.key} style={{ padding: 12, border: "1px solid var(--border-hair)", background: "var(--bg)", borderRadius: 3 }}>
+            <div className="t-label" style={{ color: "var(--fg-hint)" }}>{cfg.label}</div>
+            <div className="t-mono" style={{ marginTop: 4, fontSize: 18, color: "var(--ink-1000)", fontWeight: 500 }}>
+              {cfg.format(cfg.effective)}
+            </div>
+            <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-muted)" }}>
+              {cfg.overlay != null
+                ? <>overlay · default <span className="t-mono" style={{ fontStyle: "normal" }}>{cfg.format(cfg.defaultVal)}</span></>
+                : <>default · no overlay</>}
+            </div>
+            {isAdmin && (
+              <button
+                onClick={cfg.onEdit}
+                disabled={busy}
+                style={{
+                  marginTop: 8,
+                  width: "100%",
+                  padding: "4px 8px",
+                  background: "var(--bg-elev-1)",
+                  color: "var(--ink-1000)",
+                  border: "1px solid var(--border-strong)",
+                  borderRadius: 3,
+                  fontFamily: "var(--font-ui)",
+                  fontSize: 11,
+                  cursor: busy ? "wait" : "pointer",
+                  opacity: busy ? 0.5 : 1,
+                }}
+              >
+                {cfg.overlay != null ? "Edit overlay…" : "Set overlay…"}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      {msg && (
+        <div style={{ marginTop: 10, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: msg.tone === "ok" ? "var(--up-500)" : "var(--down-500)" }}>
+          {msg.text}
+        </div>
+      )}
+      {!isAdmin && (
+        <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-hint)" }}>
+          Read-only. Admin role required to edit overlays.
+        </div>
+      )}
+    </div>
+  );
+}
 
 function PBHeader({ s, onBack, onNav }) {
   return (
@@ -11738,6 +13775,158 @@ const AdminPage = ({ tweaks, onNav }) => {
   const adminKeys = Array.isArray(live.adminKeys) ? live.adminKeys : [];
   const layoutSections = Array.isArray(live.adminLayout?.dashboard_sections) ? live.adminLayout.dashboard_sections : [];
   const deploy = live.adminLastDeploy || null;
+  // 2026-05-11 (round 5i): per-agent control surface (Plan B.2).
+  // GET is auth-only; PATCH is admin-only. We render the list for
+  // everyone so the operator can see archetype health, and gate the
+  // pause/cap edit buttons on admin role.
+  const currentUser = useCurrentUser();
+  const userRole = currentUser.data?.role || "";
+  const isAdmin = userRole === "admin" || userRole === "operator";
+  const [agentControls, setAgentControls] = useState<Awaited<ReturnType<typeof getAgentControls>>>([]);
+  const [agentControlBusy, setAgentControlBusy] = useState<number | null>(null);
+  const [agentControlErr, setAgentControlErr] = useState<string | null>(null);
+
+  // 2026-05-11 (round 6): emergency trading controls. Three POSTs:
+  //   /trades/halt          — sets the halt flag + cancels open orders.
+  //                            Optional flatten=true closes positions too.
+  //   /trades/flatten_all   — close every position at market, leave
+  //                            trading enabled. For end-of-day de-risk.
+  //   /trades/resume        — clears the halt flag.
+  // All three are admin-only and audit-logged.
+  const [haltState, setHaltState] = useState<Awaited<ReturnType<typeof getHaltStatus>> | null>(null);
+  const [haltBusy, setHaltBusy] = useState<"halt" | "flatten" | "resume" | null>(null);
+  const [haltMsg, setHaltMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getHaltStatus();
+        if (!cancelled) setHaltState(res);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const refreshHalt = async () => {
+    try {
+      const res = await getHaltStatus();
+      setHaltState(res);
+    } catch { /* ignore */ }
+  };
+  const handleHalt = async () => {
+    if (!isAdmin || haltBusy) return;
+    const reason = window.prompt(
+      "HALT TRADING — cancels every open order and blocks new orders. " +
+      "Optionally flatten all positions too (you'll be asked next).\n\nReason for halt:",
+      "",
+    );
+    if (!reason || !reason.trim()) return;
+    const flatten = window.confirm(
+      "Also FLATTEN all open positions at market?\n\n" +
+      "OK = halt + flatten (close every position)\n" +
+      "Cancel = halt only (keep positions; cancel open orders)",
+    );
+    setHaltBusy("halt");
+    setHaltMsg(null);
+    try {
+      const res = await haltTrading({ flatten, reason: reason.trim() });
+      setHaltMsg({
+        tone: "ok",
+        text: res.flatten_queued_for_next_open
+          ? "Halted. Flatten queued for next market open."
+          : res.flatten_indeterminate
+          ? "Halted. Flatten partial — broker state indeterminate."
+          : flatten
+          ? "Halted + flattened."
+          : "Halted (positions kept).",
+      });
+      await refreshHalt();
+    } catch (e) {
+      setHaltMsg({ tone: "err", text: e instanceof Error ? e.message : "Halt failed." });
+    } finally {
+      setHaltBusy(null);
+    }
+  };
+  const handleFlatten = async () => {
+    if (!isAdmin || haltBusy) return;
+    if (!window.confirm("FLATTEN ALL POSITIONS — close every open position at market without halting trading. Final and admin-only. Confirm?")) return;
+    setHaltBusy("flatten");
+    setHaltMsg(null);
+    try {
+      const res = await flattenAllPositions();
+      setHaltMsg({
+        tone: "ok",
+        text: `${res.summary.flatten_successes}/${res.summary.flatten_attempts} positions closed.`,
+      });
+    } catch (e) {
+      setHaltMsg({ tone: "err", text: e instanceof Error ? e.message : "Flatten failed." });
+    } finally {
+      setHaltBusy(null);
+    }
+  };
+  const handleResume = async () => {
+    if (!isAdmin || haltBusy) return;
+    if (!window.confirm("RESUME TRADING — clear the halt flag and allow new orders. Confirm?")) return;
+    setHaltBusy("resume");
+    setHaltMsg(null);
+    try {
+      const res = await resumeTrading();
+      setHaltMsg({ tone: "ok", text: res.message || "Trading resumed." });
+      await refreshHalt();
+    } catch (e) {
+      setHaltMsg({ tone: "err", text: e instanceof Error ? e.message : "Resume failed." });
+    } finally {
+      setHaltBusy(null);
+    }
+  };
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await getAgentControls();
+        if (!cancelled) setAgentControls(Array.isArray(rows) ? rows : []);
+      } catch (e) {
+        if (!cancelled) setAgentControlErr(e instanceof Error ? e.message : "Agent controls fetch failed.");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const toggleAgentPaused = async (control: typeof agentControls[number]) => {
+    if (!isAdmin || agentControlBusy === control.id) return;
+    setAgentControlBusy(control.id);
+    setAgentControlErr(null);
+    try {
+      const next = await patchAgentControl(control.id, { is_paused: !control.is_paused });
+      setAgentControls((cur) => cur.map((r) => (r.id === control.id ? next : r)));
+    } catch (e) {
+      setAgentControlErr(e instanceof Error ? e.message : "Pause toggle failed.");
+    } finally {
+      setAgentControlBusy(null);
+    }
+  };
+  const updateAgentCap = async (control: typeof agentControls[number]) => {
+    if (!isAdmin || agentControlBusy === control.id) return;
+    const current = control.daily_spend_cap_usd != null ? String(control.daily_spend_cap_usd) : "";
+    const next = window.prompt(
+      `Daily spend cap for ${control.archetype} (USD). Empty = no cap.`,
+      current,
+    );
+    if (next === null) return;
+    const parsed = next.trim() === "" ? 0 : Number.parseFloat(next.trim());
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      window.alert("Cap must be a non-negative number.");
+      return;
+    }
+    setAgentControlBusy(control.id);
+    setAgentControlErr(null);
+    try {
+      const updated = await patchAgentControl(control.id, { daily_spend_cap_usd: parsed });
+      setAgentControls((cur) => cur.map((r) => (r.id === control.id ? updated : r)));
+    } catch (e) {
+      setAgentControlErr(e instanceof Error ? e.message : "Cap update failed.");
+    } finally {
+      setAgentControlBusy(null);
+    }
+  };
   const modules = [
     { name: "API proxy", value: live.error ? "error" : "online", tone: live.error ? "down" : "up", caption: live.error || "Frontend API calls authenticated and responding." },
     { name: "Portfolio", value: live.portfolio ? "connected" : "empty", tone: live.portfolio ? "up" : "warn", caption: live.portfolio?.source ? `source ${live.portfolio.source}` : "No portfolio payload returned." },
@@ -11777,6 +13966,117 @@ const AdminPage = ({ tweaks, onNav }) => {
         ))}
       </div>
 
+      {/* 2026-05-11 (round 6): Emergency trading controls. Halt /
+       * flatten / resume — admin-only writes. Each gated on
+       * window.prompt (halt) or window.confirm (flatten + resume).
+       * State pill mirrors /halt-status so any admin landing on this
+       * page sees whether trading is allowed right now. */}
+      <div style={{ marginBottom: 18, padding: "18px 22px", border: `1px solid ${haltState?.halted ? "var(--down-500)" : "var(--border)"}`, background: haltState?.halted ? "rgba(224,120,86,0.06)" : "var(--ink-100)", borderRadius: 4 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 18 }}>
+          <div>
+            <div className="t-eyebrow-italic" style={{ color: haltState?.halted ? "var(--down-500)" : "var(--brand)", letterSpacing: "0.2em" }}>
+              EMERGENCY · TRADING CONTROLS
+            </div>
+            <h2 style={{ margin: "2px 0 4px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>
+              {haltState
+                ? haltState.halted
+                  ? `Trading halted${haltState.halted_by ? ` by ${haltState.halted_by}` : ""}`
+                  : "Trading enabled"
+                : "Loading halt status…"}
+            </h2>
+            {haltState?.halted && haltState.reason && (
+              <div style={{ marginTop: 2, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--down-500)" }}>
+                Reason: {haltState.reason}
+              </div>
+            )}
+            {haltState?.halted_at && (
+              <div style={{ marginTop: 2, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+                halted at {formatLiveDate(haltState.halted_at)}
+              </div>
+            )}
+            {!haltState?.halted && (
+              <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: "var(--fg-muted)", maxWidth: 600 }}>
+                Halt cancels every open order. Flatten closes positions without halting trading. Both are audit-logged and admin-only.
+              </div>
+            )}
+          </div>
+          {isAdmin && haltState && (
+            <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+              {!haltState.halted ? (
+                <>
+                  <button
+                    onClick={handleHalt}
+                    disabled={!!haltBusy}
+                    style={{
+                      padding: "6px 14px",
+                      background: "rgba(224,120,86,0.10)",
+                      color: "var(--down-500)",
+                      border: "1px solid var(--down-500)",
+                      borderRadius: 3,
+                      fontFamily: "var(--font-ui)",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      letterSpacing: "0.04em",
+                      cursor: haltBusy ? "wait" : "pointer",
+                      opacity: haltBusy ? 0.5 : 1,
+                    }}
+                  >
+                    {haltBusy === "halt" ? "Halting…" : "HALT TRADING"}
+                  </button>
+                  <button
+                    onClick={handleFlatten}
+                    disabled={!!haltBusy}
+                    style={{
+                      padding: "6px 14px",
+                      background: "var(--bg-elev-1)",
+                      color: "var(--ink-1000)",
+                      border: "1px solid var(--border-strong)",
+                      borderRadius: 3,
+                      fontFamily: "var(--font-ui)",
+                      fontSize: 12,
+                      cursor: haltBusy ? "wait" : "pointer",
+                      opacity: haltBusy ? 0.5 : 1,
+                    }}
+                  >
+                    {haltBusy === "flatten" ? "Flattening…" : "Flatten all"}
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={handleResume}
+                  disabled={!!haltBusy}
+                  style={{
+                    padding: "6px 14px",
+                    background: "var(--brand)",
+                    color: "var(--brand-on)",
+                    border: "1px solid var(--brand)",
+                    borderRadius: 3,
+                    fontFamily: "var(--font-ui)",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    letterSpacing: "0.04em",
+                    cursor: haltBusy ? "wait" : "pointer",
+                    opacity: haltBusy ? 0.5 : 1,
+                  }}
+                >
+                  {haltBusy === "resume" ? "Resuming…" : "RESUME TRADING"}
+                </button>
+              )}
+            </div>
+          )}
+          {!isAdmin && haltState && (
+            <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-hint)", flexShrink: 0 }}>
+              admin-only controls
+            </span>
+          )}
+        </div>
+        {haltMsg && (
+          <div style={{ marginTop: 10, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: haltMsg.tone === "ok" ? "var(--up-500)" : "var(--down-500)" }}>
+            {haltMsg.text}
+          </div>
+        )}
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 18 }}>
         <AdminSection eyebrow="ADMIN · LIVE FEEDS" title="Backend endpoints" sub="The control center reflects mounted APIs instead of a mock architecture graph.">
           <div style={{ display: "grid", gap: 10 }}>
@@ -11813,6 +14113,102 @@ const AdminPage = ({ tweaks, onNav }) => {
           </div>
         </AdminSection>
       </div>
+
+      {/* 2026-05-11 (round 5i): per-agent control surface (Plan B.2).
+       * Four archetypes: research / signal / risk / exec. Each row
+       * has a pause flag and an optional daily-spend cap. Admin can
+       * toggle pause and edit the cap; non-admin sees read-only
+       * status. Section hidden when the endpoint returns no rows
+       * (backend not yet seeded). */}
+      {agentControls.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <AdminSection
+            eyebrow="ADMIN · AGENT CONTROL"
+            title="Per-archetype pause + spend cap"
+            sub="Four AI archetypes route the desk: research / signal / risk / exec. Each can be paused independently and capped on daily Anthropic spend."
+          >
+            {agentControlErr && (
+              <div style={{ padding: "8px 12px", marginBottom: 10, background: "rgba(224,120,86,0.08)", border: "1px solid var(--down-500)", borderRadius: 3, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--down-500)" }}>
+                {agentControlErr}
+              </div>
+            )}
+            <div style={{ display: "grid", gap: 6 }}>
+              {agentControls.map((a) => {
+                const busy = agentControlBusy === a.id;
+                return (
+                  <div key={a.id} style={{ display: "grid", gridTemplateColumns: "120px 1fr 110px 110px 200px", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "center" }}>
+                    <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 16, color: "var(--ink-1000)", letterSpacing: "-0.01em" }}>
+                      {a.archetype.charAt(0).toUpperCase() + a.archetype.slice(1)}
+                    </span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+                      {a.model || "*"} · {a.provider || "*"}
+                      {a.reason && <span style={{ marginLeft: 8, fontStyle: "italic", fontFamily: "var(--font-display)", color: "var(--fg-hint)" }}>"{a.reason}"</span>}
+                    </span>
+                    <span
+                      style={{
+                        padding: "3px 8px",
+                        border: `1px solid ${a.is_paused ? "var(--down-500)" : "var(--up-500)"}`,
+                        color: a.is_paused ? "var(--down-500)" : "var(--up-500)",
+                        borderRadius: 999,
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 10,
+                        letterSpacing: "0.06em",
+                        fontWeight: 600,
+                        textAlign: "center",
+                      }}
+                    >
+                      {a.is_paused ? "PAUSED" : "RUNNING"}
+                    </span>
+                    <span className="t-mono" style={{ fontSize: 11.5, color: "var(--fg)", textAlign: "right" }}>
+                      cap {a.daily_spend_cap_usd != null ? `$${a.daily_spend_cap_usd.toFixed(2)}/d` : "—"}
+                    </span>
+                    {isAdmin ? (
+                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                        <button
+                          onClick={() => toggleAgentPaused(a)}
+                          disabled={busy}
+                          style={{
+                            padding: "3px 10px",
+                            background: a.is_paused ? "var(--brand)" : "rgba(224,120,86,0.08)",
+                            color: a.is_paused ? "var(--brand-on)" : "var(--down-500)",
+                            border: `1px solid ${a.is_paused ? "var(--brand)" : "var(--down-500)"}`,
+                            borderRadius: 3,
+                            fontFamily: "var(--font-ui)",
+                            fontSize: 10.5,
+                            cursor: busy ? "wait" : "pointer",
+                            opacity: busy ? 0.5 : 1,
+                          }}
+                        >
+                          {a.is_paused ? "Resume" : "Pause…"}
+                        </button>
+                        <button
+                          onClick={() => updateAgentCap(a)}
+                          disabled={busy}
+                          style={{
+                            padding: "3px 10px",
+                            background: "var(--bg-elev-1)",
+                            color: "var(--ink-1000)",
+                            border: "1px solid var(--border-strong)",
+                            borderRadius: 3,
+                            fontFamily: "var(--font-ui)",
+                            fontSize: 10.5,
+                            cursor: busy ? "wait" : "pointer",
+                            opacity: busy ? 0.5 : 1,
+                          }}
+                        >
+                          Cap
+                        </button>
+                      </div>
+                    ) : (
+                      <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-hint)", textAlign: "right" }}>read-only</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </AdminSection>
+        </div>
+      )}
     </div>
   );
 };
