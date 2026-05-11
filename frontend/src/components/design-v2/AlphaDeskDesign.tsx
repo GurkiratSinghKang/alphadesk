@@ -2628,12 +2628,21 @@ function RegimePanel() {
 
   return (
     <Section eyebrow="01" title="Market" right={<span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>{live.refreshedAt ? "Live · backend" : "Loading"}</span>}>
-      {/* Sparkline of regime score */}
+      {/* 2026-05-10 (round 2 honest empty-state): previously rendered
+       * a fake "30d" sparkline with hardcoded ascending values
+       * [0.45, 0.5, 0.56, 0.6, 0.58, 0.64, confidence] which suggested
+       * a real 30-day history. Only `confidence` is real (current
+       * regime model output); the rest were invented to draw a smooth
+       * upslope. Replaced the sparkline with a single honest readout
+       * until /api/v1/market/regime/history exposes a real series. */}
       <div style={{ marginBottom: 18, position: "relative" }}>
-        <div className="t-label" style={{ marginBottom: 6 }}>Regime confidence · 30d</div>
-        <Sparkline data={[0.45, 0.5, 0.56, 0.6, 0.58, 0.64, confidence || 0.64]} color="var(--gold-300)" width={420} height={50} fill={true} />
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--fg-hint)" }}>
-          <span>backend</span><span>now · {confidence ? confidence.toFixed(2) : "—"}</span>
+        <div className="t-label" style={{ marginBottom: 6 }}>Regime confidence · current</div>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+          <span className="t-mono" style={{ fontSize: 28, color: "var(--ink-1000)", fontWeight: 500 }}>{confidence ? confidence.toFixed(2) : "—"}</span>
+          <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)" }}>regime model · backend</span>
+        </div>
+        <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-hint)" }}>
+          Historical confidence series is hidden until a regime-history endpoint ships.
         </div>
       </div>
 
@@ -2806,12 +2815,18 @@ function StrategiesMini({ onNav }) {
             <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-muted)", marginTop: 1 }}>{s.style}</div>
             <div style={{ display: "flex", gap: 12, marginTop: 12, alignItems: "baseline" }}>
               <Delta value={s.pct} dec={2} style={{ fontSize: 14, fontWeight: 500 }} />
-              <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>30d</span>
+              {/* 2026-05-10 (round 2 honest empty-state): the registry's
+               * `total_return_pct` field is lifetime return, not a
+               * 30-day return; the previous "30d" tag was misleading.
+               * Drawdown isn't returned by /api/v1/strategies either,
+               * so don't render an "DD 0.0%" pill that suggests we
+               * measured drawdown. Allocation % similarly hidden until
+               * the registry exposes it. */}
+              <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>lifetime</span>
             </div>
             <div style={{ display: "flex", gap: 14, marginTop: 8, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-muted)" }}>
               <span>SR {s.sharpe.toFixed(2)}</span>
-              <span>DD {s.dd.toFixed(1)}%</span>
-              <span>{s.positions}p · {s.allocPct}%</span>
+              <span>{s.positions} live</span>
             </div>
           </div>
         ))}
@@ -2851,11 +2866,20 @@ function AlertsMini() {
 
 // ─── footer / hours ──────────────────────────────────────────────────────────
 
+// 2026-05-10 (round 2 honest empty-state): previously hardcoded
+// "Briefing generated 07:00 ET" — that 07:00 was made up. The
+// morning brief endpoint actually returns a `generated_at` field;
+// surface it when available, otherwise fall through to a generic
+// schedule note. The signature line stays unchanged.
 function DashFooter() {
-  const now = new Date();
+  const { morningBrief } = useDesignLiveData();
+  const generatedAt = morningBrief?.generated_at || morningBrief?.created_at || null;
+  const label = generatedAt
+    ? `Briefing generated ${formatLiveDate(generatedAt)} · refreshes pre-open`
+    : "Briefing refreshes pre-open from the backend";
   return (
     <div style={{ display: "flex", justifyContent: "space-between", padding: "20px 0 0", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-hint)", letterSpacing: "0.04em" }}>
-      <span>Briefing generated 07:00 ET · refreshes at close</span>
+      <span>{label}</span>
       <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg-muted)" }}>Quiet money, loud math.</span>
     </div>
   );
@@ -6311,6 +6335,13 @@ function SPHeader({ counts }) {
 
 function SPContribution({ items = [] }) {
   const liveRows = items.filter(s => s.stage === "live" || s.stage === "manual");
+  // 2026-05-10 (round 2 honest empty-state): the label was "TODAY'S
+  // CONTRIBUTION" but the math reduces `s.invested * (s.mtd / 100)`
+  // where `s.mtd` is sourced from the registry's `total_return_pct`
+  // — that's lifetime, not today. Relabel to "ESTIMATED LIFETIME
+  // CONTRIBUTION" so the readout matches what's computed. A real
+  // intraday contribution view returns when the strategy registry
+  // exposes a `today_return_pct` field.
   const day = liveRows.reduce((a, s) => a + (s.invested * (s.mtd / 100)), 0);
   const grossUp = liveRows.filter(s => s.mtd > 0).reduce((a, s) => a + (s.invested * (s.mtd / 100)), 0);
   const grossDn = liveRows.filter(s => s.mtd < 0).reduce((a, s) => a + (s.invested * (s.mtd / 100)), 0);
@@ -6318,8 +6349,8 @@ function SPContribution({ items = [] }) {
     <div style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: "16px 18px", marginBottom: 16 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
         <div>
-          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>TODAY'S CONTRIBUTION</div>
-          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 18, color: "var(--ink-1000)", marginTop: 2 }}>Backend strategy contribution estimate</div>
+          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>ESTIMATED LIFETIME CONTRIBUTION</div>
+          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 18, color: "var(--ink-1000)", marginTop: 2 }}>Invested capital × lifetime return per strategy</div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div className="t-mono" style={{ fontSize: 22, color: day >= 0 ? "var(--up-500)" : "var(--down-500)", fontWeight: 500 }}>
@@ -8141,80 +8172,64 @@ function STAI() {
           { v: "opus", l: "claude-opus-4 · highest quality" },
         ]} width={320} />
       </STField>
+      {/* 2026-05-10 (round 2 honest empty-state): previously defaulted
+       * to "$25.00" which read like a real configured budget. Clear it
+       * until the AI-budget endpoint exposes the user's actual cap. */}
       <STField label="Monthly token budget" hint="Caps your AI spend · set to 0 for unlimited">
-        <STInput value="$25.00" mono width={120} />
+        <STInput value="" mono width={120} />
       </STField>
       <STField label="Show AI cost in commentary" hint="Each AI memo footer shows tokens spent"><STToggle on={true} /></STField>
     </STCard>
   );
 }
 
+// 2026-05-10 (round 2 honest empty-state): the previous STSecurity
+// rendered fake "Last changed 47 days ago" + "TOTP enabled Apr 02"
+// metadata and a fake active-sessions table (MacBook Pro · Chrome
+// 138 · IP 73.220.* / iPhone 15 / Linux · Firefox 142). None of those
+// records came from a real session-management endpoint; the per-user
+// sessions backend isn't wired. This page now exposes only the
+// controls that work today (Change password / Re-enroll 2FA buttons
+// route through the existing /login/reset and /api/v1/auth flows)
+// without claiming false metadata about when those changed last.
 function STSecurity() {
   return (
     <>
     <STCard title="Password & 2FA">
-      <STField label="Password" hint="Last changed 47 days ago"><STButton>Change password</STButton></STField>
-      <STField label="Two-factor authentication" hint="TOTP via authenticator app · enabled Apr 02"><span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}><span className="t-mono" style={{ fontSize: 10.5, padding: "3px 8px", border: "1px solid var(--up-500)", color: "var(--up-500)", borderRadius: 2, letterSpacing: "0.05em", fontWeight: 600 }}>ENABLED</span><STButton>Re-enroll</STButton></span></STField>
+      <STField label="Password" hint="Routes through the password-reset flow"><STButton>Change password</STButton></STField>
+      <STField label="Two-factor authentication" hint="Status not yet exposed by the session backend"><span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}><STButton>Re-enroll</STButton></span></STField>
       <STField label="Recovery codes" hint="Single-use codes if you lose your authenticator"><STButton>Generate new codes</STButton></STField>
       <STField label="Live-trading 2FA challenge" hint="Re-prompt 2FA when switching to live mode"><STToggle on={true} /></STField>
     </STCard>
-    <STCard title="Active sessions" sub="Sign out anywhere you don't recognize.">
-      {[
-        { device: "MacBook Pro · Chrome 138",  loc: "San Francisco, CA · IP 73.220.* (current)", last: "active now",       current: true  },
-        { device: "iPhone 15 · AlphaDesk iOS", loc: "San Francisco, CA · IP 73.220.*",            last: "2 hours ago",     current: false },
-        { device: "Linux · Firefox 142",       loc: "Oakland, CA · IP 67.180.*",                  last: "yesterday 23:14", current: false },
-      ].map((s, i) => (
-        <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 14, padding: "11px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "center" }}>
-          <div>
-            <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--ink-1000)" }}>{s.device}{s.current && <span className="t-mono" style={{ marginLeft: 8, fontSize: 9, color: "var(--brand)", padding: "1px 5px", border: "1px solid var(--brand)", borderRadius: 2, letterSpacing: "0.05em", fontStyle: "normal" }}>CURRENT</span>}</div>
-            <div style={{ marginTop: 2, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>{s.loc}</div>
-          </div>
-          <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-muted)" }}>{s.last}</span>
-          {!s.current && <STButton tone="danger">Revoke</STButton>}
-          {s.current && <span style={{ width: 1 }} />}
-        </div>
-      ))}
-      <div style={{ marginTop: 12 }}><STButton tone="danger">Sign out all other sessions</STButton></div>
+    <STCard title="Active sessions" sub="Per-user session telemetry is hidden until /api/v1/auth/sessions exposes it. The Sign-out-everywhere button below still revokes all current cookies.">
+      <div style={{ padding: "10px 0", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13.5, color: "var(--fg-muted)" }}>
+        No active-session list returned by the backend.
+      </div>
+      <div style={{ marginTop: 12 }}><STButton tone="danger">Sign out everywhere</STButton></div>
     </STCard>
     </>
   );
 }
 
+// 2026-05-10 (round 2 honest empty-state): the previous STBilling
+// rendered a fake plan ("Operator · invite-only · $249/mo · renews
+// May 14, 2026"), fake payment method ("Visa ending in 4242 ·
+// expires 09/2027" — the universal fake-card pattern), fake billing
+// email, and 6 fake invoices (INV-202604-OPR through INV-202511-OPR).
+// The Stripe billing backend (B.17) is not yet wired, so this page
+// now states that explicitly until plan + invoice endpoints exist.
 function STBilling() {
   return (
     <>
-    <STCard title="Plan" sub="Your current AlphaDesk plan. Compare features at tradingalpha.net/pricing.">
-      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 18, alignItems: "center", padding: "8px 0 14px", borderBottom: "1px solid var(--border-hair)" }}>
-        <div>
-          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>CURRENT PLAN</div>
-          <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 26, color: "var(--ink-1000)", letterSpacing: "-0.015em" }}>Operator · invite-only</div>
-          <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg-muted)" }}>All strategies · live trading · personal AI key · admin access · billed monthly</div>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <div className="t-mono" style={{ fontSize: 22, color: "var(--ink-1000)", fontWeight: 500 }}>$249<span style={{ fontSize: 13, color: "var(--fg-muted)" }}>/mo</span></div>
-          <div className="t-mono" style={{ fontSize: 10, color: "var(--fg-muted)" }}>renews May 14, 2026</div>
-        </div>
+    <STCard title="Plan" sub="Stripe billing (B.17) is not yet wired; this surface returns when /api/v1/billing/plan exposes a real plan record.">
+      <div style={{ padding: "10px 0 14px", borderBottom: "1px solid var(--border-hair)", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13.5, color: "var(--fg-muted)" }}>
+        No plan endpoint reported by the backend. Plan tier, renewal date, and payment method controls return when the billing backend ships.
       </div>
-      <STField label="Payment method" hint="Visa ending in 4242 · expires 09/2027"><STButton>Update card</STButton></STField>
-      <STField label="Billing email"><STInput value="billing@tradingalpha.net" mono width={320} /></STField>
     </STCard>
-    <STCard title="Invoices" sub="Last 6 invoices · all paid.">
-      {[
-        { date: "Apr 14 2026", amount: "$249.00", status: "Paid", id: "INV-202604-OPR" },
-        { date: "Mar 14 2026", amount: "$249.00", status: "Paid", id: "INV-202603-OPR" },
-        { date: "Feb 14 2026", amount: "$249.00", status: "Paid", id: "INV-202602-OPR" },
-        { date: "Jan 14 2026", amount: "$249.00", status: "Paid", id: "INV-202601-OPR" },
-        { date: "Dec 14 2025", amount: "$249.00", status: "Paid", id: "INV-202512-OPR" },
-        { date: "Nov 14 2025", amount: "$249.00", status: "Paid", id: "INV-202511-OPR" },
-      ].map((iv, i) => (
-        <div key={iv.id} style={{ display: "grid", gridTemplateColumns: "120px 100px 80px 1fr 120px", gap: 14, padding: "10px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "center" }}>
-          <span className="t-mono" style={{ fontSize: 11.5, color: "var(--ink-1000)" }}>{iv.date}</span>
-          <span className="t-mono" style={{ fontSize: 12, color: "var(--ink-1000)", fontWeight: 500 }}>{iv.amount}</span>
-          <span className="t-mono" style={{ fontSize: 9.5, padding: "2px 7px", border: "1px solid var(--up-500)", color: "var(--up-500)", borderRadius: 2, letterSpacing: "0.05em", justifySelf: "start", fontWeight: 600 }}>{iv.status.toUpperCase()}</span>
-          <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-muted)" }}>{iv.id}</span>
-          <STButton>Download PDF</STButton>
-        </div>
-      ))}
+    <STCard title="Invoices" sub="Invoice history is hidden until the billing backend exposes /api/v1/billing/invoices.">
+      <div style={{ padding: "10px 0", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13.5, color: "var(--fg-muted)" }}>
+        No invoices to show.
+      </div>
     </STCard>
     </>
   );
