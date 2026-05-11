@@ -8563,8 +8563,8 @@ function WLPulse({ allSymbols }) {
     const seen = new Set();
     return arr.filter(s => seen.has(s.sym) ? false : (seen.add(s.sym), true));
   };
-  const gainers = dedupe([...all].sort((a,b)=>b.pct-a.pct).slice(0, 5));
-  const losers  = dedupe([...all].sort((a,b)=>a.pct-b.pct).slice(0, 5));
+  const gainers = dedupe([...all].filter(s => typeof s.pct === "number" && s.pct > 0).sort((a,b)=>b.pct-a.pct).slice(0, 5));
+  const losers  = dedupe([...all].filter(s => typeof s.pct === "number" && s.pct < 0).sort((a,b)=>a.pct-b.pct).slice(0, 5));
   const signals = dedupe(all.filter(s => s.signal && s.signal !== "avoid")).slice(0, 5);
 
   return (
