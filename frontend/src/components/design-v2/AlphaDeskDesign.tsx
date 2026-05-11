@@ -124,6 +124,9 @@ import {
   // 20-day index sparklines + sector winners/losers strip.
   getIndexSparklines,
   getMarketSectors,
+  // 2026-05-11 (round 9): Analytics page slippage analytics —
+  // execution-quality metrics by strategy and structure-type.
+  getSlippageSummary,
 } from "@/lib/api";
 import type {
   NotificationPrefType,
@@ -6752,6 +6755,12 @@ const AnalyticsPage = () => {
   // /api/v1/strategies/contribution — today / MTD / lifetime buckets
   // with invested + closed-trade counts.
   const [contribution, setContribution] = useState<Awaited<ReturnType<typeof getStrategyContribution>> | null>(null);
+  // 2026-05-11 (round 9): execution-quality / slippage analytics
+  // from /api/v1/analytics/slippage — total trades, avg/median/p90
+  // slippage %, dollars leaked, by-strategy + by-structure-type +
+  // fill-mode-comparison breakdowns. Surfaces how much money is
+  // being left on the table by suboptimal fills.
+  const [slippage, setSlippage] = useState<Awaited<ReturnType<typeof getSlippageSummary>> | null>(null);
   const [perfErr, setPerfErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -6762,6 +6771,7 @@ const AnalyticsPage = () => {
         getPortfolioCalendar(),
         getPortfolioJournal({ limit: 12 }),
         getStrategyContribution(),
+        getSlippageSummary(),
       ]);
       if (cancelled) return;
       if (results[0].status === "fulfilled") setPerf(results[0].value);
@@ -6769,6 +6779,7 @@ const AnalyticsPage = () => {
       if (results[1].status === "fulfilled") setCalendar(results[1].value);
       if (results[2].status === "fulfilled") setJournal(results[2].value);
       if (results[3].status === "fulfilled") setContribution(results[3].value);
+      if (results[4].status === "fulfilled") setSlippage(results[4].value);
     })();
     return () => { cancelled = true; };
   }, [period]);
@@ -7067,6 +7078,90 @@ const AnalyticsPage = () => {
           </div>
         );
       })()}
+
+      {/* 2026-05-11 (round 9): slippage analytics from
+       * /api/v1/analytics/slippage. Renders an honest "how much
+       * money are bad fills costing us" view. Hidden when the
+       * endpoint returns no trades (the analytics service emits
+       * total_trades=0 when no fills exist in the period). */}
+      {slippage && slippage.total_trades > 0 && (
+        <div style={{ marginBottom: 22, padding: 22, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+            <div>
+              <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>EXECUTION QUALITY · SLIPPAGE</div>
+              <h2 style={{ margin: "2px 0 4px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>
+                {slippage.total_trades.toLocaleString()} fill{slippage.total_trades === 1 ? "" : "s"} analyzed
+              </h2>
+              <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: "var(--fg-muted)" }}>
+                Slippage = (fill_price − target) / target. Lower is better.
+              </div>
+            </div>
+            {slippage.trades_without_target > 0 && (
+              <div style={{ padding: "4px 10px", border: "1px solid var(--gold-500)", borderRadius: 999, fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--gold-500)", letterSpacing: "0.04em" }}>
+                {slippage.trades_without_target} without target
+              </div>
+            )}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1, background: "var(--border)", border: "1px solid var(--border)", borderRadius: 3, marginBottom: 12 }}>
+            {[
+              { label: "AVG SLIPPAGE", val: slippage.avg_slippage_pct == null ? "—" : `${(slippage.avg_slippage_pct * 100).toFixed(3)}%` },
+              { label: "MEDIAN", val: slippage.median_slippage_pct == null ? "—" : `${(slippage.median_slippage_pct * 100).toFixed(3)}%` },
+              { label: "P90", val: slippage.p90_slippage_pct == null ? "—" : `${(slippage.p90_slippage_pct * 100).toFixed(3)}%`, tone: "warn" },
+              { label: "$ LEAKED", val: fmtMoney(slippage.total_dollars_leaked, { sign: true, dec: 0 }), tone: slippage.total_dollars_leaked < 0 ? "down" : "neutral" },
+            ].map((m, i) => (
+              <div key={i} style={{ padding: "12px 14px", background: "var(--bg)" }}>
+                <div className="t-label" style={{ color: "var(--fg-hint)" }}>{m.label}</div>
+                <div className="t-mono" style={{ marginTop: 4, fontSize: 16, color: m.tone === "down" ? "var(--down-500)" : m.tone === "warn" ? "var(--gold-300)" : "var(--ink-1000)", fontWeight: 500 }}>
+                  {m.val}
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* By strategy + by structure-type breakdowns — render as a
+           * 2-column grid. Each item shows top-3 by largest absolute
+           * slippage so the worst offenders surface first. */}
+          {(Object.keys(slippage.by_strategy).length > 0 || Object.keys(slippage.by_structure_type).length > 0) && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              {Object.keys(slippage.by_strategy).length > 0 && (
+                <div>
+                  <div className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)", letterSpacing: "0.08em", marginBottom: 4 }}>BY STRATEGY</div>
+                  {Object.entries(slippage.by_strategy)
+                    .filter(([, b]) => Number.isFinite(b?.avg_slippage_pct))
+                    .sort(([, a], [, b]) => Math.abs(b.avg_slippage_pct ?? 0) - Math.abs(a.avg_slippage_pct ?? 0))
+                    .slice(0, 5)
+                    .map(([name, b]: any) => (
+                      <div key={name} style={{ display: "grid", gridTemplateColumns: "1fr 60px 70px", gap: 8, padding: "4px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
+                        <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--ink-1000)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                        <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-muted)", textAlign: "right" }}>{b.count}</span>
+                        <span className="t-mono" style={{ fontSize: 11, color: (b.avg_slippage_pct ?? 0) < 0 ? "var(--down-500)" : "var(--up-500)", textAlign: "right" }}>
+                          {b.avg_slippage_pct == null ? "—" : `${(b.avg_slippage_pct * 100).toFixed(2)}%`}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
+              {Object.keys(slippage.by_structure_type).length > 0 && (
+                <div>
+                  <div className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)", letterSpacing: "0.08em", marginBottom: 4 }}>BY STRUCTURE TYPE</div>
+                  {Object.entries(slippage.by_structure_type)
+                    .filter(([, b]) => Number.isFinite(b?.avg_slippage_pct))
+                    .sort(([, a], [, b]) => Math.abs(b.avg_slippage_pct ?? 0) - Math.abs(a.avg_slippage_pct ?? 0))
+                    .slice(0, 5)
+                    .map(([name, b]: any) => (
+                      <div key={name} style={{ display: "grid", gridTemplateColumns: "1fr 60px 70px", gap: 8, padding: "4px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
+                        <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--ink-1000)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                        <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-muted)", textAlign: "right" }}>{b.count}</span>
+                        <span className="t-mono" style={{ fontSize: 11, color: (b.avg_slippage_pct ?? 0) < 0 ? "var(--down-500)" : "var(--up-500)", textAlign: "right" }}>
+                          {b.avg_slippage_pct == null ? "—" : `${(b.avg_slippage_pct * 100).toFixed(2)}%`}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Trade journal — last 12 entries from /portfolio/journal */}
       {journal.length > 0 && (
