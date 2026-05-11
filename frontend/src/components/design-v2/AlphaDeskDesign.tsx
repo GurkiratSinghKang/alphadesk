@@ -556,6 +556,10 @@ const __LAYOUT_GUARD_STYLE = `
       min-width: 0 !important;
     }
 
+    [data-ad-main] [style*="flex-direction: column"] {
+      flex-wrap: nowrap !important;
+    }
+
     [data-ad-main] [style*="overflow: hidden"] {
       overflow: auto !important;
     }
