@@ -358,7 +358,18 @@ function AuthFormPane({
   footerLeft?: ReactNode;
   footerRight?: ReactNode;
 }) {
-  const useDesignFooter = footerLeft === undefined && footerRight === undefined;
+  // BUG-065 (audit 2026-05-11, F-SCOUT-93 / M1-02 / P8-02): the "DEMO · STATE
+  // PICKER" footer that ships the 7 auth-state chips (signin/magic-sent/twofa/
+  // recovery/pending/rejected/locked) is a build-time visual scaffolding tool,
+  // not a production affordance. It shipped to prod and rendered on
+  // tradingalpha.net/login — phishing primitive on our own cert. Gate it to
+  // non-production. NEXT_PUBLIC_SHOW_AUTH_STATE_PICKER=1 opts back in for
+  // intentional demo deploys.
+  const isProd = process.env.NODE_ENV === "production";
+  const allowDemoStatePicker =
+    !isProd || process.env.NEXT_PUBLIC_SHOW_AUTH_STATE_PICKER === "1";
+  const useDesignFooter =
+    footerLeft === undefined && footerRight === undefined && allowDemoStatePicker;
 
   return (
     <div className="order-1 flex min-h-[100dvh] flex-col overflow-visible lg:order-none lg:min-h-0 lg:overflow-auto" style={{ padding: "clamp(20px, 5vw, 32px) clamp(22px, 7vw, 60px)" }}>
