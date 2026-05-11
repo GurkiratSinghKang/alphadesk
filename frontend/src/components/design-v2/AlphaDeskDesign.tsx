@@ -85,6 +85,10 @@ import {
   getPortfolioPerformance,
   getPortfolioJournal,
   getPortfolioCalendar,
+  // 2026-05-11 (round 5f): Reports + Settings → Broker tab consume
+  // the real broker reconciliation surface (state + run).
+  getReconciliationState,
+  runBrokerReconciliation,
 } from "@/lib/api";
 import type {
   NotificationPrefType,
@@ -8177,7 +8181,33 @@ const ReportsPage = ({ tweaks, onNav }) => {
 
 // ─── header ──────────────────────────────────────────────────────────────
 
+// 2026-05-11 (round 5f backend wiring): the previous RPHeader rendered
+// a hardcoded "Reconciled with Alpaca · 09:14 today" badge — that
+// timestamp was static design copy, not a real reconciliation event.
+// The broker reconciliation backend exposes /api/v1/broker/
+// reconciliation/state with last_reconciled_at + open_issue_count +
+// primary_provider. Now consumed here so the operator sees the actual
+// last sync timestamp + a count of open issues that need review.
 function RPHeader() {
+  const [reconState, setReconState] = useState<Awaited<ReturnType<typeof getReconciliationState>> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getReconciliationState();
+        if (!cancelled) setReconState(res);
+      } catch {
+        // ignore — fall back to em-dash render
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const last = reconState?.last_reconciled_at ? formatLiveDate(reconState.last_reconciled_at) : null;
+  const provider = reconState?.primary_provider || null;
+  const isClean = !!reconState?.is_clean;
+  const issueCount = reconState?.open_issue_count ?? 0;
+
   return (
     <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 0 14px", borderBottom: "1px solid var(--border-hair)", marginBottom: 16 }}>
       <div>
@@ -8190,8 +8220,18 @@ function RPHeader() {
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
-        <StatusDot tone="up" size={6} />
-        <span>Reconciled with Alpaca · 09:14 today</span>
+        <StatusDot tone={isClean ? "up" : issueCount > 0 ? "down" : "neutral"} size={6} />
+        {reconState ? (
+          <span>
+            {provider ? `Reconciled with ${provider}` : "Reconciliation"}
+            {last ? ` · ${last}` : " · no data"}
+            {issueCount > 0 && (
+              <span style={{ marginLeft: 8, color: "var(--down-500)", fontWeight: 600 }}>· {issueCount} open issue{issueCount === 1 ? "" : "s"}</span>
+            )}
+          </span>
+        ) : (
+          <span>Reconciliation state · loading</span>
+        )}
         <span style={{ marginLeft: 10, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 3, color: "var(--ink-1000)", background: "var(--bg-elev-1)" }}>Export bundle</span>
       </div>
     </header>
@@ -8780,9 +8820,50 @@ function STBroker() {
   // hardcodes account number, linkage date, or "last reconciled 09:14
   // today". Reads the actual portfolio source from the live API and
   // falls through to a clear "No broker linked" state if none is set.
+  // 2026-05-11 (round 5f backend wiring): "Reconcile positions now"
+  // button now hits the actual broker reconciliation endpoint. Open
+  // issues count surfaces inline so the operator can drill in.
   const live = useDesignLiveData();
   const liveSource = String(live.portfolio?.source || "").toLowerCase();
   const active = BROKERS.find((b) => b.id === liveSource) || null;
+  const [reconState, setReconState] = useState<Awaited<ReturnType<typeof getReconciliationState>> | null>(null);
+  const [reconRunning, setReconRunning] = useState(false);
+  const [reconStatus, setReconStatus] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getReconciliationState();
+        if (!cancelled) setReconState(res);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleReconcileNow = async () => {
+    setReconRunning(true);
+    setReconStatus(null);
+    try {
+      const counts = await runBrokerReconciliation();
+      const flagged = (counts.backfilled || 0) + (counts.orphaned || 0);
+      setReconStatus({
+        tone: flagged === 0 ? "ok" : "err",
+        text: flagged === 0
+          ? `Clean — ${counts.matched} matched, no orphans or backfills.`
+          : `${counts.matched} matched · ${counts.backfilled} backfilled · ${counts.orphaned} orphaned. Review open issues below.`,
+      });
+      try {
+        const fresh = await getReconciliationState();
+        setReconState(fresh);
+      } catch { /* ignore */ }
+    } catch (e) {
+      setReconStatus({ tone: "err", text: e instanceof Error ? e.message : "Reconcile failed." });
+    } finally {
+      setReconRunning(false);
+    }
+  };
+
   return (
     <>
     <STCard title="Active broker" sub="Order execution and account data flow through this broker. Each strategy can override per-playbook in the strategy book.">
@@ -8808,6 +8889,42 @@ function STBroker() {
           No broker connection reported by the live portfolio endpoint. Per-user broker linkage is hidden until the backend exposes it.
         </div>
       )}
+      <STField label="Reconciliation" hint="Compares your broker's open positions against AlphaDesk's book and flags discrepancies for review.">
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button
+              onClick={handleReconcileNow}
+              disabled={reconRunning}
+              style={{
+                padding: "6px 14px",
+                background: "var(--brand)",
+                color: "var(--brand-on)",
+                border: "1px solid var(--brand)",
+                borderRadius: 3,
+                fontFamily: "var(--font-ui)",
+                fontSize: 12,
+                cursor: reconRunning ? "wait" : "pointer",
+                opacity: reconRunning ? 0.6 : 1,
+              }}
+            >
+              {reconRunning ? "Reconciling…" : "Reconcile positions now"}
+            </button>
+            {reconState && (
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+                {reconState.last_reconciled_at ? `last · ${formatLiveDate(reconState.last_reconciled_at)}` : "never reconciled"}
+                {reconState.open_issue_count > 0 && (
+                  <span style={{ marginLeft: 8, color: "var(--down-500)", fontWeight: 600 }}>· {reconState.open_issue_count} open</span>
+                )}
+              </span>
+            )}
+          </div>
+          {reconStatus && (
+            <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: reconStatus.tone === "ok" ? "var(--up-500)" : "var(--down-500)" }}>
+              {reconStatus.text}
+            </div>
+          )}
+        </div>
+      </STField>
       <STField label="Daily live-mode approval" hint="Re-confirm live trading once per day with 2FA · applies to all brokers"><STToggle on={true} /></STField>
       <STField label="Test default broker"><STButton>Run paper · then live test</STButton></STField>
     </STCard>
