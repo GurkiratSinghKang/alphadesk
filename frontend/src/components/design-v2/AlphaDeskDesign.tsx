@@ -7261,7 +7261,7 @@ const AnalyticsPage = () => {
           { label: "SHARPE", val: perf?.sharpe_ratio == null ? "—" : perf.sharpe_ratio.toFixed(2), tone: null },
           { label: "SORTINO", val: perf?.sortino_ratio == null ? "—" : perf.sortino_ratio.toFixed(2), tone: null },
           { label: "MAX DD", val: perf?.max_drawdown == null ? "—" : `${(perf.max_drawdown * 100).toFixed(1)}%`, tone: "down" },
-          { label: "WIN RATE", val: perf?.win_rate == null ? "—" : `${(perf.win_rate * 100).toFixed(0)}%`, tone: null },
+          { label: "WIN RATE", val: perf?.win_rate == null || perf.win_rate < 0 ? "—" : `${(perf.win_rate * 100).toFixed(0)}%`, tone: null },
           { label: "TRADES", val: perf ? String(perf.total_trades) : "—", tone: null },
         ].map((m, i) => (
           <div key={i} style={{ padding: "14px 16px", background: "var(--ink-100)", borderRadius: 4 }}>
@@ -9001,7 +9001,7 @@ const ReportsPage = ({ tweaks, onNav }) => {
               </div>
               <div>
                 <div style={{ color: "var(--fg-hint)", fontSize: 9, letterSpacing: "0.18em" }}>WIN RATE</div>
-                <div style={{ color: "var(--ink-1000)", marginTop: 2 }}>{winRate == null ? "—" : `${(winRate * 100).toFixed(0)}%`}</div>
+                <div style={{ color: "var(--ink-1000)", marginTop: 2 }}>{winRate == null || winRate < 0 ? "—" : `${(winRate * 100).toFixed(0)}%`}</div>
               </div>
             </div>
           </div>
@@ -12866,7 +12866,7 @@ const StrategyPlaybook = ({ tweaks, stratName = "Momentum & Quality", onNav, onB
             { label: "TOTAL RETURN", val: totalReturnPct == null ? "—" : `${totalReturnPct >= 0 ? "+" : ""}${totalReturnPct.toFixed(2)}%`, sub: annualizedReturnPct == null ? "lifetime" : `ann ${annualizedReturnPct >= 0 ? "+" : ""}${annualizedReturnPct.toFixed(1)}%`, tone: totalReturnPct == null ? "neutral" : totalReturnPct >= 0 ? "up" : "down" },
             { label: "SHARPE", val: sharpe == null ? "—" : sharpe.toFixed(2), sub: "risk-adjusted" },
             { label: "MAX DRAWDOWN", val: maxDrawdown == null ? "—" : `${maxDrawdown.toFixed(2)}%`, sub: "underwater peak", tone: "down" },
-            { label: "WIN RATE", val: winRate == null ? "—" : `${(winRate * (Math.abs(winRate) <= 1 ? 100 : 1)).toFixed(1)}%`, sub: profitFactor == null ? "of closed trades" : `PF ${profitFactor.toFixed(2)}` },
+            { label: "WIN RATE", val: winRate == null || winRate < 0 ? "—" : `${(winRate * (Math.abs(winRate) <= 1 ? 100 : 1)).toFixed(1)}%`, sub: winRate != null && winRate < 0 ? "no closed trades" : profitFactor == null ? "of closed trades" : `PF ${profitFactor.toFixed(2)}` },
           ] : []),
         ].map((m, i) => (
           <div key={i} style={{ padding: "16px 18px", background: "var(--ink-100)", borderRadius: 4 }}>
