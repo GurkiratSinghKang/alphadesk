@@ -139,6 +139,21 @@
         # 2026-05-08: remove the broad ``https:`` script source. The app does
         # not load third-party scripts; keeping only self + inline bootstrap
         # preserves hydration while meaningfully shrinking the XSS blast radius.
+        #
+        # BUG-067 (audit 2026-05-11) — migration path: M-2 deploy reliability
+        # is now ✓ fixed in `.github/workflows/deploy.yml:480`. The strict-CSP
+        # enforcement code path is shipped in `frontend/src/middleware.ts`
+        # behind the env flag `NEXT_PUBLIC_CSP_ENFORCE_STRICT`. Default off →
+        # this Caddy header (with `'unsafe-inline'`) governs enforcement;
+        # middleware sets Report-Only for telemetry. Flag on → middleware
+        # sets enforced strict CSP with per-request nonce; this Caddy header
+        # serves as a redundant fallback (per CSP3 multi-header semantics,
+        # browsers enforce the intersection = strict wins). Once the team
+        # has validated strict mode in staging + smoke + ~1 week of Report-
+        # Only data, the flag flips in prod env. To complete the migration,
+        # delete THIS line (Caddy stops setting CSP, middleware owns it).
+        # See `.audit/2026-05-11/BUG-067-CSP-NONCE-PLAN.md` for the full
+        # rollout playbook.
         >Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss://{$DOMAIN:localhost}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests; report-uri /api/v1/security/csp-report"
         -Server
         -X-Powered-By
