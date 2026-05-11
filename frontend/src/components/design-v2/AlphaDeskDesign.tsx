@@ -131,6 +131,11 @@ import {
   // /api/v1/trades/history. Replaces the "realized P&L hidden"
   // placeholder with the real ledger.
   getTradeHistory,
+  // 2026-05-11 (round 11): Dashboard "Earnings ahead" strip pulls
+  // upcoming earnings from /api/v1/earnings/calendar so operators
+  // see pre-earnings IV runup + post-earnings drift candidates one
+  // glance away from the dashboard.
+  getEarningsCalendar,
 } from "@/lib/api";
 import type {
   NotificationPrefType,
@@ -2592,10 +2597,101 @@ const Dashboard = ({ tweaks, onNav, onPickTicker }) => {
         </div>
       </div>
 
+      {/* 2026-05-11 (round 11): upcoming earnings — top 6 reports
+       * within the default window from /api/v1/earnings/calendar.
+       * Compact strip below the orders row. Operators care about
+       * pre-earnings IV runup and post-earnings drift; surfacing the
+       * calendar at the front door keeps that signal one glance away
+       * instead of buried inside a dedicated screener. */}
+      <EarningsAheadStrip onPickTicker={onPickTicker} />
+
       <DashFooter />
     </div>
   );
 };
+
+function EarningsAheadStrip({ onPickTicker }: { onPickTicker?: (sym: string) => void }) {
+  const [rows, setRows] = useState<Awaited<ReturnType<typeof getEarningsCalendar>>["earnings"]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getEarningsCalendar({ window: "next_5_days" });
+        if (cancelled) return;
+        const sorted = (res.earnings || [])
+          .filter((r: any) => Number.isFinite(r?.daysUntil))
+          .slice()
+          .sort((a: any, b: any) => a.daysUntil - b.daysUntil);
+        setRows(sorted.slice(0, 6));
+      } catch { /* silent — hide section */ }
+      finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading || rows.length === 0) return null;
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 1, background: "var(--border)", borderBottom: "1px solid var(--border)" }}>
+      <div style={{ background: "var(--bg)", padding: "20px 28px 22px" }}>
+        <Section
+          eyebrow="05"
+          title="Earnings · ahead"
+          right={
+            <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>
+              {rows.length} report{rows.length === 1 ? "" : "s"} · next 5 days
+            </span>
+          }
+        >
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8 }}>
+            {rows.map((r: any) => (
+              <div
+                key={r.symbol}
+                onClick={() => onPickTicker?.(r.symbol)}
+                style={{
+                  padding: 10,
+                  border: "1px solid var(--border-hair)",
+                  background: "var(--bg-elev-1)",
+                  borderRadius: 3,
+                  cursor: "pointer",
+                  transition: "border-color 120ms",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--brand)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border-hair)"; }}
+              >
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+                  <span className="t-mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-1000)" }}>{r.symbol}</span>
+                  <span className="t-mono" style={{ fontSize: 9, color: "var(--brand)", padding: "1px 5px", border: "1px solid var(--gold-500)", borderRadius: 2, letterSpacing: "0.04em" }}>
+                    {r.reportTime === "bmo" ? "BMO" : r.reportTime === "amc" ? "AMC" : "—"}
+                  </span>
+                </div>
+                <div style={{ marginTop: 3, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.company}>
+                  {r.company}
+                </div>
+                <div style={{ marginTop: 5, display: "flex", justifyContent: "space-between", alignItems: "baseline", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>
+                  <span style={{ color: "var(--fg-hint)" }}>{r.daysUntil}d</span>
+                  {r.ivRank != null && (
+                    <span style={{ color: r.ivRank > 0.6 ? "var(--gold-300)" : "var(--fg-muted)" }}>
+                      IV {(r.ivRank * 100).toFixed(0)}
+                    </span>
+                  )}
+                </div>
+                {r.expectedMovePct != null && (
+                  <div style={{ marginTop: 2, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-hint)" }}>
+                    exp ±{(r.expectedMovePct * 100).toFixed(1)}%
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </Section>
+      </div>
+    </div>
+  );
+}
 
 // ─── hero band ───────────────────────────────────────────────────────────────
 
