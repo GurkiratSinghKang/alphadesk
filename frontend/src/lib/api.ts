@@ -618,6 +618,77 @@ export function getRiskCrowding() {
   return apiFetch<Record<string, unknown>>(`/api/v1/risk/crowding`);
 }
 
+// ─── Auth / Security (round 5b backend wiring) ─────────────────────
+//
+// The Settings → Security tab can wire to these once we wrap them
+// in a UI. The auth flow itself (POST /login, /refresh) remains
+// owned by LoginForm.tsx.
+export function authChangePassword(body: { old_password: string; new_password: string }) {
+  return apiFetch<{ success: boolean }>(`/api/v1/auth/change-password`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+export function authLogoutEverywhere() {
+  return apiFetch<{ revoked_count: number }>(`/api/v1/auth/logout-all`, { method: "POST" });
+}
+export function authStartTotpEnroll() {
+  return apiFetch<{ secret: string; otpauth_url: string; qr_data_url?: string }>(`/api/v1/auth/2fa/enroll`, { method: "POST" });
+}
+export function authVerifyTotpEnroll(body: { code: string }) {
+  return apiFetch<{ recovery_codes: string[] }>(`/api/v1/auth/2fa/verify`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+export function authDisableTotp(body: { code: string }) {
+  return apiFetch<{ success: boolean }>(`/api/v1/auth/2fa/disable`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+export function authSession() {
+  return apiFetch<{
+    username: string;
+    issued_at?: string;
+    expires_at?: string;
+    totp_enabled?: boolean;
+    refresh_token_present?: boolean;
+  }>(`/api/v1/auth/session`);
+}
+
+// ─── User data export + erase (round 5b) ───────────────────────────
+//
+// Wires the existing Settings → Danger zone buttons to the real
+// /api/v1/user/* endpoints (previously inert). Erase is a 2-step
+// flow: GET /erase/preview returns a summary + token, POST /erase
+// confirms with the token.
+export function getMe() {
+  return apiFetch<{
+    username: string;
+    email?: string | null;
+    role?: string;
+    created_at?: string;
+    last_login_at?: string | null;
+    totp_enabled?: boolean;
+  }>(`/api/v1/user/me`);
+}
+export function postUserExport() {
+  return apiFetch<{ download_url?: string; export_id?: string; ready?: boolean }>(`/api/v1/user/export`, { method: "POST" });
+}
+export function previewUserErase() {
+  return apiFetch<{
+    erase_token: string;
+    will_delete: Record<string, number>;
+    grace_days?: number;
+  }>(`/api/v1/user/erase/preview`);
+}
+export function confirmUserErase(body: { erase_token: string; confirm_phrase: string }) {
+  return apiFetch<{ scheduled_for: string }>(`/api/v1/user/erase`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
 export interface StrategyTrade {
   id: number;
   symbol: string;
