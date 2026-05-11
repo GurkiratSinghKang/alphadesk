@@ -381,6 +381,18 @@ function LiveDataProvider({ symbol, page, children }) {
     // the fan-out everywhere else. Conservatively still include the
     // user-watchlist scaffold but defer the 12-call enrichment loop.
     const shouldEnrichWatchlists = page === "watchlists";
+    // BUG-070 partial (audit 2026-05-11, M2-01): the per-symbol quote
+    // fan-out (~18 `getQuote` REST calls per LiveDataProvider load)
+    // dominated the M2-01 finding (`/market/quotes/{sym}` polled 2,468×
+    // in 44 min). Quotes already arrive over the WebSocket "quotes"
+    // channel for users on dashboard routes via `useDataPipeline` →
+    // `useMarketStore`. Gate the REST fan-out to the routes that
+    // actually display a live ticker rail or chart (dashboard / trade
+    // / ticker detail / watchlists). Other routes drop the 18 calls
+    // entirely and rely on the WS feed populating `live.quotes` once
+    // the user navigates back. The proper full fix is to consume
+    // `useMarketStore` directly here (BUG-070 follow-up).
+    const shouldLoadQuotes = page === "dashboard" || page === "/" || page === "trade" || page === "ticker" || page === "watchlists";
 
     async function load() {
       setState((prev) => ({ ...prev, loading: true, error: null }));
@@ -444,14 +456,20 @@ function LiveDataProvider({ symbol, page, children }) {
         ...LIVE_QUOTE_SYMBOLS,
       ].map((s) => String(s || "").toUpperCase()).filter(Boolean))].slice(0, 18);
 
-      const quoteEntries = await Promise.allSettled(
-        seedSymbols.map(async (s) => [s, await getQuote(s, { suppressAuthRedirect: true })]),
-      );
+      // BUG-070 partial: skip the REST quote fan-out on routes that
+      // don't render a ticker rail. Saves ~18 calls/pageview. Live
+      // tick updates still arrive via the WS "quotes" channel
+      // (useDataPipeline → useMarketStore) where present.
       const quotes = {};
-      for (const entry of quoteEntries) {
-        if (entry.status !== "fulfilled") continue;
-        const [s, q] = entry.value;
-        if (q) quotes[s] = q;
+      if (shouldLoadQuotes) {
+        const quoteEntries = await Promise.allSettled(
+          seedSymbols.map(async (s) => [s, await getQuote(s, { suppressAuthRedirect: true })]),
+        );
+        for (const entry of quoteEntries) {
+          if (entry.status !== "fulfilled") continue;
+          const [s, q] = entry.value;
+          if (q) quotes[s] = q;
+        }
       }
 
       const rawLists = watchlistsR.status === "fulfilled" ? (watchlistsR.value || []) : [];
