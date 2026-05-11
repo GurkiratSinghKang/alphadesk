@@ -333,7 +333,7 @@ function LiveDataProvider({ symbol, page, children }) {
             count: payload.items.length,
             purpose: shell.description || "Live watchlist from backend.",
             feeds: shell.auto_source_strategy ? [shell.auto_source_strategy] : [],
-            updated: "Live · backend",
+            updated: "Live feed",  // BUG-080: see context below; "Live · backend" was ambiguous with trading mode
             symbols: payload.items.map((it) => {
               const q = quotes[it.symbol] || {};
               return liveRowFromQuote(
@@ -2585,7 +2585,12 @@ function DashHero({ layout, onNav }) {
           />
           <Stat label="Day" value={summary ? fmtPct(summary.dayPnlPct || 0) : "—"} tone={up ? "up" : "down"} />
           <Stat label="Unrealized" value={summary ? fmtMoney(summary.unrealizedPnl || 0, { dec: 0 }) : "—"} tone={(summary?.unrealizedPnl || 0) >= 0 ? "up" : "down"} big />
-          <Stat label="Last update" value={summary?.lastUpdated ? "fresh" : "—"} />
+          {/* BUG-081 (audit 2026-05-11, F-SCOUT-05): "fresh" is vague — a
+              scalper can't tell whether the data is 1s old or 30min old.
+              Show the actual local time when we have it; fall back to em-
+              dash. `formatLiveDate` already lives in this file and is used
+              by every other "last update" cell — reuse it for consistency. */}
+          <Stat label="Last update" value={summary?.lastUpdated ? formatLiveDate(summary.lastUpdated) : "—"} />
         </div>
       </div>
 
@@ -2804,7 +2809,13 @@ function RegimePanel({ onPickTicker }) {
   const confidence = Number(r.confidence ?? 0);
 
   return (
-    <Section eyebrow="01" title="Market" right={<span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>{live.refreshedAt ? "Live · backend" : "Loading"}</span>}>
+    {/* BUG-080 (audit 2026-05-11, F-SCOUT-03 / P1-11): the "Live · backend"
+        label collides semantically with the top-right PAPER/LIVE trading-
+        mode toggle — scalpers reading the dashboard while in PAPER mode
+        thought market data feed was "Live" (correct) and trading mode was
+        ambiguous (wrong, they were paper). Rename to "Live quotes" to
+        disambiguate market data freshness from trading mode. */}
+    <Section eyebrow="01" title="Market" right={<span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>{live.refreshedAt ? "Live quotes" : "Loading"}</span>}>
       {/* 2026-05-10 (round 2 honest empty-state): previously rendered
        * a fake "30d" sparkline with hardcoded ascending values
        * [0.45, 0.5, 0.56, 0.6, 0.58, 0.64, confidence] which suggested
