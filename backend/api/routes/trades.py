@@ -10,7 +10,7 @@ import uuid as _uuid
 from collections.abc import Mapping
 from datetime import date, datetime, timedelta, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -399,6 +399,14 @@ class BracketSpec(BaseModel):
 class CreateOrderRequest(BaseModel):
     legs: list[OrderLeg] = Field(..., min_length=1, max_length=4)
     time_in_force: TimeInForce = TimeInForce.DAY
+    mode: Literal["paper", "live"] = Field(
+        "paper",
+        description="Trading mode the user confirmed in the UI for this submit.",
+    )
+    confirm: bool = Field(
+        False,
+        description="True only after the user confirmed the reviewed order.",
+    )
     route_intent: RouteIntent = Field(
         RouteIntent.BROKER_ORDER_REVIEW,
         description="Frontend execution intent; broker_order_review means user-reviewed broker routing.",
@@ -981,6 +989,7 @@ def _reject_unsupported_broker_provider(provider: BrokerProvider) -> None:
 def _order_review_hash(request: CreateOrderRequest) -> str:
     payload = {
         "order": _order_dedup_hash(request),
+        "mode": request.mode,
         "route_intent": request.route_intent.value,
         "broker_provider": request.broker_provider.value,
         "combo_type": request.combo_type or "",
@@ -1019,8 +1028,6 @@ async def _store_order_review(request: CreateOrderRequest, *, username: str) -> 
 
 
 async def _require_matching_order_review(request: CreateOrderRequest, *, username: str) -> None:
-    if "route_intent" not in getattr(request, "model_fields_set", set()):
-        return
     if not request.review_id:
         raise HTTPException(status_code=428, detail={"error": "order_review_required", "reason": "Preview the broker-routed order before submitting."})
     try:
@@ -1040,6 +1047,157 @@ async def _require_matching_order_review(request: CreateOrderRequest, *, usernam
         raise HTTPException(status_code=428, detail={"error": "order_review_invalid", "reason": "Preview the order again before submitting."}) from exc
     if data.get("hash") != _order_review_hash(request):
         raise HTTPException(status_code=428, detail={"error": "order_review_mismatch", "reason": "Order changed after preview. Preview again before submitting."})
+
+
+_LIVE_ORDER_STEP_UP_TTL_SECONDS = 5 * 60
+
+
+def _utc_aware(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+async def _committed_trading_mode(username: str) -> tuple[Literal["paper", "live"], datetime | None]:
+    """Return the user's server-committed trading mode.
+
+    Tests and local scripts often run with ``SKIP_DB_INIT``; defaulting to
+    paper there preserves safe behavior without requiring a database.
+    """
+    try:
+        from core.config import settings as _settings
+        if getattr(_settings, "SKIP_DB_INIT", False):
+            return "paper", None
+
+        from core.database import _get_session_factory
+        from data.storage.models import UserSettings
+        from sqlalchemy import select
+
+        factory = _get_session_factory()
+        async with factory() as db:
+            result = await db.execute(
+                select(UserSettings).where(UserSettings.username == username)
+            )
+            row = result.scalars().first()
+            if row is None:
+                return "paper", None
+            mode = "live" if row.trading_mode == "live" else "paper"
+            return mode, _utc_aware(row.live_step_up_at)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("order submit trading-mode lookup failed", exc_info=True)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "trading_mode_unavailable",
+                "reason": "Could not verify committed paper/live trading mode.",
+            },
+        ) from exc
+
+
+async def _audit_order_mode_rejection(
+    *,
+    event: str,
+    username: str,
+    http_request: Request,
+    details: dict[str, Any],
+) -> None:
+    try:
+        from core.audit import write_audit
+        from core.logging import REQUEST_ID
+
+        rid = REQUEST_ID.get()
+        await write_audit(
+            event=event,
+            username=username,
+            ip=_client_ip_for_audit(http_request),
+            request_id=rid if rid and rid != "-" else None,
+            details=details,
+        )
+    except Exception:
+        logger.debug("order mode rejection audit failed", exc_info=True)
+
+
+async def _enforce_order_submit_preconditions(
+    payload: CreateOrderRequest,
+    *,
+    username: str,
+    http_request: Request,
+) -> None:
+    fields_set = getattr(payload, "model_fields_set", set())
+    if payload.confirm is not True:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "order_confirmation_required",
+                "reason": "Submit requires confirm=true after reviewing the server preview.",
+            },
+        )
+    if "mode" not in fields_set:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "trading_mode_required",
+                "reason": "Submit requires explicit mode='paper' or mode='live'.",
+            },
+        )
+    await _require_matching_order_review(payload, username=username)
+
+    committed_mode, live_step_up_at = await _committed_trading_mode(username)
+    if payload.mode != committed_mode:
+        await _audit_order_mode_rejection(
+            event="mode_disagreement",
+            username=username,
+            http_request=http_request,
+            details={
+                "submitted_mode": payload.mode,
+                "committed_mode": committed_mode,
+                "symbol": payload.legs[0].symbol if payload.legs else None,
+            },
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "mode_disagreement",
+                "reason": (
+                    f"Submitted mode '{payload.mode}' does not match the "
+                    f"server-committed mode '{committed_mode}'."
+                ),
+                "submitted_mode": payload.mode,
+                "committed_mode": committed_mode,
+            },
+        )
+
+    if payload.mode == "live":
+        now = datetime.now(timezone.utc)
+        step_up_at = _utc_aware(live_step_up_at)
+        fresh = (
+            step_up_at is not None
+            and 0 <= (now - step_up_at).total_seconds() <= _LIVE_ORDER_STEP_UP_TTL_SECONDS
+        )
+        if not fresh:
+            await _audit_order_mode_rejection(
+                event="live_step_up_required",
+                username=username,
+                http_request=http_request,
+                details={
+                    "submitted_mode": payload.mode,
+                    "committed_mode": committed_mode,
+                    "live_step_up_at": step_up_at.isoformat() if step_up_at else None,
+                    "symbol": payload.legs[0].symbol if payload.legs else None,
+                },
+            )
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "live_step_up_required",
+                    "reason": "Live order submit requires a fresh 2FA step-up within 5 minutes.",
+                    "max_age_seconds": _LIVE_ORDER_STEP_UP_TTL_SECONDS,
+                },
+            )
 
 
 def _normalise_alpaca_status(raw: Any) -> str:
@@ -1409,14 +1567,34 @@ async def create_order(
     Supports single-leg equity orders and multi-leg options orders.
     All orders pass through the RiskManagerAgent before submission.
 
-    Request header ``Idempotency-Key`` (persona-40 F2, persona-65 F1): if
-    present, the server caches the response JSON for 10 minutes and returns
-    the original response verbatim for any second call with the same key.
-    Missing / empty header falls back to the payload-hash dedup (30 s
-    window) for legacy clients.
+    Request header ``Idempotency-Key`` (persona-40 F2, persona-65 F1): the
+    server caches the response JSON for 10 minutes and returns the original
+    response verbatim for any second call with the same key. New submits must
+    also carry ``confirm=true``, a matching preview ``review_id``, and an
+    explicit paper/live ``mode`` matching the user's server-committed mode.
     """
     _reject_unsupported_broker_provider(payload.broker_provider)
-    await _require_matching_order_review(payload, username=username)
+
+    if not idempotency_key or not idempotency_key.strip():
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "idempotency_key_required",
+                "reason": "POST /trades/orders requires an Idempotency-Key header.",
+            },
+        )
+    # Bound the key length so a pathological client can't DOS Redis with a
+    # 1MB header value; 128 chars is far more than a uuid4().
+    if len(idempotency_key) > 128:
+        raise HTTPException(status_code=400, detail="Idempotency-Key must be ≤128 chars")
+    # Canonicalise through the sanitiser so a stray CRLF / NUL in the
+    # header can't land in our Redis key namespace unescaped.
+    _key_clean = _sanitize_user_text(idempotency_key) or idempotency_key
+    idem_cache_key = f"idem:orders:{_key_clean}:{username}"
+    # Short slug used as part of the Alpaca client_order_id below. Alpaca caps
+    # client_order_id at 128 chars; the last 24 chars of a uuid4 still preserve
+    # 96 bits of entropy.
+    idem_key_short = _key_clean[-24:]
 
     # persona-16 P0-1: halt MUST gate every single manual order before any
     # side-effecting check (risk, dedup, broker POST). Previously the halt
@@ -1457,7 +1635,7 @@ async def create_order(
     # Two parallel requests with the same Idempotency-Key both saw the cache
     # miss in step 1 and both reached the broker before either wrote the
     # cache. New ordering (Wave A):
-    #   1. GET cache → if hit return; if "PENDING" return 429 in-flight.
+    #   1. GET cache → if hit return; if "PENDING" return 409 in-flight.
     #   2. SET NX EX 600 = "PENDING" sentinel.
     #   3. If SET NX failed (race lost) → re-GET; another worker beat us.
     #   4. POST broker.
@@ -1466,8 +1644,8 @@ async def create_order(
     #
     # Cache key is scoped to the caller's username so a stolen key from one
     # user cannot mask a different user's legitimate order. If Redis is down
-    # the whole block is skipped and we fall through to the payload-hash
-    # dedup path below (legacy behaviour preserved).
+    # the endpoint fails closed; order submission never falls back to a
+    # no-idempotency broker POST.
     #
     # Wave 6β Fix 5 (persona 117) — idempotency cache durability note:
     #
@@ -1495,104 +1673,91 @@ async def create_order(
     # correctness gap, and a PG write on every order path would slow the
     # critical trade latency budget we're already tight on.
     _PENDING_SENTINEL = "__PENDING__"
-    idem_cache_key: str | None = None
-    idem_key_short: str | None = None
     idem_claimed = False
-    if idempotency_key:
-        # Bound the key length so a pathological client can't DOS Redis
-        # with a 1MB header value; 128 chars is far more than a uuid4().
-        if len(idempotency_key) > 128:
-            raise HTTPException(status_code=400, detail="Idempotency-Key must be ≤128 chars")
-        # Canonicalise through the sanitiser so a stray CRLF / NUL in the
-        # header can't land in our Redis key namespace unescaped.
-        _key_clean = _sanitize_user_text(idempotency_key) or idempotency_key
-        idem_cache_key = f"idem:orders:{_key_clean}:{username}"
-        # Short slug used as part of the Alpaca client_order_id below.
-        # Alpaca caps client_order_id at 128 chars; we use the last 24 of
-        # the idempotency key to stay well under the cap and still preserve
-        # collision resistance (uuid4 is 32 hex chars; the tail 24 hex still
-        # gives us 96 bits of entropy which is more than enough).
-        idem_key_short = _key_clean[-24:]
-        try:
-            from core.redis import get_redis
-            redis = await get_redis()
-            if redis is not None:
-                # Step 1: GET — return cached response or in-flight marker.
-                cached = await redis.get(idem_cache_key)
-                if cached:
-                    raw = cached.decode() if isinstance(cached, (bytes, bytearray)) else cached
-                    if raw == _PENDING_SENTINEL:
-                        raise HTTPException(
-                            status_code=429,
-                            detail=(
-                                "Idempotent request already in flight. Retry "
-                                "after the original completes."
-                            ),
-                        )
-                    try:
-                        data = json.loads(raw)
-                        return OrderResponse(**data)
-                    except HTTPException:
-                        raise
-                    except Exception:
-                        logger.warning(
-                            "Idempotency-Key cache entry malformed — falling through to re-submit",
-                            exc_info=True,
-                        )
+    try:
+        from core.redis import get_redis
+        redis = await get_redis()
+        if redis is None:
+            raise RuntimeError("redis unavailable")
 
-                # Step 2: SET NX = PENDING sentinel atomically. If we lose
-                # the race, re-GET and treat the winner's value as authoritative.
-                claimed = await redis.set(
-                    idem_cache_key, _PENDING_SENTINEL, nx=True, ex=600,
+        # Step 1: GET — return cached response or in-flight marker. Completed
+        # idempotent retries are allowed to return even if the preview token
+        # has expired since the first successful submit.
+        cached = await redis.get(idem_cache_key)
+        if cached:
+            raw = cached.decode() if isinstance(cached, (bytes, bytearray)) else cached
+            if raw == _PENDING_SENTINEL:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Idempotent request already in flight. Retry "
+                        "after the original completes."
+                    ),
                 )
-                if claimed:
-                    idem_claimed = True
-                if not claimed:
-                    cached = await redis.get(idem_cache_key)
-                    if cached:
-                        raw = cached.decode() if isinstance(cached, (bytes, bytearray)) else cached
-                        if raw == _PENDING_SENTINEL:
-                            raise HTTPException(
-                                status_code=429,
-                                detail=(
-                                    "Idempotent request already in flight. Retry "
-                                    "after the original completes."
-                                ),
-                            )
-                        try:
-                            data = json.loads(raw)
-                            return OrderResponse(**data)
-                        except HTTPException:
-                            raise
-                        except Exception:
-                            logger.warning(
-                                "Idempotency-Key cache entry malformed after race — re-submitting",
-                                exc_info=True,
-                            )
-        except HTTPException:
-            raise
-        except Exception:
-            # Round-11 / BB-18 (P1): when the user supplied an
-            # Idempotency-Key but Redis is unreachable, fail closed
-            # rather than silently fall through. Falling through
-            # would let a retried client submit DUPLICATE orders
-            # during a Redis blip — only the broker-side
-            # ``client_order_id`` dedup catches it (and that's only
-            # set when an idem key exists). 503 is the correct
-            # status: the dedup service is unavailable, not the
-            # order endpoint itself; the client should retry with
-            # the same key once Redis recovers.
-            logger.error(
-                "Idempotency-Key dedup unavailable — refusing to fall through",
-                exc_info=True,
-            )
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "Idempotency dedup service unavailable. Retry the "
-                    "request with the same Idempotency-Key when ready."
-                ),
-            )
+            try:
+                data = json.loads(raw)
+                return OrderResponse(**data)
+            except HTTPException:
+                raise
+            except Exception:
+                logger.warning(
+                    "Idempotency-Key cache entry malformed — falling through to re-submit",
+                    exc_info=True,
+                )
+
+        await _enforce_order_submit_preconditions(
+            payload,
+            username=username,
+            http_request=http_request,
+        )
+
+        # Step 2: SET NX = PENDING sentinel atomically. If we lose the race,
+        # re-GET and treat the winner's value as authoritative.
+        claimed = await redis.set(
+            idem_cache_key, _PENDING_SENTINEL, nx=True, ex=600,
+        )
+        if claimed:
+            idem_claimed = True
+        if not claimed:
+            cached = await redis.get(idem_cache_key)
+            if cached:
+                raw = cached.decode() if isinstance(cached, (bytes, bytearray)) else cached
+                if raw == _PENDING_SENTINEL:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            "Idempotent request already in flight. Retry "
+                            "after the original completes."
+                        ),
+                    )
+                try:
+                    data = json.loads(raw)
+                    return OrderResponse(**data)
+                except HTTPException:
+                    raise
+                except Exception:
+                    logger.warning(
+                        "Idempotency-Key cache entry malformed after race — re-submitting",
+                        exc_info=True,
+                    )
+    except HTTPException:
+        raise
+    except Exception:
+        # Round-11 / BB-18 (P1): when the user supplied an
+        # Idempotency-Key but Redis is unreachable, fail closed rather
+        # than silently fall through. Falling through would let a retried
+        # client submit DUPLICATE orders during a Redis blip.
+        logger.error(
+            "Idempotency-Key dedup unavailable — refusing to fall through",
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Idempotency dedup service unavailable. Retry the "
+                "request with the same Idempotency-Key when ready."
+            ),
+        )
 
     # Security audit R6: per-user order-submission rate limit. Caps a
     # compromised-session blast radius before market-hours / broker / risk.
@@ -1822,10 +1987,9 @@ async def create_order(
     # persona-56 / persona-65 F1 / Wave-A: client_order_id correlation key so a
     # mid-POST disconnect, retry, or reconciliation pass can match the
     # broker row against the local ledger row. Format: ``{user}_{idem_short}``
-    # when the caller supplied an Idempotency-Key (so Alpaca dedupes broker-
-    # side too — Alpaca refuses duplicate ``client_order_id`` within ~24h),
-    # otherwise ``manual_{user}_{12hex}`` to preserve back-compat for callers
-    # that don't pass an Idempotency-Key.
+    # when the caller supplied an Idempotency-Key (all submit callers must, so
+    # Alpaca dedupes broker-side too — Alpaca refuses duplicate
+    # ``client_order_id`` within ~24h).
     # Sanitize username → a filesystem-safe-ish slug so an unusual character
     # doesn't land in the Alpaca ID.
     #
@@ -1840,12 +2004,9 @@ async def create_order(
     # separator regardless of whether the idem itself contains
     # underscores.
     _user_slug = re.sub(r"[^A-Za-z0-9\-]", "", username)[:32] or "u"
-    if idem_key_short:
-        # Strip non-alnum from the idem tail so Alpaca accepts it.
-        _idem_clean = re.sub(r"[^A-Za-z0-9_\-]", "", idem_key_short)
-        client_order_id = f"{_user_slug}_{_idem_clean}"[:128]
-    else:
-        client_order_id = f"manual_{_user_slug}_{_uuid.uuid4().hex[:12]}"
+    # Strip non-alnum from the idem tail so Alpaca accepts it.
+    _idem_clean = re.sub(r"[^A-Za-z0-9_\-]", "", idem_key_short)
+    client_order_id = f"{_user_slug}_{_idem_clean}"[:128]
 
     # Wave 6β Fix 6 (persona 123 P1) — halt TOCTOU re-check.
     #

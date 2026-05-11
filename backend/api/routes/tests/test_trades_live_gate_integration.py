@@ -16,6 +16,7 @@ the live-gate has been silently bypassed — the test fails loudly.
 """
 from __future__ import annotations
 
+import fakeredis.aioredis
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -104,12 +105,16 @@ def app_with_trades(
         # gate semantics being tested live elsewhere.
         return None
 
+    async def _fake_review(payload, *, username: str) -> None:
+        return None
+
     monkeypatch.setattr(trades_mod, "_submit_to_broker", _fake_submit)
     monkeypatch.setattr(trades_mod, "_is_trading_halted", _fake_is_halted)
     monkeypatch.setattr(trades_mod, "_check_duplicate_order", _fake_dup)
     monkeypatch.setattr(trades_mod, "_aggregate_risk_check", _fake_agg)
     monkeypatch.setattr(trades_mod, "_risk_check", _fake_per)
     monkeypatch.setattr(trades_mod, "_enforce_order_rate_limit", _fake_rate_limit)
+    monkeypatch.setattr(trades_mod, "_require_matching_order_review", _fake_review)
 
     # Also skip DB persistence and the final Redis ``publish`` — neither
     # is relevant to the gate semantics and both try to open real sockets
@@ -121,10 +126,15 @@ def app_with_trades(
     monkeypatch.setattr(core_config.settings, "SKIP_DB_INIT", True, raising=False)
 
     import core.redis as _redis_mod
+    _fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+
+    async def _fake_get_redis():
+        return _fake_redis
 
     async def _fake_publish(channel, data):
         return 0
 
+    monkeypatch.setattr(_redis_mod, "get_redis", _fake_get_redis)
     monkeypatch.setattr(_redis_mod, "publish", _fake_publish)
     # ``trades`` imports ``publish`` into its own namespace lazily; patch
     # the already-imported copy too if it's there.
@@ -173,7 +183,13 @@ def _valid_orb_order_payload() -> dict:
         "strategy": "orb",
         "notes": "integration test",
         "extended_hours": True,
+        "mode": "paper",
+        "confirm": True,
     }
+
+
+def _idem_headers(key: str) -> dict[str, str]:
+    return {"Idempotency-Key": key}
 
 
 def test_post_orders_orb_on_live_returns_422_without_reaching_broker(
@@ -195,6 +211,7 @@ def test_post_orders_orb_on_live_returns_422_without_reaching_broker(
     resp = client.post(
         "/api/v1/trades/orders",
         json=_valid_orb_order_payload(),
+        headers=_idem_headers("live-gate-orb"),
     )
 
     assert resp.status_code == 422, f"expected 422 but got {resp.status_code}: {resp.text}"
@@ -225,6 +242,7 @@ def test_post_orders_orb_gate_runs_before_risk_and_dedup(
     resp = client.post(
         "/api/v1/trades/orders",
         json=_valid_orb_order_payload(),
+        headers=_idem_headers("live-gate-ordering"),
     )
     assert resp.status_code == 422
     # Gate runs BEFORE: aggregate risk, per-order risk, dedup, broker POST.
@@ -251,7 +269,11 @@ def test_post_orders_unknown_strategy_on_live_returns_400(
     payload = _valid_orb_order_payload()
     payload["strategy"] = "orbx"  # spoof — not on the allowlist.
 
-    resp = client.post("/api/v1/trades/orders", json=payload)
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json=payload,
+        headers=_idem_headers("live-gate-unknown"),
+    )
     assert resp.status_code == 400
     assert "unknown strategy" in (resp.json().get("detail") or "")
     assert probes["broker_called"] is False
@@ -274,7 +296,11 @@ def test_post_orders_manual_none_strategy_passes_gate(
     payload = _valid_orb_order_payload()
     payload.pop("strategy")  # manual / discretionary
 
-    resp = client.post("/api/v1/trades/orders", json=payload)
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json=payload,
+        headers=_idem_headers("live-gate-manual"),
+    )
     # The manual path hits the broker mock and returns 201 with the fake id.
     assert resp.status_code == 201, f"expected 201 but got {resp.status_code}: {resp.text}"
     assert probes["broker_called"] is True

@@ -1267,7 +1267,10 @@ describe('placeOrder', () => {
     await placeOrder({ symbol: 'SPY', side: 'buy', type: 'market', quantity: 10 });
     const [, init] = mockFetch.mock.calls[0];
     expect(init.method).toBe('POST');
+    expect(init.headers).toMatchObject({ 'Idempotency-Key': expect.any(String) });
     const body = JSON.parse(init.body);
+    expect(body.mode).toBe('paper');
+    expect(body.confirm).toBe(true);
     expect(body.legs).toHaveLength(1);
     expect(body.legs[0].symbol).toBe('SPY');
     expect(body.legs[0].side).toBe('buy');

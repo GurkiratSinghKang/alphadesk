@@ -95,6 +95,10 @@ def app_with_trades(
     monkeypatch.setattr(trades_mod, "_aggregate_risk_check", _fake_agg)
     monkeypatch.setattr(trades_mod, "_risk_check", _fake_per)
 
+    async def _fake_review(_payload: Any, *, username: str) -> None:
+        return None
+    monkeypatch.setattr(trades_mod, "_require_matching_order_review", _fake_review)
+
     from core import config as core_config
 
     monkeypatch.setattr(core_config.settings, "SKIP_DB_INIT", True, raising=False)
@@ -151,6 +155,8 @@ def _payload() -> dict:
         # halt re-check just before broker submit. Opting into
         # extended hours keeps the test focused on TOCTOU.
         "extended_hours": True,
+        "mode": "paper",
+        "confirm": True,
     }
 
 
@@ -167,7 +173,11 @@ def test_halt_flipping_mid_request_blocks_broker_submit(
     app, probes = app_with_trades
     client = TestClient(app)
 
-    resp = client.post("/api/v1/trades/orders", json=_payload())
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json=_payload(),
+        headers={"Idempotency-Key": "toctou-blocks-broker"},
+    )
 
     # The second check trips; the handler raises 503.
     assert resp.status_code == 503
@@ -193,7 +203,11 @@ def test_halt_stable_false_permits_order(
     probes["flip_after_call"] = 999
     client = TestClient(app)
 
-    resp = client.post("/api/v1/trades/orders", json=_payload())
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json=_payload(),
+        headers={"Idempotency-Key": "toctou-stable-false"},
+    )
     assert resp.status_code == 201, resp.text
     assert len(probes["broker_posts"]) == 1
     # Both checks ran and both returned False.
@@ -224,5 +238,5 @@ def test_toctou_clears_pending_idempotency_sentinel(
     )
     assert cached is None, (
         f"PENDING sentinel leaked past a TOCTOU halt interception — got "
-        f"{cached!r}. A retry after resume would 429 for 600s."
+        f"{cached!r}. A retry after resume would 409 for 600s."
     )

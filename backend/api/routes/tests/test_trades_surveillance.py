@@ -663,6 +663,15 @@ async def test_halt_trading_writes_audit_log(
 
             return _Resp()
 
+        async def get(self, *a: Any, **kw: Any) -> Any:
+            class _Resp:
+                status_code = 200
+
+                def json(self) -> list[Any]:
+                    return []
+
+            return _Resp()
+
     monkeypatch.setattr(httpx, "AsyncClient", _StubClient)
 
     # Build a minimal Request-shaped object the handler expects.

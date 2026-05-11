@@ -152,6 +152,7 @@ def _single_leg_payload(strategy: str | None = None) -> dict:
         ],
         "time_in_force": "day",
         "extended_hours": True,
+        "mode": "paper",
     }
     if strategy is not None:
         body["strategy"] = strategy
@@ -187,10 +188,19 @@ def _iron_condor_payload(strategy: str | None = "earnings-options-play") -> dict
         "time_in_force": "day",
         "combo_type": "iron_condor",
         "extended_hours": True,
+        "mode": "paper",
     }
     if strategy is not None:
         body["strategy"] = strategy
     return body
+
+
+def _reviewed_payload(client: TestClient, payload: dict) -> dict:
+    preview = client.post("/api/v1/trades/orders/preview", json=payload)
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["can_submit"] is True
+    return {**payload, "review_id": body["review_id"], "confirm": True}
 
 
 # ---------------------------------------------------------------------------#
@@ -213,7 +223,7 @@ def test_order_carries_strategy_field(
 
     resp = client.post(
         "/api/v1/trades/orders",
-        json=_single_leg_payload(strategy="earnings-options-play"),
+        json=_reviewed_payload(client, _single_leg_payload(strategy="earnings-options-play")),
         headers={"Idempotency-Key": "f1-strategy-roundtrip"},
     )
     assert resp.status_code == 201, resp.text
@@ -236,7 +246,7 @@ def test_order_without_strategy_returns_null_strategy(
 
     resp = client.post(
         "/api/v1/trades/orders",
-        json=_single_leg_payload(strategy=None),
+        json=_reviewed_payload(client, _single_leg_payload(strategy=None)),
         headers={"Idempotency-Key": "f1-no-strategy"},
     )
     assert resp.status_code == 201, resp.text
@@ -263,7 +273,7 @@ def test_broker_review_preview_mints_submit_token(
 
     resp = client.post(
         "/api/v1/trades/orders",
-        json={**payload, "review_id": body["review_id"]},
+        json={**payload, "review_id": body["review_id"], "confirm": True},
         headers={"Idempotency-Key": "broker-review-submit"},
     )
     assert resp.status_code == 201, resp.text
@@ -283,6 +293,7 @@ def test_broker_review_submit_requires_preview_token(
             **_single_leg_payload(strategy="earnings-options-play"),
             "route_intent": "broker_order_review",
             "broker_provider": "alpaca",
+            "confirm": True,
         },
         headers={"Idempotency-Key": "broker-review-missing-token"},
     )
@@ -308,6 +319,7 @@ def test_broker_review_submit_rejects_changed_order_after_preview(
     changed["route_intent"] = "broker_order_review"
     changed["broker_provider"] = "alpaca"
     changed["review_id"] = preview.json()["review_id"]
+    changed["confirm"] = True
 
     resp = client.post(
         "/api/v1/trades/orders",
@@ -364,7 +376,7 @@ def test_multi_leg_order_combo_type_persists(
 
     resp = client.post(
         "/api/v1/trades/orders",
-        json=_iron_condor_payload(),
+        json=_reviewed_payload(client, _iron_condor_payload()),
         headers={"Idempotency-Key": "f14-iron-condor"},
     )
     assert resp.status_code == 201, resp.text

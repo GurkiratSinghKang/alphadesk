@@ -8,7 +8,7 @@ Scope (matches the Wave-A race-safe ordering in ``create_order``):
 
 * Duplicate key within the 10-minute TTL returns the cached 200 verbatim.
 * Two concurrent requests with the same key: the first claims the
-  PENDING sentinel (SET NX), the second sees PENDING and gets a 429.
+  PENDING sentinel (SET NX), the second sees PENDING and gets a 409.
 * Idempotency-Key longer than 128 chars is rejected at the edge with 400.
 * When the broker POST errors, the PENDING sentinel is cleared so a
   retry with the same key can proceed (NOT cached as an error response).
@@ -104,11 +104,23 @@ def app_with_trades(
     async def _fake_per(_payload: Any) -> tuple[bool, str]:
         return True, "ok"
 
+    async def _fake_notional(_payload: Any) -> float:
+        return 150.0
+
+    async def _fake_max_loss(
+        _payload: Any,
+        *,
+        username: str,
+    ) -> tuple[bool, str, float, float]:
+        return True, "passed", 150.0, 100_000.0
+
     monkeypatch.setattr(trades_mod, "_submit_to_broker", _fake_submit)
     monkeypatch.setattr(trades_mod, "_is_trading_halted", _fake_is_halted)
     monkeypatch.setattr(trades_mod, "_check_duplicate_order", _fake_dup)
     monkeypatch.setattr(trades_mod, "_aggregate_risk_check", _fake_agg)
     monkeypatch.setattr(trades_mod, "_risk_check", _fake_per)
+    monkeypatch.setattr(trades_mod, "_compute_order_notional", _fake_notional)
+    monkeypatch.setattr(trades_mod, "_max_loss_vs_equity_check", _fake_max_loss)
 
     # Bypass DB + portfolio websocket fanout.
     from core import config as core_config
@@ -170,7 +182,17 @@ def _payload(symbol: str = "AAPL", qty: int = 10) -> dict:
         "time_in_force": "day",
         "notes": "idempotency test",
         "extended_hours": True,
+        "mode": "paper",
     }
+
+
+def _reviewed_payload(client: TestClient, payload: dict | None = None) -> dict:
+    base = payload or _payload()
+    preview = client.post("/api/v1/trades/orders/preview", json=base)
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["can_submit"] is True
+    return {**base, "review_id": body["review_id"], "confirm": True}
 
 
 # --------------------------------------------------------------------------- #
@@ -191,9 +213,10 @@ def test_duplicate_key_within_window_returns_cached_response(
     app, probes = app_with_trades
     client = TestClient(app)
     idem = "test-key-alpha-12345"
+    payload = _reviewed_payload(client)
 
     r1 = client.post(
-        "/api/v1/trades/orders", json=_payload(), headers={"Idempotency-Key": idem},
+        "/api/v1/trades/orders", json=payload, headers={"Idempotency-Key": idem},
     )
     assert r1.status_code == 201, r1.text
     first_id = r1.json()["id"]
@@ -204,7 +227,7 @@ def test_duplicate_key_within_window_returns_cached_response(
     # same status as the original. The cache-hit invariant is:
     # same response body + broker NOT touched a second time.
     r2 = client.post(
-        "/api/v1/trades/orders", json=_payload(), headers={"Idempotency-Key": idem},
+        "/api/v1/trades/orders", json=payload, headers={"Idempotency-Key": idem},
     )
     assert r2.status_code == 201
     assert r2.json()["id"] == first_id
@@ -227,7 +250,7 @@ def test_oversize_idempotency_key_returns_400(
     oversize = "x" * 129
     resp = client.post(
         "/api/v1/trades/orders",
-        json=_payload(),
+        json=_reviewed_payload(client),
         headers={"Idempotency-Key": oversize},
     )
     assert resp.status_code == 400
@@ -236,19 +259,19 @@ def test_oversize_idempotency_key_returns_400(
     assert probes["broker_posts"] == []
 
 
-def test_concurrent_same_key_one_wins_other_gets_429_pending(
+def test_concurrent_same_key_one_wins_other_gets_409_pending(
     app_with_trades: tuple[FastAPI, dict[str, Any]],
     fake_redis: Any,
 ) -> None:
     """Two parallel requests with the same key: exactly one reaches the
-    broker, the other sees the PENDING sentinel and gets 429.
+    broker, the other sees the PENDING sentinel and gets 409.
 
     Simulating true concurrency inside TestClient is awkward, so we
     simulate the race by pre-planting the PENDING sentinel in Redis
     before the second request hits — mirroring the state the second
     worker would see after the first worker ran ``SET NX = PENDING``
     but BEFORE it wrote the final response. The code path under test
-    is: ``GET cache`` sees PENDING → 429.
+    is: ``GET cache`` sees PENDING → 409.
     """
     app, probes = app_with_trades
     client = TestClient(app)
@@ -261,9 +284,9 @@ def test_concurrent_same_key_one_wins_other_gets_429_pending(
     )
 
     resp = client.post(
-        "/api/v1/trades/orders", json=_payload(), headers={"Idempotency-Key": idem},
+        "/api/v1/trades/orders", json=_reviewed_payload(client), headers={"Idempotency-Key": idem},
     )
-    assert resp.status_code == 429
+    assert resp.status_code == 409
     assert "in flight" in resp.json()["detail"].lower()
     # Broker never touched — the route short-circuited on the sentinel.
     assert probes["broker_posts"] == []
@@ -284,8 +307,9 @@ def test_broker_error_clears_pending_so_retry_proceeds(
 
     # Force the next broker call to fail.
     probes["broker_should_fail"] = True
+    payload = _reviewed_payload(client)
     r1 = client.post(
-        "/api/v1/trades/orders", json=_payload(), headers={"Idempotency-Key": idem},
+        "/api/v1/trades/orders", json=payload, headers={"Idempotency-Key": idem},
     )
     assert r1.status_code == 502
     assert len(probes["broker_posts"]) == 1
@@ -296,13 +320,13 @@ def test_broker_error_clears_pending_so_retry_proceeds(
     )
     assert cached is None, (
         f"PENDING sentinel leaked past a broker error — got {cached!r}. "
-        "Subsequent retries with the same key would 429 for 600s."
+        "Subsequent retries with the same key would 409 for 600s."
     )
 
     # Now let the broker succeed and retry with the same key.
     probes["broker_should_fail"] = False
     r2 = client.post(
-        "/api/v1/trades/orders", json=_payload(), headers={"Idempotency-Key": idem},
+        "/api/v1/trades/orders", json=payload, headers={"Idempotency-Key": idem},
     )
     assert r2.status_code == 201, r2.text
     assert len(probes["broker_posts"]) == 2  # retry DID reach the broker.
@@ -328,9 +352,10 @@ def test_idempotency_key_forwarded_as_client_order_id_to_alpaca(
     client = TestClient(app)
     idem = "abcdef1234567890abcdef1234567890abcdef12"  # 40 chars
     expected_tail = idem[-24:]
+    payload = _reviewed_payload(client)
 
     resp = client.post(
-        "/api/v1/trades/orders", json=_payload(), headers={"Idempotency-Key": idem},
+        "/api/v1/trades/orders", json=payload, headers={"Idempotency-Key": idem},
     )
     assert resp.status_code == 201, resp.text
     assert len(probes["broker_posts"]) == 1
@@ -342,20 +367,122 @@ def test_idempotency_key_forwarded_as_client_order_id_to_alpaca(
     assert expected_tail in broker_coid
 
 
-def test_no_idempotency_key_uses_manual_client_order_id(
+def test_submit_requires_confirm_true_after_preview(
     app_with_trades: tuple[FastAPI, dict[str, Any]],
 ) -> None:
-    """When no Idempotency-Key is sent, the coid falls back to the
-    ``manual_<user>_<hex>`` format (back-compat for legacy clients).
+    app, probes = app_with_trades
+    client = TestClient(app)
+    payload = _payload()
+    preview = client.post("/api/v1/trades/orders/preview", json=payload)
+    assert preview.status_code == 200, preview.text
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json={**payload, "review_id": preview.json()["review_id"]},
+        headers={"Idempotency-Key": "confirm-required"},
+    )
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["detail"]["error"] == "order_confirmation_required"
+    assert probes["broker_posts"] == []
 
-    Ensures we don't regress back-compat while exercising the cached
-    path: legacy clients still get a stable coid for broker correlation.
-    """
+
+def test_submit_requires_explicit_trading_mode(
+    app_with_trades: tuple[FastAPI, dict[str, Any]],
+) -> None:
+    app, probes = app_with_trades
+    client = TestClient(app)
+    payload = _payload()
+    payload.pop("mode")
+    preview = client.post("/api/v1/trades/orders/preview", json=payload)
+    assert preview.status_code == 200, preview.text
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json={**payload, "review_id": preview.json()["review_id"], "confirm": True},
+        headers={"Idempotency-Key": "mode-required"},
+    )
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["detail"]["error"] == "trading_mode_required"
+    assert probes["broker_posts"] == []
+
+
+def test_submit_rejects_mode_disagreement(
+    app_with_trades: tuple[FastAPI, dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from api.routes import trades as trades_mod
+
+    async def _fake_committed(_username: str) -> tuple[str, None]:
+        return "live", None
+
+    monkeypatch.setattr(trades_mod, "_committed_trading_mode", _fake_committed)
+
+    app, probes = app_with_trades
+    client = TestClient(app)
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json=_reviewed_payload(client),
+        headers={"Idempotency-Key": "mode-disagreement"},
+    )
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["detail"]["error"] == "mode_disagreement"
+    assert probes["broker_posts"] == []
+
+
+def test_live_submit_requires_fresh_step_up(
+    app_with_trades: tuple[FastAPI, dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from api.routes import trades as trades_mod
+
+    async def _fake_committed(_username: str) -> tuple[str, None]:
+        return "live", None
+
+    monkeypatch.setattr(trades_mod, "_committed_trading_mode", _fake_committed)
+
+    app, probes = app_with_trades
+    client = TestClient(app)
+    payload = _reviewed_payload(client, {**_payload(), "mode": "live"})
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json=payload,
+        headers={"Idempotency-Key": "live-step-up-required"},
+    )
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["detail"]["error"] == "live_step_up_required"
+    assert probes["broker_posts"] == []
+
+
+def test_live_submit_with_fresh_step_up_reaches_broker(
+    app_with_trades: tuple[FastAPI, dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from datetime import datetime, timezone
+    from api.routes import trades as trades_mod
+
+    async def _fake_committed(_username: str) -> tuple[str, datetime]:
+        return "live", datetime.now(timezone.utc)
+
+    monkeypatch.setattr(trades_mod, "_committed_trading_mode", _fake_committed)
+
+    app, probes = app_with_trades
+    client = TestClient(app)
+    payload = _reviewed_payload(client, {**_payload(), "mode": "live"})
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json=payload,
+        headers={"Idempotency-Key": "live-step-up-fresh"},
+    )
+    assert resp.status_code == 201, resp.text
+    assert len(probes["broker_posts"]) == 1
+
+
+def test_no_idempotency_key_is_rejected_before_broker(
+    app_with_trades: tuple[FastAPI, dict[str, Any]],
+) -> None:
+    """When no Idempotency-Key is sent, submit fails before broker touch."""
     app, probes = app_with_trades
     client = TestClient(app)
 
-    resp = client.post("/api/v1/trades/orders", json=_payload())
-    assert resp.status_code == 201, resp.text
-    _, broker_coid = probes["broker_posts"][0]
-    assert broker_coid is not None
-    assert broker_coid.startswith("manual_alice_")
+    resp = client.post("/api/v1/trades/orders", json=_reviewed_payload(client))
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["detail"]["error"] == "idempotency_key_required"
+    assert probes["broker_posts"] == []

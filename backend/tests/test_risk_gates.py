@@ -117,6 +117,11 @@ def risk_gate_app(
     monkeypatch.setattr(trades_mod, "_risk_check", _fake_per)
     monkeypatch.setattr(trades_mod, "_alpaca_credentials_or_503", _fake_credentials)
     monkeypatch.setattr(trades_mod, "_get_account_equity", _fake_equity)
+
+    async def _fake_review(_payload: Any, *, username: str) -> None:
+        return None
+    monkeypatch.setattr(trades_mod, "_require_matching_order_review", _fake_review)
+
     # Reset the 60s equity cache so each test starts cold.
     trades_mod._equity_cache_clear()
 
@@ -227,6 +232,14 @@ def _equity_payload() -> dict:
     }
 
 
+def _submit_payload(payload: dict) -> dict:
+    return {**payload, "mode": "paper", "confirm": True}
+
+
+def _idem_headers(key: str) -> dict[str, str]:
+    return {"Idempotency-Key": key}
+
+
 def _iron_condor_payload() -> dict:
     """4-leg iron condor on SPY with $5 width — $500 max loss × qty.
 
@@ -269,7 +282,11 @@ def test_killed_strategy_rejected_with_423(
         client = TestClient(app)
         body = _equity_payload()
         body["strategy"] = "momentum_quality"
-        resp = client.post("/api/v1/trades/orders", json=body)
+        resp = client.post(
+            "/api/v1/trades/orders",
+            json=_submit_payload(body),
+            headers=_idem_headers("killed-strategy"),
+        )
 
     assert resp.status_code == 423, resp.text
     detail = resp.json().get("detail")
@@ -309,7 +326,8 @@ def test_admin_override_kill_switch_succeeds(
         body["strategy"] = "momentum_quality"
         resp = client.post(
             "/api/v1/trades/orders?override_kill_switch=true",
-            json=body,
+            json=_submit_payload(body),
+            headers=_idem_headers("admin-kill-override"),
         )
 
     assert resp.status_code == 201, resp.text
@@ -348,7 +366,8 @@ def test_non_admin_override_kill_switch_forbidden(
         body["strategy"] = "momentum_quality"
         resp = client.post(
             "/api/v1/trades/orders?override_kill_switch=true",
-            json=body,
+            json=_submit_payload(body),
+            headers=_idem_headers("non-admin-kill-override"),
         )
 
     assert resp.status_code == 403
@@ -372,7 +391,11 @@ def test_manual_order_unaffected_by_kill_switch(
 
     client = TestClient(app)
     body = _equity_payload()  # no "strategy" key
-    resp = client.post("/api/v1/trades/orders", json=body)
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json=_submit_payload(body),
+        headers=_idem_headers("manual-kill-unaffected"),
+    )
 
     assert resp.status_code == 201, resp.text
     assert len(probes["broker_posts"]) == 1
@@ -435,7 +458,11 @@ def test_oversized_debit_order_rejected_422(
         "time_in_force": "day",
     }
     client = TestClient(app)
-    resp = client.post("/api/v1/trades/orders", json=body)
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json=_submit_payload(body),
+        headers=_idem_headers("oversized-debit-reject"),
+    )
 
     assert resp.status_code == 422, resp.text
     detail = resp.json().get("detail", "")
@@ -477,7 +504,8 @@ def test_admin_override_size_limit_succeeds(
         client = TestClient(app)
         resp = client.post(
             "/api/v1/trades/orders?override_size_limit=true",
-            json=body,
+            json=_submit_payload(body),
+            headers=_idem_headers("admin-size-override"),
         )
 
     assert resp.status_code == 201, resp.text
@@ -502,7 +530,8 @@ def test_iron_condor_within_cap_succeeds(
     client = TestClient(app)
     resp = client.post(
         "/api/v1/trades/orders",
-        json=_iron_condor_payload(),
+        json=_submit_payload(_iron_condor_payload()),
+        headers=_idem_headers("iron-condor-within-cap"),
     )
     assert resp.status_code == 201, resp.text
     assert len(probes["broker_posts"]) == 1
@@ -532,7 +561,11 @@ def test_naked_short_option_rejected_as_undefined_risk(
         "time_in_force": "day",
     }
     client = TestClient(app)
-    resp = client.post("/api/v1/trades/orders", json=body)
+    resp = client.post(
+        "/api/v1/trades/orders",
+        json=_submit_payload(body),
+        headers=_idem_headers("naked-short-option"),
+    )
 
     assert resp.status_code == 422, resp.text
     detail = resp.json().get("detail", "")
@@ -550,8 +583,16 @@ def test_equity_cache_avoids_per_order_alpaca_calls(
     client = TestClient(app)
     body = _equity_payload()  # tiny order, well under cap
 
-    r1 = client.post("/api/v1/trades/orders", json=body)
-    r2 = client.post("/api/v1/trades/orders", json=body)
+    r1 = client.post(
+        "/api/v1/trades/orders",
+        json=_submit_payload(body),
+        headers=_idem_headers("equity-cache-1"),
+    )
+    r2 = client.post(
+        "/api/v1/trades/orders",
+        json=_submit_payload(body),
+        headers=_idem_headers("equity-cache-2"),
+    )
 
     assert r1.status_code == 201, r1.text
     assert r2.status_code == 201, r2.text
@@ -786,7 +827,8 @@ def test_long_straddle_within_cap_succeeds_via_api(
     client = TestClient(app)
     resp = client.post(
         "/api/v1/trades/orders",
-        json=_long_straddle_payload(),
+        json=_submit_payload(_long_straddle_payload()),
+        headers=_idem_headers("long-straddle"),
     )
     assert resp.status_code == 201, resp.text
     assert len(probes["broker_posts"]) == 1
@@ -802,7 +844,8 @@ def test_long_strangle_within_cap_succeeds_via_api(
     client = TestClient(app)
     resp = client.post(
         "/api/v1/trades/orders",
-        json=_long_strangle_payload(),
+        json=_submit_payload(_long_strangle_payload()),
+        headers=_idem_headers("long-strangle"),
     )
     assert resp.status_code == 201, resp.text
     assert len(probes["broker_posts"]) == 1
@@ -821,7 +864,8 @@ def test_short_strangle_rejected_as_undefined_risk_via_api(
     client = TestClient(app)
     resp = client.post(
         "/api/v1/trades/orders",
-        json=_short_strangle_payload(),
+        json=_submit_payload(_short_strangle_payload()),
+        headers=_idem_headers("short-strangle"),
     )
     assert resp.status_code == 422, resp.text
     detail = resp.json().get("detail", "")
@@ -886,7 +930,8 @@ def test_single_trade_at_5pct_per_trade_cap_allowed(
     client = TestClient(app)
     resp = client.post(
         "/api/v1/trades/orders",
-        json=_at_5pct_per_trade_cap_payload(),
+        json=_submit_payload(_at_5pct_per_trade_cap_payload()),
+        headers=_idem_headers("single-trade-5pct"),
     )
     assert resp.status_code == 201, resp.text
     assert len(probes["broker_posts"]) == 1
@@ -924,7 +969,11 @@ def test_aggregate_under_20pct_allowed(
         trades_mod, "_get_open_positions_max_loss_total", new=_fake_open_total,
     ):
         client = TestClient(app)
-        resp = client.post("/api/v1/trades/orders", json=payload)
+        resp = client.post(
+            "/api/v1/trades/orders",
+            json=_submit_payload(payload),
+            headers=_idem_headers("aggregate-under"),
+        )
 
     assert resp.status_code == 201, resp.text
     assert len(probes["broker_posts"]) == 1
@@ -966,7 +1015,11 @@ def test_aggregate_over_20pct_rejected(
         trades_mod, "_get_open_positions_max_loss_total", new=_fake_open_total,
     ):
         client = TestClient(app)
-        resp = client.post("/api/v1/trades/orders", json=payload)
+        resp = client.post(
+            "/api/v1/trades/orders",
+            json=_submit_payload(payload),
+            headers=_idem_headers("aggregate-over"),
+        )
 
     assert resp.status_code == 422, resp.text
     detail = resp.json().get("detail", "")

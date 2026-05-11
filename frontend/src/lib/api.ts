@@ -1,5 +1,6 @@
 import { env } from "@/env";
 import { isOccSymbol } from "@/lib/occ";
+import { useUIStore } from "@/stores/ui";
 import type {
   Quote,
   OHLCVBar,
@@ -2258,6 +2259,7 @@ export interface PlaceOrderPayload {
   route_intent?: "broker_order_review";
   broker_provider?: OrderBrokerProvider;
   review_id?: string;
+  mode?: TradingMode;
 }
 
 export interface PlaceOrderOptions {
@@ -2289,7 +2291,10 @@ export interface OrderPreviewResponse {
   checks: OrderPreviewCheck[];
 }
 
-function orderRequestBodyFromPayload(payload: PlaceOrderPayload): Record<string, unknown> {
+function orderRequestBodyFromPayload(
+  payload: PlaceOrderPayload,
+  options?: { confirm?: boolean },
+): Record<string, unknown> {
   const explicitLegs = payload.legs != null;
   if (explicitLegs && payload.legs && payload.legs.length > 1) {
     const pricedCount = payload.legs.filter((leg) => leg.price != null).length;
@@ -2316,7 +2321,12 @@ function orderRequestBodyFromPayload(payload: PlaceOrderPayload): Record<string,
   // backend `CreateOrderRequest.strategy` field is populated and the
   // ledger row carries the originating strategy + combo type. We omit
   // undefined keys to keep existing single-leg equity flows tidy.
-  const reqBody: Record<string, unknown> = { legs, time_in_force: payload.time_in_force ?? "day" };
+  const reqBody: Record<string, unknown> = {
+    legs,
+    time_in_force: payload.time_in_force ?? "day",
+    mode: payload.mode ?? useUIStore.getState().tradingMode,
+  };
+  if (options?.confirm) reqBody.confirm = true;
   if (payload.strategy) reqBody.strategy = payload.strategy;
   if (payload.combo_type) reqBody.combo_type = payload.combo_type;
   if (payload.combo_correlation_id) reqBody.combo_correlation_id = payload.combo_correlation_id;
@@ -2375,7 +2385,7 @@ export function placeOrder(payload: PlaceOrderPayload, options?: PlaceOrderOptio
     headers: {
       "Idempotency-Key": idempKey,
     },
-    body: JSON.stringify(orderRequestBodyFromPayload(payload)),
+    body: JSON.stringify(orderRequestBodyFromPayload(payload, { confirm: true })),
   });
 }
 
