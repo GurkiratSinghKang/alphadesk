@@ -14,18 +14,29 @@ import {
 // duplicating the literal.
 export const DEFAULT_WATCHLIST = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "SPY", "QQQ", "META", "AMD"];
 
-// TODO(BUG-016): the dashboard currently observes ~295 GETs/min across
-// portfolio/orders/quotes because most surfaces poll on their own
-// intervals. The proper fix is a unified WebSocket stream for quotes +
-// portfolio + orders so pages subscribe once and receive push updates
-// (the `portfolio` WS channel already exists — see useDataPipeline — but
-// the REST poll in parallel defeats its purpose). Until that lands:
+// TODO(BUG-016 / BUG-070): the dashboard previously observed ~295
+// GETs/min across portfolio/orders/quotes because most surfaces polled
+// on their own intervals.
+//
+// Audit 2026-05-11 progress:
+//   ✓ commit a21a33b2 — `LiveDataProvider` in design-v2 reads WS-fed
+//     quotes from `useMarketStore` first; REST only for the cold-start
+//     tail. Steady-state polling on the v2 surfaces drops to ~0
+//     calls/pageview after WS warmup.
+//   ✓ commit 85f44dc3 + e20273d9 — quote and watchlist fan-outs gated
+//     to routes that actually render those views (~30 calls saved per
+//     off-ticker pageview).
+//   ✓ commit 559cd85d — shared 5s response cache for
+//     portfolio/positions/orders kills cross-page drift (BUG-001 /
+//     BUG-059 cluster).
+//
+// Still pending for the v1 (DeskLayout) surfaces:
+//   • React Query hooks (regime=5m, indices=1m, strategies=1m) remain
+//     coarse-grained — see hooks/useQueries.ts.
 //   • `useDataPipeline` defaults portfolio polling to 30s and gates it
 //     on market hours when the user hasn't overridden the interval.
-//   • React Query hooks (regime=5m, indices=1m, strategies=1m) remain
-//     coarse-grained; see hooks/useQueries.ts.
-// Follow-up owner: next WS wave (consolidate portfolio + quotes into one
-// subscription, drop redundant REST polls).
+// Follow-up owner: V1→V2 migration (BUG-079) collapses the two
+// surfaces into the WS-driven design-v2 pipeline.
 
 /**
  * Slice-11 / SLG-1 (2026 design brief, TWS Mosaic pattern): symbol-link

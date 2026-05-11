@@ -1336,14 +1336,20 @@ export async function getBars(
 /**
  * Fetch snapshots for multiple symbols.
  *
- * TODO(perf-audit-r3 P0 #4): the backend currently exposes only
- * `/api/v1/market/quotes/{symbol}` (per-symbol), not a batched
- * `/api/v1/market/snapshots?symbols=A,B,C` endpoint. This function therefore
- * fires N parallel requests — with a 10-symbol watchlist the first mount
- * triggers 10 Alpaca calls and ~3–5 s of cold-start latency. When the
- * backend batch endpoint lands (screener.py:_fetch_multi_snapshots is the
- * closest existing implementation), migrate callers to `getSnapshots` below
- * and delete this per-symbol fan-out.
+ * TODO(perf-audit-r3 P0 #4 / BUG-070): the backend currently exposes
+ * only `/api/v1/market/quotes/{symbol}` (per-symbol), not a batched
+ * `/api/v1/market/snapshots?symbols=A,B,C` endpoint. This function
+ * therefore fires N parallel requests — with a 10-symbol watchlist the
+ * first mount triggers 10 Alpaca calls and ~3-5 s of cold-start latency.
+ *
+ * Audit 2026-05-11 progress: design-v2's `LiveDataProvider` (commit
+ * a21a33b2) now reads WS-fed quotes from `useMarketStore` first, so the
+ * REST-only callers of `getSnapshot` are limited to the v1 surfaces +
+ * the cold-start tail. The full batch-endpoint migration (replace per-
+ * symbol with `getSnapshots` below) remains the proper fix and is
+ * tracked as a backend follow-up alongside the BUG-070 WS-consume
+ * work. `screener.py:_fetch_multi_snapshots` is the closest existing
+ * batched implementation; expose it as the public batch endpoint.
  */
 export async function getSnapshot(
   symbols: string[],
