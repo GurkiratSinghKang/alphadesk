@@ -3544,31 +3544,66 @@ export interface PipelineSchedulerState {
   missed_runs?: number;
 }
 
+// 2026-05-11 (round 5d follow-up): the original /schedule + /summary
+// + /realtime-setups types were wishful — they didn't match the
+// backend's actual wire shapes. PR #174 shipped with these guesses,
+// which crashed Pipeline page in prod ("x.slice is not a function"
+// because /realtime-setups returns {summary, setups} not an array).
+// Updated to the real shapes the backend emits.
+
+export interface PipelineScheduleWindow {
+  time: string;     // "06:00 ET" / "15:30 Fri"
+  name: string;     // "Pre-market scan" / "Market open execution"
+  strategies: string[];
+  frequency: string; // "daily" / "weekly (Friday)" / etc.
+}
+
 export interface PipelineSchedule {
-  windows: Array<{ name: string; et: string }>;
-  enabled: boolean;
-  last_updated?: string;
+  windows: PipelineScheduleWindow[];
+  realtime: {
+    strategies: string[];
+    description: string;
+  };
 }
 
+// `/pipeline/summary` returns an aggregate-stats blob. None of the
+// fields I originally assumed (universe / candidates / staged / live /
+// filled) exist on the backend — those numbers come from staged + live
+// state, not the summary endpoint. Real shape mirrors the FastAPI
+// handler verbatim.
 export interface PipelineSummary {
-  last_run_date?: string | null;
-  last_run_status?: string | null;
-  last_run_finished_at?: string | null;
-  universe?: number | null;
-  candidates?: number | null;
-  staged?: number | null;
-  live?: number | null;
-  filled?: number | null;
+  total_runs: number;
+  total_trades_placed: number;
+  total_trades_rejected: number;
+  approval_rate: number;
+  most_active_strategy: string | null;
+  most_rejected_reason: string | null;
+  last_run: string | null;
+  portfolio_since_start: {
+    starting_equity: number;
+    current_equity: number;
+    total_return_pct: number;
+  };
+  closed_trade_metrics: Record<string, unknown>;
 }
 
+// `/realtime-setups` returns `{summary, setups[]}` where summary is
+// the scanner's aggregate and setups is the per-symbol active list.
+// PipelinePage cares about the `setups` array; we unwrap here so
+// callers can `.slice/.map` on the return value without defensive
+// guards everywhere.
 export interface PipelineRealtimeSetup {
   symbol: string;
-  strategy: string | null;
-  signal: string | null;
-  conviction: number | null;
-  entry_price: number | null;
-  rationale: string | null;
-  timestamp: string | null;
+  strategy: string;
+  type: string;
+  trigger_price: number;
+  direction: string;
+  expires: string;
+}
+
+export interface PipelineRealtimeSetupsResponse {
+  summary: Record<string, unknown>;
+  setups: PipelineRealtimeSetup[];
 }
 
 export function getPipelineSchedule() {
@@ -3589,8 +3624,14 @@ export function cancelPipelineRun() {
   });
 }
 
-export function getPipelineRealtimeSetups() {
-  return apiFetch<PipelineRealtimeSetup[]>(`/api/v1/pipeline/realtime-setups`);
+/** Returns ONLY the setups[] array — backend wraps it in {summary, setups}. */
+export async function getPipelineRealtimeSetups(): Promise<PipelineRealtimeSetup[]> {
+  const res = await apiFetch<PipelineRealtimeSetupsResponse | PipelineRealtimeSetup[]>(
+    `/api/v1/pipeline/realtime-setups`,
+  );
+  // Defensive: if backend ever flattens, accept both shapes.
+  if (Array.isArray(res)) return res;
+  return Array.isArray(res?.setups) ? res.setups : [];
 }
 
 export async function getPipelineRun(date: string): Promise<PipelineRun> {
