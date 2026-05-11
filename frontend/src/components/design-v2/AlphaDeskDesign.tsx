@@ -48,6 +48,17 @@ import {
   getTickerFundamentals,
   getUserWatchlist,
   getWatchlistsV2,
+  // 2026-05-11 (round 5c): Settings → Security + Danger zone
+  // wiring. These clients hit /api/v1/auth/* and /api/v1/user/*
+  // for the actual operations the buttons claim to do.
+  authChangePassword,
+  authDisableTotp,
+  authLogoutEverywhere,
+  authStartTotpEnroll,
+  authVerifyTotpEnroll,
+  confirmUserErase,
+  postUserExport,
+  previewUserErase,
 } from "@/lib/api";
 // 2026-05-10 (chart wiring): swap the design's hand-rolled SVG HeroChart
 // for the real lightweight-charts engine via a thin wrapper. The mock
@@ -8507,20 +8518,158 @@ function STAI() {
 // controls that work today (Change password / Re-enroll 2FA buttons
 // route through the existing /login/reset and /api/v1/auth flows)
 // without claiming false metadata about when those changed last.
+// 2026-05-11 (round 5c backend wiring): Settings → Security buttons
+// now actually call /api/v1/auth/{change-password,2fa/enroll,
+// 2fa/verify,2fa/disable,logout-all}. The flows are inline (no
+// modals yet) but real — the operator can change their password,
+// enroll/verify/disable TOTP, and revoke all sessions from this UI.
+// Status messages render inline under each control so the operator
+// gets feedback on success/error.
 function STSecurity() {
+  const [pwOld, setPwOld] = useState("");
+  const [pwNew, setPwNew] = useState("");
+  const [pwStatus, setPwStatus] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  const [pwLoading, setPwLoading] = useState(false);
+  const handleChangePassword = async () => {
+    if (!pwOld || !pwNew) {
+      setPwStatus({ tone: "err", text: "Both old and new password required." });
+      return;
+    }
+    setPwLoading(true);
+    try {
+      await authChangePassword({ old_password: pwOld, new_password: pwNew });
+      setPwStatus({ tone: "ok", text: "Password updated." });
+      setPwOld("");
+      setPwNew("");
+    } catch (e) {
+      setPwStatus({ tone: "err", text: e instanceof Error ? e.message : "Password change failed." });
+    } finally {
+      setPwLoading(false);
+    }
+  };
+
+  const [enroll, setEnroll] = useState<{ secret?: string; otpauth_url?: string; qr_data_url?: string } | null>(null);
+  const [enrollCode, setEnrollCode] = useState("");
+  const [enrollStatus, setEnrollStatus] = useState<{ tone: "ok" | "err"; text: string; codes?: string[] } | null>(null);
+  const [enrollLoading, setEnrollLoading] = useState(false);
+  const handleStartEnroll = async () => {
+    setEnrollLoading(true);
+    setEnrollStatus(null);
+    try {
+      const res = await authStartTotpEnroll();
+      setEnroll(res);
+    } catch (e) {
+      setEnrollStatus({ tone: "err", text: e instanceof Error ? e.message : "TOTP enroll failed." });
+    } finally {
+      setEnrollLoading(false);
+    }
+  };
+  const handleVerifyEnroll = async () => {
+    if (!enrollCode) {
+      setEnrollStatus({ tone: "err", text: "6-digit code required." });
+      return;
+    }
+    setEnrollLoading(true);
+    try {
+      const res = await authVerifyTotpEnroll({ code: enrollCode.trim() });
+      setEnrollStatus({ tone: "ok", text: "TOTP enrolled. Save these recovery codes — they are shown once.", codes: res.recovery_codes });
+      setEnroll(null);
+      setEnrollCode("");
+    } catch (e) {
+      setEnrollStatus({ tone: "err", text: e instanceof Error ? e.message : "Verify failed." });
+    } finally {
+      setEnrollLoading(false);
+    }
+  };
+  const [disableCode, setDisableCode] = useState("");
+  const [disableStatus, setDisableStatus] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  const handleDisable = async () => {
+    if (!disableCode) {
+      setDisableStatus({ tone: "err", text: "6-digit code required to disable TOTP." });
+      return;
+    }
+    try {
+      await authDisableTotp({ code: disableCode.trim() });
+      setDisableStatus({ tone: "ok", text: "TOTP disabled. 2FA challenge no longer required at sign-in." });
+      setDisableCode("");
+    } catch (e) {
+      setDisableStatus({ tone: "err", text: e instanceof Error ? e.message : "Disable failed." });
+    }
+  };
+
+  const [logoutStatus, setLogoutStatus] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  const handleLogoutAll = async () => {
+    if (!window.confirm("Sign out all sessions including this one? You'll need to sign back in.")) return;
+    try {
+      const res = await authLogoutEverywhere();
+      setLogoutStatus({ tone: "ok", text: `${res.revoked_count} session${res.revoked_count === 1 ? "" : "s"} revoked. Redirecting…` });
+      window.setTimeout(() => { window.location.href = "/login"; }, 1500);
+    } catch (e) {
+      setLogoutStatus({ tone: "err", text: e instanceof Error ? e.message : "Logout-all failed." });
+    }
+  };
+
+  const Status = ({ s }: { s: { tone: "ok" | "err"; text: string } | null }) =>
+    s ? (
+      <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: s.tone === "ok" ? "var(--up-500)" : "var(--down-500)" }}>{s.text}</div>
+    ) : null;
+
   return (
     <>
-    <STCard title="Password & 2FA">
-      <STField label="Password" hint="Routes through the password-reset flow"><STButton>Change password</STButton></STField>
-      <STField label="Two-factor authentication" hint="Status not yet exposed by the session backend"><span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}><STButton>Re-enroll</STButton></span></STField>
-      <STField label="Recovery codes" hint="Single-use codes if you lose your authenticator"><STButton>Generate new codes</STButton></STField>
-      <STField label="Live-trading 2FA challenge" hint="Re-prompt 2FA when switching to live mode"><STToggle on={true} /></STField>
+    <STCard title="Password" sub="POSTs /api/v1/auth/change-password — re-prompts you for current password as a check.">
+      <STField label="Current password"><input type="password" value={pwOld} onChange={(e) => setPwOld(e.target.value)} style={{ width: 280, padding: "7px 10px", fontFamily: "var(--font-mono)", fontSize: 12.5, color: "var(--ink-1000)", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderRadius: 3, outline: "none" }} /></STField>
+      <STField label="New password"><input type="password" value={pwNew} onChange={(e) => setPwNew(e.target.value)} style={{ width: 280, padding: "7px 10px", fontFamily: "var(--font-mono)", fontSize: 12.5, color: "var(--ink-1000)", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderRadius: 3, outline: "none" }} /></STField>
+      <STField label=""><span><button onClick={handleChangePassword} disabled={pwLoading} style={{ padding: "6px 14px", background: "var(--brand)", color: "var(--brand-on)", border: "1px solid var(--brand)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, cursor: pwLoading ? "wait" : "pointer", opacity: pwLoading ? 0.6 : 1 }}>{pwLoading ? "Updating…" : "Change password"}</button><Status s={pwStatus} /></span></STField>
     </STCard>
-    <STCard title="Active sessions" sub="Per-user session telemetry is hidden until /api/v1/auth/sessions exposes it. The Sign-out-everywhere button below still revokes all current cookies.">
+
+    <STCard title="Two-factor authentication" sub="TOTP via /api/v1/auth/2fa/{enroll,verify,disable}. Recovery codes are returned once on verify and never re-shown.">
+      <STField label="Enroll a new authenticator">
+        <span>
+          <button onClick={handleStartEnroll} disabled={enrollLoading || !!enroll} style={{ padding: "6px 14px", background: "var(--bg-elev-1)", color: "var(--ink-1000)", border: "1px solid var(--border-strong)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, cursor: enrollLoading || !!enroll ? "wait" : "pointer", opacity: enrollLoading || !!enroll ? 0.6 : 1 }}>{enroll ? "Started" : enrollLoading ? "Loading…" : "Start enroll"}</button>
+        </span>
+      </STField>
+      {enroll && (
+        <STField label="Verify 6-digit code">
+          <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+            <input value={enrollCode} onChange={(e) => setEnrollCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" inputMode="numeric" autoComplete="one-time-code" style={{ width: 120, padding: "7px 10px", fontFamily: "var(--font-mono)", fontSize: 14, color: "var(--ink-1000)", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderRadius: 3, outline: "none", textAlign: "center", letterSpacing: "0.2em" }} />
+            <button onClick={handleVerifyEnroll} disabled={enrollLoading || enrollCode.length !== 6} style={{ padding: "6px 14px", background: "var(--brand)", color: "var(--brand-on)", border: "1px solid var(--brand)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, cursor: enrollLoading || enrollCode.length !== 6 ? "wait" : "pointer", opacity: enrollLoading || enrollCode.length !== 6 ? 0.6 : 1 }}>Verify</button>
+          </span>
+        </STField>
+      )}
+      {enroll && enroll.otpauth_url && (
+        <div style={{ padding: "10px 14px", background: "var(--bg-elev-1)", border: "1px solid var(--border-hair)", borderRadius: 3, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg)", wordBreak: "break-all", marginTop: 8 }}>
+          <div style={{ color: "var(--fg-hint)", fontSize: 9.5, letterSpacing: "0.18em", marginBottom: 4 }}>SECRET / OTPAUTH</div>
+          {enroll.secret && <div>Secret: <span style={{ color: "var(--gold-300)" }}>{enroll.secret}</span></div>}
+          <div>otpauth: <span style={{ color: "var(--ice-500)" }}>{enroll.otpauth_url}</span></div>
+        </div>
+      )}
+      <Status s={enrollStatus} />
+      {enrollStatus?.codes && enrollStatus.codes.length > 0 && (
+        <div style={{ marginTop: 10, padding: "10px 14px", background: "rgba(201,166,107,0.06)", border: "1px solid var(--gold-500)", borderRadius: 3 }}>
+          <div className="t-eyebrow-italic" style={{ color: "var(--gold-500)", fontSize: 9.5, letterSpacing: "0.18em" }}>RECOVERY CODES · save these</div>
+          <div style={{ marginTop: 6, fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--ink-1000)", display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 4 }}>
+            {enrollStatus.codes.map((c) => <span key={c}>{c}</span>)}
+          </div>
+        </div>
+      )}
+
+      <STField label="Disable TOTP" hint="Enter your current 6-digit code to confirm.">
+        <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+          <input value={disableCode} onChange={(e) => setDisableCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" inputMode="numeric" autoComplete="one-time-code" style={{ width: 120, padding: "7px 10px", fontFamily: "var(--font-mono)", fontSize: 14, color: "var(--ink-1000)", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderRadius: 3, outline: "none", textAlign: "center", letterSpacing: "0.2em" }} />
+          <button onClick={handleDisable} disabled={disableCode.length !== 6} style={{ padding: "6px 14px", background: "rgba(224,120,86,0.10)", color: "var(--down-500)", border: "1px solid var(--down-500)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, cursor: disableCode.length !== 6 ? "wait" : "pointer", opacity: disableCode.length !== 6 ? 0.6 : 1 }}>Disable</button>
+        </span>
+      </STField>
+      <Status s={disableStatus} />
+    </STCard>
+
+    <STCard title="Active sessions" sub="Per-user session listing isn't exposed yet. The button below revokes every cookie tied to your account, this device included.">
       <div style={{ padding: "10px 0", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13.5, color: "var(--fg-muted)" }}>
         No active-session list returned by the backend.
       </div>
-      <div style={{ marginTop: 12 }}><STButton tone="danger">Sign out everywhere</STButton></div>
+      <div style={{ marginTop: 12 }}>
+        <button onClick={handleLogoutAll} style={{ padding: "6px 14px", background: "rgba(224,120,86,0.10)", color: "var(--down-500)", border: "1px solid var(--down-500)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, cursor: "pointer" }}>Sign out everywhere</button>
+        <Status s={logoutStatus} />
+      </div>
     </STCard>
     </>
   );
@@ -8550,13 +8699,113 @@ function STBilling() {
   );
 }
 
+// 2026-05-11 (round 5c backend wiring): Danger zone wired to
+// /api/v1/user/{export,erase/preview,erase}. Export creates a job
+// or returns a download URL the operator can grab. Erase is the
+// 2-step preview → confirm flow with a typed-confirm guard so
+// fat-finger doesn't trash the account.
 function STDanger() {
+  const [exportStatus, setExportStatus] = useState<{ tone: "ok" | "err"; text: string; url?: string } | null>(null);
+  const [exportLoading, setExportLoading] = useState(false);
+  const handleExport = async () => {
+    setExportLoading(true);
+    try {
+      const res = await postUserExport();
+      const text = res.download_url
+        ? "Export ready — link below valid for 24h."
+        : res.export_id
+        ? `Export queued · id ${res.export_id}. You'll get an email when it's done.`
+        : "Export started — you'll get an email when it's ready.";
+      setExportStatus({ tone: "ok", text, url: res.download_url });
+    } catch (e) {
+      setExportStatus({ tone: "err", text: e instanceof Error ? e.message : "Export failed." });
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const [erasePreview, setErasePreview] = useState<{ erase_token: string; will_delete: Record<string, number>; grace_days?: number } | null>(null);
+  const [erasePhrase, setErasePhrase] = useState("");
+  const [eraseStatus, setEraseStatus] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  const [eraseLoading, setEraseLoading] = useState(false);
+  const handleErasePreview = async () => {
+    setEraseLoading(true);
+    setEraseStatus(null);
+    try {
+      const res = await previewUserErase();
+      setErasePreview(res);
+    } catch (e) {
+      setEraseStatus({ tone: "err", text: e instanceof Error ? e.message : "Preview failed." });
+    } finally {
+      setEraseLoading(false);
+    }
+  };
+  const handleEraseConfirm = async () => {
+    if (!erasePreview) return;
+    if (erasePhrase !== "DELETE") {
+      setEraseStatus({ tone: "err", text: 'Type DELETE exactly to confirm (case-sensitive).' });
+      return;
+    }
+    if (!window.confirm("This is final. Erase your account and all data?")) return;
+    setEraseLoading(true);
+    try {
+      const res = await confirmUserErase({ erase_token: erasePreview.erase_token, confirm_phrase: erasePhrase });
+      setEraseStatus({ tone: "ok", text: `Account scheduled for erase on ${res.scheduled_for}. Cancel by signing in within the grace window.` });
+      setErasePreview(null);
+      setErasePhrase("");
+    } catch (e) {
+      setEraseStatus({ tone: "err", text: e instanceof Error ? e.message : "Erase failed." });
+    } finally {
+      setEraseLoading(false);
+    }
+  };
+
+  const Status = ({ s }: { s: { tone: "ok" | "err"; text: string; url?: string } | null }) =>
+    s ? (
+      <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: s.tone === "ok" ? "var(--up-500)" : "var(--down-500)" }}>
+        {s.text}
+        {s.url && (
+          <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 8, color: "var(--brand)" }}>Download ↓</a>
+        )}
+      </div>
+    ) : null;
+
   return (
-    <STCard title="Danger zone" sub="Destructive actions. There is no undo for any of these.">
-      <STField label="Export all data" hint="Trades, watchlists, AI memos, audit log · ZIP"><STButton>Request export</STButton></STField>
-      <STField label="Reset preferences" hint="Wipe display preferences · keeps trading data"><STButton>Reset</STButton></STField>
-      <STField label="Sign out everywhere" hint="Revokes every session including this one"><STButton tone="danger">Sign out everywhere</STButton></STField>
-      <STField label="Delete account" hint="30-day grace period · positions must be flat first"><STButton tone="danger">Delete account…</STButton></STField>
+    <STCard title="Danger zone" sub="Destructive actions. Erase is gated by a typed-confirm phrase — there is no undo once the grace window closes.">
+      <STField label="Export all data" hint="POSTs /api/v1/user/export — covers trades, watchlists, AI memos, audit log.">
+        <span>
+          <button onClick={handleExport} disabled={exportLoading} style={{ padding: "6px 14px", background: "var(--bg-elev-1)", color: "var(--ink-1000)", border: "1px solid var(--border-strong)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, cursor: exportLoading ? "wait" : "pointer", opacity: exportLoading ? 0.6 : 1 }}>{exportLoading ? "Requesting…" : "Request export"}</button>
+          <Status s={exportStatus} />
+        </span>
+      </STField>
+
+      <STField label="Delete account" hint="Two-step erase. Preview surfaces what will be deleted; confirm requires typing DELETE.">
+        <span>
+          <button onClick={handleErasePreview} disabled={eraseLoading} style={{ padding: "6px 14px", background: "rgba(224,120,86,0.10)", color: "var(--down-500)", border: "1px solid var(--down-500)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, cursor: eraseLoading ? "wait" : "pointer", opacity: eraseLoading ? 0.6 : 1 }}>{eraseLoading && !erasePreview ? "Loading…" : "Preview erase…"}</button>
+          {erasePreview && (
+            <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(224,120,86,0.05)", border: "1px solid var(--down-500)", borderRadius: 3 }}>
+              <div className="t-eyebrow-italic" style={{ color: "var(--down-500)", letterSpacing: "0.18em", fontSize: 9.5 }}>WILL DELETE</div>
+              <div style={{ marginTop: 6, fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--ink-1000)" }}>
+                {Object.entries(erasePreview.will_delete).map(([k, v]) => (
+                  <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
+                    <span style={{ color: "var(--fg-muted)" }}>{k}</span>
+                    <span>{v}</span>
+                  </div>
+                ))}
+              </div>
+              {erasePreview.grace_days && (
+                <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-muted)" }}>{erasePreview.grace_days}-day grace period · sign in to cancel.</div>
+              )}
+              <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center" }}>
+                <input value={erasePhrase} onChange={(e) => setErasePhrase(e.target.value)} placeholder="Type DELETE to confirm" style={{ flex: 1, padding: "7px 10px", fontFamily: "var(--font-mono)", fontSize: 12.5, color: "var(--ink-1000)", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderRadius: 3, outline: "none" }} />
+                <button onClick={handleEraseConfirm} disabled={eraseLoading || erasePhrase !== "DELETE"} style={{ padding: "6px 14px", background: erasePhrase === "DELETE" ? "var(--down-500)" : "rgba(224,120,86,0.10)", color: erasePhrase === "DELETE" ? "var(--down-on)" : "var(--down-500)", border: "1px solid var(--down-500)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, cursor: erasePhrase === "DELETE" ? "pointer" : "not-allowed", opacity: erasePhrase === "DELETE" ? 1 : 0.6 }}>Confirm erase</button>
+              </div>
+              <Status s={eraseStatus} />
+            </div>
+          )}
+          {!erasePreview && <Status s={eraseStatus} />}
+        </span>
+      </STField>
     </STCard>
   );
 }
