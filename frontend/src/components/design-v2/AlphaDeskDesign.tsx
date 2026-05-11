@@ -2532,6 +2532,21 @@ function DashHero({ layout, onNav }) {
   const live = useDesignLiveData();
   const summary = live.portfolio;
   const r = live.regime?.regime || {};
+  // BUG-074 (audit 2026-05-11, F-SCOUT-02 / P1-05, continues BUG-DT-3):
+  // hero card label "X working orders" was bound to `live.orders.length`
+  // — the broker returns every order from history (filled + cancelled +
+  // open). On the audit account that produced "50 working orders" while
+  // `GET /api/v1/trades/orders?status=open` was returning 0. Filter to
+  // not-yet-resolved (working) orders: anything whose status is NOT one
+  // of filled/canceled/cancelled/replaced/rejected/expired/done_for_day.
+  const _terminalOrderStatuses = new Set([
+    "filled", "canceled", "cancelled", "replaced", "rejected",
+    "expired", "done_for_day", "fill",
+  ]);
+  const workingOrderCount = (live.orders || []).filter((o) => {
+    const s = String((o && (o.status || o.state)) || "").toLowerCase();
+    return s !== "" && !_terminalOrderStatuses.has(s);
+  }).length;
   const p = {
     ...MOCK_PORTFOLIO,
     equity: summary?.equity ?? 0,
@@ -2539,7 +2554,7 @@ function DashHero({ layout, onNav }) {
     cash: summary?.cash ?? 0,
     buyingPower: summary?.buyingPower ?? 0,
     positions: summary?.positionsCount ?? live.positions.length,
-    orders: live.orders.length,
+    orders: workingOrderCount,
     exposureLong: summary?.equity ? Math.min(1, Math.max(0, live.positions.filter((pos) => pos.side !== "short").reduce((acc, pos) => acc + Math.abs(pos.marketValue || 0), 0) / summary.equity)) : 0,
     exposureShort: summary?.equity ? Math.min(1, Math.max(0, live.positions.filter((pos) => pos.side === "short").reduce((acc, pos) => acc + Math.abs(pos.marketValue || 0), 0) / summary.equity)) : 0,
   };
