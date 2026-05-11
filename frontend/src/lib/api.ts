@@ -503,6 +503,93 @@ export function getStrategyLeaderboard() {
   return apiFetch<StrategyLeaderboardResponse>(`/api/v1/strategies/leaderboard`);
 }
 
+// 2026-05-11 (round 20): admin leaderboard variant — includes raw
+// PnL + max-drawdown + total trades + Sharpe for every strategy,
+// not just the cached top-level summary.
+export interface StrategyAdminLeaderboardEntry {
+  id: string;
+  name: string;
+  status: string;
+  invested: number;
+  realized_pnl: number;
+  unrealized_pnl: number;
+  total_pnl: number;
+  return_pct: number;
+  sharpe_ratio: number | null;
+  max_drawdown_pct: number | null;
+  total_trades: number;
+  win_rate: number | null;
+  last_trade_at: string | null;
+}
+
+export function getStrategyAdminLeaderboard() {
+  return apiFetch<StrategyAdminLeaderboardEntry[]>(`/api/v1/strategies/admin/leaderboard`);
+}
+
+// 2026-05-11 (round 15): feature flags v2 — caller-visible flag set.
+// Phase 1 returns default-enabled rows; admin scope at
+// /admin/feature-flags returns the full registry.
+export interface FeatureFlag {
+  key: string;
+  enabled: boolean;
+  default_enabled: boolean;
+  rollout_status: string;
+  description: string | null;
+}
+
+export function getFeatureFlags() {
+  return apiFetch<FeatureFlag[]>(`/api/v1/feature-flags`);
+}
+
+export function getAdminFeatureFlags() {
+  return apiFetch<FeatureFlag[]>(`/api/v1/admin/feature-flags`);
+}
+
+// 2026-05-11 (round 16): user settings v2 — density/theme/shortcuts
+// persistence + slippage tolerance + default order qty.
+export interface UserSettingsV2 {
+  default_broker_connection_id: number | null;
+  slippage_tolerance_bps: number;
+  default_order_qty: number;
+  fast_fill_confirms: boolean;
+  appearance: Record<string, unknown> | null;
+  shortcuts: Record<string, unknown> | null;
+  feed_providers: Record<string, unknown> | null;
+}
+
+export interface UserSettingsV2Patch {
+  default_broker_connection_id?: number | null;
+  slippage_tolerance_bps?: number;
+  default_order_qty?: number;
+  fast_fill_confirms?: boolean;
+  appearance?: Record<string, unknown> | null;
+  shortcuts?: Record<string, unknown> | null;
+  feed_providers?: Record<string, unknown> | null;
+}
+
+export function getUserSettingsV2() {
+  return apiFetch<UserSettingsV2>(`/api/v1/user/settings`);
+}
+
+export function patchUserSettingsV2(patch: UserSettingsV2Patch) {
+  return apiFetch<UserSettingsV2>(`/api/v1/user/settings`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+// 2026-05-11 (round 19): trades reconcile — POST /trades/reconcile
+// runs the trade ledger reconciliation (separate from the broker
+// reconciliation in /broker/reconciliation/run which compares
+// positions). Trade ledger reconcile checks order → fill → ledger
+// row consistency. Admin-only.
+export function reconcileTrades() {
+  return apiFetch<{ ok: boolean; reconciled: number; mismatched: number; created: number }>(
+    `/api/v1/trades/reconcile`,
+    { method: "POST", timeoutMs: 45_000 },
+  );
+}
+
 export function getIndexSparklines() {
   return apiFetch<{ sparklines: Record<string, number[]>; as_of: string }>(
     `/api/v1/market-overview/indices/sparklines`
