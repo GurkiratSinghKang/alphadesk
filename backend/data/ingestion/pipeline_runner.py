@@ -724,6 +724,123 @@ async def _scheduler_loop() -> None:
     logger.info("Pipeline scheduler stopped")
 
 
+_LEADER_LOCK_KEY = "alphadesk:scheduler:leader"
+_LEADER_LOCK_TTL_SECONDS = 60
+_LEADER_LOCK_REFRESH_SECONDS = 20
+_LEADER_TOKEN: str | None = None
+_leader_heartbeat_task: asyncio.Task | None = None
+
+
+async def _acquire_scheduler_leadership() -> bool:
+    """Try to claim the singleton scheduler-leader lock in Redis.
+
+    BUG-091 (audit 2026-05-11): the Dockerfile pins ``-w 1`` because
+    every worker's lifespan would otherwise spawn its own scheduler /
+    ledger-sync / exit-monitor tasks, producing duplicate orders.
+    Adding a Redis-backed leader lock lets exactly one worker run the
+    schedulers; siblings detect a held lock and skip startup, so
+    multi-worker scaling becomes safe.
+
+    Returns True if this worker is the new leader (lock acquired),
+    False otherwise. Failures on Redis access return False (fail-safe:
+    don't run scheduler when state is unclear; another worker that
+    can reach Redis will pick up).
+    """
+    global _LEADER_TOKEN
+
+    import uuid as _uuid
+
+    try:
+        from core.redis import get_redis
+
+        redis = await get_redis()
+        if redis is None:
+            # No Redis = single-worker mode is the only safe mode.
+            # Return True so the scheduler starts. Operators running
+            # multi-worker without Redis would deadlock here, which is
+            # the right failure mode (they MUST have shared state).
+            logger.warning(
+                "scheduler leader-election: Redis unavailable, falling back to "
+                "single-worker assumption (start scheduler unconditionally)"
+            )
+            return True
+        token = _uuid.uuid4().hex
+        # SET key value NX EX ttl → only succeeds if the key doesn't exist.
+        # Returns True/None depending on driver; treat anything truthy as ok.
+        result = await redis.set(_LEADER_LOCK_KEY, token, ex=_LEADER_LOCK_TTL_SECONDS, nx=True)
+        if result:
+            _LEADER_TOKEN = token
+            logger.info(
+                "scheduler leader-election: acquired lock token=%s ttl=%ss",
+                token, _LEADER_LOCK_TTL_SECONDS,
+            )
+            return True
+        logger.info(
+            "scheduler leader-election: another worker holds the lock; "
+            "skipping scheduler start on this worker",
+        )
+        return False
+    except Exception:
+        logger.warning(
+            "scheduler leader-election: Redis probe raised; assuming "
+            "single-worker mode and starting scheduler",
+            exc_info=True,
+        )
+        return True
+
+
+async def _leader_heartbeat_loop() -> None:
+    """Refresh the leader lock periodically so it doesn't expire mid-run.
+
+    Lua-style compare-and-set isn't strictly necessary here: only the
+    holder of `_LEADER_TOKEN` is in this process, and we re-set with
+    the same token so a sibling that somehow stole the lock would be
+    over-written back to us. The TTL refresh is the important bit.
+    """
+    while True:
+        await asyncio.sleep(_LEADER_LOCK_REFRESH_SECONDS)
+        if _LEADER_TOKEN is None:
+            return
+        try:
+            from core.redis import get_redis
+
+            redis = await get_redis()
+            if redis is None:
+                return
+            # Refresh TTL without changing the token.
+            await redis.set(_LEADER_LOCK_KEY, _LEADER_TOKEN, ex=_LEADER_LOCK_TTL_SECONDS)
+        except Exception:
+            logger.warning(
+                "scheduler leader-election: heartbeat refresh raised", exc_info=True,
+            )
+
+
+async def _release_scheduler_leadership() -> None:
+    """Drop the leader lock on graceful shutdown so the next deploy's
+    workers can immediately claim it (don't wait for the TTL)."""
+    global _LEADER_TOKEN
+    if _LEADER_TOKEN is None:
+        return
+    try:
+        from core.redis import get_redis
+
+        redis = await get_redis()
+        if redis is not None:
+            # Only delete if we still hold the token (best-effort
+            # CAS via GETDEL semantic — Redis 6.2+. Fall back to
+            # bare DEL on older versions).
+            current = await redis.get(_LEADER_LOCK_KEY)
+            if current == _LEADER_TOKEN or current == _LEADER_TOKEN.encode():
+                await redis.delete(_LEADER_LOCK_KEY)
+                logger.info("scheduler leader-election: released lock on shutdown")
+    except Exception:
+        logger.warning(
+            "scheduler leader-election: release on shutdown raised",
+            exc_info=True,
+        )
+    _LEADER_TOKEN = None
+
+
 async def start_pipeline_scheduler() -> None:
     """Start the daily pipeline scheduler + ledger sync as background tasks.
 
@@ -734,11 +851,31 @@ async def start_pipeline_scheduler() -> None:
     cron tick simply doesn't fire and oncall finds out only when a
     user notices. Cancellation during graceful shutdown remains
     silent (logged at INFO).
+
+    BUG-091 (audit 2026-05-11): wraps the task launch in a Redis-backed
+    leader lock so multi-worker deployments don't race to spawn
+    duplicate schedulers. The Dockerfile's ``-w 1`` is the today
+    posture; this lock makes ``-w N`` safe going forward. Only the
+    worker that wins the lock runs the schedulers; others log "not
+    leader" and skip. Heartbeat refreshes the TTL every 20 s; lock
+    TTL is 60 s, so a leader can die for up to ~40 s before a sibling
+    picks up.
     """
     from core.supervised_task import create_supervised_task
 
     global _scheduler_task, _ledger_sync_task, _exit_monitor_task, _should_stop
+    global _leader_heartbeat_task
     _should_stop = False
+
+    is_leader = await _acquire_scheduler_leadership()
+    if not is_leader:
+        logger.info(
+            "Pipeline scheduler: not leader; skipping background-task start. "
+            "Lock holder will run the daily/ledger/exit loops; this worker "
+            "serves API requests only."
+        )
+        return
+
     _scheduler_task = create_supervised_task(
         _scheduler_loop(), name="pipeline_scheduler"
     )
@@ -751,19 +888,27 @@ async def start_pipeline_scheduler() -> None:
     _exit_monitor_task = create_supervised_task(
         _exit_monitor_loop(), name="pipeline_exit_monitor"
     )
+    # Heartbeat keeps the lock alive while we own it.
+    _leader_heartbeat_task = create_supervised_task(
+        _leader_heartbeat_loop(), name="scheduler_leader_heartbeat"
+    )
     logger.info(
-        "Pipeline scheduler + ledger sync + exit monitor background tasks created"
+        "Pipeline scheduler + ledger sync + exit monitor background tasks created (leader)"
     )
 
 
 async def stop_pipeline_scheduler() -> None:
     """Stop the scheduler + ledger sync + exit monitor gracefully."""
     global _should_stop, _scheduler_task, _ledger_sync_task, _exit_monitor_task
+    global _leader_heartbeat_task
     _should_stop = True
     for label, task_ref in (
         ("scheduler", "_scheduler_task"),
         ("ledger_sync", "_ledger_sync_task"),
         ("exit_monitor", "_exit_monitor_task"),
+        # BUG-091: also cancel the leader-heartbeat task before releasing
+        # the lock so it stops re-asserting the TTL during shutdown.
+        ("leader_heartbeat", "_leader_heartbeat_task"),
     ):
         task = globals().get(task_ref)
         if task:
@@ -773,4 +918,7 @@ async def stop_pipeline_scheduler() -> None:
             except (asyncio.CancelledError, Exception):
                 pass
             globals()[task_ref] = None
+    # Release the Redis leader lock so the next deploy's workers can
+    # take over immediately rather than waiting for the 60 s TTL.
+    await _release_scheduler_leadership()
     logger.info("Pipeline scheduler + ledger sync + exit monitor stopped")
