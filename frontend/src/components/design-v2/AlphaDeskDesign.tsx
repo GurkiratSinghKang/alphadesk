@@ -59,6 +59,13 @@ import {
   confirmUserErase,
   postUserExport,
   previewUserErase,
+  // BUG-056 (audit 2026-05-11): wire the v2 trade ticket to the real
+  // preview → submit flow using the same API client functions the v1
+  // OrderBar.tsx flow uses. `previewOrder` returns a `review_id`;
+  // `placeOrder` consumes it (BUG-058 made this mandatory on the
+  // backend).
+  placeOrder,
+  previewOrder,
 } from "@/lib/api";
 // 2026-05-10 (chart wiring): swap the design's hand-rolled SVG HeroChart
 // for the real lightweight-charts engine via a thin wrapper. The mock
@@ -4271,6 +4278,71 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
 
+  // BUG-056 (audit 2026-05-11, F-SCOUT-99..102): two-stage order
+  // submit. First click → fetch preview (server validates risk/halt/
+  // size + mints a `review_id`). Second click on the now-"Confirm"
+  // button → POST with the review_id. Either stage can fail and
+  // surface inline. Disabling the button when preview is loading
+  // prevents double-submit; user can still Cancel to reset.
+  const [ticketStage, setTicketStage] = useState("idle"); // "idle" | "previewing" | "reviewed" | "submitting" | "submitted" | "error"
+  const [ticketPreview, setTicketPreview] = useState(null); // OrderPreviewResponse | null
+  const [ticketError, setTicketError] = useState(null); // string | null
+  const [ticketReceipt, setTicketReceipt] = useState(null); // { id, status } | null
+
+  async function handleTicketStage() {
+    if (ticketStage === "previewing" || ticketStage === "submitting") return;
+    if (ticketStage === "reviewed" && ticketPreview && ticketPreview.review_id) {
+      // Second click — submit.
+      setTicketStage("submitting");
+      setTicketError(null);
+      try {
+        const result = await placeOrder({
+          symbol: t.sym,
+          side,
+          quantity: qty,
+          type: orderType,
+          price: orderType === "limit" || orderType === "stop_limit" ? limitPx : undefined,
+          review_id: ticketPreview.review_id,
+        });
+        setTicketReceipt({ id: result.id || result.order_id || "(no id)", status: result.status || "submitted" });
+        setTicketStage("submitted");
+      } catch (e) {
+        setTicketError(String(e?.message || e || "Submit failed"));
+        setTicketStage("error");
+      }
+      return;
+    }
+    // First click — preview.
+    setTicketStage("previewing");
+    setTicketError(null);
+    setTicketReceipt(null);
+    try {
+      const preview = await previewOrder({
+        symbol: t.sym,
+        side,
+        quantity: qty,
+        type: orderType,
+        price: orderType === "limit" || orderType === "stop_limit" ? limitPx : undefined,
+      });
+      setTicketPreview(preview);
+      setTicketStage(preview && preview.can_submit ? "reviewed" : "error");
+      if (preview && !preview.can_submit) {
+        const failed = (preview.checks || []).filter((c) => !c.passed).slice(0, 3).map((c) => `${c.label}: ${c.detail || "failed"}`).join(" · ");
+        setTicketError(failed || "Preview rejected by risk gate. See checks.");
+      }
+    } catch (e) {
+      setTicketError(String(e?.message || e || "Preview failed"));
+      setTicketStage("error");
+    }
+  }
+
+  function resetTicket() {
+    setTicketStage("idle");
+    setTicketPreview(null);
+    setTicketError(null);
+    setTicketReceipt(null);
+  }
+
   useEffect(() => {
     if (t.px > 0) setLimitPx(t.px);
   }, [t.sym, t.px]);
@@ -4364,30 +4436,68 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
           </>}
           {asset === "builder" && <OptionBuilder strategy={builderStrategy} setStrategy={setBuilderStrategy} />}
           <AIMemoPanel isOption={isOption} symbol={t.sym} />
-          {/* BUG-056 (audit 2026-05-11, F-SCOUT-99..102, P1-01): the
-              previous version of this button silently rendered as
-              decoration — no onClick, no submit handler. A scalper
-              clicked "Stage buy order →" and nothing happened: no
-              feedback, no error, no POST in the network panel. The
-              design-v2 ticket isn't yet wired to the real `/preview
-              → /orders` flow (that's the BUG-056 follow-up). Until
-              the wired ticket lands, render the button as explicitly
-              disabled with an inline note pointing operators at the
-              v1 trade page (`/trade?symbol=...`) which uses the
-              tested `OrderBar.tsx` flow. This stops users from
-              thinking they placed an order that never reached the
-              server. */}
-          <button
-            type="button"
-            disabled
-            aria-disabled="true"
-            title="The v2 design preview is not wired to the broker. Use /trade?symbol= to place a real paper order."
-            style={{ marginTop: 4, height: 46, background: "var(--bg-elev-2)", color: "var(--fg-muted)", border: "1px solid var(--border-strong)", borderRadius: 4, fontFamily: "var(--font-ui)", fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "not-allowed", opacity: 0.7 }}>
-            Stage {isOption ? `${side} to open` : `${side} order`} (preview)
-          </button>
-          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)", textAlign: "center", marginTop: -8 }}>
-            Design preview only · use <a href={`/trade?symbol=${t.sym}`} style={{ color: "var(--brand)", textDecoration: "underline" }}>/trade</a> to submit a real order
-          </div>
+          {/* BUG-056 (audit 2026-05-11, F-SCOUT-99..102, P1-01): wired
+              the v2 stage-order button to a real preview → submit flow.
+              Two-stage: first click runs `previewOrder` (server returns
+              review_id + risk checks); the button label flips to
+              "Confirm submit" and a second click runs `placeOrder` with
+              that review_id. Either stage can fail inline and the
+              receipt/error renders below. Options legs are not yet
+              supported through this minimal wiring — equity-only.
+              Options builders are still a follow-up. */}
+          {isOption ? (
+            <>
+              <button
+                type="button"
+                disabled
+                aria-disabled="true"
+                title="Multi-leg option order wiring is the next follow-up. Stick with /trade for now."
+                style={{ marginTop: 4, height: 46, background: "var(--bg-elev-2)", color: "var(--fg-muted)", border: "1px solid var(--border-strong)", borderRadius: 4, fontFamily: "var(--font-ui)", fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "not-allowed", opacity: 0.7 }}>
+                Stage {side} to open (options wiring pending)
+              </button>
+              <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)", textAlign: "center", marginTop: -8 }}>
+                Use <a href={`/trade?symbol=${t.sym}`} style={{ color: "var(--brand)", textDecoration: "underline" }}>/trade</a> for multi-leg option orders
+              </div>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleTicketStage}
+                disabled={ticketStage === "previewing" || ticketStage === "submitting" || ticketStage === "submitted"}
+                aria-busy={ticketStage === "previewing" || ticketStage === "submitting"}
+                style={{ marginTop: 4, height: 46, background: ticketStage === "reviewed" ? "var(--brand)" : (side === "buy" ? "var(--up-500)" : "var(--down-500)"), color: ticketStage === "reviewed" ? "var(--ink-1000)" : "var(--up-on)", border: 0, borderRadius: 4, fontFamily: "var(--font-ui)", fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", cursor: (ticketStage === "previewing" || ticketStage === "submitting" || ticketStage === "submitted") ? "wait" : "pointer", opacity: (ticketStage === "previewing" || ticketStage === "submitting") ? 0.7 : 1 }}>
+                {ticketStage === "previewing" && "Previewing…"}
+                {ticketStage === "reviewed" && `Confirm ${side} ${qty} ${t.sym} →`}
+                {ticketStage === "submitting" && "Submitting…"}
+                {ticketStage === "submitted" && "Submitted ✓"}
+                {(ticketStage === "idle" || ticketStage === "error") && `Stage ${side} order →`}
+              </button>
+              {ticketStage === "reviewed" && ticketPreview && (
+                <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg)", textAlign: "left", padding: "8px 10px", background: "var(--bg-elev-1)", border: "1px solid var(--border-hair)", borderRadius: 3 }}>
+                  Notional ≈ {ticketPreview.notional != null ? `$${Number(ticketPreview.notional).toFixed(0)}` : "—"} · Max loss ≈ {ticketPreview.max_loss != null ? `$${Number(ticketPreview.max_loss).toFixed(0)}` : "—"} · Account: {ticketPreview.account_env || "?"}{" "}
+                  <button type="button" onClick={resetTicket} style={{ marginLeft: 6, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-muted)", background: "transparent", border: 0, padding: 0, textDecoration: "underline", cursor: "pointer" }}>cancel</button>
+                </div>
+              )}
+              {ticketStage === "submitted" && ticketReceipt && (
+                <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg)", textAlign: "left", padding: "8px 10px", background: "var(--up-500)", color: "var(--up-on)", borderRadius: 3 }}>
+                  Order id {String(ticketReceipt.id).slice(0, 12)} · status {ticketReceipt.status}{" "}
+                  <button type="button" onClick={resetTicket} style={{ marginLeft: 6, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--up-on)", background: "transparent", border: 0, padding: 0, textDecoration: "underline", cursor: "pointer" }}>new ticket</button>
+                </div>
+              )}
+              {ticketStage === "error" && (
+                <div role="alert" style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--down-500)", textAlign: "left", padding: "8px 10px", background: "var(--bg-elev-1)", border: "1px solid var(--down-500)", borderRadius: 3 }}>
+                  {ticketError || "Order request failed."}{" "}
+                  <button type="button" onClick={resetTicket} style={{ marginLeft: 6, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-muted)", background: "transparent", border: 0, padding: 0, textDecoration: "underline", cursor: "pointer" }}>retry</button>
+                </div>
+              )}
+              {ticketStage === "idle" && (
+                <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)", textAlign: "center", marginTop: -8 }}>
+                  Reviewed against regime + risk policy
+                </div>
+              )}
+            </>
+          )}
         </aside>
         ))}
       </div>
