@@ -3654,13 +3654,19 @@ async def _check_wash_trade(
                 # container has rotated.
                 try:
                     from core.audit import write_audit
-                    from core.logging import REQUEST_ID
+                    from core.logging import CLIENT_IP, REQUEST_ID
 
                     rid = REQUEST_ID.get()
+                    # BUG-093 (audit 2026-05-11, M5-05): previously hardcoded
+                    # ip=None which the audit table normalises to "-". Read
+                    # the client IP from the request-scoped CLIENT_IP context
+                    # set by the request-id middleware so the audit row
+                    # carries the originating IP for surveillance.
+                    client_ip = CLIENT_IP.get()
                     await write_audit(
                         "wash_trade_rejected",
                         username=username,
-                        ip=None,
+                        ip=client_ip,
                         request_id=rid if rid and rid != "-" else None,
                         details={
                             "symbol": leg.symbol,

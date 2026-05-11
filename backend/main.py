@@ -30,7 +30,7 @@ from api.routes import auth as auth_routes
 
 from core.config import settings
 from core.database import init_db, close_db
-from core.logging import REQUEST_ID, configure_logging
+from core.logging import CLIENT_IP, REQUEST_ID, configure_logging
 from core.redis import get_redis, close_redis
 from api.routes import market, screener, analysis, options, trades, portfolio, agents, webhooks
 from api.routes import symbols, strategies, market_overview, risk, pipeline, news, tickers
@@ -757,11 +757,17 @@ async def add_request_id(request: Request, call_next):
     # client — carries the same id.
     request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
     request.state.request_id = request_id
-    token = REQUEST_ID.set(request_id)
+    # BUG-093: capture client IP so audit-writing helpers without a Request
+    # in scope (e.g., wash_trade surveillance, pipeline workers triggered
+    # by a request) can stamp the IP on their audit entries via CLIENT_IP.
+    client_ip = (request.client.host if request.client else None) or request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or None
+    rid_token = REQUEST_ID.set(request_id)
+    ip_token = CLIENT_IP.set(client_ip)
     try:
         response = await call_next(request)
     finally:
-        REQUEST_ID.reset(token)
+        REQUEST_ID.reset(rid_token)
+        CLIENT_IP.reset(ip_token)
     response.headers["X-Request-ID"] = request_id
     return response
 
