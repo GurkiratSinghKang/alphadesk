@@ -2390,7 +2390,7 @@ export interface HaltStatus {
 }
 
 export async function getHaltStatus(): Promise<HaltStatus> {
-  return apiFetch<HaltStatus>(`/api/v1/trades/halt-status`, { suppressGlobalError: true });
+  return apiFetch<HaltStatus>(`/api/v1/halt-status`, { suppressGlobalError: true });
 }
 
 export async function haltTrading(opts?: { flatten?: boolean; reason?: string }): Promise<{
@@ -2404,11 +2404,11 @@ export async function haltTrading(opts?: { flatten?: boolean; reason?: string })
   if (opts?.flatten !== undefined) params.set("flatten", String(opts.flatten));
   if (opts?.reason) params.set("reason", opts.reason);
   const qs = params.toString() ? `?${params.toString()}` : "";
-  return apiFetch(`/api/v1/trades/halt${qs}`, { method: "POST" });
+  return apiFetch(`/api/v1/halt${qs}`, { method: "POST" });
 }
 
 export async function resumeTrading(): Promise<{ halted: boolean; message: string }> {
-  return apiFetch(`/api/v1/trades/resume`, { method: "POST" });
+  return apiFetch(`/api/v1/halt/resume`, { method: "POST" });
 }
 
 export async function getOrders(status?: string): Promise<Order[]> {

@@ -32,6 +32,9 @@ import {
   placeOrder,
   cancelOrder,
   getOrders,
+  getHaltStatus,
+  haltTrading,
+  resumeTrading,
   getPositions,
   getPortfolioSummary,
   getPortfolioGreeks,
@@ -1419,6 +1422,40 @@ describe('cancelOrder', () => {
     const [calledUrl, init] = mockFetch.mock.calls[0];
     expect(calledUrl).toContain('ord-123');
     expect(init.method).toBe('DELETE');
+  });
+});
+
+// ─── halt controls ───────────────────────────────────────────────────────────
+
+describe('halt controls', () => {
+  it('reads halt status from the top-level halt endpoint', async () => {
+    mockFetch.mockReturnValueOnce(ok({ halted: false, halted_by: null, halted_at: null, reason: null }));
+
+    const result = await getHaltStatus();
+    expect(result.halted).toBe(false);
+    const [calledUrl] = mockFetch.mock.calls[0];
+    expect(calledUrl).toContain('/api/v1/halt-status');
+  });
+
+  it('posts halt requests to /api/v1/halt with flatten and reason', async () => {
+    mockFetch.mockReturnValueOnce(ok({ halted: true, message: 'Trading halted.' }));
+
+    await haltTrading({ flatten: true, reason: 'Operator halt from dashboard' });
+    const [calledUrl, init] = mockFetch.mock.calls[0];
+    const url = new URL(String(calledUrl), 'https://alphadesk.test');
+    expect(url.pathname).toBe('/api/v1/halt');
+    expect(url.searchParams.get('flatten')).toBe('true');
+    expect(url.searchParams.get('reason')).toBe('Operator halt from dashboard');
+    expect(init.method).toBe('POST');
+  });
+
+  it('posts resumes to /api/v1/halt/resume', async () => {
+    mockFetch.mockReturnValueOnce(ok({ halted: false, message: 'Trading resumed.' }));
+
+    await resumeTrading();
+    const [calledUrl, init] = mockFetch.mock.calls[0];
+    expect(calledUrl).toContain('/api/v1/halt/resume');
+    expect(init.method).toBe('POST');
   });
 });
 

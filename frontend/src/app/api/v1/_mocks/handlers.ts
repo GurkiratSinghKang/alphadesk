@@ -104,7 +104,8 @@ const HANDLERS: Record<string, MockHandler> = {
   }),
 
   // ─── Trades / orders / positions ──────────────────────────────────
-  "GET /trades/halt-status": () => ({ halted: false, scope: "global", reason: null, by: null, at: null }),
+  "GET /halt-status": () => ({ halted: false, scope: "global", halted_by: null, halted_at: null, reason: null }),
+  "GET /trades/halt-status": () => ({ halted: false, scope: "global", halted_by: null, halted_at: null, reason: null }),
   "GET /trades/positions": () => [
     // api.ts#getPositions expects snake_case backend shape (avg_cost,
     // current_price, market_value, unrealized_pnl) with the v2 strategy

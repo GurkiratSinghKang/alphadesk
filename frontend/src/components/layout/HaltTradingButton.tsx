@@ -21,9 +21,9 @@ import {
  * ONE strategy; in an emergency operators need a single-click halt
  * that cancels open orders + flattens positions across the board.
  *
- * Wires up the existing ``POST /api/v1/trades/halt`` (admin-only,
+ * Wires up ``POST /api/v1/halt`` (admin-only,
  * cancels open orders, flattens positions, persists halt state) and
- * ``POST /api/v1/trades/resume``.
+ * ``POST /api/v1/halt/resume``.
  *
  * Render contract:
  *  · Default state: amber "Halt trading" outline button, opens
@@ -122,9 +122,15 @@ export default function HaltTradingButton({ className }: { className?: string })
         triggeredAt ? ` at ${triggeredAt}` : ""
       }${status.reason ? ` — ${status.reason}` : ""}. Click to resume.`
     : "Halt trading: cancel open orders + flatten positions.";
+  const liveStatus = halted
+    ? `Trading halted${status.reason ? `: ${status.reason}` : ""}.`
+    : "Trading halt is clear.";
 
   return (
     <>
+      <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {liveStatus}
+      </span>
       <Button
         variant="outline"
         size="sm"
@@ -132,6 +138,7 @@ export default function HaltTradingButton({ className }: { className?: string })
         disabled={loading}
         title={tooltip}
         aria-label={halted ? "Resume trading" : "Halt trading"}
+        aria-pressed={halted}
         className={cn(
           "h-9 gap-1.5 font-mono text-label uppercase tracking-wider",
           halted

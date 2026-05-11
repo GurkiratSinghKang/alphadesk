@@ -547,6 +547,48 @@ async def _alerts_alias(  # pragma: no cover - thin alias
 # in place for back-compat — the aliases simply re-dispatch into the same
 # canonical handlers.
 @app.get(
+    "/api/v1/halt-status",
+    tags=["Risk"],
+    include_in_schema=False,
+)
+async def _halt_status_top_level_alias(  # pragma: no cover - thin alias
+    username: str = Depends(require_auth),
+):
+    """Top-level alias for ``GET /api/v1/trades/halt-status`` (BUG-063)."""
+    return await trades.get_halt_status(username=username)
+
+
+@app.post(
+    "/api/v1/halt",
+    tags=["Risk"],
+    include_in_schema=False,
+)
+async def _halt_post_top_level_alias(  # pragma: no cover - thin alias
+    req: Request,
+    flatten: bool = Query(True),
+    reason: str | None = Query(None, max_length=256),
+    username: str = Depends(require_auth),
+):
+    """Top-level alias for ``POST /api/v1/trades/halt`` (BUG-063)."""
+    return await trades.halt_trading(
+        req=req, flatten=flatten, reason=reason, username=username,
+    )
+
+
+@app.post(
+    "/api/v1/halt/resume",
+    tags=["Risk"],
+    include_in_schema=False,
+)
+async def _halt_resume_top_level_alias(  # pragma: no cover - thin alias
+    req: Request,
+    username: str = Depends(require_auth),
+):
+    """Top-level alias for ``POST /api/v1/trades/resume`` (BUG-063)."""
+    return await trades.resume_trading(req=req, username=username)
+
+
+@app.get(
     "/api/v1/risk/halt-status",
     tags=["Risk"],
     include_in_schema=False,
