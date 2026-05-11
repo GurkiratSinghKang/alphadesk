@@ -221,6 +221,66 @@ export function maybeDispatchBrokerDegraded(endpoint: string, flag: unknown): vo
   }
 }
 
+// BUG-059 + BUG-066/069 partial (audit 2026-05-11, P2-01 / P9-02 /
+// F-SCOUT-04): the same admin AVGO position rendered three+ different
+// unrealized P&Ls across /dashboard, /analytics, /pipeline inside the
+// same minute. Root cause: each page mounts its own data hook and
+// fires an independent fetch for `/api/v1/portfolio/summary`,
+// `/trades/positions`, `/trades/orders` — the broker returns a fresh
+// snapshot each call, so values drift.
+//
+// Fix: small in-process response cache for a curated allow-list of
+// idempotent GETs. Two windows:
+//   - in-flight dedup: while a request is in flight, all callers
+//     return the same Promise (no extra network roundtrip).
+//   - short post-resolve TTL: 5 seconds after resolution, the next
+//     caller still gets the cached value. Forces every component
+//     mounting within a 5s window to see the SAME numbers, killing
+//     the cross-page drift cluster without touching component code.
+//
+// Conservative scope: only applies to the path allow-list below. Other
+// endpoints fall through to `apiFetch` directly. TTL is intentionally
+// short (5s) so the next refresh still picks up real broker updates.
+const _SHARED_GET_CACHE_TTL_MS = 5_000;
+const _SHARED_GET_PATHS = new Set<string>([
+  "/api/v1/portfolio/summary",
+  "/api/v1/trades/positions",
+  "/api/v1/trades/orders",
+]);
+type _CacheEntry<T> = { value: T; expiresAt: number };
+const _inFlightGets = new Map<string, Promise<unknown>>();
+const _resolvedGets = new Map<string, _CacheEntry<unknown>>();
+
+async function apiFetchShared<T>(path: string, init?: ApiFetchOptions): Promise<T> {
+  // Only dedup/cache pure GETs (no body, no custom method) for the
+  // allow-listed paths. Anything else delegates to apiFetch directly.
+  const method = (init?.method ?? "GET").toUpperCase();
+  const allowlisted = _SHARED_GET_PATHS.has(path);
+  if (method !== "GET" || !allowlisted) {
+    return apiFetch<T>(path, init);
+  }
+  const now = Date.now();
+  const cached = _resolvedGets.get(path) as _CacheEntry<T> | undefined;
+  if (cached && cached.expiresAt > now) {
+    return cached.value;
+  }
+  const inFlight = _inFlightGets.get(path) as Promise<T> | undefined;
+  if (inFlight) {
+    return inFlight;
+  }
+  const p = (async () => {
+    try {
+      const value = await apiFetch<T>(path, init);
+      _resolvedGets.set(path, { value, expiresAt: Date.now() + _SHARED_GET_CACHE_TTL_MS });
+      return value;
+    } finally {
+      _inFlightGets.delete(path);
+    }
+  })();
+  _inFlightGets.set(path, p);
+  return p;
+}
+
 async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
   const base = typeof window !== "undefined"
     ? (env.API_URL || "")
@@ -2578,7 +2638,12 @@ export function patchKillSwitchThresholds(body: KillSwitchThresholdsPatchBody) {
 
 export async function getOrders(status?: string): Promise<Order[]> {
   const qs = status ? `?status=${status}` : "";
-  const raw = await apiFetch<Record<string, unknown>[]>(`/api/v1/trades/orders${qs}`);
+  // BUG-059: only the unqueried form (`/api/v1/trades/orders`) is in
+  // the shared cache allow-list. Status-filtered calls go straight to
+  // apiFetch so different filters don't collide on the same cache key.
+  const raw = status
+    ? await apiFetch<Record<string, unknown>[]>(`/api/v1/trades/orders${qs}`)
+    : await apiFetchShared<Record<string, unknown>[]>(`/api/v1/trades/orders`);
   return raw.map((o) => {
     const legs = (o.legs as Array<Record<string, unknown>>) ?? [];
     const firstLeg = legs[0] ?? {};
@@ -2855,7 +2920,8 @@ export function rejectReconciliationIssue(
 // ─── Portfolio ───────────────────────────────────────────────
 
 export async function getPositions(): Promise<Position[]> {
-  const raw = await apiFetch<Record<string, unknown>[]>(`/api/v1/trades/positions`);
+  // BUG-059: shared 5s response cache — see apiFetchShared.
+  const raw = await apiFetchShared<Record<string, unknown>[]>(`/api/v1/trades/positions`);
   return raw.map((p) => ({
     symbol: (p.symbol as string) ?? "",
     quantity: (p.quantity as number) ?? (p.qty as number) ?? 0,
@@ -2902,7 +2968,9 @@ export async function getPortfolioSummary(): Promise<PortfolioSummary> {
   // settled in <1s after warm-up, so this is a first-hit tail, not a real
   // failure — a longer timeout prevents the dashboard from briefly showing
   // em-dashes for equity/P&L.
-  const raw = await apiFetch<BackendSummary>(`/api/v1/portfolio/summary`, {
+  // BUG-059: route through `apiFetchShared` so two pages mounting in
+  // the same second see the same snapshot (no cross-page drift).
+  const raw = await apiFetchShared<BackendSummary>(`/api/v1/portfolio/summary`, {
     timeoutMs: 30_000,
   });
   // Prefer backend-provided true day P&L. When older backends omit it,
