@@ -12,17 +12,19 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-import { getPortfolioSummary, getPositions } from "@/lib/api";
+import { __clearSharedGetCacheForTests, getPortfolioSummary, getPositions } from "@/lib/api";
 
 describe("BUG-059 — shared response cache for portfolio endpoints", () => {
   let originalFetch: typeof globalThis.fetch;
 
   beforeEach(() => {
     originalFetch = globalThis.fetch;
+    __clearSharedGetCacheForTests();
     vi.useFakeTimers();
   });
 
   afterEach(() => {
+    __clearSharedGetCacheForTests();
     globalThis.fetch = originalFetch;
     vi.useRealTimers();
     vi.restoreAllMocks();

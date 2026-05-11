@@ -7,8 +7,10 @@ behaviors that, if reverted, would re-open the originally-found bug.
 """
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
+import fakeredis.aioredis
 import pytest
 from fastapi.testclient import TestClient
 
@@ -18,23 +20,41 @@ from main import app
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def fake_redis(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """Provide Redis for idempotency middleware in tests that POST orders."""
+    import core.redis as redis_mod
+
+    instance = fakeredis.aioredis.FakeRedis(decode_responses=True)
+
+    async def _fake_get_redis() -> Any:
+        return instance
+
+    monkeypatch.setattr(redis_mod, "get_redis", _fake_get_redis)
+    return instance
+
+
 # ─── BUG-058 ─────────────────────────────────────────────────────────
 # `_require_matching_order_review` used to skip the review check when
 # the client omitted `route_intent`. M4 demonstrated by firing a raw
 # `POST /api/v1/trades/orders {"symbol": "SPY", "side": "buy", "qty": 1,
 # "order_type": "market"}` and getting a live broker fill — no preview,
-# no idempotency, no max-loss gate. We dropped the bypass; the check
-# now triggers unconditionally on any external POST without a review_id.
+# no idempotency, no max-loss gate. The newer submit flow also requires
+# `confirm=true` after preview; these tests set confirm explicitly so
+# they pin the preview-review token gate rather than the earlier confirm gate.
 
 
 def test_bug_058_post_orders_without_review_id_returns_428():
-    """POST /api/v1/trades/orders must reject (428) when no review_id present."""
+    """Confirmed POST must still reject (428) when no review_id is present."""
     r = client.post(
         "/api/v1/trades/orders",
+        headers={"Idempotency-Key": "bug-058-missing-review"},
         json={
             # Minimal payload that would have slipped past the prior
             # model_fields_set bypass (no route_intent).
             "legs": [{"symbol": "SPY", "side": "buy", "qty": 1, "order_type": "market"}],
+            "confirm": True,
+            "mode": "paper",
         },
     )
     assert r.status_code == 428, f"expected 428 (Precondition Required), got {r.status_code}: {r.text[:300]}"
@@ -48,7 +68,12 @@ def test_bug_058_review_id_field_explicitly_named_in_error_reason():
     """The 428 reason should name the two-step flow so callers know what to do."""
     r = client.post(
         "/api/v1/trades/orders",
-        json={"legs": [{"symbol": "SPY", "side": "buy", "qty": 1, "order_type": "market"}]},
+        headers={"Idempotency-Key": "bug-058-review-reason"},
+        json={
+            "legs": [{"symbol": "SPY", "side": "buy", "qty": 1, "order_type": "market"}],
+            "confirm": True,
+            "mode": "paper",
+        },
     )
     assert r.status_code == 428
     reason = (r.json().get("detail") or {}).get("reason", "")

@@ -89,17 +89,19 @@ export default function HelpMenu({ className }: { className?: string }) {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Help and support"
-          title="Help and support"
-          className={cn("h-9 w-9 text-fg-muted hover:text-fg", className)}
-        >
-          <Question className="h-4 w-4" weight="bold" />
-        </Button>
-      </PopoverTrigger>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Help and support"
+            title="Help and support"
+            className={cn("h-9 w-9 text-fg-muted hover:text-fg", className)}
+          >
+            <Question className="h-4 w-4" weight="bold" />
+          </Button>
+        }
+      />
       <PopoverContent
         align="end"
         className="w-80 border-border bg-bg-elev-1 p-0 text-fg"

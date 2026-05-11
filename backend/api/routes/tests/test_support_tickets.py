@@ -76,7 +76,7 @@ def test_bug_088_rejects_invalid_category():
         "/api/v1/support/tickets",
         json={
             "category": "spam",  # not in {support, legal, security, feedback}
-            "subject": "x",
+            "subject": "invalid category",
             "body": "yyyyy",
             "page_url": "",
         },
@@ -90,7 +90,7 @@ def test_bug_088_rejects_body_too_short():
         "/api/v1/support/tickets",
         json={
             "category": "support",
-            "subject": "x",
+            "subject": "short body",
             "body": "1234",  # 4 chars, under min
             "page_url": "",
         },
@@ -118,7 +118,7 @@ def test_bug_088_truncates_body_at_max_length():
         "/api/v1/support/tickets",
         json={
             "category": "support",
-            "subject": "x",
+            "subject": "max body",
             "body": "a" * 10_000,  # exactly at max
             "page_url": "",
         },
@@ -130,7 +130,7 @@ def test_bug_088_truncates_body_at_max_length():
         "/api/v1/support/tickets",
         json={
             "category": "support",
-            "subject": "x",
+            "subject": "too long body",
             "body": "a" * 10_001,  # one over
             "page_url": "",
         },
@@ -146,7 +146,7 @@ def test_bug_088_all_four_categories_accepted():
             "/api/v1/support/tickets",
             json={
                 "category": category,
-                "subject": "x",
+                "subject": "category test",
                 "body": "category test for " + category,
                 "page_url": "",
             },

@@ -55,6 +55,7 @@ import {
   mapEarningsSetup,
   mapEarningsBacktestResponse,
   SETUP_ID_TO_LABEL,
+  __clearSharedGetCacheForTests,
 } from '@/lib/api';
 
 // ─── Mock setup ──────────────────────────────────────────────────────────────
@@ -62,6 +63,7 @@ import {
 const mockFetch = vi.fn();
 
 beforeEach(() => {
+  __clearSharedGetCacheForTests();
   mockFetch.mockReset();
   vi.stubGlobal('fetch', mockFetch);
 

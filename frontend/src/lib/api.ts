@@ -251,6 +251,11 @@ type _CacheEntry<T> = { value: T; expiresAt: number };
 const _inFlightGets = new Map<string, Promise<unknown>>();
 const _resolvedGets = new Map<string, _CacheEntry<unknown>>();
 
+export function __clearSharedGetCacheForTests(): void {
+  _inFlightGets.clear();
+  _resolvedGets.clear();
+}
+
 async function apiFetchShared<T>(path: string, init?: ApiFetchOptions): Promise<T> {
   // Only dedup/cache pure GETs (no body, no custom method) for the
   // allow-listed paths. Anything else delegates to apiFetch directly.

@@ -71,10 +71,10 @@ describe('Login Page', () => {
     expect(screen.getByText('AlphaDesk')).toBeDefined();
   });
 
-  it('email input has the design placeholder', () => {
+  it('username/email input has the design placeholder', () => {
     render(<LoginPage />);
     const input = screen.getByLabelText(/email/i) as HTMLInputElement;
-    expect(input.placeholder).toBe('you@firm.com');
+    expect(input.placeholder).toBe('admin or you@firm.com');
   });
 
   it('renders the editorial Operator login heading', () => {

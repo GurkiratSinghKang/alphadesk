@@ -3148,6 +3148,7 @@ function RegimePanel({ onPickTicker }) {
   const sectorBottom = topSectors.slice(-3).reverse();
 
   return (
+    <>
     {/* BUG-080 (audit 2026-05-11, F-SCOUT-03 / P1-11): the "Live · backend"
         label collides semantically with the top-right PAPER/LIVE trading-
         mode toggle — scalpers reading the dashboard while in PAPER mode
@@ -3247,6 +3248,7 @@ function RegimePanel({ onPickTicker }) {
         </div>
       )}
     </Section>
+    </>
   );
 }
 
