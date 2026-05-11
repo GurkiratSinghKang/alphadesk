@@ -147,6 +147,21 @@ export default function RootLayout({
         />
       </head>
       <body className="h-full bg-bg text-fg" suppressHydrationWarning>
+        {/* BUG-083 (audit 2026-05-11, M3-02 / M3-03 / P6): WCAG 2.4.1
+            "Bypass Blocks" — keyboard + screen-reader users need a way to
+            skip past the nav into the page's main content. The link is
+            visually hidden until focused (focus:not-sr-only), then shows
+            top-left so a Tab from the address bar lands on it. Targets
+            `#main-content`, which the dashboard + auth layouts (and any
+            page that wants explicit a11y) attach to their primary
+            content container. Pages without that id degrade gracefully
+            — the link still works but the jump lands at body top. */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[9999] focus:rounded focus:bg-bg focus:px-3 focus:py-2 focus:text-fg focus:outline focus:outline-2 focus:outline-fg"
+        >
+          Skip to main content
+        </a>
         {/* K-1 + K-14 (round-6): WebVitalsReporter mounts web-vitals@4
             listeners (LCP/CLS/INP/FCP/TTFB) and beacons each metric to
             `${NEXT_PUBLIC_API_URL}/api/v1/metrics/vitals` via sendBeacon,
