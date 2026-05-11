@@ -38,6 +38,14 @@ from typing import Any
 # "-" so background tasks and startup logs don't crash the formatter.
 REQUEST_ID: ContextVar[str] = ContextVar("request_id", default="-")
 
+# BUG-093 (audit 2026-05-11, M5-05): the wash_trade_rejected audit event
+# wrote `ip=-` because the helper that calls `write_audit(...)` doesn't
+# receive a Request object. Other audit events (login, order_submit) do
+# carry the client IP. Same shape as REQUEST_ID — set by the request-id
+# middleware once per request, read by anything that wants to attribute
+# an audit/log line to the originating client.
+CLIENT_IP: ContextVar[str | None] = ContextVar("client_ip", default=None)
+
 
 # Round-5 Cluster D H-8: read the deploy git SHA once at module load and
 # stamp every JSON record with it. The Dockerfile passes the value via an

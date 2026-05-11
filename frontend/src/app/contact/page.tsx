@@ -14,7 +14,7 @@ export default function ContactPage() {
     <StaticArticle
       route="/contact"
       title="Contact"
-      lastUpdated="2026-04-19"
+      lastUpdated="2026-05-11"
       clauses={CONTACT_CLAUSES}
     />
   );
