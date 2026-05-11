@@ -1017,10 +1017,25 @@ async def _store_order_review(request: CreateOrderRequest, *, username: str) -> 
 
 
 async def _require_matching_order_review(request: CreateOrderRequest, *, username: str) -> None:
-    if "route_intent" not in getattr(request, "model_fields_set", set()):
-        return
+    # BUG-058 (audit 2026-05-11, M4-01): the prior bypass
+    #     if "route_intent" not in getattr(request, "model_fields_set", set()):
+    #         return
+    # let any caller that simply OMITTED ``route_intent`` from the JSON body
+    # skip the preview/review gate entirely. M4 demonstrated this by firing a
+    # raw `POST /api/v1/trades/orders {"symbol":"SPY","side":"buy",
+    # "qty":1,"order_type":"market"}` and watching it fill instantly on the
+    # live Alpaca paper account — no preview, no idempotency, no max-loss
+    # gate, no preview-token-mismatch check.
+    #
+    # Fix: every external POST must carry a server-issued ``review_id`` from
+    # a prior POST /orders/preview. The ``route_intent`` field is now always
+    # populated (Pydantic default = BROKER_ORDER_REVIEW) so model_fields_set
+    # is the wrong signal. Strategy runners that bypassed this previously
+    # must either (a) call preview first OR (b) authenticate via an internal
+    # service path that lands on a different submit helper. The "missing
+    # field skips the check" loophole is closed.
     if not request.review_id:
-        raise HTTPException(status_code=428, detail={"error": "order_review_required", "reason": "Preview the broker-routed order before submitting."})
+        raise HTTPException(status_code=428, detail={"error": "order_review_required", "reason": "Preview the broker-routed order before submitting. POST /api/v1/trades/orders/preview first, then POST /api/v1/trades/orders with the returned review_id."})
     try:
         from core.redis import get_redis
         redis = await get_redis()
