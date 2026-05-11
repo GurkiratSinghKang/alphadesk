@@ -144,6 +144,17 @@ import {
   // /api/v1/strategies/leaderboard surfaces top return + best sharpe
   // + worst performer.
   getStrategyLeaderboard,
+  // 2026-05-11 (round 13+14): Risk page portfolio Greeks +
+  // Ticker page strategies-by-symbol coverage card.
+  getPortfolioGreeks,
+  getStrategiesBySymbol,
+  // 2026-05-11 (rounds 15-20): feature flags, user settings v2,
+  // auth session, trade-ledger reconcile, admin leaderboard.
+  authSession,
+  getAdminFeatureFlags,
+  getFeatureFlags,
+  getStrategyAdminLeaderboard,
+  reconcileTrades,
 } from "@/lib/api";
 import type {
   NotificationPrefType,
@@ -3766,6 +3777,11 @@ const TickerPage = ({ tweaks, sym, onTrade, onPickTicker, onBack }) => {
             <div style={{ background: "var(--bg)", padding: "20px 28px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
               <TickerLiveMemo t={t} />
               <SignalsPanel t={t} />
+              {/* 2026-05-11 (round 14): strategies running this symbol —
+               * /strategies/by-symbol/{sym} returns one row per
+               * catalogue entry with current_position. Hidden when no
+               * strategies match. */}
+              <StrategiesMatchingPanel sym={t.sym} onNav={onTrade} />
             </div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", background: "var(--border)", gap: 1 }}>
@@ -4293,6 +4309,91 @@ function TickerLiveMemo({ t }) {
         <Chip tone="brand">{source}</Chip>
       </div>
     </AIStrip>
+  );
+}
+
+// ─── strategies matching this symbol (round 14) ─────────────────────────────
+//
+// /api/v1/strategies/by-symbol/{sym} returns every catalogue entry with a
+// computed `score` + `side` against the current ticker. Used to answer
+// "which of my strategies have an opinion on this name right now?" — high-
+// signal on the Symbol page.
+function StrategiesMatchingPanel({ sym, onNav }: { sym: string; onNav?: () => void }) {
+  const [data, setData] = useState<Awaited<ReturnType<typeof getStrategiesBySymbol>> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getStrategiesBySymbol(sym);
+        if (!cancelled) setData(res);
+      } catch { /* hide section on error */ }
+    })();
+    return () => { cancelled = true; };
+  }, [sym]);
+
+  if (!data || !Array.isArray(data.matches) || data.matches.length === 0) return null;
+
+  // Sort by absolute score (strongest opinion first) and take top 6.
+  const ranked = data.matches
+    .slice()
+    .sort((a, b) => Math.abs((b.score ?? 0)) - Math.abs((a.score ?? 0)))
+    .slice(0, 6);
+
+  return (
+    <Section
+      eyebrow="STRATEGIES"
+      title="Coverage"
+      right={
+        <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>
+          {ranked.length} of {data.matches.length}
+        </span>
+      }
+    >
+      <div style={{ display: "grid", gap: 6 }}>
+        {ranked.map((m: any) => {
+          const score = Number.isFinite(m.score) ? m.score : null;
+          const side = String(m.side || "").toLowerCase();
+          const tone =
+            side === "long" || side === "buy" ? "var(--up-500)" :
+            side === "short" || side === "sell" ? "var(--down-500)" :
+            "var(--fg-muted)";
+          const heldPnl = m.currentPosition?.unrealizedPnl;
+          return (
+            <div
+              key={m.id || m.slug || m.name}
+              onClick={() => onNav?.()}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 60px 70px",
+                gap: 8,
+                padding: "8px 10px",
+                background: "var(--bg-elev-1)",
+                border: m.currentPosition ? "1px solid var(--gold-500)" : "1px solid var(--border-hair)",
+                borderRadius: 3,
+                alignItems: "baseline",
+                cursor: "pointer",
+              }}
+            >
+              <div>
+                <div style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--ink-1000)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {m.name || m.id}
+                </div>
+                <div style={{ marginTop: 2, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-hint)", letterSpacing: "0.04em" }}>
+                  {side ? side.toUpperCase() : "NEUTRAL"}
+                  {m.currentPosition ? " · HELD" : ""}
+                </div>
+              </div>
+              <span className="t-mono" style={{ fontSize: 11, color: tone, textAlign: "right" }}>
+                {score == null ? "—" : score.toFixed(2)}
+              </span>
+              <span className="t-mono" style={{ fontSize: 11, color: heldPnl == null ? "var(--fg-muted)" : heldPnl >= 0 ? "var(--up-500)" : "var(--down-500)", textAlign: "right" }}>
+                {heldPnl == null ? "—" : fmtMoney(heldPnl, { sign: true, dec: 0 })}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </Section>
   );
 }
 
@@ -9036,9 +9137,17 @@ const ReportsPage = ({ tweaks, onNav }) => {
             Live account, position, and order data. Tax-lot and realized-P&amp;L endpoints are not exposed yet, so the page no longer invents tax figures.
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
-          <StatusDot tone={live.error ? "down" : "up"} size={6} />
-          <span>{live.error ? "Backend error" : "Reconciled with backend"} · {formatLiveDate(live.refreshedAt)}</span>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+            <StatusDot tone={live.error ? "down" : "up"} size={6} />
+            <span>{live.error ? "Backend error" : "Reconciled with backend"} · {formatLiveDate(live.refreshedAt)}</span>
+          </div>
+          {/* 2026-05-11 (round 19): /api/v1/trades/reconcile runs the
+           * trade-ledger reconciliation (compares orders → fills →
+           * ledger rows). Separate from the broker reconciliation in
+           * /broker/reconciliation/run which compares positions.
+           * Admin-only. */}
+          <TradesReconcileButton />
         </div>
       </header>
 
@@ -10470,6 +10579,120 @@ function STAI() {
 // enroll/verify/disable TOTP, and revoke all sessions from this UI.
 // Status messages render inline under each control so the operator
 // gets feedback on success/error.
+// 2026-05-11 (round 19): trade-ledger reconciliation button.
+// /api/v1/trades/reconcile runs the audit between orders → fills →
+// ledger rows (separate from /broker/reconciliation which compares
+// positions). Admin-only via backend; gated client-side via
+// useCurrentUser too so the button hides for non-admins.
+function TradesReconcileButton() {
+  const currentUser = useCurrentUser();
+  const role = currentUser.data?.role || "";
+  const isAdmin = role === "admin" || role === "operator";
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  if (!isAdmin) return null;
+  const handleClick = async () => {
+    if (busy) return;
+    if (!window.confirm("Reconcile the trade ledger? This audits every order/fill against the ledger; non-destructive but may take a minute.")) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      const res = await reconcileTrades();
+      setStatus({
+        tone: res.mismatched === 0 ? "ok" : "err",
+        text: res.mismatched === 0
+          ? `Clean — ${res.reconciled} rows reconciled${res.created ? `, ${res.created} created` : ""}.`
+          : `${res.reconciled} reconciled · ${res.mismatched} mismatched · ${res.created} created.`,
+      });
+    } catch (e) {
+      setStatus({ tone: "err", text: e instanceof Error ? e.message : "Reconcile failed." });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div>
+      <button onClick={handleClick} disabled={busy} style={{ padding: "5px 12px", background: "var(--bg-elev-1)", color: "var(--ink-1000)", border: "1px solid var(--border-strong)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 11.5, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.5 : 1 }}>
+        {busy ? "Reconciling ledger…" : "Reconcile ledger"}
+      </button>
+      {status && (
+        <div style={{ marginTop: 4, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: status.tone === "ok" ? "var(--up-500)" : "var(--down-500)", textAlign: "right" }}>
+          {status.text}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 2026-05-11 (round 17): current-session card driven by /api/v1/auth/
+// session. Shows the username + issued_at + expires_at + totp_enabled
+// + refresh_token_present. The "sign out everywhere" button stays.
+// Per-session listing (multiple browsers / devices) needs a separate
+// backend endpoint not yet shipped.
+function SessionInfoCard({ onLogoutAll, logoutStatus }: { onLogoutAll: () => void; logoutStatus: { tone: "ok" | "err"; text: string } | null }) {
+  const [session, setSession] = useState<Awaited<ReturnType<typeof authSession>> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authSession();
+        if (!cancelled) setSession(res);
+      } catch { /* hide card if endpoint unreachable */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const Status = ({ s }: { s: { tone: "ok" | "err"; text: string } | null }) =>
+    s ? (
+      <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: s.tone === "ok" ? "var(--up-500)" : "var(--down-500)" }}>{s.text}</div>
+    ) : null;
+
+  return (
+    <STCard title="Current session" sub="Cookie metadata from /api/v1/auth/session. Per-session listing (multiple devices) returns when the security backend exposes it.">
+      {session ? (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div>
+            <div className="t-label" style={{ color: "var(--fg-hint)" }}>USER</div>
+            <div className="t-mono" style={{ marginTop: 4, fontSize: 13, color: "var(--ink-1000)" }}>{session.username}</div>
+          </div>
+          <div>
+            <div className="t-label" style={{ color: "var(--fg-hint)" }}>TOTP</div>
+            <div className="t-mono" style={{ marginTop: 4, fontSize: 13, color: session.totp_enabled ? "var(--up-500)" : "var(--fg-muted)" }}>
+              {session.totp_enabled ? "ENABLED" : "off"}
+            </div>
+          </div>
+          {session.issued_at && (
+            <div>
+              <div className="t-label" style={{ color: "var(--fg-hint)" }}>SIGNED IN</div>
+              <div className="t-mono" style={{ marginTop: 4, fontSize: 12, color: "var(--fg)" }}>{formatLiveDate(session.issued_at)}</div>
+            </div>
+          )}
+          {session.expires_at && (
+            <div>
+              <div className="t-label" style={{ color: "var(--fg-hint)" }}>EXPIRES</div>
+              <div className="t-mono" style={{ marginTop: 4, fontSize: 12, color: "var(--fg)" }}>{formatLiveDate(session.expires_at)}</div>
+            </div>
+          )}
+          <div>
+            <div className="t-label" style={{ color: "var(--fg-hint)" }}>REFRESH TOKEN</div>
+            <div className="t-mono" style={{ marginTop: 4, fontSize: 12, color: session.refresh_token_present ? "var(--up-500)" : "var(--fg-muted)" }}>
+              {session.refresh_token_present ? "present" : "absent"}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{ padding: "10px 0", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13.5, color: "var(--fg-muted)" }}>
+          Loading session metadata…
+        </div>
+      )}
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-hair)" }}>
+        <button onClick={onLogoutAll} style={{ padding: "6px 14px", background: "rgba(224,120,86,0.10)", color: "var(--down-500)", border: "1px solid var(--down-500)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, cursor: "pointer" }}>Sign out everywhere</button>
+        <Status s={logoutStatus} />
+      </div>
+    </STCard>
+  );
+}
+
 function STSecurity() {
   const [pwOld, setPwOld] = useState("");
   const [pwNew, setPwNew] = useState("");
@@ -10607,15 +10830,13 @@ function STSecurity() {
       <Status s={disableStatus} />
     </STCard>
 
-    <STCard title="Active sessions" sub="Per-user session listing isn't exposed yet. The button below revokes every cookie tied to your account, this device included.">
-      <div style={{ padding: "10px 0", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13.5, color: "var(--fg-muted)" }}>
-        No active-session list returned by the backend.
-      </div>
-      <div style={{ marginTop: 12 }}>
-        <button onClick={handleLogoutAll} style={{ padding: "6px 14px", background: "rgba(224,120,86,0.10)", color: "var(--down-500)", border: "1px solid var(--down-500)", borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, cursor: "pointer" }}>Sign out everywhere</button>
-        <Status s={logoutStatus} />
-      </div>
-    </STCard>
+    {/* 2026-05-11 (round 17): /api/v1/auth/session returns the
+     * current cookie's metadata — username, issued_at, expires_at,
+     * totp_enabled, refresh_token_present. Replaces the "no active-
+     * session list" empty state with what we can honestly show. The
+     * full per-session listing still needs a backend endpoint, but
+     * the current-session card is now real. */}
+    <SessionInfoCard onLogoutAll={handleLogoutAll} logoutStatus={logoutStatus} />
     </>
   );
 }
@@ -12032,12 +12253,20 @@ const RiskPage = ({ tweaks, onNav, onPickTicker }) => {
   const isAdmin = userRole === "admin" || userRole === "operator";
   const [riskMonitor, setRiskMonitor] = useState<Awaited<ReturnType<typeof getRiskMonitorState>> | null>(null);
   const [riskMonitorBusy, setRiskMonitorBusy] = useState(false);
+  // 2026-05-11 (round 13): portfolio Greeks from /api/v1/portfolio/
+  // greeks. Surfaces net delta/gamma/theta/vega + beta-weighted delta
+  // for the entire book. Critical for options traders.
+  const [greeks, setGreeks] = useState<Awaited<ReturnType<typeof getPortfolioGreeks>> | null>(null);
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const res = await getRiskMonitorState();
         if (!cancelled) setRiskMonitor(res);
+      } catch { /* ignore */ }
+      try {
+        const g = await getPortfolioGreeks();
+        if (!cancelled) setGreeks(g);
       } catch { /* ignore */ }
     })();
     return () => { cancelled = true; };
@@ -12136,6 +12365,66 @@ const RiskPage = ({ tweaks, onNav, onPickTicker }) => {
           </div>
         ))}
       </div>
+
+      {/* 2026-05-11 (round 13): Portfolio Greeks from
+       * /api/v1/portfolio/greeks. Net delta/gamma/theta/vega +
+       * beta-weighted delta. Hidden when greeks haven't loaded or
+       * when by_position is empty (which the backend marks
+       * is_demo=true for). */}
+      {greeks && !greeks.is_demo && (
+        <div style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: 18, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+            <div>
+              <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>PORTFOLIO GREEKS</div>
+              <h2 className="t-h3" style={{ margin: "2px 0 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>Net options exposure</h2>
+            </div>
+            <span className="t-mono" style={{ fontSize: 10.5, color: "var(--fg-muted)" }}>
+              {greeks.byPosition?.length ? `${greeks.byPosition.length} legs · live` : "no legs"}
+            </span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 1, background: "var(--border)", marginTop: 14, border: "1px solid var(--border)", borderRadius: 3 }}>
+            {[
+              { label: "NET DELTA", val: greeks.netDelta.toFixed(2), tone: greeks.netDelta >= 0 ? "up" : "down" },
+              { label: "BETA-WEIGHTED Δ", val: greeks.betaWeightedDelta.toFixed(2), tone: greeks.betaWeightedDelta >= 0 ? "up" : "down" },
+              { label: "NET GAMMA", val: greeks.netGamma.toFixed(3) },
+              { label: "NET THETA", val: greeks.netTheta.toFixed(2), tone: greeks.netTheta >= 0 ? "up" : "down" },
+              { label: "NET VEGA", val: greeks.netVega.toFixed(2), tone: greeks.netVega >= 0 ? "up" : "down" },
+            ].map((m, i) => (
+              <div key={i} style={{ padding: "14px 16px", background: "var(--bg)" }}>
+                <div className="t-label" style={{ color: "var(--fg-hint)" }}>{m.label}</div>
+                <div className="t-mono" style={{ marginTop: 4, fontSize: 20, color: m.tone === "down" ? "var(--down-500)" : m.tone === "up" ? "var(--up-500)" : "var(--ink-1000)", fontWeight: 500 }}>
+                  {m.val}
+                </div>
+              </div>
+            ))}
+          </div>
+          {greeks.byPosition && greeks.byPosition.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div className="t-label" style={{ color: "var(--fg-hint)", marginBottom: 6 }}>BY POSITION · TOP CONTRIBUTORS</div>
+              <div style={{ display: "grid", gridTemplateColumns: "100px 1fr 1fr 1fr 1fr", gap: 8, padding: "4px 0", fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--fg-hint)", letterSpacing: "0.06em", borderBottom: "1px solid var(--border-hair)" }}>
+                <span>SYMBOL</span>
+                <span style={{ textAlign: "right" }}>Δ</span>
+                <span style={{ textAlign: "right" }}>Γ</span>
+                <span style={{ textAlign: "right" }}>Θ</span>
+                <span style={{ textAlign: "right" }}>V</span>
+              </div>
+              {greeks.byPosition
+                .slice()
+                .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+                .slice(0, 6)
+                .map((p) => (
+                  <div key={p.symbol} onClick={() => onPickTicker?.(p.symbol)} style={{ display: "grid", gridTemplateColumns: "100px 1fr 1fr 1fr 1fr", gap: 8, padding: "5px 0", borderBottom: "1px solid var(--border-hair)", cursor: "pointer", alignItems: "baseline" }}>
+                    <span className="t-mono" style={{ fontSize: 12, color: "var(--ink-1000)", fontWeight: 500 }}>{p.symbol}</span>
+                    <span className="t-mono" style={{ fontSize: 11, color: p.delta >= 0 ? "var(--up-500)" : "var(--down-500)", textAlign: "right" }}>{p.delta.toFixed(2)}</span>
+                    <span className="t-mono" style={{ fontSize: 11, color: "var(--fg)", textAlign: "right" }}>{p.gamma.toFixed(3)}</span>
+                    <span className="t-mono" style={{ fontSize: 11, color: p.theta >= 0 ? "var(--up-500)" : "var(--down-500)", textAlign: "right" }}>{p.theta.toFixed(2)}</span>
+                    <span className="t-mono" style={{ fontSize: 11, color: p.vega >= 0 ? "var(--up-500)" : "var(--down-500)", textAlign: "right" }}>{p.vega.toFixed(2)}</span>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 2026-05-10 (round 5 backend wiring): VaR + CVaR detail card.
        * Reads /api/v1/risk/var which returns 1d/10d horizons at 95/99,
@@ -14076,9 +14365,31 @@ const AdminPage = ({ tweaks, onNav }) => {
           <h1 style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 36, color: "var(--ink-1000)", letterSpacing: "-0.025em", lineHeight: 1.05, margin: "6px 0 4px" }}>Application control center</h1>
           <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--fg-dim)", maxWidth: 720 }}>Read-only live backend health, provider-key status, layout config, and last deploy state. Mutating admin actions remain admin-gated.</div>
         </div>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 11px 5px 9px", border: `1px solid ${live.error ? "rgba(224,120,86,0.45)" : "rgba(168,208,77,0.45)"}`, background: live.error ? "rgba(224,120,86,0.08)" : "rgba(168,208,77,0.08)", borderRadius: 999 }}>
-          <StatusDot tone={live.error ? "down" : "up"} size={6} glow />
-          <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: live.error ? "var(--down-500)" : "var(--up-500)" }}>{live.error ? "NEEDS ATTENTION" : "LIVE BACKEND"}</span>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 11px 5px 9px", border: `1px solid ${live.error ? "rgba(224,120,86,0.45)" : "rgba(168,208,77,0.45)"}`, background: live.error ? "rgba(224,120,86,0.08)" : "rgba(168,208,77,0.08)", borderRadius: 999 }}>
+            <StatusDot tone={live.error ? "down" : "up"} size={6} glow />
+            <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: live.error ? "var(--down-500)" : "var(--up-500)" }}>{live.error ? "NEEDS ATTENTION" : "LIVE BACKEND"}</span>
+          </div>
+          {/* 2026-05-11 (round 21): /api/v1/user/me badge — shows
+           * the authenticated operator + role pill so admins know
+           * which session they're acting from. Confidence-building
+           * when juggling impersonation or multi-tenant admin. */}
+          {currentUser.data && (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+              <span style={{ color: "var(--fg-hint)", letterSpacing: "0.04em" }}>SIGNED IN</span>
+              <span style={{ color: "var(--ink-1000)" }}>{currentUser.data.username}</span>
+              {currentUser.data.role && (
+                <span style={{ padding: "1px 7px", border: `1px solid ${isAdmin ? "var(--brand)" : "var(--border-strong)"}`, color: isAdmin ? "var(--brand)" : "var(--fg-muted)", borderRadius: 999, fontSize: 9.5, letterSpacing: "0.06em", fontWeight: 600, textTransform: "uppercase" }}>
+                  {currentUser.data.role}
+                </span>
+              )}
+              {currentUser.data.is_demo_seed && (
+                <span style={{ padding: "1px 7px", border: "1px solid var(--gold-500)", color: "var(--gold-500)", borderRadius: 999, fontSize: 9.5, letterSpacing: "0.06em", fontWeight: 600, textTransform: "uppercase" }}>
+                  DEMO SEED
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </header>
 
@@ -14336,6 +14647,19 @@ const AdminPage = ({ tweaks, onNav }) => {
           </AdminSection>
         </div>
       )}
+
+      {/* 2026-05-11 (round 15): Feature flags surface (Plan B.8).
+       * Read-only display of the caller-visible flag set. Admin /
+       * admin/feature-flags returns the full registry; this page
+       * shows what the current user gets. PATCH endpoints exist
+       * but are out of scope for this round — operator can toggle
+       * via the admin scope when needed. */}
+      <FeatureFlagsSection isAdmin={isAdmin} />
+
+      {/* 2026-05-11 (round 20): Admin leaderboard — full per-strategy
+       * detail with realized + unrealized + Sharpe + max-drawdown +
+       * total-trades + win-rate + last-trade timestamp. Admin-only. */}
+      <AdminLeaderboardSection isAdmin={isAdmin} />
     </div>
   );
 };
@@ -14547,6 +14871,102 @@ function ArchDetail({ node }) {
            "All probes nominal. No operator action required."}
         </div>
       </div>
+    </div>
+  );
+}
+
+// 2026-05-11 (round 15): Feature flags surface — caller-visible
+// row set with rollout-status + description. Admin sees the same
+// list via /admin/feature-flags (full registry); regular users get
+// only what they can act on.
+function FeatureFlagsSection({ isAdmin }: { isAdmin: boolean }) {
+  const [flags, setFlags] = useState<Awaited<ReturnType<typeof getFeatureFlags>>>([]);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = isAdmin ? await getAdminFeatureFlags() : await getFeatureFlags();
+        if (!cancelled) setFlags(Array.isArray(res) ? res : []);
+      } catch (e) {
+        if (!cancelled) setErr(e instanceof Error ? e.message : "Feature flags fetch failed.");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isAdmin]);
+
+  if (err || flags.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 18 }}>
+      <AdminSection
+        eyebrow="ADMIN · FEATURE FLAGS"
+        title={`${flags.length} flag${flags.length === 1 ? "" : "s"} resolved`}
+        sub="Phase 1 returns the default-enabled set with rollout status. Override resolution (user > tenant > env > default) lights up in Phase 2."
+      >
+        <div style={{ display: "grid", gap: 6 }}>
+          {flags.map((f) => (
+            <div key={f.key} style={{ display: "grid", gridTemplateColumns: "1fr 100px 120px 1.5fr", gap: 10, padding: "8px 10px", background: "var(--bg-elev-1)", border: "1px solid var(--border-hair)", borderRadius: 3, alignItems: "baseline" }}>
+              <span className="t-mono" style={{ fontSize: 11.5, color: "var(--ink-1000)" }}>{f.key}</span>
+              <span style={{ padding: "2px 8px", border: `1px solid ${f.enabled ? "var(--up-500)" : "var(--fg-muted)"}`, color: f.enabled ? "var(--up-500)" : "var(--fg-muted)", borderRadius: 999, fontFamily: "var(--font-mono)", fontSize: 9.5, letterSpacing: "0.06em", fontWeight: 600, textAlign: "center" }}>
+                {f.enabled ? "ENABLED" : "DISABLED"}
+              </span>
+              <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>{f.rollout_status}</span>
+              <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)", lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={f.description ?? undefined}>
+                {f.description || "—"}
+              </span>
+            </div>
+          ))}
+        </div>
+      </AdminSection>
+    </div>
+  );
+}
+
+// 2026-05-11 (round 20): Admin leaderboard — full per-strategy
+// detail. Sorted by total_pnl descending so the operator's eye lands
+// on top performers; worst at the bottom needs scroll.
+function AdminLeaderboardSection({ isAdmin }: { isAdmin: boolean }) {
+  const [rows, setRows] = useState<Awaited<ReturnType<typeof getStrategyAdminLeaderboard>>>([]);
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getStrategyAdminLeaderboard();
+        if (!cancelled) setRows(Array.isArray(res) ? res : []);
+      } catch { /* hide on failure */ }
+    })();
+    return () => { cancelled = true; };
+  }, [isAdmin]);
+  if (!isAdmin || rows.length === 0) return null;
+  return (
+    <div style={{ marginTop: 18 }}>
+      <AdminSection
+        eyebrow="ADMIN · STRATEGY LEADERBOARD"
+        title={`${rows.length} strateg${rows.length === 1 ? "y" : "ies"} ranked by P&L`}
+        sub="Realized + unrealized + Sharpe + max-DD + trade counts. Admin-only deep dive."
+      >
+        <div style={{ display: "grid", gap: 1, background: "var(--border)", border: "1px solid var(--border)", borderRadius: 3 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1.5fr 80px 90px 90px 80px 80px 90px 100px", gap: 8, padding: "8px 12px", background: "var(--bg-elev-1)" }}>
+            {["STRATEGY", "STATUS", "INVESTED", "TOTAL PNL", "RETURN", "SHARPE", "MAX DD", "TRADES · WIN"].map((h) => (
+              <span key={h} className="t-label" style={{ color: "var(--fg-hint)" }}>{h}</span>
+            ))}
+          </div>
+          {rows.slice(0, 12).map((r) => (
+            <div key={r.id} style={{ display: "grid", gridTemplateColumns: "1.5fr 80px 90px 90px 80px 80px 90px 100px", gap: 8, padding: "9px 12px", background: "var(--bg)", alignItems: "baseline" }}>
+              <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--ink-1000)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name || r.id}</span>
+              <span className="t-mono" style={{ fontSize: 10, padding: "1px 6px", border: `1px solid ${r.status === "active" || r.status === "live" ? "var(--up-500)" : "var(--fg-muted)"}`, color: r.status === "active" || r.status === "live" ? "var(--up-500)" : "var(--fg-muted)", borderRadius: 999, letterSpacing: "0.04em", textAlign: "center", textTransform: "uppercase", fontWeight: 600 }}>{r.status}</span>
+              <span className="t-mono" style={{ fontSize: 11, color: "var(--fg)", textAlign: "right" }}>{fmtMoney(r.invested, { dec: 0 })}</span>
+              <span className="t-mono" style={{ fontSize: 11.5, color: r.total_pnl >= 0 ? "var(--up-500)" : "var(--down-500)", textAlign: "right", fontWeight: 500 }}>{fmtMoney(r.total_pnl, { sign: true, dec: 0 })}</span>
+              <span className="t-mono" style={{ fontSize: 11, color: r.return_pct >= 0 ? "var(--up-500)" : "var(--down-500)", textAlign: "right" }}>{(r.return_pct * 100).toFixed(2)}%</span>
+              <span className="t-mono" style={{ fontSize: 11, color: "var(--fg)", textAlign: "right" }}>{r.sharpe_ratio == null ? "—" : r.sharpe_ratio.toFixed(2)}</span>
+              <span className="t-mono" style={{ fontSize: 11, color: "var(--down-500)", textAlign: "right" }}>{r.max_drawdown_pct == null ? "—" : `${(r.max_drawdown_pct * 100).toFixed(1)}%`}</span>
+              <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-muted)", textAlign: "right" }}>{r.total_trades} · {r.win_rate == null ? "—" : `${(r.win_rate * 100).toFixed(0)}%`}</span>
+            </div>
+          ))}
+        </div>
+      </AdminSection>
     </div>
   );
 }
