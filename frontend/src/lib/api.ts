@@ -540,6 +540,84 @@ export function recomputeRiskDashboard() {
   return apiFetch<RiskDashboardResponse>(`/api/v1/risk/recompute`, { method: "POST" });
 }
 
+// 2026-05-10 (round 5 backend wiring): the rest of the risk surface.
+// The redesigned RiskPage at /risk-dashboard renders only the dashboard
+// summary today; with these clients we can populate sector exposure,
+// VaR + CVaR, drawdown series, correlation matrix, and crowding.
+export interface CorrelationEntry {
+  strategy_a: string;
+  strategy_b: string;
+  correlation: number;
+}
+export interface CorrelationResponse {
+  strategies: string[];
+  matrix: number[][];
+  pairs: CorrelationEntry[];
+}
+export function getRiskCorrelation() {
+  return apiFetch<CorrelationResponse>(`/api/v1/risk/correlation`);
+}
+
+export interface SectorExposure {
+  sector: string;
+  allocation_pct: number;
+  value: number;
+  position_count: number;
+}
+export interface ExposureResponse {
+  sector_exposure: SectorExposure[];
+  long_exposure_pct: number;
+  short_exposure_pct: number;
+  net_exposure_pct: number;
+  gross_exposure_pct: number;
+  cash_pct: number;
+}
+export function getRiskExposure() {
+  return apiFetch<ExposureResponse>(`/api/v1/risk/exposure`);
+}
+
+export interface FactorExposure {
+  factor: string;
+  beta: number;
+  contribution_pct: number;
+}
+export interface VaRResponse {
+  var_95_1d: number | null;
+  var_99_1d: number | null;
+  var_95_10d: number | null;
+  var_99_10d: number | null;
+  cvar_95_1d: number | null;
+  cvar_99_1d: number | null;
+  method: string;
+  confidence_note: string;
+  factor_exposures: FactorExposure[];
+  estimated?: boolean;
+}
+export function getRiskVar() {
+  return apiFetch<VaRResponse>(`/api/v1/risk/var`);
+}
+
+export interface DrawdownPoint {
+  date: string;
+  drawdown_pct: number;
+  portfolio_value: number;
+  peak_value: number;
+}
+export interface DrawdownResponse {
+  current_drawdown_pct: number;
+  max_drawdown_pct: number;
+  max_drawdown_date: string;
+  recovery_days: number | null;
+  drawdown_series: DrawdownPoint[];
+}
+export function getRiskDrawdown() {
+  return apiFetch<DrawdownResponse>(`/api/v1/risk/drawdown`);
+}
+
+export function getRiskCrowding() {
+  return apiFetch<Record<string, unknown>>(`/api/v1/risk/crowding`);
+}
+
 export interface StrategyTrade {
   id: number;
   symbol: string;

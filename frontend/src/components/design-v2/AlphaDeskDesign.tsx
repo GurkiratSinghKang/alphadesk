@@ -33,7 +33,12 @@ import {
   getPositions,
   getPriceAlerts,
   getQuote,
+  getRiskCorrelation,
+  getRiskCrowding,
   getRiskDashboard,
+  getRiskDrawdown,
+  getRiskExposure,
+  getRiskVar,
   getStrategies,
   getTickerContext,
   getTickerFundamentals,
@@ -82,6 +87,17 @@ const LiveDataContext = React.createContext({
   watchlists: [],
   quotes: {},
   riskDashboard: null,
+  // 2026-05-10 (round 5 backend wiring): expanded risk surface — VaR
+  // (with CVaR + factor exposures), correlation matrix, drawdown
+  // series, sector exposure, and factor crowding all come from
+  // dedicated /api/v1/risk/* endpoints. The redesigned RiskPage now
+  // renders these honestly (em-dash when null), no more hardcoded
+  // sparklines or fabricated stress scenarios.
+  riskVar: null,
+  riskCorrelation: null,
+  riskDrawdown: null,
+  riskExposure: null,
+  riskCrowding: null,
   adminKeys: null,
   adminLayout: null,
   adminLastDeploy: null,
@@ -184,6 +200,11 @@ function LiveDataProvider({ symbol, page, children }) {
     watchlists: [],
     quotes: {},
     riskDashboard: null,
+    riskVar: null,
+    riskCorrelation: null,
+    riskDrawdown: null,
+    riskExposure: null,
+    riskCrowding: null,
     adminKeys: null,
     adminLayout: null,
     adminLastDeploy: null,
@@ -194,6 +215,12 @@ function LiveDataProvider({ symbol, page, children }) {
     let cancelled = false;
     const selected = String(symbol || "NVDA").toUpperCase();
     const shouldLoadAdmin = page === "admin" || page === "admin-users";
+    // 2026-05-10 (round 5 backend wiring): Risk-page-only fetches.
+    // We don't load these for every route because /risk/var and
+    // /risk/drawdown/series can be expensive (factor model + history
+    // computation). Only fetch when the operator is actually on the
+    // risk dashboard.
+    const shouldLoadRiskExtras = page === "risk" || page === "risk-dashboard";
 
     async function load() {
       setState((prev) => ({ ...prev, loading: true, error: null }));
@@ -212,6 +239,11 @@ function LiveDataProvider({ symbol, page, children }) {
         userWatchlistR,
         watchlistsR,
         riskDashboardR,
+        riskVarR,
+        riskCorrelationR,
+        riskDrawdownR,
+        riskExposureR,
+        riskCrowdingR,
         adminKeysR,
         adminLayoutR,
         adminLastDeployR,
@@ -235,6 +267,11 @@ function LiveDataProvider({ symbol, page, children }) {
         getUserWatchlist(),
         getWatchlistsV2(),
         getRiskDashboard(),
+        shouldLoadRiskExtras ? getRiskVar() : Promise.resolve(null),
+        shouldLoadRiskExtras ? getRiskCorrelation() : Promise.resolve(null),
+        shouldLoadRiskExtras ? getRiskDrawdown() : Promise.resolve(null),
+        shouldLoadRiskExtras ? getRiskExposure() : Promise.resolve(null),
+        shouldLoadRiskExtras ? getRiskCrowding() : Promise.resolve(null),
         shouldLoadAdmin ? getAdminBackendKeys() : Promise.resolve(null),
         shouldLoadAdmin ? getLayoutConfig() : Promise.resolve(null),
         shouldLoadAdmin ? getLastDeploy() : Promise.resolve(null),
@@ -325,6 +362,11 @@ function LiveDataProvider({ symbol, page, children }) {
         watchlists,
         quotes,
         riskDashboard: riskDashboardR.status === "fulfilled" ? riskDashboardR.value : null,
+        riskVar: shouldLoadRiskExtras && riskVarR.status === "fulfilled" ? riskVarR.value : null,
+        riskCorrelation: shouldLoadRiskExtras && riskCorrelationR.status === "fulfilled" ? riskCorrelationR.value : null,
+        riskDrawdown: shouldLoadRiskExtras && riskDrawdownR.status === "fulfilled" ? riskDrawdownR.value : null,
+        riskExposure: shouldLoadRiskExtras && riskExposureR.status === "fulfilled" ? riskExposureR.value : null,
+        riskCrowding: shouldLoadRiskExtras && riskCrowdingR.status === "fulfilled" ? riskCrowdingR.value : null,
         adminKeys: shouldLoadAdmin && adminKeysR.status === "fulfilled" ? adminKeysR.value || [] : null,
         adminLayout: shouldLoadAdmin && adminLayoutR.status === "fulfilled" ? adminLayoutR.value : null,
         adminLastDeploy: shouldLoadAdmin && adminLastDeployR.status === "fulfilled" ? adminLastDeployR.value : null,
@@ -9579,6 +9621,159 @@ const RiskPage = ({ tweaks, onNav, onPickTicker }) => {
           </div>
         ))}
       </div>
+
+      {/* 2026-05-10 (round 5 backend wiring): VaR + CVaR detail card.
+       * Reads /api/v1/risk/var which returns 1d/10d horizons at 95/99,
+       * Conditional VaR (Expected Shortfall), method tag, and factor
+       * exposure decomposition. The empty-state copy from earlier
+       * stays correct when factor model isn't loaded. */}
+      {live.riskVar && (
+        <div style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: 18, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+            <div>
+              <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>VALUE AT RISK</div>
+              <h2 className="t-h3" style={{ margin: "2px 0 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>Loss tail · 1d &amp; 10d horizons</h2>
+            </div>
+            <span className="t-mono" style={{ fontSize: 10.5, color: "var(--fg-muted)" }}>method · {live.riskVar.method || "—"}{live.riskVar.estimated ? " · estimated" : ""}</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 1, background: "var(--border)", marginTop: 14, border: "1px solid var(--border)", borderRadius: 3 }}>
+            {[
+              { label: "VAR · 1D · 95%", val: live.riskVar.var_95_1d, tone: "warn" },
+              { label: "VAR · 1D · 99%", val: live.riskVar.var_99_1d, tone: "down" },
+              { label: "CVAR · 1D · 95%", val: live.riskVar.cvar_95_1d, tone: "warn" },
+              { label: "CVAR · 1D · 99%", val: live.riskVar.cvar_99_1d, tone: "down" },
+              { label: "VAR · 10D · 95%", val: live.riskVar.var_95_10d, tone: "warn" },
+              { label: "VAR · 10D · 99%", val: live.riskVar.var_99_10d, tone: "down" },
+            ].map((cell, i) => (
+              <div key={i} style={{ background: "var(--ink-100)", padding: "12px 14px" }}>
+                <div className="t-label" style={{ color: "var(--fg-hint)" }}>{cell.label}</div>
+                <div className="t-mono" style={{ marginTop: 6, fontSize: 18, color: cell.val == null ? "var(--fg-muted)" : cell.tone === "down" ? "var(--down-500)" : "var(--gold-300)", fontWeight: 500 }}>{cell.val == null ? "—" : fmtMoney(cell.val, { dec: 0 })}</div>
+              </div>
+            ))}
+          </div>
+          {live.riskVar.confidence_note && (
+            <div style={{ marginTop: 10, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 12.5 }}>
+              {live.riskVar.confidence_note}
+            </div>
+          )}
+          {Array.isArray(live.riskVar.factor_exposures) && live.riskVar.factor_exposures.length > 0 && (
+            <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-hair)" }}>
+              <div className="t-label" style={{ color: "var(--fg-hint)", marginBottom: 8 }}>FACTOR EXPOSURES</div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {live.riskVar.factor_exposures.map((f) => (
+                  <div key={f.factor} style={{ display: "grid", gridTemplateColumns: "180px 1fr 80px 80px", gap: 14, alignItems: "center" }}>
+                    <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg)", fontSize: 13 }}>{f.factor}</span>
+                    <div style={{ position: "relative", height: 6, background: "var(--ink-300)", borderRadius: 1 }}>
+                      <div style={{ position: "absolute", left: "50%", top: 0, height: "100%", width: `${Math.min(50, Math.abs(f.contribution_pct))}%`, transform: f.contribution_pct < 0 ? "translateX(-100%)" : "translateX(0)", background: f.contribution_pct >= 0 ? "var(--up-500)" : "var(--down-500)" }} />
+                    </div>
+                    <span className="t-mono" style={{ color: "var(--ink-1000)", textAlign: "right", fontSize: 12 }}>β {f.beta?.toFixed(2)}</span>
+                    <span className="t-mono" style={{ color: f.contribution_pct >= 0 ? "var(--up-500)" : "var(--down-500)", textAlign: "right", fontSize: 12 }}>{f.contribution_pct >= 0 ? "+" : ""}{f.contribution_pct.toFixed(2)}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 2026-05-10 (round 5): sector exposure pulled from
+       * /api/v1/risk/exposure with long/short/net/gross/cash percentages.
+       * Renders only when the endpoint returns at least one sector. */}
+      {live.riskExposure && Array.isArray(live.riskExposure.sector_exposure) && live.riskExposure.sector_exposure.length > 0 && (
+        <div style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: 18, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14 }}>
+            <div>
+              <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>SECTOR EXPOSURE</div>
+              <h2 className="t-h3" style={{ margin: "2px 0 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>Where the book is concentrated</h2>
+            </div>
+            <span className="t-mono" style={{ fontSize: 10.5, color: "var(--fg-muted)" }}>
+              long {live.riskExposure.long_exposure_pct?.toFixed(1)}% · short {live.riskExposure.short_exposure_pct?.toFixed(1)}% · net {live.riskExposure.net_exposure_pct?.toFixed(1)}% · cash {live.riskExposure.cash_pct?.toFixed(1)}%
+            </span>
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {live.riskExposure.sector_exposure.slice(0, 12).map((s) => (
+              <div key={s.sector} style={{ display: "grid", gridTemplateColumns: "180px 1fr 90px 70px", gap: 14, alignItems: "center" }}>
+                <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg)", fontSize: 13 }}>{s.sector}</span>
+                <div style={{ position: "relative", height: 8, background: "var(--bg-elev-1)", borderRadius: 2 }}>
+                  <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${Math.min(100, s.allocation_pct)}%`, background: s.allocation_pct > 25 ? "var(--down-500)" : s.allocation_pct > 12 ? "var(--gold-300)" : "var(--brand)", opacity: 0.85, borderRadius: 2 }} />
+                </div>
+                <span className="t-mono" style={{ color: "var(--ink-1000)", textAlign: "right", fontSize: 12 }}>{fmtMoney(s.value, { dec: 0 })}</span>
+                <span className="t-mono" style={{ color: "var(--fg-muted)", textAlign: "right", fontSize: 12 }}>{s.allocation_pct.toFixed(1)}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 2026-05-10 (round 5): drawdown-history panel from
+       * /api/v1/risk/drawdown. Renders only when the series is
+       * populated; honest dash treatment otherwise. */}
+      {live.riskDrawdown && Array.isArray(live.riskDrawdown.drawdown_series) && live.riskDrawdown.drawdown_series.length > 0 && (
+        <div style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: 18, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14 }}>
+            <div>
+              <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>DRAWDOWN · UNDERWATER</div>
+              <h2 className="t-h3" style={{ margin: "2px 0 0", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>
+                Current {live.riskDrawdown.current_drawdown_pct?.toFixed(2)}% · max {live.riskDrawdown.max_drawdown_pct?.toFixed(2)}%
+              </h2>
+            </div>
+            <span className="t-mono" style={{ fontSize: 10.5, color: "var(--fg-muted)" }}>
+              max on {live.riskDrawdown.max_drawdown_date || "—"}{live.riskDrawdown.recovery_days != null ? ` · recovered in ${live.riskDrawdown.recovery_days}d` : " · still underwater"}
+            </span>
+          </div>
+          <Sparkline data={live.riskDrawdown.drawdown_series.map((p) => p.drawdown_pct)} color="var(--down-500)" width={1200} height={80} fill />
+        </div>
+      )}
+
+      {/* 2026-05-10 (round 5): correlation matrix from
+       * /api/v1/risk/correlation. Shows up to 6×6 (more than that and
+       * the cells get unreadable on a 1200px page). */}
+      {live.riskCorrelation && Array.isArray(live.riskCorrelation.strategies) && live.riskCorrelation.strategies.length > 1 && (
+        <div style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: 18, marginBottom: 16 }}>
+          <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>CORRELATION</div>
+          <h2 className="t-h3" style={{ margin: "2px 0 14px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 22, letterSpacing: "-0.015em", fontWeight: 400 }}>How strategies move together</h2>
+          {(() => {
+            const labels = live.riskCorrelation.strategies.slice(0, 6);
+            const matrix = live.riskCorrelation.matrix.slice(0, 6).map((row) => row.slice(0, 6));
+            const cell = (v) => {
+              if (v == null) return "var(--fg-hint)";
+              const a = Math.min(1, Math.abs(v));
+              return v >= 0 ? `rgba(168,208,77,${0.15 + a * 0.55})` : `rgba(224,120,86,${0.15 + a * 0.55})`;
+            };
+            return (
+              <div style={{ display: "grid", gridTemplateColumns: `120px repeat(${labels.length}, 1fr)`, gap: 1, background: "var(--border-hair)", border: "1px solid var(--border-hair)", borderRadius: 3 }}>
+                <div style={{ background: "var(--bg-elev-1)", padding: "6px 8px" }} />
+                {labels.map((l) => (
+                  <div key={`h-${l}`} style={{ background: "var(--bg-elev-1)", padding: "6px 4px", fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--fg-muted)", textAlign: "center", letterSpacing: "0.04em" }}>{l.slice(0, 8)}</div>
+                ))}
+                {matrix.map((row, ri) => (
+                  <React.Fragment key={`r-${labels[ri]}`}>
+                    <div style={{ background: "var(--bg-elev-1)", padding: "6px 8px", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg)" }}>{labels[ri]}</div>
+                    {row.map((v, ci) => (
+                      <div key={`c-${ri}-${ci}`} style={{ background: cell(v), padding: "8px 4px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--ink-1000)", textAlign: "center", fontWeight: ri === ci ? 600 : 400 }}>{v == null ? "—" : v.toFixed(2)}</div>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </div>
+            );
+          })()}
+          {Array.isArray(live.riskCorrelation.pairs) && live.riskCorrelation.pairs.length > 0 && (
+            <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--border-hair)" }}>
+              <div className="t-label" style={{ color: "var(--fg-hint)", marginBottom: 6 }}>HIGHEST-MAGNITUDE PAIRS</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {[...live.riskCorrelation.pairs]
+                  .sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation))
+                  .slice(0, 6)
+                  .map((p) => (
+                    <span key={`${p.strategy_a}-${p.strategy_b}`} className="t-mono" style={{ fontSize: 10.5, padding: "3px 8px", border: "1px solid var(--border)", borderRadius: 999, color: p.correlation >= 0 ? "var(--up-500)" : "var(--down-500)" }}>
+                      {p.strategy_a} · {p.strategy_b}: {p.correlation >= 0 ? "+" : ""}{p.correlation.toFixed(2)}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: 16, marginBottom: 16 }}>
         <div style={{ background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, padding: 18 }}>
