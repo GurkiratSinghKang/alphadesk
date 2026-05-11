@@ -21,9 +21,9 @@ def test_defaults_match_historic_hardcoded_values():
     assert s.EARNINGS_IV_CHEAP_THRESHOLD == 35.0
     # A-3: Claude opus per-call cost
     assert s.CLAUDE_OPUS_COST_PER_CALL_USD == 0.30
-    # A-4 / A-5: FMP cache TTLs
-    assert s.FMP_CALENDAR_CACHE_TTL_SECONDS == 300
-    assert s.FMP_RESCUE_CACHE_TTL_SECONDS == 300
+    # A-4 / A-5 plus BUG-071: FMP calendar TTL defaults to 15 minutes.
+    assert s.FMP_CALENDAR_CACHE_TTL_SECONDS == 900
+    assert s.FMP_RESCUE_CACHE_TTL_SECONDS == 900
     # A-6 through A-9: rate-limit caps
     assert s.RATE_LIMIT_FULL_RESEARCH_MAX == 5
     assert s.RATE_LIMIT_FULL_RESEARCH_WINDOW_SECONDS == 600.0

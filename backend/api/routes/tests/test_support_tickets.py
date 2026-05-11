@@ -12,12 +12,32 @@ the frontend depends on:
 """
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from main import app
 
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def auth_override():
+    """Support-ticket tests own their auth state, independent of suite order."""
+    from core.auth import require_auth
+
+    async def _fake_user() -> str:
+        return "alice"
+
+    original = app.dependency_overrides.get(require_auth)
+    app.dependency_overrides[require_auth] = _fake_user
+    try:
+        yield
+    finally:
+        if original is not None:
+            app.dependency_overrides[require_auth] = original
+        else:
+            app.dependency_overrides.pop(require_auth, None)
 
 
 # ─── BUG-088 ─────────────────────────────────────────────────────────

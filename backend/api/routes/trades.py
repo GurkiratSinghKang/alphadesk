@@ -1625,8 +1625,6 @@ async def create_order(
             logger.debug("Could not resolve halt TTL for response", exc_info=True)
         raise HTTPException(status_code=503, detail=halted_detail)
 
-    broker_creds = await _alpaca_credentials_or_503(username)
-
     # persona-40 F2 / persona-65 F1 / Wave-A bypass-fix: Idempotency-Key
     # support with race-safe ordering.
     #
@@ -1710,6 +1708,8 @@ async def create_order(
             username=username,
             http_request=http_request,
         )
+
+        broker_creds = await _alpaca_credentials_or_503(username)
 
         # Step 2: SET NX = PENDING sentinel atomically. If we lose the race,
         # re-GET and treat the winner's value as authoritative.
