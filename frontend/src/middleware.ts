@@ -5,7 +5,7 @@ import type { NextRequest } from "next/server";
  * BUG-067 (audit 2026-05-11, M1-01, continues 2026-04-19 BUG-040):
  * Next.js middleware managing the Content-Security-Policy migration.
  *
- * Default mode (NEXT_PUBLIC_CSP_ENFORCE_STRICT !== "1"):
+ * Default mode (CSP_ENFORCE_STRICT !== "1"):
  *   - Caddy's static enforced CSP (Caddyfile:142, still allows
  *     `'unsafe-inline'`) governs actual blocking.
  *   - This middleware ALSO sets a strict
@@ -15,7 +15,7 @@ import type { NextRequest } from "next/server";
  *     every inline source that would need a nonce or a refactor
  *     before the enforced flip.
  *
- * Strict mode (NEXT_PUBLIC_CSP_ENFORCE_STRICT === "1"):
+ * Strict mode (CSP_ENFORCE_STRICT === "1"):
  *   - Middleware mints a per-request base64 nonce.
  *   - Sets ENFORCED `Content-Security-Policy: ... 'nonce-X'
  *     'strict-dynamic'` (no `'unsafe-inline'`) so non-nonced inline
@@ -35,10 +35,21 @@ import type { NextRequest } from "next/server";
  *
  * Rollback path (when strict mode is enabled and something blanks
  * the page):
- *   1. Unset `NEXT_PUBLIC_CSP_ENFORCE_STRICT` in prod env, redeploy.
- *      ~2 min. Drops the enforced strict header; Report-Only resumes.
+ *   1. Unset `CSP_ENFORCE_STRICT` in the prod frontend container's
+ *      env (docker-compose env_file or `environment:` block), then
+ *      restart the container. ~2 min. Drops the enforced strict
+ *      header; Report-Only resumes.
  *   2. Or, set `NEXT_PUBLIC_DISABLE_CSP_REPORT_ONLY=1` to kill both
  *      paths entirely without a code change.
+ *
+ * Why CSP_ENFORCE_STRICT (no NEXT_PUBLIC_ prefix):
+ *   Middleware runs in Next.js's Edge runtime; `process.env` IS
+ *   read at request time for non-prefixed vars, so this flag is
+ *   FLIPPABLE WITHOUT A REBUILD. The team sets it in the
+ *   frontend container's runtime env and restarts; the next
+ *   request runs the strict path. `NEXT_PUBLIC_*` would have been
+ *   inlined at build time into client bundles too — a security
+ *   flag has no business there.
  *
  * Why both modes share a single middleware:
  *   - Single source of truth for the policy string (one place to
@@ -61,8 +72,8 @@ import type { NextRequest } from "next/server";
  *   - 1 week+ of Report-Only data with no surprise sources.
  *   - `force-dynamic` on `app/layout.tsx`,
  *     `app/(dashboard)/layout.tsx`, `app/login/layout.tsx`.
- *   - Staging deploy with `NEXT_PUBLIC_CSP_ENFORCE_STRICT=1` for
- *     ~1 day, manual smoke across Chrome / Safari / Firefox.
+ *   - Staging deploy with `CSP_ENFORCE_STRICT=1` for ~1 day,
+ *     manual smoke across Chrome / Safari / Firefox.
  *   - Post-deploy smoke (`qa/post-deploy/smoke-audit-2026-05-11.sh`)
  *     extended to check `Content-Security-Policy` (enforced)
  *     contains `nonce-` and lacks `unsafe-inline`.
@@ -128,7 +139,11 @@ export function middleware(request: NextRequest) {
     request: { headers: requestHeaders },
   });
 
-  const enforceStrict = process.env.NEXT_PUBLIC_CSP_ENFORCE_STRICT === "1";
+  // Read at request time (Edge runtime). NOT prefixed with NEXT_PUBLIC_
+  // so the value is server-side only — flag flips via docker-compose
+  // env without a rebuild. NEXT_PUBLIC_ would have inlined the flag
+  // value into client bundles too (no security value, just noise).
+  const enforceStrict = process.env.CSP_ENFORCE_STRICT === "1";
   if (enforceStrict) {
     // Strict mode: middleware OWNS the enforced CSP. Caddy's static
     // CSP is still emitted as a second header; the browser enforces
