@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sys
 from contextvars import ContextVar
 from datetime import datetime, timezone
@@ -78,6 +79,39 @@ _STD_LOGRECORD_ATTRS = frozenset(
 )
 
 
+# BUG-064 (audit 2026-05-11, M4-02 / M5-03): httpx logs each outbound URL at
+# INFO with the apikey query param intact. Polygon and FMP keys leaked 300+
+# times in a 32-min capture. We redact at the formatter level so the leak
+# class is killed regardless of which library emits the log.
+#
+# Patterns covered: ``apikey=…``, ``apiKey=…``, ``api_key=…`` (Polygon / FMP
+# style), ``token=…``, ``access_token=…``, and ``Authorization: Bearer …``
+# headers if they ever land in a message. Match is case-insensitive on the
+# key name and greedy on the value up to the next ``&``, whitespace, or
+# quote so we don't over-redact.
+_SECRET_QS_PATTERN = re.compile(
+    r"(?i)((?:apikey|api[-_]?key|api[-_]?token|access[_-]?token|token|secret)\s*=\s*)"
+    r"([^\s&\"'<>]+)"
+)
+_SECRET_BEARER_PATTERN = re.compile(
+    r"(?i)(bearer\s+)([A-Za-z0-9._\-+/=]{8,})"
+)
+
+
+def redact_secrets(text: str) -> str:
+    """Strip API-key and bearer-token values from a log string.
+
+    Preserves the key/header NAME (so operators still know "Polygon was
+    called") while replacing the value with ``<REDACTED>``. Returns the
+    input unchanged when no patterns match.
+    """
+    if not text or not isinstance(text, str):
+        return text
+    redacted = _SECRET_QS_PATTERN.sub(r"\1<REDACTED>", text)
+    redacted = _SECRET_BEARER_PATTERN.sub(r"\1<REDACTED>", redacted)
+    return redacted
+
+
 class JsonFormatter(logging.Formatter):
     """Emit one JSON object per log record.
 
@@ -96,7 +130,7 @@ class JsonFormatter(logging.Formatter):
         payload: dict[str, Any] = {
             "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
             "level": record.levelname,
-            "message": record.getMessage(),
+            "message": redact_secrets(record.getMessage()),
             "logger": record.name,
             "request_id": REQUEST_ID.get(),
             # Round-5 Cluster D H-8: git_sha lets log aggregators correlate
@@ -115,12 +149,13 @@ class JsonFormatter(logging.Formatter):
             if key in payload:
                 # Don't let an ``extra={"level": ...}`` clobber the real level.
                 continue
-            payload[key] = value
+            # Redact string extras too (e.g. ``extra={"url": "...apikey=..."}``)
+            payload[key] = redact_secrets(value) if isinstance(value, str) else value
 
         if record.exc_info:
-            payload["stack"] = self.formatException(record.exc_info)
+            payload["stack"] = redact_secrets(self.formatException(record.exc_info))
         elif record.stack_info:
-            payload["stack"] = self.formatStack(record.stack_info)
+            payload["stack"] = redact_secrets(self.formatStack(record.stack_info))
 
         # default=str so datetime / Decimal / UUID extras don't blow up the
         # formatter mid-log. Worst case we stringify an object; better than
