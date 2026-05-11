@@ -14,6 +14,23 @@ import {
 } from "@/components/ui/sheet";
 
 /**
+ * ⚠️  STATUS · BUG-079 (audit 2026-05-11, F-SCOUT-67): v1 shell
+ * ──────────────────────────────────────────────────────────────
+ * This layout is the legacy "v1" desk shell. Two app shells co-exist
+ * in production:
+ *   - DeskLayout (this file) — used by `/` (Desk: Desk · Strategies ·
+ *     Analytics · Pipeline · Alerts)
+ *   - `(dashboard)/layout.tsx` + `design-v2/AlphaDeskDesign.tsx` —
+ *     used by every other route plus the post-2026-05 redesign
+ *
+ * The audit + the design-v2 redirect in feature/deployment have
+ * established that v2 is the canonical shell. Net result: new pages
+ * should NOT mount this layout. When the `/` route migrates onto v2
+ * (BUG-079 follow-up), this file becomes unused and can be removed.
+ *
+ * Do not extend, do not add new slots, do not import from new pages.
+ * Touch only for security/bug fixes that block prod.
+ *
  * DeskLayout (Layer 3 shell)
  * ──────────────────────────
  * The 4-row editorial workstation shell that hosts the Layer-2 desk
