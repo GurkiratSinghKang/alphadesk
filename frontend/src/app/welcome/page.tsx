@@ -13,8 +13,13 @@ export const metadata: Metadata = {
 export const dynamic = "force-static";
 
 export default function WelcomePage() {
+  // BUG-083 follow-up (audit 2026-05-11, M3-02 / M3-03): /welcome had
+  // no `<main>` landmark — screen-reader users had nothing to orient on
+  // and the universal skip-to-content link in app/layout.tsx had no
+  // target. Wrap the page in `<main id="main-content">` so both gaps
+  // close. WCAG 1.3.1 (Info and Relationships) + 2.4.1 (Bypass Blocks).
   return (
-    <div data-welcome-page="" style={{ background: "var(--bg)", color: "var(--fg)", minHeight: "100vh" }}>
+    <main id="main-content" data-welcome-page="" style={{ background: "var(--bg)", color: "var(--fg)", minHeight: "100vh" }}>
       <style
         dangerouslySetInnerHTML={{
           __html: `
@@ -70,7 +75,7 @@ export default function WelcomePage() {
       <MKAgents />
       <MKResults />
       <MKFooter />
-    </div>
+    </main>
   );
 }
 
