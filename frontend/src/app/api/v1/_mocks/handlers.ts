@@ -162,6 +162,38 @@ const HANDLERS: Record<string, MockHandler> = {
     vix:  Array.from({ length: 30 }, (_, i) => 14 + Math.sin(i / 2) * 1.2),
   }),
   "GET /market/quotes/:symbol": (_, { symbol }) => quoteFor(symbol),
+  // Level-2 ladder for the order-book panel. Returns 10 levels per side
+  // around the seeded last price; sizes alternate venue+size so the depth
+  // bars render with realistic variance. The shape mirrors backend
+  // /market/depth/{symbol} (snake_case) so the FE mapper passes through.
+  "GET /market/depth/:symbol": (_, { symbol }) => {
+    const sym = symbol.toUpperCase();
+    const seed = SEED_PRICES[sym] ?? 100;
+    const tick = seed >= 100 ? 0.01 : 0.005;
+    const venuesBid = ["IEX", "ARCA", "NYSE", "EDGX", "BATS"];
+    const venuesAsk = ["NASDAQ", "BATS", "EDGX", "ARCA", "IEX"];
+    const bids = Array.from({ length: 10 }, (_, i) => ({
+      price: +(seed - tick * (i + 1)).toFixed(2),
+      size: 100 + (i * 65 + ((i * 37) % 80)),
+      venue: venuesBid[i % venuesBid.length],
+    }));
+    const asks = Array.from({ length: 10 }, (_, i) => ({
+      price: +(seed + tick * (i + 1)).toFixed(2),
+      size: 100 + (i * 55 + ((i * 41) % 70)),
+      venue: venuesAsk[i % venuesAsk.length],
+    }));
+    return {
+      symbol: sym,
+      kind: "level_2" as const,
+      provider: "mock-depth",
+      bids,
+      asks,
+      timestamp: NOW_ISO(),
+      is_l2: true,
+      is_demo: false,
+      notes: ["Local mock depth for QA; not routed to a broker."],
+    };
+  },
   "GET /market/market-status": () => ({
     state: "regular",
     isOpen: true,

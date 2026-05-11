@@ -168,6 +168,7 @@ import type {
 // fallback by `_OldChartPanel` reference code below); the live Trade +
 // Symbol routes consume `HeroChartWired` instead.
 import HeroChartWired from "./_wired/HeroChartWired";
+import { useMarketDepth } from "@/hooks/useMarketDepth";
 
 const TWEAK_DEFAULTS = {
   page: "dashboard",
@@ -3696,6 +3697,9 @@ function useLiveTicker(sym) {
   const last = quoteLast(q);
   const bid = Number(q?.bid ?? 0);
   const ask = Number(q?.ask ?? 0);
+  const bidSize = Number.isFinite(Number(q?.bidSize)) ? Number(q?.bidSize) : null;
+  const askSize = Number.isFinite(Number(q?.askSize)) ? Number(q?.askSize) : null;
+  const quoteTs = Number.isFinite(Number(q?.timestamp)) ? Number(q?.timestamp) : 0;
   const changePct = quoteChangePct(q);
   const change = Number(q?.change ?? (((last * changePct) / 100) || 0));
   const high52 = asFiniteNumber(f?.fiftyTwoWeekHigh, null);
@@ -3712,6 +3716,9 @@ function useLiveTicker(sym) {
     pct: changePct,
     bid: Number.isFinite(bid) ? bid : 0,
     ask: Number.isFinite(ask) ? ask : 0,
+    bidSize,
+    askSize,
+    quoteTs,
     spread: bid > 0 && ask > 0 && Number.isFinite(ask - bid) ? Math.max(0, ask - bid) : null,
     vol: Number(q?.volume || 0),
     avgVol: Number(f?.avgVolume30d || q?.avg_daily_volume_20d || q?.volume || 0),
@@ -4931,7 +4938,7 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
               <a onClick={() => setLeftCollapsed(true)} title="Collapse"
                  style={{ fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--fg-muted)", cursor: "default", padding: "2px 6px", border: "1px solid var(--border-hair)", borderRadius: 2 }}>◂ close</a>
             </div>
-            {isOption ? (<OptionsOrderBookPanel />) : (<><OrderBookPanel last={t.px} /><TimeAndSalesPanel last={t.px} /></>)}
+            {isOption ? (<OptionsOrderBookPanel />) : (<><OrderBookPanel symbol={t.sym} last={t.px} bid={t.bid} ask={t.ask} bidSize={t.bidSize} askSize={t.askSize} quoteTs={t.quoteTs} /><TimeAndSalesPanel symbol={t.sym} last={t.px} bid={t.bid} ask={t.ask} bidSize={t.bidSize} askSize={t.askSize} /></>)}
           </aside>
         )}
 
@@ -5940,8 +5947,24 @@ function OptionsOrderBookPanel() {
   );
 }
 
-function OrderBookPanel({ last }) {
+function OrderBookPanel({ symbol, last, bid, ask, bidSize, askSize, quoteTs }) {
   const mid = Number(last || 0);
+  const symUpper = String(symbol || "").toUpperCase();
+  const quoteFallback = React.useMemo(() => {
+    const b = Number(bid);
+    const a = Number(ask);
+    if (!Number.isFinite(b) || !Number.isFinite(a) || b <= 0 || a <= 0) return null;
+    return {
+      bid: b,
+      ask: a,
+      bidSize: Number.isFinite(Number(bidSize)) ? Number(bidSize) : null,
+      askSize: Number.isFinite(Number(askSize)) ? Number(askSize) : null,
+      timestamp: Number.isFinite(Number(quoteTs)) ? Number(quoteTs) : 0,
+    };
+  }, [bid, ask, bidSize, askSize, quoteTs]);
+
+  const depth = useMarketDepth(symUpper, quoteFallback, Boolean(symUpper));
+
   if (!mid) {
     return (
       <div style={{ borderBottom: "1px solid var(--border)", padding: "14px" }}>
@@ -5950,28 +5973,59 @@ function OrderBookPanel({ last }) {
       </div>
     );
   }
-  const tick = mid >= 100 ? 0.01 : 0.005;
-  const asks = Array.from({ length: 7 }, (_, i) => ({ px: mid + tick * (i + 1), sz: 0 }));
-  const bids = Array.from({ length: 7 }, (_, i) => ({ px: mid - tick * (i + 1), sz: 0 }));
-  const maxSz = Math.max(1, ...asks.map(a => a.sz), ...bids.map(b => b.sz));
+
+  const rawBids = Array.isArray(depth?.bids) ? depth.bids : [];
+  const rawAsks = Array.isArray(depth?.asks) ? depth.asks : [];
+  // Take the best 7 levels on each side, then orient so the spread sits
+  // adjacent to the mid row:
+  //   • Asks: keep the 7 lowest prices, render highest→lowest top-to-bottom
+  //     (worst ask at top, best ask just above mid).
+  //   • Bids: keep the 7 highest prices, render highest→lowest top-to-bottom
+  //     (best bid just below mid, worst bid at bottom).
+  const askLevels = [...rawAsks]
+    .sort((a, b) => a.price - b.price)
+    .slice(0, 7)
+    .reverse()
+    .map(level => ({ px: Number(level.price), sz: Number(level.size ?? 0) }));
+  const bidLevels = [...rawBids]
+    .sort((a, b) => b.price - a.price)
+    .slice(0, 7)
+    .map(level => ({ px: Number(level.price), sz: Number(level.size ?? 0) }));
+  const maxSz = Math.max(1, ...askLevels.map(a => a.sz), ...bidLevels.map(b => b.sz));
+  const isL2 = depth?.isL2 === true;
+  const isFallback = !depth || depth.kind === "top_of_book" || depth.provider === "quote_fallback";
+  const isDemo = depth?.isDemo === true;
+  const headerLabel = isDemo ? "demo depth" : isL2 ? "level 2" : isFallback ? "quote fallback" : "top of book";
+  const footerLabel = isL2 ? `Live ladder · ${depth?.provider || "depth"}` : "Depth unavailable · top-of-book only";
+
   return (
     <div style={{ borderBottom: "1px solid var(--border)" }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "14px 14px 8px" }}>
         <h3 style={{ margin: 0, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 15, color: "var(--ink-1000)", fontWeight: 400 }}>Order book</h3>
-        <span className="t-label" style={{ fontSize: 8.5 }}>quote fallback</span>
+        <span className="t-label" style={{ fontSize: 8.5 }}>{headerLabel}</span>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 1, padding: "0 10px 4px", fontFamily: "var(--font-ui)", fontSize: 8, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--fg-hint)" }}>
         <span>Bid sz</span><span style={{ textAlign: "center" }}>Price</span><span style={{ textAlign: "right" }}>Ask sz</span>
       </div>
-      {asks.map((a, i) => <BookRow key={"a" + i} side="ask" px={a.px} sz={a.sz} maxSz={maxSz} />)}
+      {askLevels.length === 0 && (
+        <div style={{ padding: "8px 14px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 12 }}>
+          No ask levels published.
+        </div>
+      )}
+      {askLevels.map((a, i) => <BookRow key={"a" + i} side="ask" px={a.px} sz={a.sz} maxSz={maxSz} />)}
       <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", padding: "7px 10px", background: "var(--bg-elev-1)", borderTop: "1px solid var(--border-hair)", borderBottom: "1px solid var(--border-hair)", alignItems: "center" }}>
         <span className="t-mono" style={{ color: "var(--up-500)", fontSize: 10 }}>▲ {last.toFixed(2)}</span>
         <span className="t-mono" style={{ color: "var(--ink-1000)", textAlign: "center", fontSize: 11, padding: "0 8px" }}>${last.toFixed(2)}</span>
-        <span className="t-mono" style={{ color: "var(--fg-hint)", fontSize: 8.5, textAlign: "right" }}>0.04s</span>
+        <span className="t-mono" style={{ color: "var(--fg-hint)", fontSize: 8.5, textAlign: "right" }}>mid</span>
       </div>
-      {bids.map((b, i) => <BookRow key={"b" + i} side="bid" px={b.px} sz={b.sz} maxSz={maxSz} />)}
+      {bidLevels.length === 0 && (
+        <div style={{ padding: "8px 14px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 12 }}>
+          No bid levels published.
+        </div>
+      )}
+      {bidLevels.map((b, i) => <BookRow key={"b" + i} side="bid" px={b.px} sz={b.sz} maxSz={maxSz} />)}
       <div style={{ padding: "7px 10px", display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--fg-muted)", borderTop: "1px solid var(--border-hair)" }}>
-        <span>Depth unavailable</span><span>displaying quote ladder</span>
+        <span>{footerLabel}</span><span>{isL2 ? `${askLevels.length + bidLevels.length} levels` : "best bid/ask only"}</span>
       </div>
     </div>
   );
@@ -5988,24 +6042,62 @@ function BookRow({ side, px, sz, maxSz }) {
     </div>
   );
 }
-function TimeAndSalesPanel({ last }) {
-  const ticks = last ? [{ ts: "live", px: last, sz: 0 }] : [];
+function TimeAndSalesPanel({ symbol, last, bid, ask, bidSize, askSize }) {
+  // Rolling buffer of observed quote prints. We record a new entry every time
+  // ``last`` ticks to a new value (uptick → ask side, downtick → bid side).
+  // The size column shows the relevant side's published size when available.
+  const [ticks, setTicks] = React.useState([]);
+  const prevLastRef = React.useRef(null);
+  const prevSymRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const sym = String(symbol || "").toUpperCase();
+    if (prevSymRef.current !== sym) {
+      // Symbol changed → drop the previous symbol's tape.
+      prevSymRef.current = sym;
+      prevLastRef.current = null;
+      setTicks([]);
+      return;
+    }
+    const px = Number(last);
+    if (!Number.isFinite(px) || px <= 0) return;
+    const prev = prevLastRef.current;
+    if (prev != null && px === prev) return;
+    const side = prev != null && px < prev ? "bid" : "ask";
+    const sizeRaw = side === "ask" ? askSize : bidSize;
+    const sz = Number.isFinite(Number(sizeRaw)) ? Number(sizeRaw) : null;
+    const entry = { ts: new Date(), px, side, sz };
+    setTicks(buf => [entry, ...buf].slice(0, 14));
+    prevLastRef.current = px;
+  }, [symbol, last, bid, ask, bidSize, askSize]);
+
+  const fmtTime = (d) => {
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    const ss = String(d.getSeconds()).padStart(2, "0");
+    return `${hh}:${mm}:${ss}`;
+  };
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "12px 14px 8px" }}>
         <h3 style={{ margin: 0, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 15, color: "var(--ink-1000)", fontWeight: 400 }}>Time &amp; sales</h3>
-        <span className="t-label" style={{ fontSize: 8.5 }}>quote print</span>
+        <span className="t-label" style={{ fontSize: 8.5 }}>quote prints</span>
       </div>
       {ticks.length === 0 && (
         <div style={{ padding: "8px 14px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 12 }}>
-          No live tape returned.
+          Waiting for first quote tick.
         </div>
       )}
       {ticks.map((tk, i) => (
-        <div key={i} style={{ display: "grid", gridTemplateColumns: "auto auto 1fr", gap: 10, padding: "4px 14px", fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--fg-dim)", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
-          <span style={{ color: "var(--fg-hint)" }}>{tk.ts}</span>
-          <span style={{ color: "var(--ink-1000)" }}>{tk.px.toFixed(2)}</span>
-          <span style={{ color: "var(--ink-900)", textAlign: "right" }}>{tk.sz.toLocaleString()}</span>
+        <div key={i} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, padding: "4px 14px", fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--fg-dim)", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
+          <span style={{ color: "var(--fg-hint)" }}>{fmtTime(tk.ts)}</span>
+          <span style={{ color: tk.side === "ask" ? "var(--up-500)" : "var(--down-500)" }}>
+            {tk.px.toFixed(2)}
+          </span>
+          <span style={{ color: "var(--ink-900)", textAlign: "right" }}>
+            {tk.sz != null ? tk.sz.toLocaleString() : "—"}
+          </span>
         </div>
       ))}
     </div>
