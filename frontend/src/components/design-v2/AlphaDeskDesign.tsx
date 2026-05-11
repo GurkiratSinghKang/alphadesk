@@ -127,6 +127,10 @@ import {
   // 2026-05-11 (round 9): Analytics page slippage analytics —
   // execution-quality metrics by strategy and structure-type.
   getSlippageSummary,
+  // 2026-05-11 (round 10): Reports page closed-trade ledger from
+  // /api/v1/trades/history. Replaces the "realized P&L hidden"
+  // placeholder with the real ledger.
+  getTradeHistory,
 } from "@/lib/api";
 import type {
   NotificationPrefType,
@@ -8496,6 +8500,27 @@ const ReportsPage = ({ tweaks, onNav }) => {
   const open = orders.filter((o) => !String(o.status || "").toLowerCase().includes("fill"));
   const equity = asFiniteNumber(live.portfolio?.equity, null);
   const cash = asFiniteNumber(live.portfolio?.cash, null);
+  // 2026-05-11 (round 10): closed-trade history from /api/v1/trades/
+  // history. The Reports page was rendering only broker orders +
+  // saying "realized P&L hidden until backend endpoints exist" —
+  // but the endpoint DOES exist. Now consumed: real closed trades
+  // with entry/exit prices, realized P&L, and pnl_pct.
+  const [tradeHistory, setTradeHistory] = useState<Awaited<ReturnType<typeof getTradeHistory>>>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getTradeHistory(50);
+        if (!cancelled) setTradeHistory(Array.isArray(res) ? res : []);
+      } catch { /* silent — empty state hides section */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const closedTrades = tradeHistory.filter((t) => t.status === "closed" && t.exit_price != null);
+  const realizedPnl = closedTrades.reduce((acc, t) => acc + (asFiniteNumber(t.pnl, 0) || 0), 0);
+  const realizedTradeCount = closedTrades.length;
+  const wins = closedTrades.filter((t) => (t.pnl ?? 0) > 0).length;
+  const winRate = realizedTradeCount > 0 ? wins / realizedTradeCount : null;
 
   return (
     <div style={{ padding: "20px 24px 60px", maxWidth: 1640, margin: "0 auto" }}>
@@ -8530,10 +8555,66 @@ const ReportsPage = ({ tweaks, onNav }) => {
         ))}
       </div>
 
+      {/* 2026-05-11 (round 10): Closed trades section — replaces the
+       * old "realized P&L intentionally hidden" notice. Renders only
+       * trades with status=closed AND exit_price present, so partial
+       * fills don't pollute the realized number. Wash-sale + tax-doc
+       * widgets still gated on B.13. */}
+      {realizedTradeCount > 0 && (
+        <div style={{ marginBottom: 14, padding: 18, border: "1px solid var(--border)", borderRadius: 4, background: "var(--ink-100)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+            <div>
+              <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>CLOSED TRADES · REALIZED P&L</div>
+              <h2 style={{ margin: "2px 0 4px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--ink-1000)", fontSize: 20, letterSpacing: "-0.01em", fontWeight: 400 }}>
+                {realizedTradeCount} closed · {fmtMoney(realizedPnl, { sign: true, dec: 0 })} realized
+              </h2>
+            </div>
+            <div style={{ display: "flex", gap: 18, fontFamily: "var(--font-mono)", fontSize: 11 }}>
+              <div>
+                <div style={{ color: "var(--fg-hint)", fontSize: 9, letterSpacing: "0.18em" }}>WINS</div>
+                <div style={{ color: "var(--up-500)", marginTop: 2 }}>{wins}</div>
+              </div>
+              <div>
+                <div style={{ color: "var(--fg-hint)", fontSize: 9, letterSpacing: "0.18em" }}>LOSSES</div>
+                <div style={{ color: "var(--down-500)", marginTop: 2 }}>{realizedTradeCount - wins}</div>
+              </div>
+              <div>
+                <div style={{ color: "var(--fg-hint)", fontSize: 9, letterSpacing: "0.18em" }}>WIN RATE</div>
+                <div style={{ color: "var(--ink-1000)", marginTop: 2 }}>{winRate == null ? "—" : `${(winRate * 100).toFixed(0)}%`}</div>
+              </div>
+            </div>
+          </div>
+          <div style={{ background: "var(--bg)", border: "1px solid var(--border-hair)", borderRadius: 3 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "70px 90px 60px 100px 100px 100px 90px 1fr", gap: 8, padding: "8px 12px", borderBottom: "1px solid var(--border-hair)", background: "var(--bg-elev-1)" }}>
+              {["SYMBOL", "STRATEGY", "SIDE", "ENTRY", "EXIT", "PNL", "PCT", "EXITED"].map((h) => (
+                <span key={h} className="t-label" style={{ color: "var(--fg-hint)" }}>{h}</span>
+              ))}
+            </div>
+            {closedTrades.slice(0, 20).map((t) => (
+              <div key={t.id} onClick={() => onNav?.("ticker", { ticker: t.symbol })} style={{ display: "grid", gridTemplateColumns: "70px 90px 60px 100px 100px 100px 90px 1fr", gap: 8, padding: "8px 12px", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline", cursor: "default" }}>
+                <span className="t-mono" style={{ fontSize: 12.5, color: "var(--ink-1000)", fontWeight: 600 }}>{t.symbol}</span>
+                <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.strategy || "manual"}</span>
+                <span className="t-mono" style={{ fontSize: 11, color: t.side === "buy" || t.side === "long" ? "var(--up-500)" : "var(--down-500)" }}>{(t.side || "").toUpperCase()}</span>
+                <span className="t-mono" style={{ fontSize: 11, color: "var(--fg)" }}>{fmtMoney(t.entry_price, { dec: 2 })}</span>
+                <span className="t-mono" style={{ fontSize: 11, color: "var(--fg)" }}>{t.exit_price == null ? "—" : fmtMoney(t.exit_price, { dec: 2 })}</span>
+                <span className="t-mono" style={{ fontSize: 11.5, color: (t.pnl ?? 0) >= 0 ? "var(--up-500)" : "var(--down-500)", fontWeight: 500 }}>{t.pnl == null ? "—" : fmtMoney(t.pnl, { sign: true, dec: 0 })}</span>
+                <span className="t-mono" style={{ fontSize: 11, color: (t.pnl_pct ?? 0) >= 0 ? "var(--up-500)" : "var(--down-500)" }}>{t.pnl_pct == null ? "—" : `${t.pnl_pct >= 0 ? "+" : ""}${(t.pnl_pct * (Math.abs(t.pnl_pct) <= 1 ? 100 : 1)).toFixed(2)}%`}</span>
+                <span className="t-mono" style={{ fontSize: 10.5, color: "var(--fg-hint)" }}>{formatLiveDate(t.exit_time)}</span>
+              </div>
+            ))}
+            {realizedTradeCount > 20 && (
+              <div style={{ padding: "8px 12px", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-muted)", textAlign: "center" }}>
+                {realizedTradeCount - 20} more closed trades · paginated view comes with the dedicated reports page
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div style={{ background: "rgba(201,166,107,0.08)", border: "1px solid var(--gold-300)", borderLeft: "2px solid var(--gold-500)", borderRadius: 4, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "baseline", gap: 12 }}>
         <span className="t-mono" style={{ fontSize: 10.5, color: "var(--gold-500)", padding: "2px 7px", border: "1px solid var(--gold-500)", borderRadius: 2, letterSpacing: "0.05em", fontWeight: 600 }}>BACKEND ONLY</span>
         <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg)", lineHeight: 1.5 }}>
-          Realized P&amp;L, wash-sale, and tax-document widgets are intentionally hidden until dedicated backend endpoints exist. This table is the broker order feed, not a tax statement.
+          Wash-sale and tax-document widgets are intentionally hidden until B.13 ships. The order feed below + closed-trade table above are the broker reality, not a tax statement.
         </span>
       </div>
 
