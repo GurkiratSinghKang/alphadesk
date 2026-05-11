@@ -2962,6 +2962,51 @@ export function deletePriceAlert(alertId: string) {
   });
 }
 
+// 2026-05-11 (round 5i): the alert-ack endpoint marks an alert as
+// "acknowledged" (operator saw it; don't re-fire). Different from
+// delete — the row stays around for audit.
+export function ackPriceAlert(alertId: string) {
+  return apiFetch<{ ok: boolean }>(`/api/v1/trades/alerts/${alertId}/ack`, {
+    method: "POST",
+  });
+}
+
+// ─── Per-agent control (Plan B.2, round 5i) ─────────────────────────
+//
+// Four archetypes (research / signal / risk / exec). Each row has a
+// pause flag, an optional daily-spend cap in USD, and audit metadata
+// (paused_by, paused_at, reason). Phase B seeds one wildcard row per
+// archetype with a $50/day default cap.
+export interface AgentControl {
+  id: number;
+  archetype: "research" | "signal" | "risk" | "exec" | string;
+  model: string | null;
+  provider: string | null;
+  is_paused: boolean;
+  daily_spend_cap_usd: number | null;
+  paused_by: string | null;
+  paused_at: string | null;
+  reason: string | null;
+  updated_at: string | null;
+}
+
+export interface AgentControlPatch {
+  is_paused?: boolean;
+  daily_spend_cap_usd?: number;
+  reason?: string;
+}
+
+export function getAgentControls() {
+  return apiFetch<AgentControl[]>(`/api/v1/agents/controls`);
+}
+
+export function patchAgentControl(controlId: number, patch: AgentControlPatch) {
+  return apiFetch<AgentControl>(`/api/v1/agents/controls/${controlId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
 // ─── Portfolio Performance ──────────────────────────────────
 
 /**

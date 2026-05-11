@@ -102,6 +102,13 @@ import {
   getStrategyContribution,
   getRiskMonitorState,
   setRiskMonitorState,
+  // 2026-05-11 (round 5i): admin AdminPage gets per-agent pause +
+  // spend-cap from Plan B.2 (/api/v1/agents/controls). Alert ack
+  // wires the "acknowledged" state alongside delete on the alerts
+  // workflow.
+  ackPriceAlert,
+  getAgentControls,
+  patchAgentControl,
 } from "@/lib/api";
 import type {
   NotificationPrefType,
@@ -12763,6 +12770,65 @@ const AdminPage = ({ tweaks, onNav }) => {
   const adminKeys = Array.isArray(live.adminKeys) ? live.adminKeys : [];
   const layoutSections = Array.isArray(live.adminLayout?.dashboard_sections) ? live.adminLayout.dashboard_sections : [];
   const deploy = live.adminLastDeploy || null;
+  // 2026-05-11 (round 5i): per-agent control surface (Plan B.2).
+  // GET is auth-only; PATCH is admin-only. We render the list for
+  // everyone so the operator can see archetype health, and gate the
+  // pause/cap edit buttons on admin role.
+  const currentUser = useCurrentUser();
+  const userRole = currentUser.data?.role || "";
+  const isAdmin = userRole === "admin" || userRole === "operator";
+  const [agentControls, setAgentControls] = useState<Awaited<ReturnType<typeof getAgentControls>>>([]);
+  const [agentControlBusy, setAgentControlBusy] = useState<number | null>(null);
+  const [agentControlErr, setAgentControlErr] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await getAgentControls();
+        if (!cancelled) setAgentControls(Array.isArray(rows) ? rows : []);
+      } catch (e) {
+        if (!cancelled) setAgentControlErr(e instanceof Error ? e.message : "Agent controls fetch failed.");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const toggleAgentPaused = async (control: typeof agentControls[number]) => {
+    if (!isAdmin || agentControlBusy === control.id) return;
+    setAgentControlBusy(control.id);
+    setAgentControlErr(null);
+    try {
+      const next = await patchAgentControl(control.id, { is_paused: !control.is_paused });
+      setAgentControls((cur) => cur.map((r) => (r.id === control.id ? next : r)));
+    } catch (e) {
+      setAgentControlErr(e instanceof Error ? e.message : "Pause toggle failed.");
+    } finally {
+      setAgentControlBusy(null);
+    }
+  };
+  const updateAgentCap = async (control: typeof agentControls[number]) => {
+    if (!isAdmin || agentControlBusy === control.id) return;
+    const current = control.daily_spend_cap_usd != null ? String(control.daily_spend_cap_usd) : "";
+    const next = window.prompt(
+      `Daily spend cap for ${control.archetype} (USD). Empty = no cap.`,
+      current,
+    );
+    if (next === null) return;
+    const parsed = next.trim() === "" ? 0 : Number.parseFloat(next.trim());
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      window.alert("Cap must be a non-negative number.");
+      return;
+    }
+    setAgentControlBusy(control.id);
+    setAgentControlErr(null);
+    try {
+      const updated = await patchAgentControl(control.id, { daily_spend_cap_usd: parsed });
+      setAgentControls((cur) => cur.map((r) => (r.id === control.id ? updated : r)));
+    } catch (e) {
+      setAgentControlErr(e instanceof Error ? e.message : "Cap update failed.");
+    } finally {
+      setAgentControlBusy(null);
+    }
+  };
   const modules = [
     { name: "API proxy", value: live.error ? "error" : "online", tone: live.error ? "down" : "up", caption: live.error || "Frontend API calls authenticated and responding." },
     { name: "Portfolio", value: live.portfolio ? "connected" : "empty", tone: live.portfolio ? "up" : "warn", caption: live.portfolio?.source ? `source ${live.portfolio.source}` : "No portfolio payload returned." },
@@ -12838,6 +12904,102 @@ const AdminPage = ({ tweaks, onNav }) => {
           </div>
         </AdminSection>
       </div>
+
+      {/* 2026-05-11 (round 5i): per-agent control surface (Plan B.2).
+       * Four archetypes: research / signal / risk / exec. Each row
+       * has a pause flag and an optional daily-spend cap. Admin can
+       * toggle pause and edit the cap; non-admin sees read-only
+       * status. Section hidden when the endpoint returns no rows
+       * (backend not yet seeded). */}
+      {agentControls.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <AdminSection
+            eyebrow="ADMIN · AGENT CONTROL"
+            title="Per-archetype pause + spend cap"
+            sub="Four AI archetypes route the desk: research / signal / risk / exec. Each can be paused independently and capped on daily Anthropic spend."
+          >
+            {agentControlErr && (
+              <div style={{ padding: "8px 12px", marginBottom: 10, background: "rgba(224,120,86,0.08)", border: "1px solid var(--down-500)", borderRadius: 3, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--down-500)" }}>
+                {agentControlErr}
+              </div>
+            )}
+            <div style={{ display: "grid", gap: 6 }}>
+              {agentControls.map((a) => {
+                const busy = agentControlBusy === a.id;
+                return (
+                  <div key={a.id} style={{ display: "grid", gridTemplateColumns: "120px 1fr 110px 110px 200px", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "center" }}>
+                    <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 16, color: "var(--ink-1000)", letterSpacing: "-0.01em" }}>
+                      {a.archetype.charAt(0).toUpperCase() + a.archetype.slice(1)}
+                    </span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
+                      {a.model || "*"} · {a.provider || "*"}
+                      {a.reason && <span style={{ marginLeft: 8, fontStyle: "italic", fontFamily: "var(--font-display)", color: "var(--fg-hint)" }}>"{a.reason}"</span>}
+                    </span>
+                    <span
+                      style={{
+                        padding: "3px 8px",
+                        border: `1px solid ${a.is_paused ? "var(--down-500)" : "var(--up-500)"}`,
+                        color: a.is_paused ? "var(--down-500)" : "var(--up-500)",
+                        borderRadius: 999,
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 10,
+                        letterSpacing: "0.06em",
+                        fontWeight: 600,
+                        textAlign: "center",
+                      }}
+                    >
+                      {a.is_paused ? "PAUSED" : "RUNNING"}
+                    </span>
+                    <span className="t-mono" style={{ fontSize: 11.5, color: "var(--fg)", textAlign: "right" }}>
+                      cap {a.daily_spend_cap_usd != null ? `$${a.daily_spend_cap_usd.toFixed(2)}/d` : "—"}
+                    </span>
+                    {isAdmin ? (
+                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                        <button
+                          onClick={() => toggleAgentPaused(a)}
+                          disabled={busy}
+                          style={{
+                            padding: "3px 10px",
+                            background: a.is_paused ? "var(--brand)" : "rgba(224,120,86,0.08)",
+                            color: a.is_paused ? "var(--brand-on)" : "var(--down-500)",
+                            border: `1px solid ${a.is_paused ? "var(--brand)" : "var(--down-500)"}`,
+                            borderRadius: 3,
+                            fontFamily: "var(--font-ui)",
+                            fontSize: 10.5,
+                            cursor: busy ? "wait" : "pointer",
+                            opacity: busy ? 0.5 : 1,
+                          }}
+                        >
+                          {a.is_paused ? "Resume" : "Pause…"}
+                        </button>
+                        <button
+                          onClick={() => updateAgentCap(a)}
+                          disabled={busy}
+                          style={{
+                            padding: "3px 10px",
+                            background: "var(--bg-elev-1)",
+                            color: "var(--ink-1000)",
+                            border: "1px solid var(--border-strong)",
+                            borderRadius: 3,
+                            fontFamily: "var(--font-ui)",
+                            fontSize: 10.5,
+                            cursor: busy ? "wait" : "pointer",
+                            opacity: busy ? 0.5 : 1,
+                          }}
+                        >
+                          Cap
+                        </button>
+                      </div>
+                    ) : (
+                      <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11, color: "var(--fg-hint)", textAlign: "right" }}>read-only</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </AdminSection>
+        </div>
+      )}
     </div>
   );
 };
