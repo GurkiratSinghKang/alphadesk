@@ -300,7 +300,11 @@ export default function LoginForm() {
 
       <div className="flex flex-col gap-2">
         <label htmlFor="login-username" className={authLabelClass}>
-          EMAIL
+          {/* BUG-092 (audit 2026-05-11, P5/F-SCOUT-93): label said "EMAIL" but
+           * backend accepts username-or-email via the `username` field. Admin
+           * login uses literal "admin", not an email — confusing for new
+           * users + breaks form-fill heuristics. Match the actual contract. */}
+          USERNAME OR EMAIL
         </label>
         {/* Audit A-F11 (2026-05-05): the form rejected empty submission via
          * the disabled-button trick (button is disabled until both fields
@@ -318,7 +322,7 @@ export default function LoginForm() {
             setTotpRequired(false);
             setTotpCode("");
           }}
-          placeholder="you@firm.com"
+          placeholder="admin or you@firm.com"
           autoComplete="username"
           required
           aria-required="true"
