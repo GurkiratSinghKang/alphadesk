@@ -57,6 +57,7 @@ import {
   authLogoutEverywhere,
   authStartTotpEnroll,
   authVerifyTotpEnroll,
+  commitUserTradingMode,
   confirmUserErase,
   postUserExport,
   previewUserErase,
@@ -1745,7 +1746,15 @@ function TopBar({ page, onNav, onSearch, regime, theme = "dark", onTheme }) {
   // immediately propagates to tab B's persistence + storage event.
   const mode = useUIStore((s) => s.tradingMode);
   const setTradingMode = useUIStore((s) => s.setTradingMode);
-  const setModeP = (v) => setTradingMode(v === "live" ? "live" : "paper");
+  const setModeP = (v) => {
+    const nextMode = v === "live" ? "live" : "paper";
+    if (nextMode === mode) return;
+    commitUserTradingMode({ mode: nextMode })
+      .then((res) => setTradingMode(res.mode === "live" ? "live" : "paper"))
+      .catch(() => {
+        // Live mode requires a server-side TOTP step-up; keep local state unchanged.
+      });
+  };
   const navs = [
     { id: "dashboard",  label: "Dashboard" },
     { id: "watchlists", label: "Watchlists" },

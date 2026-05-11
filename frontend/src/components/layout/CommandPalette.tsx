@@ -24,7 +24,7 @@ import { useUIStore } from "@/stores/ui";
 import { useMarketStore } from "@/stores/market";
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogHeader, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { searchSymbols } from "@/lib/api";
+import { ApiError, commitUserTradingMode, searchSymbols } from "@/lib/api";
 import { STRATEGY_META, STRATEGY_ORDER } from "@/lib/strategies";
 import { useToast } from "@/hooks/useToast";
 
@@ -105,6 +105,7 @@ export function CommandPalette() {
   // BUG-039: confirmation modal for live-trading flip. paper→live must
   // never be one keystroke away; live→paper is always safe (no gate).
   const [confirmLiveOpen, setConfirmLiveOpen] = useState(false);
+  const [liveTotpCode, setLiveTotpCode] = useState("");
   const [pendingDestructiveAction, setPendingDestructiveAction] = useState<PendingDestructiveAction | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pathname = usePathname();
@@ -160,6 +161,12 @@ export function CommandPalette() {
     }
   }, [commandPaletteOpen]);
 
+  useEffect(() => {
+    if (!confirmLiveOpen) {
+      setLiveTotpCode("");
+    }
+  }, [confirmLiveOpen]);
+
   // Clean up debounce on unmount
   useEffect(() => {
     return () => {
@@ -193,12 +200,20 @@ export function CommandPalette() {
   // BUG-039: flipping paper→live is destructive (real money!) — gate it
   // behind a confirmation modal with explicit risk copy. Going live→paper
   // remains a single keystroke since it only reduces risk.
-  function handleSwitchLive() {
+  async function handleSwitchLive() {
     if (useUIStore.getState().tradingMode === "live") {
       // Switching back to paper is always safe
       setCommandPaletteOpen(false);
-      setTradingMode("paper");
-      toast({ type: "info", message: "Switched to paper trading" });
+      try {
+        const res = await commitUserTradingMode({ mode: "paper" });
+        setTradingMode(res.mode);
+        toast({ type: "info", message: "Switched to paper trading" });
+      } catch (err) {
+        toast({
+          type: "error",
+          message: err instanceof ApiError && err.detail ? err.detail : "Could not switch to paper trading.",
+        });
+      }
     } else {
       // Close the palette and open the confirmation modal; the flip
       // itself only happens once the user hits "Enable live trading".
@@ -207,24 +222,24 @@ export function CommandPalette() {
     }
   }
 
-  function handleConfirmLive() {
-    // Round-10 / W-2 (P0): the previous flow flipped
-    // ``useUIStore.tradingMode`` to "live" purely on the client and
-    // toasted "Live trading enabled — orders will use real capital."
-    // — but there's NO ``/auth/switch-mode`` endpoint, the backend
-    // continues to use paper credentials, and ProfileMenu + Settings
-    // both correctly tell users this requires admin action. Three
-    // surfaces presented contradictory truth: a user could convince
-    // themselves they were live via the palette while still trading
-    // paper, or worse, take a real-money posture knowing it was
-    // really a paper account. Aligned now: only paper→paper is
-    // user-toggleable; live requires admin contact.
+  async function handleConfirmLive() {
     setConfirmLiveOpen(false);
-    toast({
-      type: "info",
-      message:
-        "Live trading is admin-gated — contact your AlphaDesk operator to enable real-capital orders.",
-    });
+    try {
+      const res = await commitUserTradingMode({
+        mode: "live",
+        totp_code: liveTotpCode.trim() || undefined,
+      });
+      setTradingMode(res.mode);
+      toast({ type: "warning", message: "Live trading mode enabled" });
+    } catch (err) {
+      toast({
+        type: "warning",
+        message: err instanceof ApiError && err.detail
+          ? err.detail
+          : "Live trading requires a fresh 2FA step-up before it can be enabled.",
+      });
+      setConfirmLiveOpen(true);
+    }
   }
 
   function tradeUrl(): string {
@@ -718,19 +733,29 @@ export function CommandPalette() {
       >
         <DialogHeader>
           <DialogTitle className="text-foreground">
-            Live trading requires admin enablement
+            Enable live trading
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            This account is currently paper-only. Real-capital routing must
-            be enabled server-side by an AlphaDesk operator before orders can
-            leave the paper broker.
+            Enter your current 2FA code to commit live mode on the server.
+            Orders still require preview and confirmation before submission.
           </DialogDescription>
         </DialogHeader>
         <ul className="list-disc space-y-1 pl-5 text-label text-muted-foreground">
-          <li>The command palette cannot enable live trading by itself.</li>
-          <li>Paper-mode orders remain routed to the paper account.</li>
-          <li>Contact your admin when the account is ready for live credentials.</li>
+          <li>The mode change is audited.</li>
+          <li>Paper mode remains available without step-up.</li>
+          <li>Live orders are rejected if the request mode disagrees.</li>
         </ul>
+        <label className="space-y-1 text-label font-medium text-muted-foreground">
+          <span>2FA code</span>
+          <input
+            value={liveTotpCode}
+            onChange={(event) => setLiveTotpCode(event.target.value.replace(/\D/g, "").slice(0, 8))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            className="h-9 w-full rounded-md border border-border bg-[var(--panel)] px-3 font-mono text-sm text-foreground outline-none focus:border-brand"
+            placeholder="123456"
+          />
+        </label>
         <DialogFooter className="gap-2">
           <Button
             variant="outline"
@@ -744,9 +769,10 @@ export function CommandPalette() {
             variant="primary"
             size="sm"
             onClick={handleConfirmLive}
+            disabled={liveTotpCode.trim().length < 6}
             data-testid="confirm-live-confirm"
           >
-            Understood
+            Enable live
           </Button>
         </DialogFooter>
       </DialogContent>

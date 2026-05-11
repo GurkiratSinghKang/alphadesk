@@ -61,6 +61,7 @@ def test_v2_phase_b_routes_mounted() -> None:
         # B.16 User settings
         "/api/v1/user/settings",
         "/api/v1/user/settings/reset",
+        "/api/v1/user/trading-mode",
         # B.5 Templates (read)
         "/api/v1/access-requests/templates/reject-reasons",
         "/api/v1/access-requests/templates/welcome",

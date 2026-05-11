@@ -208,6 +208,8 @@ vi.mock('@/lib/api', async (importOriginal) => {
     }),
     getTradingAgentsRuns: vi.fn().mockResolvedValue([]),
     getTradingAgentsRun: vi.fn().mockResolvedValue(null),
+    getUserTradingMode: vi.fn().mockResolvedValue({ mode: "paper" }),
+    commitUserTradingMode: vi.fn().mockImplementation(async (body: { mode: "paper" | "live" }) => ({ mode: body.mode })),
     toggleStrategy: vi.fn().mockResolvedValue({ strategy_id: 'pead', new_status: 'paused' }),
     getPipelineStatus: vi.fn().mockResolvedValue({ running: false, lastRun: null, lastResult: null }),
     getPipelineHistory: vi.fn().mockResolvedValue([]),

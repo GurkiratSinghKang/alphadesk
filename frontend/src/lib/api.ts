@@ -657,6 +657,25 @@ export function authSession() {
   }>(`/api/v1/auth/session`);
 }
 
+export type TradingMode = "paper" | "live";
+
+export interface UserTradingMode {
+  mode: TradingMode;
+  updated_at?: string | null;
+  live_step_up_at?: string | null;
+}
+
+export function getUserTradingMode() {
+  return apiFetch<UserTradingMode>(`/api/v1/user/trading-mode`);
+}
+
+export function commitUserTradingMode(body: { mode: TradingMode; totp_code?: string }) {
+  return apiFetch<UserTradingMode>(`/api/v1/user/trading-mode`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 // ─── User data export + erase (round 5b) ───────────────────────────
 //
 // Wires the existing Settings → Danger zone buttons to the real

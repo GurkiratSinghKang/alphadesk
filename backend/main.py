@@ -670,6 +670,7 @@ app.include_router(v2_agent_control.router, prefix="/api/v1", tags=["v2 Agent Co
 app.include_router(v2_watchlists.router, prefix="/api/v1", tags=["v2 Watchlists"])
 app.include_router(v2_notifications.router, prefix="/api/v1", tags=["v2 Notifications"])
 app.include_router(v2_user_settings.router, prefix="/api/v1", tags=["v2 User Settings"])
+app.include_router(v2_user_settings.mode_router, prefix="/api/v1", tags=["v2 User Trading Mode"])
 app.include_router(v2_user_layout.router, prefix="/api/v1", tags=["v2 User Layout"])
 app.include_router(v2_feature_flags.router, prefix="/api/v1", tags=["v2 Feature Flags"])
 app.include_router(v2_feature_flags.admin_router, prefix="/api/v1", tags=["v2 Feature Flags Admin"])
