@@ -10,12 +10,17 @@ import { HeroCTAs } from "../_sections/HeroCTAs";
 // `useToast` to a no-op so we can render without a ToastProvider; we
 // just need to seed/clear `watchlist` between tests so each test sees
 // a known starting state.
+//
+// Iter 23: tests run in the "post-hydration" state — `hydrated: true`
+// — so the Watch button reflects the seeded watchlist immediately
+// rather than sitting in the disabled hydration window.
 beforeEach(() => {
   useMarketStore.setState({
     watchlist: [],
     quotes: {},
     selectedSymbol: "SPY",
     freshestTs: 0,
+    hydrated: true,
   });
 });
 
@@ -25,6 +30,7 @@ afterEach(() => {
     quotes: {},
     selectedSymbol: "SPY",
     freshestTs: 0,
+    hydrated: false,
   });
 });
 

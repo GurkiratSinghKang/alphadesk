@@ -20,7 +20,16 @@ function mkQuote(symbol: string, last: number, changePct: number): Quote {
 }
 
 beforeEach(() => {
-  useMarketStore.setState({ selectedSymbol: "SPY", quotes: {}, watchlist: SYMBOLS });
+  // Iter 23: seed `hydrated: true` so the skeleton-vs-rows render gate
+  // resolves to rows. Without this, the composite renders the loading
+  // pulse on `useHydratedWatchlist`'s default `isHydrating: true` and
+  // none of the row assertions below match.
+  useMarketStore.setState({
+    selectedSymbol: "SPY",
+    quotes: {},
+    watchlist: SYMBOLS,
+    hydrated: true,
+  });
 });
 
 describe("Watchlist", () => {

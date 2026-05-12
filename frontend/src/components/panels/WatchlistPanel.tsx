@@ -14,7 +14,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useMarketStore, useQuotes } from "@/stores/market";
+import { useMarketStore, useQuotes, useHydratedWatchlist } from "@/stores/market";
 import { useUIStore } from "@/stores/ui";
 import { formatCurrency, formatPercent, getChangeTextClass, cn } from "@/lib/utils";
 import { screenStocks } from "@/lib/api";
@@ -877,7 +877,12 @@ function SignalsTab() {
 
 export function WatchlistPanel() {
   const router = useRouter();
-  const watchlist = useMarketStore((s) => s.watchlist);
+  // Iter 23: read watchlist + the hydration flag together so the rows
+  // can render a skeleton while the WatchlistHydrator round-trip is in
+  // flight. Without this gate the panel paints DEFAULT_WATCHLIST for
+  // ~200ms before the server reply lands, which power users saw as a
+  // "10 mega-caps flash" on every cold load.
+  const { symbols: watchlist, isHydrating } = useHydratedWatchlist();
   // Wave 14 perf-audit-r3 P0 #3: was `useMarketStore((s) => s.quotes)` which
   // returned the whole map ref and rerendered this ~1000-LOC panel on every
   // tick. `useQuotes(watchlist)` shallow-compares only the symbols we care
@@ -1065,8 +1070,23 @@ export function WatchlistPanel() {
           </div>
 
           <ScrollArea className="flex-1">
-            <div className="py-0.5">
-              {watchlist.length === 0 ? (
+            <div className="py-0.5" data-loading={isHydrating ? "true" : undefined}>
+              {isHydrating ? (
+                // Iter 23: hydration skeleton — 6 placeholder rows that
+                // match WatchlistRow's 9-px row height + column gap so
+                // the layout doesn't jump when the real rows replace
+                // them. Animated to match the dashboard's other
+                // `animate-pulse` skeletons (e.g. MultiTimeframe,
+                // OptionsStrategyBuilder).
+                <div aria-busy="true" aria-label="Loading watchlist">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="mx-2 my-1 h-9 animate-pulse rounded border border-border-hair bg-bg-elev-1"
+                    />
+                  ))}
+                </div>
+              ) : watchlist.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
                   <TrendingUp className="h-6 w-6 text-muted-foreground/40 mb-2" />
                   <p className="text-label text-muted-foreground mb-1">No symbols in watchlist</p>
