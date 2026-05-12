@@ -64,6 +64,11 @@ export interface ChartPaneProps {
    *  triggers from the chart's pan callback. */
   loadingMoreHistory?: boolean;
   className?: string;
+  /** Owner-controlled indicators. When provided, ChartPane renders the list
+   *  from this prop, skips localStorage persistence, and hides its internal
+   *  indicator-menu button so a parent toolbar can own that affordance. */
+  indicators?: Indicator[];
+  onIndicatorsChange?: (next: Indicator[]) => void;
 }
 
 export interface ChartTradeOverlay {
@@ -399,6 +404,8 @@ export default function ChartPane({
   onLoadMoreHistory,
   loadingMoreHistory,
   className,
+  indicators: controlledIndicators,
+  onIndicatorsChange,
 }: ChartPaneProps) {
   // Slice-16 / TPL-1 (2026 design brief, TradingView "Save Layout"): the
   // user's chart configuration (chartType + indicators) is persisted to
@@ -421,7 +428,8 @@ export default function ChartPane({
   const chartThemeKey = usePreferencesStore((s) => s.display.theme);
   const [activeTool, setActiveTool] = React.useState<DrawingTool>("cursor");
   const [menuOpen, setMenuOpen] = React.useState(false);
-  const [indicators, setIndicators] = React.useState<Indicator[]>(() => {
+  const indicatorsControlled = Array.isArray(controlledIndicators);
+  const [localIndicators, setLocalIndicators] = React.useState<Indicator[]>(() => {
     const raw = safeGetItem("alphadesk:chart-template:default");
     if (!raw) return ["Volume"];
     try {
@@ -432,16 +440,33 @@ export default function ChartPane({
     }
     return ["Volume"];
   });
+  const indicators = indicatorsControlled ? (controlledIndicators as Indicator[]) : localIndicators;
+  const setIndicators: React.Dispatch<React.SetStateAction<Indicator[]>> = React.useCallback(
+    (updater) => {
+      if (indicatorsControlled) {
+        const next = typeof updater === "function"
+          ? (updater as (prev: Indicator[]) => Indicator[])(controlledIndicators as Indicator[])
+          : updater;
+        onIndicatorsChange?.(next);
+      } else {
+        setLocalIndicators(updater);
+      }
+    },
+    [indicatorsControlled, controlledIndicators, onIndicatorsChange],
+  );
 
   // Slice-16 / TPL-1: persist template on every chartType / indicators
   // change. Debounced via the React batching that already groups
   // setState calls — no manual debounce needed at this volume.
+  // When indicators are controlled by a parent toolbar (Trade page),
+  // skip the local persistence — the parent owns the source of truth.
   React.useEffect(() => {
+    if (indicatorsControlled) return;
     safeSetItem(
       "alphadesk:chart-template:default",
       JSON.stringify({ chartType, indicators }),
     );
-  }, [chartType, indicators]);
+  }, [chartType, indicators, indicatorsControlled]);
 
   // Market-structure layer: truthful liquidity context with the data we
   // actually have. There is no L2/depth endpoint in the app today, so this
@@ -1294,7 +1319,7 @@ export default function ChartPane({
             <span>Replay</span>
           </button>
 
-          <div ref={menuRef} className="relative">
+          <div ref={menuRef} className={cn("relative", indicatorsControlled && "hidden")}>
             <button
               type="button"
               onClick={() => setMenuOpen((v) => !v)}

@@ -2974,6 +2974,24 @@ export function deleteBrokerConnection(connectionId: number): Promise<void> {
   });
 }
 
+// 2026-05-11 (round 24 — broker UI wiring): companion endpoints for the
+// Settings → Brokers row buttons. The real backend exposes these as
+// nested POSTs against a specific connection_id. Mock-mode echoes back
+// happy-path responses so the UI flow is rehearseable end-to-end.
+export function testBrokerConnection(connectionId: number): Promise<{ ok: boolean; latency_ms?: number; checked_at?: string }> {
+  return apiFetch<{ ok: boolean; latency_ms?: number; checked_at?: string }>(
+    `/api/v1/broker/connections/${connectionId}/test`,
+    { method: "POST" },
+  );
+}
+
+export function setDefaultBrokerConnection(connectionId: number): Promise<{ id: number; is_default: boolean }> {
+  return apiFetch<{ id: number; is_default: boolean }>(
+    `/api/v1/broker/connections/${connectionId}/default`,
+    { method: "POST" },
+  );
+}
+
 export function getReconciliationIssues(
   status: "open" | "all" | "approved" | "rejected" = "open",
 ): Promise<ReconciliationIssue[]> {

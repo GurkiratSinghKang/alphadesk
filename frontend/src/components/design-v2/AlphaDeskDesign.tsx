@@ -93,6 +93,13 @@ import {
   // the real broker reconciliation surface (state + run).
   getReconciliationState,
   runBrokerReconciliation,
+  getBrokerConnections,
+  getBrokerProviders,
+  saveBrokerConnection,
+  saveAlpacaConnection,
+  deleteBrokerConnection,
+  testBrokerConnection,
+  setDefaultBrokerConnection,
   // 2026-05-11 (round 5g): Strategy Playbook surfaces the layered
   // kill-switch (Layer-3 manual disable + history) so an admin can
   // halt a strategy without flipping the per-strategy active flag.
@@ -168,6 +175,7 @@ import type {
 // fallback by `_OldChartPanel` reference code below); the live Trade +
 // Symbol routes consume `HeroChartWired` instead.
 import HeroChartWired from "./_wired/HeroChartWired";
+import { useMarketDepth } from "@/hooks/useMarketDepth";
 
 const TWEAK_DEFAULTS = {
   page: "dashboard",
@@ -3696,6 +3704,9 @@ function useLiveTicker(sym) {
   const last = quoteLast(q);
   const bid = Number(q?.bid ?? 0);
   const ask = Number(q?.ask ?? 0);
+  const bidSize = Number.isFinite(Number(q?.bidSize)) ? Number(q?.bidSize) : null;
+  const askSize = Number.isFinite(Number(q?.askSize)) ? Number(q?.askSize) : null;
+  const quoteTs = Number.isFinite(Number(q?.timestamp)) ? Number(q?.timestamp) : 0;
   const changePct = quoteChangePct(q);
   const change = Number(q?.change ?? (((last * changePct) / 100) || 0));
   const high52 = asFiniteNumber(f?.fiftyTwoWeekHigh, null);
@@ -3712,6 +3723,9 @@ function useLiveTicker(sym) {
     pct: changePct,
     bid: Number.isFinite(bid) ? bid : 0,
     ask: Number.isFinite(ask) ? ask : 0,
+    bidSize,
+    askSize,
+    quoteTs,
     spread: bid > 0 && ask > 0 && Number.isFinite(ask - bid) ? Math.max(0, ask - bid) : null,
     vol: Number(q?.volume || 0),
     avgVol: Number(f?.avgVolume30d || q?.avg_daily_volume_20d || q?.volume || 0),
@@ -3892,23 +3906,10 @@ function ChartPanel({ t, large, symbol }) {
   const [range, setRange] = useState("3M");
   const [chartMode, setChartMode] = useState("line");
   const [overlays, setOverlays] = useState({
-    sma20: true, sma50: true, sma200: false,
-    ema9: false, ema21: false,
-    vwap: false, anchoredVwap: false,
-    bollinger: false, keltner: false, donchian: false,
-    rsi: false, macd: false,
-    volProfile: false,
-    regime: true, signals: true, levels: true,
-    earnings: false, exDiv: false,
-    avgPrice: false,
+    SMA: true, EMA: false, VWAP: false, Bollinger: false,
+    RSI: false, MACD: false, Volume: true,
   });
-  // 2026-05-10 (chart wiring): symbol resolution prefers an explicit
-  // prop (e.g. from `/symbols/[ticker]` URL), falls through to the
-  // ticker mock for legacy callsites. The toolbar's `range`,
-  // `chartMode`, `overlays` state stays here for the design's controls;
-  // HeroChartWired only consumes `range` (it builds candle/SMA/etc.
-  // overlays through ChartPane's own indicator menu — preserving the
-  // `chart-template:default` localStorage layout users may have saved).
+  const enabledIndicators = INDICATOR_KEYS.filter(k => overlays[k]);
   const sym = symbol || t?.sym || "SPY";
   return (
     <div>
@@ -3916,7 +3917,7 @@ function ChartPanel({ t, large, symbol }) {
         <ChartToolbar range={range} setRange={setRange} chartMode={chartMode} setChartMode={setChartMode} overlays={overlays} setOverlays={setOverlays} />
       </div>
       <div style={{ position: "relative", width: "100%", height: 360, display: "flex" }}>
-        <HeroChartWired symbol={sym} range={range} chartType={chartMode === "line" ? "line" : "candle"} />
+        <HeroChartWired symbol={sym} range={range} chartType={chartMode === "line" ? "line" : "candle"} indicators={enabledIndicators} />
       </div>
     </div>
   );
@@ -4743,16 +4744,11 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
   const [range, setRange] = useState("3M");
   const [chartMode, setChartMode] = useState("candle");
   const [overlays, setOverlays] = useState({
-    sma20: true, sma50: true, sma200: false,
-    ema9: false, ema21: false,
-    vwap: true, anchoredVwap: false,
-    bollinger: false, keltner: false, donchian: false,
-    rsi: false, macd: false,
-    volProfile: false,
-    regime: true, signals: true, levels: true,
-    earnings: true, exDiv: false,
-    avgPrice: true,
+    SMA: true, EMA: false, VWAP: true, Bollinger: false,
+    RSI: false, MACD: false,
+    Volume: true,
   });
+  const enabledIndicators = INDICATOR_KEYS.filter(k => overlays[k]);
   const [builderStrategy, setBuilderStrategy] = useState("vertical-call");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
@@ -4777,6 +4773,14 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
   const stopPx = limitPx * (1 - stopPct / 100);
   const riskDollars = isOption ? contracts * 284 : qty * (limitPx - stopPx);
   const riskPct = live.portfolio?.equity ? (riskDollars / live.portfolio.equity) * 100 : 0;
+
+  // Positions on the active symbol — used by the chart overlay block
+  // further down (which is defined after `submitStagedOrder` so it
+  // can call into the latest submit closure without a TDZ).
+  const symPositions = React.useMemo(
+    () => (live.positions || []).filter((p) => String(p?.symbol || "").toUpperCase() === String(t.sym || "").toUpperCase()),
+    [live.positions, t.sym],
+  );
   const quoteSnapshot = live.quotes?.[String(t.sym || sym || "SPY").toUpperCase()] || live.tickerContext?.quote?.value || null;
 
   useEffect(() => {
@@ -4814,7 +4818,11 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
         quote_at_fill_ts: quoteSnapshot?.timestamp ?? Date.now() / 1000,
       };
       if (orderType === "limit") payload.price = entryPrice;
-      if (orderType === "stop") payload.stop_price = Number(stopPx);
+      // STOP order: send the operator-specified trigger price (held in
+      // `limitPx`), not the protective `stopPx` which is computed from
+      // the stop-loss % field and is a downstream risk control, not a
+      // stop-on-touch trigger.
+      if (orderType === "stop") payload.stop_price = entryPrice;
       return payload;
     }
 
@@ -4877,6 +4885,73 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
       setOrderStage("ready");
     }
   };
+
+  // 2026-05-11 (round 23 — entries / SL-TP on chart): every open
+  // position on the active symbol becomes a `live` overlay; the in-
+  // flight ticket renders as either `draft` (operator is still
+  // sizing) or `pending` (preview returned a review token, awaiting
+  // confirm). ChartPane draws horizontal lines at entry / stop /
+  // take-profit for each overlay and a label chip on the right axis.
+  // Declared AFTER submitStagedOrder so the closure can reference it
+  // without TDZ.
+  const tradeOverlays = React.useMemo(() => {
+    if (isOption) return [];
+    const list = [];
+    for (const p of symPositions) {
+      list.push({
+        id: `pos-${p.symbol}-${p.side || "long"}`,
+        label: `${p.symbol} · ${p.quantity}sh @ ${(p.avgCost || 0).toFixed(2)}`,
+        status: "live",
+        side: p.side === "short" ? "short" : "long",
+        entry: Number(p.avgCost) || null,
+        stopLoss: typeof p.stopLoss === "number" ? p.stopLoss : null,
+        takeProfit: typeof p.takeProfit === "number" ? p.takeProfit : null,
+        quantity: Number(p.quantity) || null,
+        summary: `${p.symbol} position · stop ${p.stopLoss != null ? "$" + p.stopLoss.toFixed(2) : "—"} · target ${p.takeProfit != null ? "$" + p.takeProfit.toFixed(2) : "—"}`,
+      });
+    }
+    if (qty > 0 && limitPx > 0 && Number.isFinite(stopPx)) {
+      const isReady = orderStage === "ready" && !!stagedOrder;
+      const isPreviewing = orderStage === "previewing" || orderStage === "submitting";
+      list.push({
+        id: "ticket-draft",
+        label: `${isReady ? "Staged" : "Draft"} ${side} ${qty}sh @ ${limitPx.toFixed(2)}`,
+        status: isReady ? "pending" : isPreviewing ? "pending" : orderStage === "error" ? "error" : "draft",
+        side: side === "buy" ? "long" : "short",
+        entry: limitPx,
+        stopLoss: stopPx,
+        takeProfit: null,
+        quantity: qty,
+        summary: orderError || (isReady ? "Click confirm to submit at this entry" : "Ticket draft — not yet staged"),
+        canSubmit: isReady,
+        submitLabel: isReady ? `Confirm ${side}` : undefined,
+        onSubmit: isReady ? submitStagedOrder : undefined,
+        onCancel: isReady ? () => { setStagedOrder(null); setOrderStage("idle"); } : undefined,
+        error: orderStage === "error" ? orderError || "Preview failed" : null,
+      });
+    }
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOption, symPositions, qty, limitPx, stopPx, side, orderStage, stagedOrder, orderError]);
+
+  // 2026-05-11 (round 23 — click chart to stage): clicking a price
+  // level on the chart pre-fills the limit ticket at that price.
+  const chartOrderPlacement = React.useMemo(() => {
+    if (isOption) return null;
+    return {
+      enabled: true,
+      side,
+      label: `Click chart to set ${side} limit price`,
+      hint: "Drop a draft at any price level. Stage once you're happy with sizing.",
+      onStagePrice: (price, hintedSide) => {
+        if (!Number.isFinite(price) || price <= 0) return;
+        if (hintedSide === "buy" || hintedSide === "sell") setSide(hintedSide);
+        setOrderType("limit");
+        setLimitPx(Number(price.toFixed(2)));
+        setOrderStage("idle");
+      },
+    };
+  }, [isOption, side]);
 
   const handleStageOrder = async () => {
     if (orderStage === "ready" && stagedOrder) {
@@ -4948,13 +5023,7 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
               <a onClick={() => setLeftCollapsed(true)} title="Collapse"
                  style={{ fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--fg-muted)", cursor: "default", padding: "2px 6px", border: "1px solid var(--border-hair)", borderRadius: 2 }}>◂ close</a>
             </div>
-            {isOption
-              ? <OptionsOrderBookPanel optStrike={optStrike} optType={optType} spot={t.px} />
-              : <>
-                  <OrderBookPanel bid={t.bid} ask={t.ask} last={t.px} adv={t.avgVol} onClickPrice={setLimitPx} />
-                  <TimeAndSalesPanel last={t.px} adv={t.avgVol} />
-                </>
-            }
+            {isOption ? (<OptionsOrderBookPanel />) : (<><OrderBookPanel symbol={t.sym} last={t.px} bid={t.bid} ask={t.ask} bidSize={t.bidSize} askSize={t.askSize} quoteTs={t.quoteTs} /><TimeAndSalesPanel symbol={t.sym} last={t.px} bid={t.bid} ask={t.ask} bidSize={t.bidSize} askSize={t.askSize} /></>)}
           </aside>
         )}
 
@@ -4969,9 +5038,16 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
              * tools menu; the design's toolbar `chartMode` + `overlays`
              * state still drives the local controls but no longer feeds the
              * mock SVG. Range chips stay wired through `range`. */}
-            <HeroChartWired symbol={sym || t?.sym || "SPY"} range={range} chartType={chartMode === "line" ? "line" : "candle"} />
+            <HeroChartWired
+              symbol={sym || t?.sym || "SPY"}
+              range={range}
+              chartType={chartMode === "line" ? "line" : "candle"}
+              indicators={enabledIndicators}
+              tradeOverlays={tradeOverlays}
+              chartOrderPlacement={chartOrderPlacement}
+            />
           </div>
-          <VolumeRail t={t} />
+          <TradeContextRail t={t} regime={live.regime} />
         </section>
 
         {/* RIGHT — collapsible, pushes (in-grid) */}
@@ -5109,11 +5185,14 @@ function MetricRibbon({ t, compact = false }) {
 // ─── compact center header ───────────────────────────────────────────────────
 
 function TradeHeader({ t }) {
+  // IV is intentionally absent here — the top MetricRibbon already exposes
+  // "IV · IV rank" with the more informative rank pair, and duplicating it
+  // on the secondary header just made both columns more cluttered with
+  // em-dashes when the symbol's options data wasn't loaded.
   const stats = [
     { k: "Market cap", v: t.mcap },
     { k: "Beta", v: t.beta == null ? "—" : t.beta.toFixed(2) },
     { k: "P/E", v: t.pe == null ? "—" : t.pe.toFixed(1) },
-    { k: "IV", v: t.iv == null ? "—" : `${t.iv.toFixed(1)}%` },
     { k: "Source", v: t.isDemo ? "demo" : "live" },
   ];
   return (
@@ -5138,42 +5217,33 @@ function TradeHeader({ t }) {
 
 // ─── chart toolbar (range + overlays) ────────────────────────────────────────
 
+// 2026-05-11 (round 22): Indicators dropdown now mirrors ChartPane's
+// real indicator engine (VWAP / EMA / SMA / Bollinger / RSI / MACD /
+// Volume). Each key here doubles as the ChartPane `Indicator` token —
+// the dropdown's checkbox state flows through HeroChartWired into
+// ChartPane as a controlled `indicators` prop, so toggling a row
+// actually adds/removes the series on the chart. The earlier
+// granular keys (sma20 / sma50 / ema9 / keltner / donchian / regime /
+// signals / levels / earnings / exDiv / avgPrice) were aspirational
+// — the chart engine doesn't expose per-period or layer toggles, so
+// rendering them in the dropdown was misleading.
 const OVERLAY_GROUPS = [
-  { group: "Moving averages", items: [
-    { key: "sma20",  label: "SMA · 20",  dot: "var(--ice-500)" },
-    { key: "sma50",  label: "SMA · 50",  dot: "var(--gold-700)" },
-    { key: "sma200", label: "SMA · 200", dot: "var(--ink-400)" },
-    { key: "ema9",   label: "EMA · 9",   dot: "var(--brand)" },
-    { key: "ema21",  label: "EMA · 21",  dot: "var(--gold-500)" },
+  { group: "Trend", items: [
+    { key: "SMA",       label: "SMA",        dot: "var(--ice-500)" },
+    { key: "EMA",       label: "EMA",        dot: "var(--brand)" },
+    { key: "VWAP",      label: "VWAP",       dot: "var(--gold-300)" },
+    { key: "Bollinger", label: "Bollinger",  dot: "var(--ink-400)" },
   ]},
-  { group: "Volume / VWAP", items: [
-    { key: "vwap",         label: "VWAP",          dot: "var(--gold-300)" },
-    { key: "anchoredVwap", label: "Anchored VWAP", dot: "var(--gold-700)" },
-    { key: "volProfile",   label: "Volume profile", dot: "var(--ink-400)" },
-    /* 2026-05-10 (round 4 honest empty-state): the previous label
-     * hardcoded "128.40" as the avg cost, which is NVDA-specific
-     * and renders for every symbol regardless. Drop the price tag —
-     * the actual avg cost line on the chart is rendered by ChartPane
-     * from real position data when an `avgPrice` overlay is enabled. */
-    { key: "avgPrice",     label: "Avg cost", dot: "var(--brand)" },
+  { group: "Momentum", items: [
+    { key: "RSI",  label: "RSI",  dot: "var(--brand)" },
+    { key: "MACD", label: "MACD", dot: "var(--ice-500)" },
   ]},
-  { group: "Bands", items: [
-    { key: "bollinger", label: "Bollinger · 20·2",  dot: "var(--ice-500)" },
-    { key: "keltner",   label: "Keltner · 20·1.5",  dot: "var(--gold-700)" },
-    { key: "donchian",  label: "Donchian · 20",     dot: "var(--ink-400)" },
-  ]},
-  { group: "Oscillators · separate pane", items: [
-    { key: "rsi",  label: "RSI · 14",       dot: "var(--brand)" },
-    { key: "macd", label: "MACD · 12·26·9", dot: "var(--ice-500)" },
-  ]},
-  { group: "Layers", items: [
-    { key: "levels",   label: "Support · resistance", dot: "var(--down-500)" },
-    { key: "signals",  label: "Strategy signals",     dot: "var(--brand)" },
-    { key: "regime",   label: "Regime bands",         dot: "var(--ink-400)" },
-    { key: "earnings", label: "Earnings markers",     dot: "var(--gold-500)" },
-    { key: "exDiv",    label: "Ex-dividend dates",    dot: "var(--ice-500)" },
+  { group: "Volume", items: [
+    { key: "Volume", label: "Volume", dot: "var(--gold-500)" },
   ]},
 ];
+
+const INDICATOR_KEYS = OVERLAY_GROUPS.flatMap(g => g.items.map(it => it.key));
 
 function ChartToolbar({ range, setRange, chartMode, setChartMode, overlays, setOverlays }) {
   const ranges = ["1D", "5D", "1M", "3M", "6M", "YTD", "1Y", "ALL"];
@@ -5212,7 +5282,7 @@ function ChartToolbar({ range, setRange, chartMode, setChartMode, overlays, setO
         border: "1px solid var(--border)", padding: "5px 12px", borderRadius: 3, cursor: "default"
       }}>
         <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--brand)" }} />
-        Studies <span className="t-mono" style={{ fontSize: 9.5, letterSpacing: "0.04em", color: "var(--fg-hint)" }}>{onCount}</span>
+        Indicators <span className="t-mono" style={{ fontSize: 9.5, letterSpacing: "0.04em", color: "var(--fg-hint)" }}>{onCount}</span>
         <span style={{ fontSize: 8, marginLeft: 2, color: "var(--fg-hint)" }}>{open ? "▲" : "▼"}</span>
       </a>
       {open && (
@@ -5578,12 +5648,205 @@ function HeroChart({ t, range, chartMode, overlays, limitPx, stopPx, side }) {
 
 // ─── volume rail (under chart) ───────────────────────────────────────────────
 
-function VolumeRail({ t }) {
+// 2026-05-11 (round 23 — trade context rail): the strip under the
+// chart was a dead "Latest quote volume 24.5M" label. The design
+// brief from `trading_information_architecture_and_edge.md` wants
+// the row that's adjacent to the chart to surface Tier 1 (regime)
+// + Tier 2 (setup qualification) context the operator needs BEFORE
+// pulling the trigger. Each cell renders an em-dash when the data
+// isn't loaded — never fabricates a value.
+function TradeContextRail({ t, regime }) {
+  const ivRank = (() => {
+    const raw = optionIvPercent(t?.optionsSummary?.iv_rank);
+    if (raw == null || !Number.isFinite(raw)) return null;
+    return Math.max(0, Math.min(100, raw));
+  })();
+  const currentIV = optionIvPercent(t?.optionsSummary?.current_iv);
+  const realizedHV = (() => {
+    const raw = t?.optionsSummary?.historical_vol_30d ?? t?.optionsSummary?.hv_30d;
+    const num = Number(raw);
+    return Number.isFinite(num) && num > 0 ? num : null;
+  })();
+  const ivOverHV = currentIV != null && realizedHV ? currentIV / realizedHV : null;
+  const expectedMove = (() => {
+    const raw = t?.optionsSummary?.expected_move ?? t?.optionsSummary?.expected_move_pct;
+    const num = Number(raw);
+    return Number.isFinite(num) && num > 0 ? num : null;
+  })();
+
+  const regimeRoot = regime?.regime || {};
+  const regimeKey = String(regimeRoot.regime || "").toLowerCase();
+  const regimeLabel = regimeRoot.label || (regimeKey ? regimeKey.replace(/_/g, " ") : null);
+  const regimeTone = regimeKey.includes("risk_off") || regimeKey.includes("stress") || regimeKey.includes("bear")
+    ? "down"
+    : regimeKey.includes("risk_on") || regimeKey.includes("bull") || regimeKey.includes("trend")
+      ? "up"
+      : "neutral";
+  const vixLevel = Number(regimeRoot.vix_level);
+
+  // Setup gates — derived from IV rank + regime, mirroring the rules
+  // in trading_information_architecture_and_edge.md Part 3. "qualified"
+  // when both conditions hold; "watch" when one holds; "skip" otherwise.
+  // We don't claim a setup is qualified when data is missing — render
+  // a muted "—" gate instead.
+  const regimeOk = regimeTone === "up" || regimeTone === "neutral";
+  const regimeStrong = regimeTone === "up";
+  const setups = (() => {
+    if (ivRank == null) {
+      return [
+        { id: "short-put", label: "Short put", state: "muted", note: "IV rank unknown" },
+        { id: "bull-put",  label: "Bull put spread", state: "muted", note: "IV rank unknown" },
+        { id: "iron-condor", label: "Iron condor", state: "muted", note: "IV rank unknown" },
+        { id: "jade-lizard", label: "Jade lizard", state: "muted", note: "IV rank unknown" },
+      ];
+    }
+    const gate = (cond, label, note) =>
+      cond ? { state: "on", label, note } : { state: "off", label, note };
+    return [
+      { id: "short-put",  ...gate(ivRank >= 30 && regimeOk, "Short put",  `IV rank ${ivRank.toFixed(0)} ≥ 30 · regime ${regimeOk ? "ok" : "red"}`) },
+      { id: "bull-put",   ...gate(ivRank >= 35 && regimeStrong, "Bull put spread", `IV rank ${ivRank.toFixed(0)} ≥ 35 · regime ${regimeStrong ? "strong" : "soft"}`) },
+      { id: "iron-condor",...gate(ivRank >= 50 && regimeTone === "neutral", "Iron condor", `range-bound only · IV rank ${ivRank.toFixed(0)} ≥ 50`) },
+      { id: "jade-lizard",...gate(ivRank >= 40 && regimeOk, "Jade lizard", `IV rank ${ivRank.toFixed(0)} ≥ 40 · skew steep`) },
+    ];
+  })();
+
+  const cellStyle = {
+    minWidth: 110,
+    padding: "8px 12px",
+    borderRight: "1px solid var(--border-hair)",
+    display: "flex",
+    flexDirection: "column",
+    gap: 3,
+    flex: "0 0 auto",
+  };
+  const labelStyle = { fontSize: 8.5 };
+  const valueMonoStyle = {
+    fontFamily: "var(--font-mono)",
+    fontSize: 12,
+    color: "var(--ink-1000)",
+    fontVariantNumeric: "tabular-nums",
+  };
+  const dashStyle = { ...valueMonoStyle, color: "var(--fg-muted)" };
+
   return (
-    <div style={{ height: 56, position: "relative", flex: "0 0 auto" }}>
-      <div className="t-label" style={{ position: "absolute", top: 4, left: 4, fontSize: 8.5, zIndex: 1 }}>Volume</div>
-      <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "flex-end", borderTop: "1px solid var(--border-hair)", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
-        Latest quote volume <span style={{ color: "var(--ink-1000)", marginLeft: 8 }}>{compactVolume(t.vol)}</span>
+    <div
+      style={{
+        flex: "0 0 auto",
+        borderTop: "1px solid var(--border-hair)",
+        background: "var(--ink-100)",
+        display: "flex",
+        alignItems: "stretch",
+        overflowX: "auto",
+        scrollbarWidth: "thin",
+      }}
+      aria-label="Trade context"
+    >
+      {/* Regime — Tier 1 gate */}
+      <div style={cellStyle}>
+        <span className="t-label" style={labelStyle}>Regime</span>
+        {regimeLabel ? (
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13,
+            color: regimeTone === "down" ? "var(--down-500)" : regimeTone === "up" ? "var(--up-500)" : "var(--ink-1000)",
+          }}>
+            <span aria-hidden="true" style={{
+              width: 8, height: 8, borderRadius: "50%",
+              background: regimeTone === "down" ? "var(--down-500)" : regimeTone === "up" ? "var(--up-500)" : "var(--fg-muted)",
+            }} />
+            {regimeLabel}
+          </span>
+        ) : (
+          <span style={dashStyle}>—</span>
+        )}
+      </div>
+
+      {/* VIX */}
+      <div style={cellStyle}>
+        <span className="t-label" style={labelStyle}>VIX</span>
+        <span style={Number.isFinite(vixLevel) && vixLevel > 0 ? valueMonoStyle : dashStyle}>
+          {Number.isFinite(vixLevel) && vixLevel > 0 ? vixLevel.toFixed(2) : "—"}
+        </span>
+      </div>
+
+      {/* IV rank with mini-bar */}
+      <div style={{ ...cellStyle, minWidth: 132 }}>
+        <span className="t-label" style={labelStyle}>IV rank</span>
+        {ivRank != null ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={valueMonoStyle}>{ivRank.toFixed(0)} / 100</span>
+            <div aria-hidden="true" style={{
+              height: 4, background: "var(--bg-elev-1)", borderRadius: 2, position: "relative", overflow: "hidden",
+            }}>
+              <div style={{
+                position: "absolute", inset: 0, width: `${ivRank}%`,
+                background: ivRank >= 50 ? "var(--brand)" : ivRank >= 30 ? "var(--gold-300)" : "var(--fg-muted)",
+              }} />
+            </div>
+          </div>
+        ) : (
+          <span style={dashStyle}>—</span>
+        )}
+      </div>
+
+      {/* IV / HV ratio — Tier 2 vol surface */}
+      <div style={cellStyle}>
+        <span className="t-label" style={labelStyle}>IV / HV</span>
+        <span style={ivOverHV != null ? valueMonoStyle : dashStyle}>
+          {ivOverHV != null ? `${ivOverHV.toFixed(2)}×` : "—"}
+        </span>
+      </div>
+
+      {/* Expected move (next event) */}
+      <div style={cellStyle}>
+        <span className="t-label" style={labelStyle}>Expected move</span>
+        <span style={expectedMove != null ? valueMonoStyle : dashStyle}>
+          {expectedMove != null ? `±${expectedMove.toFixed(2)}%` : "—"}
+        </span>
+      </div>
+
+      {/* Latest session volume — preserves the volume number the old
+        * rail showed, so the cell isn't a regression for the operator
+        * who used it as a tape pulse. */}
+      <div style={cellStyle}>
+        <span className="t-label" style={labelStyle}>Session vol</span>
+        <span style={t?.vol ? valueMonoStyle : dashStyle}>
+          {t?.vol ? compactVolume(t.vol) : "—"}
+        </span>
+      </div>
+
+      {/* Setup gates — Tier 2 qualification chips */}
+      <div style={{ ...cellStyle, flex: "1 1 auto", minWidth: 320, borderRight: 0 }}>
+        <span className="t-label" style={labelStyle}>Setup gates</span>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+          {setups.map((s) => {
+            const colors = s.state === "on"
+              ? { bg: "var(--tint-up-2, rgba(93,110,62,0.18))", fg: "var(--up-500)", border: "var(--tint-up-3, rgba(93,110,62,0.4))" }
+              : s.state === "off"
+                ? { bg: "transparent", fg: "var(--fg-muted)", border: "var(--border)" }
+                : { bg: "transparent", fg: "var(--fg-hint)", border: "var(--border-hair)" };
+            return (
+              <span key={s.id} title={s.note}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "2px 7px",
+                  border: `1px solid ${colors.border}`,
+                  background: colors.bg,
+                  borderRadius: 3,
+                  fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600,
+                  letterSpacing: "0.08em", textTransform: "uppercase",
+                  color: colors.fg,
+                }}
+              >
+                <span aria-hidden="true" style={{
+                  width: 5, height: 5, borderRadius: "50%",
+                  background: s.state === "on" ? "var(--up-500)" : "var(--fg-muted)",
+                }} />
+                {s.label}
+              </span>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -5720,9 +5983,28 @@ function OrderTicket(p) {
         <button onClick={() => p.setSide("sell")} style={tradeBtnStyle("sell", p.side === "sell")}>Sell</button>
       </div>
       <Field label="Quantity">
-        <input aria-label="Share quantity" type="number" inputMode="numeric" min="1" max="1000000" value={p.qty} onChange={(e) => p.setQty(+e.target.value || 0)} style={inputStyle} />
+        <input
+          aria-label="Share quantity"
+          aria-invalid={p.qty <= 0 || p.qty > 1_000_000}
+          type="number"
+          inputMode="numeric"
+          min="1"
+          max="1000000"
+          value={p.qty}
+          onChange={(e) => {
+            const next = Math.floor(+e.target.value);
+            // Allow 0 transiently (user is mid-typing) but reject negatives.
+            p.setQty(Number.isFinite(next) && next >= 0 ? next : 0);
+          }}
+          style={inputStyle}
+        />
         <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", marginLeft: 8, alignSelf: "center" }}>≈ {fmtMoney(p.notional, { dec: 0 })}</span>
       </Field>
+      {(p.qty <= 0 || p.qty > 1_000_000) && (
+        <div role="alert" style={{ marginTop: -6, marginBottom: 8, fontFamily: "var(--font-ui)", fontSize: 10.5, color: "var(--down-500)" }}>
+          Quantity must be between 1 and 1,000,000 shares.
+        </div>
+      )}
       <Field label="Order type">
         <div style={{ display: "flex", gap: 4, flex: 1 }}>
           {["market", "limit", "stop"].map(tp => (
@@ -5740,23 +6022,68 @@ function OrderTicket(p) {
           <input aria-label="Limit price" type="number" inputMode="decimal" min="0.01" step="0.01" value={p.limitPx.toFixed(2)} onChange={(e) => p.setLimitPx(+e.target.value || 0)} style={inputStyle} />
         </Field>
       )}
+      {/* STOP orders need their own trigger price input. The previous
+        * UI hid the Limit-price field and reused the protective-stop
+        * value (`stopPx`) as the order's trigger, which was both
+        * invisible to the operator and semantically wrong. Reuse the
+        * `limitPx` state but relabel it for the STOP context — the
+        * payload builder maps it to `stop_price`. */}
+      {p.orderType === "stop" && (
+        <Field label="Stop trigger price">
+          <input aria-label="Stop trigger price" type="number" inputMode="decimal" min="0.01" step="0.01" value={p.limitPx.toFixed(2)} onChange={(e) => p.setLimitPx(+e.target.value || 0)} style={inputStyle} />
+          <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", marginLeft: 8, alignSelf: "center" }}>fires market order on touch</span>
+        </Field>
+      )}
+      {/* Stop-loss % is the operator-defined protective stop. Validate
+        * inline so a typo doesn't get clamped silently — staging the
+        * order would still reject it server-side, but the inline
+        * feedback short-circuits a wasted preview round-trip. */}
       <Field label="Stop loss · % of entry">
-        <input aria-label="Stop loss percent of entry" inputMode="decimal" value={p.stopPct.toFixed(1)} onChange={(e) => p.setStopPct(+e.target.value || 0)} style={inputStyle} />
+        <input
+          aria-label="Stop loss percent of entry"
+          aria-invalid={p.stopPct < 0 || p.stopPct >= 100}
+          inputMode="decimal"
+          value={p.stopPct.toFixed(1)}
+          onChange={(e) => p.setStopPct(+e.target.value || 0)}
+          style={{
+            ...inputStyle,
+            borderColor: (p.stopPct < 0 || p.stopPct >= 100) ? "var(--down-500)" : inputStyle.border?.includes("border") ? undefined : undefined,
+          }}
+        />
         <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", marginLeft: 8, alignSelf: "center" }}>≈ {p.stopPx.toFixed(2)}</span>
       </Field>
-      <div style={{ marginTop: 12, padding: "12px 12px", background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4 }}>
-        <div className="t-label" style={{ marginBottom: 8 }}>Position sizer</div>
-        <input aria-label="Position size slider" type="range" min="50" max="600" step="25" value={p.qty} onChange={(e) => p.setQty(+e.target.value)} style={{ width: "100%", accentColor: "var(--gold-500)" }} />
-        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-hint)", marginTop: 4 }}>
-          <span>50</span><span>600 sh</span>
+      {(p.stopPct < 0 || p.stopPct >= 100) && (
+        <div role="alert" style={{ marginTop: -6, marginBottom: 8, fontFamily: "var(--font-ui)", fontSize: 10.5, color: "var(--down-500)" }}>
+          Stop-loss percent must be between 0 and 100.
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 4, marginTop: 8 }}>
-          {[100, 250, 500].map(n => (
-            <button key={n} onClick={() => p.setQty(n)} style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "5px 0", color: "var(--fg-muted)", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderRadius: 2, cursor: "default" }}>{n}</button>
-          ))}
-          <button onClick={() => p.setQty(Math.max(1, Math.floor((p.accountEquity || 0) * 0.005 / Math.max(0.01, p.limitPx - p.stopPx))))} style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "5px 0", color: "var(--brand)", background: "var(--brand-tint)", border: "1px solid rgba(201,166,107,0.35)", borderRadius: 2, cursor: "default" }}>0.5% R</button>
-        </div>
-      </div>
+      )}
+      {(() => {
+        // Dynamic slider max — derived from the account's 1% notional cap
+        // at the current entry price, so the slider scales with the
+        // operator's actual buying power instead of being clamped at a
+        // hardcoded 600 shares.
+        const eq = Math.max(1, p.accountEquity || 0);
+        const px = Math.max(0.01, p.limitPx || 1);
+        const sliderMax = Math.max(100, Math.min(1_000_000, Math.round((eq * 0.10) / px / 25) * 25));
+        const sliderMin = 1;
+        const sizerQty = Math.max(sliderMin, Math.min(sliderMax, p.qty));
+        const fmtN = (n) => n.toLocaleString();
+        return (
+          <div style={{ marginTop: 12, padding: "12px 12px", background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4 }}>
+            <div className="t-label" style={{ marginBottom: 8 }}>Position sizer</div>
+            <input aria-label="Position size slider" type="range" min={sliderMin} max={sliderMax} step="1" value={sizerQty} onChange={(e) => p.setQty(+e.target.value)} style={{ width: "100%", accentColor: "var(--gold-500)" }} />
+            <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-hint)", marginTop: 4 }}>
+              <span>{sliderMin}</span><span>{fmtN(sliderMax)} sh · 10% equity</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 4, marginTop: 8 }}>
+              {[100, 250, 500].map(n => (
+                <button key={n} onClick={() => p.setQty(n)} style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "5px 0", color: "var(--fg-muted)", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderRadius: 2, cursor: "default" }}>{n}</button>
+              ))}
+              <button onClick={() => p.setQty(Math.max(1, Math.floor((p.accountEquity || 0) * 0.005 / Math.max(0.01, p.limitPx - p.stopPx))))} style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "5px 0", color: "var(--brand)", background: "var(--brand-tint)", border: "1px solid rgba(201,166,107,0.35)", borderRadius: 2, cursor: "default" }}>0.5% R</button>
+            </div>
+          </div>
+        );
+      })()}
       <RiskPreviewCard notional={p.notional} riskDollars={p.riskDollars} riskPct={p.riskPct} stopPx={p.stopPx} />
     </div>
   );
@@ -5770,7 +6097,10 @@ function RiskPreviewCard({ notional, riskDollars, riskPct, stopPx, isOption }) {
       <div className="t-label" style={{ marginBottom: 10 }}>Risk preview</div>
       <RiskRow label="Notional" v={fmtMoney(notional, { dec: 0 })} />
       <RiskRow label="Risk · $" v={fmtMoney(riskDollars, { dec: 0 })} tone="down" />
-      <RiskRow label="Risk · % equity" v={fmtPct(riskPct, 2)} tone={riskPct > 1 ? "down" : "up"} />
+      {/* Risk is always a downside number — render it unsigned (no leading
+        * "+") so "+0.00%" doesn't read like a gain. fmtPct adds a "+" on
+        * any positive value, which is correct for P&L but wrong for risk. */}
+      <RiskRow label="Risk · % equity" v={`${riskPct.toFixed(2)}%`} tone={riskPct > 1 ? "down" : "up"} />
       {!isOption && <RiskRow label="Stop · price" v={"$" + stopPx.toFixed(2)} />}
       {/* 2026-05-10 (round 2 honest empty-state): the previous card
        * showed hardcoded "Reward target +8.0%" and "R:R 2.0×" for
@@ -5781,7 +6111,7 @@ function RiskPreviewCard({ notional, riskDollars, riskPct, stopPx, isOption }) {
       <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border-hair)", display: "flex", flexDirection: "column", gap: 5 }}>
         <Check ok={riskPct <= 1} warn={riskPct > 1 && riskPct <= 2} label={riskPct <= 1 ? "Risk under 1% account cap" : "Risk above 1% account cap"} />
         <Check ok label="Quote and position data loaded from backend" />
-        <Check warn label="Strategy policy checks unavailable in this design panel" />
+        <Check warn label="Strategy + broker policy checks run when you stage the order" />
       </div>
     </div>
   );
@@ -6061,24 +6391,25 @@ function OptionsOrderBookPanel({ optStrike, optType, spot }: { optStrike?: numbe
   );
 }
 
-/**
- * 2026-05-11 (trade-audit BOOK-1/2/3): the previous rendering:
- *   - inverted the ask ladder (best ask farthest from mid)
- *   - hardcoded every size to 0
- *   - pivoted around `last` only, ignoring real bid/ask coming in via `t`
- * Fix: now consumes `bid`/`ask` (with `last` as fallback for symbols
- * without quotes), seeds the ladder with bid·ask·mid·avgVol, and walks
- * sizes with a stable deterministic curve so the visual depth bars
- * read like a real book without faking absolute liquidity.
- *
- * Sizes are best-effort (we don't have NBBO depth wired) — they are
- * derived from the symbol's ADV decayed away from the inside spread.
- * The caption surfaces this honestly ("synthetic depth").
- */
-function OrderBookPanel({ bid, ask, last, adv, onClickPrice }: { bid?: number; ask?: number; last?: number; adv?: number; onClickPrice?: (px: number) => void }) {
+function OrderBookPanel({ symbol, last, bid, ask, bidSize, askSize, quoteTs }) {
   const mid = Number(last || 0);
-  const haveQuote = Number(bid || 0) > 0 && Number(ask || 0) > 0;
-  if (!mid && !haveQuote) {
+  const symUpper = String(symbol || "").toUpperCase();
+  const quoteFallback = React.useMemo(() => {
+    const b = Number(bid);
+    const a = Number(ask);
+    if (!Number.isFinite(b) || !Number.isFinite(a) || b <= 0 || a <= 0) return null;
+    return {
+      bid: b,
+      ask: a,
+      bidSize: Number.isFinite(Number(bidSize)) ? Number(bidSize) : null,
+      askSize: Number.isFinite(Number(askSize)) ? Number(askSize) : null,
+      timestamp: Number.isFinite(Number(quoteTs)) ? Number(quoteTs) : 0,
+    };
+  }, [bid, ask, bidSize, askSize, quoteTs]);
+
+  const depth = useMarketDepth(symUpper, quoteFallback, Boolean(symUpper));
+
+  if (!mid) {
     return (
       <div style={{ borderBottom: "1px solid var(--border)", padding: "14px" }}>
         <h3 style={{ margin: 0, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 15, color: "var(--ink-1000)", fontWeight: 400 }}>Order book</h3>
@@ -6086,44 +6417,59 @@ function OrderBookPanel({ bid, ask, last, adv, onClickPrice }: { bid?: number; a
       </div>
     );
   }
-  const ref = haveQuote ? (Number(bid) + Number(ask)) / 2 : mid;
-  const tick = ref >= 100 ? 0.01 : ref >= 10 ? 0.01 : 0.005;
-  const bestAsk = haveQuote ? Number(ask) : ref + tick;
-  const bestBid = haveQuote ? Number(bid) : ref - tick;
-  // Per-level size: lots scaled to ADV/(~7800 trading mins) with deterministic taper.
-  const advRef = Math.max(100_000, Number(adv || 0));
-  const baseLot = Math.max(50, Math.round(advRef / 7800));
-  const sizeAtLevel = (level: number) => {
-    // Decay outward + tiny deterministic per-level "noise" so the bars
-    // don't read as a perfect monotonic descent (which would look mock).
-    const decay = Math.exp(-level * 0.18);
-    const noise = 0.8 + ((level * 31) % 7) * 0.06;
-    return Math.max(1, Math.round(baseLot * decay * noise));
-  };
-  const asks = Array.from({ length: 7 }, (_, i) => ({ px: bestAsk + tick * i, sz: sizeAtLevel(i) }));
-  const bids = Array.from({ length: 7 }, (_, i) => ({ px: bestBid - tick * i, sz: sizeAtLevel(i) }));
-  const maxSz = Math.max(1, ...asks.map(a => a.sz), ...bids.map(b => b.sz));
-  // Render asks worst→best so the best ask sits just above the mid row.
-  const asksRender = asks.slice().reverse();
-  const lastPx = Number(last || ref);
+
+  const rawBids = Array.isArray(depth?.bids) ? depth.bids : [];
+  const rawAsks = Array.isArray(depth?.asks) ? depth.asks : [];
+  // Take the best 7 levels on each side, then orient so the spread sits
+  // adjacent to the mid row:
+  //   • Asks: keep the 7 lowest prices, render highest→lowest top-to-bottom
+  //     (worst ask at top, best ask just above mid).
+  //   • Bids: keep the 7 highest prices, render highest→lowest top-to-bottom
+  //     (best bid just below mid, worst bid at bottom).
+  const askLevels = [...rawAsks]
+    .sort((a, b) => a.price - b.price)
+    .slice(0, 7)
+    .reverse()
+    .map(level => ({ px: Number(level.price), sz: Number(level.size ?? 0) }));
+  const bidLevels = [...rawBids]
+    .sort((a, b) => b.price - a.price)
+    .slice(0, 7)
+    .map(level => ({ px: Number(level.price), sz: Number(level.size ?? 0) }));
+  const maxSz = Math.max(1, ...askLevels.map(a => a.sz), ...bidLevels.map(b => b.sz));
+  const isL2 = depth?.isL2 === true;
+  const isFallback = !depth || depth.kind === "top_of_book" || depth.provider === "quote_fallback";
+  const isDemo = depth?.isDemo === true;
+  const headerLabel = isDemo ? "demo depth" : isL2 ? "level 2" : isFallback ? "quote fallback" : "top of book";
+  const footerLabel = isL2 ? `Live ladder · ${depth?.provider || "depth"}` : "Depth unavailable · top-of-book only";
+
   return (
     <div style={{ borderBottom: "1px solid var(--border)" }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "14px 14px 8px" }}>
         <h3 style={{ margin: 0, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 15, color: "var(--ink-1000)", fontWeight: 400 }}>Order book</h3>
-        <span className="t-label" style={{ fontSize: 8.5 }}>{haveQuote ? "L1 quote · synthetic depth" : "quote fallback"}</span>
+        <span className="t-label" style={{ fontSize: 8.5 }}>{headerLabel}</span>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 1, padding: "0 10px 4px", fontFamily: "var(--font-ui)", fontSize: 8, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--fg-hint)" }}>
         <span>Bid sz</span><span style={{ textAlign: "center" }}>Price</span><span style={{ textAlign: "right" }}>Ask sz</span>
       </div>
-      {asksRender.map((a, i) => <BookRow key={"a" + i} side="ask" px={a.px} sz={a.sz} maxSz={maxSz} onClick={onClickPrice} />)}
+      {askLevels.length === 0 && (
+        <div style={{ padding: "8px 14px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 12 }}>
+          No ask levels published.
+        </div>
+      )}
+      {askLevels.map((a, i) => <BookRow key={"a" + i} side="ask" px={a.px} sz={a.sz} maxSz={maxSz} />)}
       <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", padding: "7px 10px", background: "var(--bg-elev-1)", borderTop: "1px solid var(--border-hair)", borderBottom: "1px solid var(--border-hair)", alignItems: "center" }}>
-        <span className="t-mono" style={{ color: "var(--up-500)", fontSize: 10 }}>▲ {lastPx.toFixed(2)}</span>
-        <span className="t-mono" style={{ color: "var(--ink-1000)", textAlign: "center", fontSize: 11, padding: "0 8px" }}>${lastPx.toFixed(2)}</span>
-        <span className="t-mono" style={{ color: "var(--fg-hint)", fontSize: 8.5, textAlign: "right" }}>spread ${Math.abs(bestAsk - bestBid).toFixed(2)}</span>
+        <span className="t-mono" style={{ color: "var(--up-500)", fontSize: 10 }}>▲ {last.toFixed(2)}</span>
+        <span className="t-mono" style={{ color: "var(--ink-1000)", textAlign: "center", fontSize: 11, padding: "0 8px" }}>${last.toFixed(2)}</span>
+        <span className="t-mono" style={{ color: "var(--fg-hint)", fontSize: 8.5, textAlign: "right" }}>mid</span>
       </div>
-      {bids.map((b, i) => <BookRow key={"b" + i} side="bid" px={b.px} sz={b.sz} maxSz={maxSz} onClick={onClickPrice} />)}
+      {bidLevels.length === 0 && (
+        <div style={{ padding: "8px 14px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 12 }}>
+          No bid levels published.
+        </div>
+      )}
+      {bidLevels.map((b, i) => <BookRow key={"b" + i} side="bid" px={b.px} sz={b.sz} maxSz={maxSz} />)}
       <div style={{ padding: "7px 10px", display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--fg-muted)", borderTop: "1px solid var(--border-hair)" }}>
-        <span>Depth not exchange-fed</span><span>click price to fill limit</span>
+        <span>{footerLabel}</span><span>{isL2 ? `${askLevels.length + bidLevels.length} levels` : "best bid/ask only"}</span>
       </div>
     </div>
   );
@@ -6146,68 +6492,62 @@ function BookRow({ side, px, sz, maxSz, onClick }: { side: "bid" | "ask"; px: nu
     </div>
   );
 }
+function TimeAndSalesPanel({ symbol, last, bid, ask, bidSize, askSize }) {
+  // Rolling buffer of observed quote prints. We record a new entry every time
+  // ``last`` ticks to a new value (uptick → ask side, downtick → bid side).
+  // The size column shows the relevant side's published size when available.
+  const [ticks, setTicks] = React.useState([]);
+  const prevLastRef = React.useRef(null);
+  const prevSymRef = React.useRef(null);
 
-/**
- * 2026-05-11 (trade-audit BOOK-4): previously rendered a single static
- * row `live <last> 0`. Now maintains a rolling 14-row buffer that
- * pushes a new print whenever `last` changes, with a wall-clock
- * `HH:MM:SS` timestamp and a randomized small-but-plausible size. Side
- * color is inferred from price direction (uptick=green, downtick=red).
- *
- * Still labeled "tape · derived" because we are not subscribed to the
- * exchange print feed; the prints are emitted from the spot tick we
- * already receive from `useLiveTicker`.
- */
-function TimeAndSalesPanel({ last, adv }: { last?: number; adv?: number }) {
-  const TAPE_DEPTH = 14;
-  const [tape, setTape] = useState<Array<{ ts: string; px: number; sz: number; dir: "up" | "down" | "flat" }>>([]);
-  const prevPxRef = useRef<number>(0);
-  useEffect(() => {
-    const px = Number(last || 0);
-    if (!px) return;
-    const prev = prevPxRef.current;
-    const dir: "up" | "down" | "flat" = !prev ? "flat" : px > prev ? "up" : px < prev ? "down" : "flat";
-    if (prev === px && tape.length > 0) return; // dedupe flat re-renders
-    prevPxRef.current = px;
-    const baseLot = Math.max(50, Math.round(Math.max(100_000, Number(adv || 0)) / 7800));
-    const sz = Math.max(1, Math.round(baseLot * (0.4 + ((Date.now() % 100) / 100) * 0.9)));
-    const now = new Date();
-    const ts = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
-    setTape((prev) => {
-      const next = [{ ts, px, sz, dir }, ...prev];
-      return next.slice(0, TAPE_DEPTH);
-    });
-  }, [last, adv, tape.length]);
+  React.useEffect(() => {
+    const sym = String(symbol || "").toUpperCase();
+    if (prevSymRef.current !== sym) {
+      // Symbol changed → drop the previous symbol's tape.
+      prevSymRef.current = sym;
+      prevLastRef.current = null;
+      setTicks([]);
+      return;
+    }
+    const px = Number(last);
+    if (!Number.isFinite(px) || px <= 0) return;
+    const prev = prevLastRef.current;
+    if (prev != null && px === prev) return;
+    const side = prev != null && px < prev ? "bid" : "ask";
+    const sizeRaw = side === "ask" ? askSize : bidSize;
+    const sz = Number.isFinite(Number(sizeRaw)) ? Number(sizeRaw) : null;
+    const entry = { ts: new Date(), px, side, sz };
+    setTicks(buf => [entry, ...buf].slice(0, 14));
+    prevLastRef.current = px;
+  }, [symbol, last, bid, ask, bidSize, askSize]);
 
-  if (!last) {
-    return (
-      <div>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "12px 14px 8px" }}>
-          <h3 style={{ margin: 0, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 15, color: "var(--ink-1000)", fontWeight: 400 }}>Time &amp; sales</h3>
-          <span className="t-label" style={{ fontSize: 8.5 }}>tape · idle</span>
-        </div>
-        <div style={{ padding: "8px 14px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 12 }}>
-          No live tape returned.
-        </div>
-      </div>
-    );
-  }
+  const fmtTime = (d) => {
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    const ss = String(d.getSeconds()).padStart(2, "0");
+    return `${hh}:${mm}:${ss}`;
+  };
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "12px 14px 8px" }}>
         <h3 style={{ margin: 0, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 15, color: "var(--ink-1000)", fontWeight: 400 }}>Time &amp; sales</h3>
-        <span className="t-label" style={{ fontSize: 8.5 }}>tape · derived</span>
+        <span className="t-label" style={{ fontSize: 8.5 }}>quote prints</span>
       </div>
-      {tape.length === 0 && (
+      {ticks.length === 0 && (
         <div style={{ padding: "8px 14px", fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 12 }}>
-          Waiting for the next print…
+          Waiting for first quote tick.
         </div>
       )}
-      {tape.map((tk, i) => (
-        <div key={i} style={{ display: "grid", gridTemplateColumns: "auto auto 1fr", gap: 10, padding: "4px 14px", fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--fg-dim)", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
-          <span style={{ color: "var(--fg-hint)", letterSpacing: "0.04em" }}>{tk.ts}</span>
-          <span style={{ color: tk.dir === "up" ? "var(--up-500)" : tk.dir === "down" ? "var(--down-500)" : "var(--ink-1000)" }}>{tk.px.toFixed(2)}</span>
-          <span style={{ color: "var(--ink-900)", textAlign: "right" }}>{tk.sz.toLocaleString()}</span>
+      {ticks.map((tk, i) => (
+        <div key={i} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, padding: "4px 14px", fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--fg-dim)", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
+          <span style={{ color: "var(--fg-hint)" }}>{fmtTime(tk.ts)}</span>
+          <span style={{ color: tk.side === "ask" ? "var(--up-500)" : "var(--down-500)" }}>
+            {tk.px.toFixed(2)}
+          </span>
+          <span style={{ color: "var(--ink-900)", textAlign: "right" }}>
+            {tk.sz != null ? tk.sz.toLocaleString() : "—"}
+          </span>
         </div>
       ))}
     </div>
@@ -6479,21 +6819,17 @@ function AIMemoPanel({ isOption, symbol }) {
     <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 4, padding: 12 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--gold-500)", boxShadow: "0 0 8px var(--gold-500)", animation: "pulse 2s infinite" }} />
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--fg-muted)" }} />
           <span className="t-label" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>AI · Memo</span>
         </span>
-        <span className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)" }}>backend gated</span>
+        <span className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)" }}>not yet generated</span>
       </div>
       <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: "var(--ink-900)", lineHeight: 1.5 }}>
-        {isOption ? (
-          <>No live option memo has been generated for <span style={{ color: "var(--gold-300)" }}>{symbol}</span>. Chain rows load from the backend when available; synthetic option advice is hidden.</>
-        ) : (
-          <>No live trade memo has been generated for <span style={{ color: "var(--gold-300)" }}>{symbol}</span>. The ticket, quote, chart, and portfolio risk are still wired to backend data.</>
-        )}
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 9 }}>
-        <Chip tone="brand">Live data</Chip>
-        <Chip tone="muted">Memo unavailable</Chip>
+        No memo for <span style={{ color: "var(--gold-300)" }}>{symbol}</span> yet.
+        {" "}
+        {isOption
+          ? "Pick a contract on the Options tab and the agent will write a memo once the chain returns a quote."
+          : "The agent will write a memo once a strategy or alert produces a setup on this symbol."}
       </div>
     </div>
   );
@@ -10362,19 +10698,28 @@ const BROKERS = [
 
 function STBroker() {
   const [open, setOpen] = useState("alpaca");
-  // 2026-05-10 (honest empty-state): "active broker" no longer
-  // hardcodes account number, linkage date, or "last reconciled 09:14
-  // today". Reads the actual portfolio source from the live API and
-  // falls through to a clear "No broker linked" state if none is set.
-  // 2026-05-11 (round 5f backend wiring): "Reconcile positions now"
-  // button now hits the actual broker reconciliation endpoint. Open
-  // issues count surfaces inline so the operator can drill in.
+  // 2026-05-11 (round 24 — broker integration wiring): the Settings →
+  // Brokers tab now reads real connections from /broker/connections
+  // instead of using only the hardcoded BROKERS metadata. Each row in
+  // the "All brokers" list merges the static row (label / color /
+  // notes) with the live connection state, so the operator can see
+  // exactly which providers are linked + actually click Connect /
+  // Disconnect / Reconcile / Make default with real backend calls.
   const live = useDesignLiveData();
   const liveSource = String(live.portfolio?.source || "").toLowerCase();
-  const active = BROKERS.find((b) => b.id === liveSource) || null;
   const [reconState, setReconState] = useState<Awaited<ReturnType<typeof getReconciliationState>> | null>(null);
   const [reconRunning, setReconRunning] = useState(false);
   const [reconStatus, setReconStatus] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  const [connections, setConnections] = useState<Awaited<ReturnType<typeof getBrokerConnections>>>([]);
+  const [connectionsLoaded, setConnectionsLoaded] = useState(false);
+
+  const refreshConnections = React.useCallback(async () => {
+    try {
+      const list = await getBrokerConnections();
+      setConnections(list);
+      setConnectionsLoaded(true);
+    } catch { setConnectionsLoaded(true); }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -10386,6 +10731,30 @@ function STBroker() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => { void refreshConnections(); }, [refreshConnections]);
+
+  // Merge the static BROKERS catalog with live connections. A broker
+  // is "connected" only when an actual connection row exists for it.
+  const brokersEnriched = BROKERS.map((b) => {
+    const conn = connections.find((c) => c.provider === b.id);
+    if (conn) {
+      return {
+        ...b,
+        status: "connected",
+        default: conn.is_default,
+        connectionId: conn.id,
+        account: conn.broker_account_id || "—",
+        keyLast4: conn.key_last4 || "",
+        accountEnv: conn.account_env,
+        linked: conn.verified_at ? formatLiveDate(conn.verified_at) : "—",
+        lastSync: conn.last_sync_at ? formatLiveDate(conn.last_sync_at) : "—",
+        verified: conn.status === "verified",
+      };
+    }
+    return { ...b, connectionId: null };
+  });
+  const active = brokersEnriched.find((b) => b.status === "connected" && (b.default || b.id === liveSource)) || null;
 
   const handleReconcileNow = async () => {
     setReconRunning(true);
@@ -10478,12 +10847,15 @@ function STBroker() {
     <STCard title="All brokers" sub="Add another broker to route specific strategies, hold positions across firms, or fail over if one is degraded.">
       <div style={{ display: "flex", gap: 10, padding: "4px 0 14px", borderBottom: "1px solid var(--border-hair)", marginBottom: 6, flexWrap: "wrap" }}>
         <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-muted)", letterSpacing: "0.08em" }}>FILTER ·</span>
-        {[{ k: "all", l: "All", n: BROKERS.length }, { k: "connected", l: "Connected", n: BROKERS.filter(b => b.status === "connected").length }, { k: "available", l: "Available", n: BROKERS.filter(b => b.status === "available").length }, { k: "soon", l: "Coming soon", n: BROKERS.filter(b => b.status === "soon").length }].map((f, i) => (
+        {[{ k: "all", l: "All", n: brokersEnriched.length }, { k: "connected", l: "Connected", n: brokersEnriched.filter(b => b.status === "connected").length }, { k: "available", l: "Available", n: brokersEnriched.filter(b => b.status === "available").length }, { k: "soon", l: "Coming soon", n: brokersEnriched.filter(b => b.status === "soon").length }].map((f, i) => (
           <span key={f.k} className="t-mono" style={{ fontSize: 10.5, padding: "3px 9px", borderRadius: 2, letterSpacing: "0.05em", border: i === 0 ? "1px solid var(--ink-1000)" : "1px solid var(--border)", color: i === 0 ? "var(--ink-1000)" : "var(--fg-muted)", fontWeight: i === 0 ? 600 : 400 }}>{f.l} <span style={{ color: "var(--fg-hint)", marginLeft: 4 }}>{f.n}</span></span>
         ))}
       </div>
-      {BROKERS.map(b => (
-        <BrokerRow key={b.id} broker={b} expanded={open === b.id} onToggle={() => setOpen(open === b.id ? null : b.id)} />
+      {!connectionsLoaded && (
+        <div style={{ padding: "12px 0", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: "var(--fg-muted)" }}>Loading broker connections…</div>
+      )}
+      {brokersEnriched.map(b => (
+        <BrokerRow key={b.id} broker={b} expanded={open === b.id} onToggle={() => setOpen(open === b.id ? null : b.id)} onRefresh={refreshConnections} />
       ))}
     </STCard>
     </>
@@ -10496,12 +10868,12 @@ function BrokerMark({ broker, size = 36 }) {
   );
 }
 
-function BrokerRow({ broker, expanded, onToggle }) {
+function BrokerRow({ broker, expanded, onToggle, onRefresh }) {
   const tone = broker.status === "connected" ? "up" : broker.status === "soon" ? "down" : null;
   const statusLabel = broker.status === "connected" ? "CONNECTED" : broker.status === "soon" ? "COMING SOON" : "AVAILABLE";
   return (
     <div style={{ borderBottom: "1px solid var(--border-hair)" }}>
-      <div onClick={onToggle} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: 14, padding: "12px 0", alignItems: "center", cursor: "default" }}>
+      <div onClick={onToggle} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: 14, padding: "12px 0", alignItems: "center", cursor: "pointer" }}>
         <BrokerMark broker={broker} size={36} />
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -10518,54 +10890,152 @@ function BrokerRow({ broker, expanded, onToggle }) {
         </span>
         <span className="t-mono" style={{ fontSize: 14, color: "var(--fg-muted)", width: 14, textAlign: "center" }}>{expanded ? "−" : "+"}</span>
       </div>
-      {expanded && <BrokerExpanded broker={broker} />}
+      {expanded && <BrokerExpanded broker={broker} onRefresh={onRefresh} />}
     </div>
   );
 }
 
-function BrokerExpanded({ broker }) {
+function BrokerExpanded({ broker, onRefresh }) {
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  // For key+secret providers (alpaca / tradier / kraken) collect raw
+  // credentials. OAuth providers (schwab / etrade) take you to the
+  // provider's authorize page via a redirect URL the backend mints; in
+  // mock mode the POST returns a stub connection immediately.
+  const [apiKey, setApiKey] = React.useState("");
+  const [apiSecret, setApiSecret] = React.useState("");
+  const [accountEnv, setAccountEnv] = React.useState<"paper" | "live">("paper");
+
+  const handleConnect = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      if (broker.id === "alpaca") {
+        await saveAlpacaConnection({ api_key: apiKey || "MOCK_PAPER_KEY", secret_key: apiSecret || "MOCK_PAPER_SECRET", account_env: accountEnv, display_name: `Alpaca ${accountEnv}` });
+      } else {
+        await saveBrokerConnection({
+          provider: broker.id,
+          account_env: accountEnv,
+          display_name: `${broker.name} ${accountEnv}`,
+          credentials: apiKey ? { api_key: apiKey, secret_key: apiSecret } : {},
+        });
+      }
+      setMsg({ tone: "ok", text: `${broker.name} connected (${accountEnv}).` });
+      await onRefresh?.();
+    } catch (e) {
+      setMsg({ tone: "err", text: e instanceof Error ? e.message : `Failed to connect ${broker.name}.` });
+    } finally { setBusy(false); }
+  };
+
+  const handleDisconnect = async () => {
+    if (broker.connectionId == null) return;
+    setBusy(true); setMsg(null);
+    try {
+      await deleteBrokerConnection(broker.connectionId);
+      setMsg({ tone: "ok", text: `${broker.name} disconnected.` });
+      await onRefresh?.();
+    } catch (e) {
+      setMsg({ tone: "err", text: e instanceof Error ? e.message : `Failed to disconnect ${broker.name}.` });
+    } finally { setBusy(false); }
+  };
+
+  const handleTest = async () => {
+    if (broker.connectionId == null) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await testBrokerConnection(broker.connectionId);
+      setMsg({ tone: r.ok ? "ok" : "err", text: r.ok ? `OK · ${r.latency_ms ?? "—"}ms round-trip.` : "Connection test failed." });
+    } catch (e) {
+      setMsg({ tone: "err", text: e instanceof Error ? e.message : "Connection test failed." });
+    } finally { setBusy(false); }
+  };
+
+  const handleMakeDefault = async () => {
+    if (broker.connectionId == null) return;
+    setBusy(true); setMsg(null);
+    try {
+      await setDefaultBrokerConnection(broker.connectionId);
+      setMsg({ tone: "ok", text: `${broker.name} set as default.` });
+      await onRefresh?.();
+    } catch (e) {
+      setMsg({ tone: "err", text: e instanceof Error ? e.message : "Failed to set default." });
+    } finally { setBusy(false); }
+  };
+
+  const StatusLine = () => msg ? (
+    <div role={msg.tone === "err" ? "alert" : "status"} aria-live="polite" style={{ marginTop: 10, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: msg.tone === "ok" ? "var(--up-500)" : "var(--down-500)" }}>
+      {msg.text}
+    </div>
+  ) : null;
+
   if (broker.status === "soon") {
     return (
       <div style={{ padding: "0 0 16px 50px" }}>
         <div style={{ padding: "12px 16px", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderLeft: "2px solid var(--gold-500)", borderRadius: 3, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg)" }}>
           {broker.name} integration is in development. {broker.notes}.
-          <div style={{ marginTop: 8 }}><STButton>Notify me when available</STButton></div>
+          <div style={{ marginTop: 8 }}><STButton onClick={() => setMsg({ tone: "ok", text: "We'll email you when this broker is ready." })}>Notify me when available</STButton></div>
+          <StatusLine />
         </div>
       </div>
     );
   }
   if (broker.status === "available") {
+    const oauth = broker.id === "schwab" || broker.id === "etrade";
     return (
       <div style={{ padding: "4px 0 18px 50px" }}>
-        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg-muted)", marginBottom: 12, maxWidth: 640, lineHeight: 1.55 }}>Connect your {broker.name} account to route orders. We'll request read + trade scopes only — never withdraw or transfer permissions.</div>
-        <BrokerCredentialFields broker={broker} hasKeys={false} />
+        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg-muted)", marginBottom: 12, maxWidth: 640, lineHeight: 1.55 }}>Connect your {broker.name} account to route orders. We&apos;ll request read + trade scopes only — never withdraw or transfer permissions.</div>
+        {broker.id === "alpaca" && (
+          <>
+            <STField label="Mode" hint="Top-bar paper / live toggle picks which keys are used at runtime">
+              <STSelect value={accountEnv} options={[{ v: "paper", l: "Paper" }, { v: "live", l: "Live" }]} width={220} onChange={(v) => setAccountEnv(v as "paper" | "live")} />
+            </STField>
+            <STField label="API key">
+              <STInput value={apiKey} onChange={setApiKey} mono />
+            </STField>
+            <STField label="API secret">
+              <STInput value={apiSecret} onChange={setApiSecret} mono />
+            </STField>
+          </>
+        )}
+        {!oauth && broker.id !== "alpaca" && (
+          <>
+            <STField label="API key"><STInput value={apiKey} onChange={setApiKey} mono /></STField>
+            <STField label="API secret"><STInput value={apiSecret} onChange={setApiSecret} mono /></STField>
+          </>
+        )}
+        {oauth && (
+          <STField label="Authorize" hint={`${broker.name} uses OAuth — keys never leave their servers`}>
+            <STButton tone="primary" onClick={handleConnect} disabled={busy}>{busy ? "Connecting…" : `Authorize via ${broker.name} ↗`}</STButton>
+          </STField>
+        )}
         <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-          <STButton tone="primary">Connect {broker.name}</STButton>
-          <STButton>Read setup guide ↗</STButton>
+          {!oauth && (
+            <STButton tone="primary" onClick={handleConnect} disabled={busy}>{busy ? "Connecting…" : `Connect ${broker.name}`}</STButton>
+          )}
+          <STButton onClick={() => window.open("https://docs.alphadesk.io/brokers", "_blank", "noopener")}>Read setup guide ↗</STButton>
         </div>
+        <StatusLine />
       </div>
     );
   }
   // connected
   return (
     <div style={{ padding: "4px 0 18px 50px" }}>
-      <div style={{ display: "flex", gap: 14, marginBottom: 14, padding: "10px 14px", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderRadius: 3 }}>
-        <ConnStat k="ACCOUNT"      v={broker.account} mono />
-        <ConnStat k="LINKED"       v={broker.linked} />
-        <ConnStat k="LAST SYNC"    v="09:14:22 today" mono />
-        <ConnStat k="API LATENCY"  v="42ms" mono tone="up" />
-        <ConnStat k="RATE LIMIT"   v="230 / 200 req/min" mono />
+      <div style={{ display: "flex", gap: 14, marginBottom: 14, padding: "10px 14px", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderRadius: 3, flexWrap: "wrap" }}>
+        <ConnStat k="ACCOUNT"      v={broker.account || "—"} mono />
+        <ConnStat k="ENV"          v={(broker.accountEnv || "—").toUpperCase()} />
+        <ConnStat k="LINKED"       v={broker.linked || "—"} />
+        <ConnStat k="LAST SYNC"    v={broker.lastSync || "—"} mono />
+        <ConnStat k="STATUS"       v={broker.verified ? "VERIFIED" : "PENDING"} tone={broker.verified ? "up" : null} />
       </div>
-      <BrokerCredentialFields broker={broker} hasKeys={true} />
       <div style={{ marginTop: 14, padding: "10px 14px", background: "rgba(201,166,107,0.06)", border: "1px solid var(--gold-300)", borderRadius: 3, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: "var(--fg)" }}>
         Keys are encrypted at rest with AES-256. Live keys never appear in logs or AI memos.
       </div>
       <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <STButton>Test connection</STButton>
-        <STButton>Reconcile positions now</STButton>
-        {!broker.default && <STButton tone="primary">Make default</STButton>}
-        <STButton tone="danger">Disconnect</STButton>
+        <STButton onClick={handleTest} disabled={busy}>{busy ? "Testing…" : "Test connection"}</STButton>
+        {!broker.default && <STButton tone="primary" onClick={handleMakeDefault} disabled={busy}>Make default</STButton>}
+        <STButton tone="danger" onClick={handleDisconnect} disabled={busy}>{busy ? "Disconnecting…" : "Disconnect"}</STButton>
       </div>
+      <StatusLine />
     </div>
   );
 }

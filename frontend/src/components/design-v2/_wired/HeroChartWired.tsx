@@ -31,10 +31,14 @@
 
 import { useQuery } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { getBars } from "@/lib/api";
-import type { ChartType, TimeFrame } from "@/types";
+import type { ChartType, Indicator, OHLCVBar, TimeFrame } from "@/types";
+import type {
+  ChartOrderPlacement,
+  ChartTradeOverlay,
+} from "@/components/charts/ChartPane";
 
 // Dynamic-import ChartPane: lightweight-charts touches `window` at
 // module-evaluation time (canvas init), so SSR would crash. The
@@ -60,15 +64,20 @@ const ChartPane = dynamic(() => import("@/components/charts/ChartPane"), {
  * give roughly the same visible-bar density the design's static
  * 80-point series produces.
  */
+// 2026-05-11 (round 23): bumped 1Y / ALL caps so the chart actually
+// paints multi-year history. 1Y now fetches a full trading year of
+// daily bars; ALL fetches ~20 years of weekly bars. The mock backend
+// honors `?limit=` (see handlers.ts) so visual QA shows the same
+// horizontal scroll the production chart would.
 const RANGE_TO_FETCH: Record<string, { timeframe: TimeFrame; limit: number }> = {
   "1D": { timeframe: "1m", limit: 390 }, // one regular session
   "5D": { timeframe: "15m", limit: 130 }, // ~5 sessions × 26 bars
   "1M": { timeframe: "1H", limit: 168 }, // ~21 sessions × 8 bars
   "3M": { timeframe: "1H", limit: 504 }, // ~63 sessions × 8 bars
   "6M": { timeframe: "D", limit: 130 },
-  YTD: { timeframe: "D", limit: 220 },
-  "1Y": { timeframe: "D", limit: 252 },
-  ALL: { timeframe: "W", limit: 260 },
+  YTD: { timeframe: "D", limit: 260 },
+  "1Y": { timeframe: "D", limit: 504 }, // 2y of daily for scroll-back headroom
+  ALL: { timeframe: "W", limit: 2000 }, // ~38y of weekly bars
 };
 
 export interface HeroChartWiredProps {
@@ -78,23 +87,46 @@ export interface HeroChartWiredProps {
   range?: string;
   /** Chart mode owned by the surrounding design toolbar. */
   chartType?: ChartType;
+  /** Indicators selected in the surrounding design toolbar's Indicators
+   *  dropdown. When provided, ChartPane renders this exact list and does
+   *  not persist its own. */
+  indicators?: Indicator[];
+  /** Live position + staged-order overlays to render directly on the
+   *  chart (entry / stop / take-profit horizontal lines). */
+  tradeOverlays?: ChartTradeOverlay[];
+  /** Click-to-stage configuration. When enabled, clicking a price level
+   *  on the chart drops a draft order at that price via `onStagePrice`. */
+  chartOrderPlacement?: ChartOrderPlacement | null;
 }
 
 export default function HeroChartWired({
   symbol,
   range = "3M",
   chartType = "candle",
+  indicators,
+  tradeOverlays,
+  chartOrderPlacement,
 }: HeroChartWiredProps) {
   const sym = (symbol || "SPY").toUpperCase();
   const { timeframe, limit } = RANGE_TO_FETCH[range] ?? RANGE_TO_FETCH["3M"];
 
+  // Per-(symbol, timeframe) extension cap so scroll-back paginates in
+  // chunks instead of fetching every historical bar up front.
+  const [extension, setExtension] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  useEffect(() => {
+    // Reset when the symbol or range flips — older extensions don't
+    // apply to a fresh timeframe.
+    setExtension(0);
+  }, [sym, timeframe]);
+
+  const effectiveLimit = Math.min(limit + extension, 5000);
+
   const { data, isLoading, isError, refetch } = useQuery({
-    // Stable key: any of (symbol, timeframe) flips invalidates and
-    // refetches. The `limit` is part of the same fetch so it doesn't
-    // need to be in the key.
-    queryKey: ["design-hero-bars", sym, timeframe],
+    // Include effectiveLimit so growing the window triggers a fetch.
+    queryKey: ["design-hero-bars", sym, timeframe, effectiveLimit],
     queryFn: ({ signal }) =>
-      getBars(sym, timeframe, limit, {
+      getBars(sym, timeframe, effectiveLimit, {
         signal,
         // Failures should NOT trigger the global ApiDegradedBanner:
         // the chart already renders an inline retry CTA via ChartPane,
@@ -108,9 +140,25 @@ export default function HeroChartWired({
     gcTime: 5 * 60_000,
   });
 
+  useEffect(() => {
+    if (!loadingMore) return;
+    if (!isLoading) setLoadingMore(false);
+  }, [isLoading, loadingMore]);
+
   // Memoise so React Query's referentially-stable empty array doesn't
   // produce a fresh `[]` on every render.
-  const bars = useMemo(() => data ?? [], [data]);
+  const bars: OHLCVBar[] = useMemo(() => data ?? [], [data]);
+
+  const handleLoadMore = useMemo(() => {
+    return () => {
+      if (loadingMore) return;
+      // Pull another bucket of bars (clamped at 5000 server-side).
+      const next = Math.min(effectiveLimit + Math.max(limit, 250), 5000);
+      if (next === effectiveLimit) return;
+      setLoadingMore(true);
+      setExtension(next - limit);
+    };
+  }, [loadingMore, effectiveLimit, limit]);
 
   return (
     <div
@@ -129,7 +177,12 @@ export default function HeroChartWired({
         data={bars}
         chartType={chartType}
         showToolbar={false}
+        indicators={indicators}
+        tradeOverlays={tradeOverlays}
+        chartOrderPlacement={chartOrderPlacement}
         isLoading={isLoading}
+        loadingMoreHistory={loadingMore}
+        onLoadMoreHistory={handleLoadMore}
         error={isError}
         onRetry={() => {
           void refetch();
