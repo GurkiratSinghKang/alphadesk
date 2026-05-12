@@ -205,6 +205,43 @@ const HANDLERS: Record<string, MockHandler> = {
   }),
   "GET /trades/alerts": () => [],
   "GET /trades/history": () => [],
+  "POST /halt": () => ({ halted: true, scope: "global", halted_at: NOW_ISO(), reason: "manual halt" }),
+  "POST /halt/resume": () => ({ halted: false, message: "Trading resumed." }),
+  "POST /trades/flatten_all": () => ({ liquidated: 0, errors: [] }),
+
+  // ─── Account (broker-level rollup) ────────────────────────────────
+  "GET /account": () => ({
+    equity: 284_512.41,
+    cash: 87_320.10,
+    buying_power: 174_640.20,
+    daytrade_buying_power: 698_561.00,
+    pattern_day_trader: false,
+    portfolio_value: 284_512.41,
+    initial_margin: 124_852.10,
+    maintenance_margin: 51_204.80,
+    last_equity: 286_352.63,
+    status: "ACTIVE",
+    currency: "USD",
+    as_of: NOW_ISO(),
+  }),
+
+  // ─── User settings ────────────────────────────────────────────────
+  // Drives the Settings → Preferences tab; the FE expects a flat
+  // record with toggles + thresholds. Shape mirrors backend
+  // user_settings table.
+  "GET /user/settings": () => ({
+    theme: "dark",
+    density: "dense",
+    default_broker_connection_id: 1,
+    default_lot_size: 1,
+    risk_alert_threshold_pct: 1.0,
+    daily_loss_limit_pct: 2.0,
+    confirm_before_submit: true,
+    show_extended_hours: true,
+    chart_indicators_default: ["SMA", "VWAP", "Volume"],
+    chart_timeframe_default: "1H",
+    as_of: NOW_ISO(),
+  }),
 
   // ─── Pipeline ─────────────────────────────────────────────────────
   "GET /pipeline/status": () => ({ state: "idle", lastRun: NOW_ISO(), nextRun: null, queueDepth: 0 }),
@@ -212,9 +249,231 @@ const HANDLERS: Record<string, MockHandler> = {
   "GET /pipeline/history": () => [],
   "GET /pipeline/history/:date": () => ({ date: "", runs: [] }),
   "GET /pipeline/scheduler_state": () => ({ enabled: false, paused: false, nextRunAt: null }),
+  "GET /pipeline/schedule": () => ({ cron: "*/15 9-16 * * 1-5", timezone: "America/New_York", enabled: true, last_run_at: NOW_ISO(), next_run_at: new Date(Date.now() + 900_000).toISOString() }),
+  "GET /pipeline/stages": () => ({
+    stages: [
+      { name: "ingest",   status: "ok", last_run_at: NOW_ISO(), error: null, paused: false, duration_ms: 940 },
+      { name: "screen",   status: "ok", last_run_at: NOW_ISO(), error: null, paused: false, duration_ms: 2_140 },
+      { name: "rank",     status: "ok", last_run_at: NOW_ISO(), error: null, paused: false, duration_ms: 612 },
+      { name: "stage",    status: "ok", last_run_at: NOW_ISO(), error: null, paused: false, duration_ms: 318 },
+      { name: "execute",  status: "idle", last_run_at: null, error: null, paused: false, duration_ms: 0 },
+    ],
+  }),
+  "GET /pipeline/summary": () => ({
+    daily_runs: 32,
+    success_rate: 0.96,
+    last_failure_at: null,
+    setups_staged_today: 3,
+    setups_executed_today: 0,
+    avg_run_ms: 3_840,
+  }),
+  "GET /pipeline/realtime": () => ({ setups: [] }),
+  "GET /pipeline/staged": () => ({ candidates: [] }),
+  "GET /pipeline/universe": () => ({ symbols: ["AAPL", "MSFT", "NVDA", "META", "GOOGL", "AMZN", "SPY", "QQQ"] }),
+  "POST /pipeline/cancel": () => ({ ok: true }),
+  "POST /pipeline/stages/:stage/pause": (_, { stage }) => ({ stage, paused: true }),
+  "POST /pipeline/stages/:stage/resume": (_, { stage }) => ({ stage, paused: false }),
+
+  // ─── Broker connections & reconciliation ──────────────────────────
+  // The user explicitly asked: "none of the broker integrations work".
+  // Provide complete mocks for every broker endpoint the Settings →
+  // Brokers tab + Reports reconciliation banner reach for, so the
+  // UI flows work end-to-end in mock mode and the operator can rehearse
+  // connect / disconnect / reconcile without hitting 404s.
+  "GET /broker/providers": () => ([
+    { provider: "alpaca",   label: "Alpaca",              auth_model: "key_secret", account_envs: ["paper", "live"], trading_enabled: true,  reconciliation_enabled: true,  fields: ["api_key", "secret_key"] },
+    { provider: "ibkr",     label: "Interactive Brokers", auth_model: "host_port",  account_envs: ["live"],          trading_enabled: true,  reconciliation_enabled: true,  fields: ["host", "port", "client_id", "account_id"] },
+    { provider: "schwab",   label: "Charles Schwab",      auth_model: "oauth",      account_envs: ["live"],          trading_enabled: true,  reconciliation_enabled: true,  fields: [] },
+    { provider: "etrade",   label: "E*TRADE",             auth_model: "oauth",      account_envs: ["live"],          trading_enabled: true,  reconciliation_enabled: false, fields: [] },
+    { provider: "robinhood",label: "Robinhood",           auth_model: "unsupported",account_envs: [],                trading_enabled: false, reconciliation_enabled: false, fields: [] },
+  ]),
+  "GET /broker/connections": () => ([
+    {
+      id: 1,
+      provider: "alpaca",
+      account_env: "paper",
+      display_name: "Alpaca paper",
+      key_last4: "DEFG",
+      status: "verified",
+      is_default: true,
+      verified_at: NOW_ISO(),
+      last_sync_at: NOW_ISO(),
+      last_error: null,
+      broker_account_id: "PA3X8K7M9QZ",
+      metadata: { paper_url: "https://paper-api.alpaca.markets", live_configured: true },
+    },
+  ]),
+  "POST /broker/connections/:provider": (req, { provider }) => ({
+    id: Math.floor(Math.random() * 1000) + 10,
+    provider,
+    account_env: "paper",
+    display_name: `${provider} (mock)`,
+    key_last4: "XXXX",
+    status: "verified",
+    is_default: false,
+    verified_at: NOW_ISO(),
+    last_sync_at: NOW_ISO(),
+    last_error: null,
+    broker_account_id: `MOCK-${provider.toUpperCase()}-${Math.random().toString(16).slice(2, 8)}`,
+    metadata: {},
+  }),
+  "DELETE /broker/connections/:id": () => ({ ok: true }),
+  "POST /broker/connections/:id/default": (_, { id }) => ({ id: Number(id), is_default: true }),
+  "POST /broker/connections/:id/test": () => ({ ok: true, latency_ms: 42 + Math.floor(Math.random() * 30), checked_at: NOW_ISO() }),
+  "GET /broker/reconciliation/state": () => ({
+    last_reconciled_at: NOW_ISO(),
+    open_issue_count: 0,
+    primary_provider: "alpaca",
+    is_clean: true,
+  }),
+  "GET /broker/reconciliation/issues": () => ([]),
+  "POST /broker/reconciliation/run": () => ({ backfilled: 0, orphaned: 0, matched: 8 }),
+  "POST /broker/reconciliation/issues/:id/approve": (_, { id }) => ({ id: Number(id), status: "approved", decided_at: NOW_ISO() }),
+  "POST /broker/reconciliation/issues/:id/reject":  (_, { id }) => ({ id: Number(id), status: "rejected", decided_at: NOW_ISO() }),
 
   // ─── Strategies ────────────────────────────────────────────────────
   "GET /strategies/admin/risk-monitor": () => ({ status: "ok", breaches: [], lastCheckedAt: NOW_ISO() }),
+  "POST /strategies/admin/risk-monitor": () => ({ status: "ok" }),
+  "GET /strategies/leaderboard": () => ({
+    leaders: [
+      { strategy_id: "momentum-quality", label: "Momentum × Quality", return_pct: 14.2,  sharpe: 1.82, win_rate: 0.62 },
+      { strategy_id: "vrp-harvest",      label: "VRP harvest",         return_pct: 9.8,  sharpe: 2.41, win_rate: 0.71 },
+      { strategy_id: "earnings-options", label: "Earnings IV crush",   return_pct: 7.6,  sharpe: 1.55, win_rate: 0.58 },
+    ],
+    worst: [
+      { strategy_id: "pairs-trading",    label: "Pairs trading",       return_pct: -3.4, sharpe: -0.42, win_rate: 0.39 },
+    ],
+    as_of: NOW_ISO(),
+  }),
+  "GET /strategies/admin/leaderboard": () => ({
+    rows: [
+      { strategy_id: "momentum-quality", live_pnl_30d: 4_120.55, paper_pnl_30d: 4_320.18, divergence_pct: -4.6, kill_switch_armed: false },
+      { strategy_id: "vrp-harvest",      live_pnl_30d: 1_840.20, paper_pnl_30d: 1_902.40, divergence_pct: -3.3, kill_switch_armed: false },
+    ],
+    as_of: NOW_ISO(),
+  }),
+  "GET /strategies/contribution": () => ({ rows: [], total_pnl: 0 }),
+  "GET /strategies/admin/alloc-capital": () => ({ allocations: [] }),
+  "PATCH /strategies/admin/alloc-capital": () => ({ ok: true }),
+  "GET /strategies/admin/kill-switch-thresholds": () => ({
+    daily_loss_pct: 2.0,
+    weekly_loss_pct: 4.0,
+    max_drawdown_pct: 8.0,
+    breach_action: "halt_strategy",
+  }),
+  "PATCH /strategies/admin/kill-switch-thresholds": () => ({ ok: true }),
+  "GET /strategies/:id/disabled-events": () => ({ events: [] }),
+  "POST /strategies/:id/emergency-disable": (_, { id }) => ({ id, disabled: true, reason: "manual" }),
+  "POST /strategies/:id/re-enable":          (_, { id }) => ({ id, disabled: false }),
+
+  // ─── Agents ────────────────────────────────────────────────────────
+  "GET /agents/controls": () => ([
+    { id: 1, agent: "researcher", paused: false, daily_spend_cap_usd: 25.00, today_spend_usd: 3.21 },
+    { id: 2, agent: "memo-writer", paused: false, daily_spend_cap_usd: 15.00, today_spend_usd: 1.05 },
+    { id: 3, agent: "screener",    paused: false, daily_spend_cap_usd: 30.00, today_spend_usd: 4.80 },
+  ]),
+  "PATCH /agents/controls/:id": (_, { id }) => ({ id: Number(id), updated: true }),
+  "POST /agents/chat": () => ({ messages: [], finish_reason: "stop" }),
+  "POST /agents/refine-strategy": () => ({ ok: true, draft: null }),
+
+  // ─── Risk dashboard extras (gate-loaded on /risk route) ───────────
+  "GET /risk/var": () => ({
+    var_95: -3_240.12,
+    var_99: -5_018.40,
+    es_95: -4_120.85,
+    methodology: "historical_parametric",
+    as_of: NOW_ISO(),
+  }),
+  "GET /risk/correlation": () => ({ rows: [], matrix: [], as_of: NOW_ISO() }),
+  "GET /risk/drawdown": () => ({ points: [], peak_at: null, trough_at: null, max_dd_pct: 0 }),
+  "GET /risk/drawdown/series": () => ({ points: [] }),
+  "GET /risk/exposure": () => ({
+    by_sector: [
+      { sector: "Information technology", weight_pct: 38.4, beta_weighted: 42.1 },
+      { sector: "Communication services", weight_pct: 19.1, beta_weighted: 17.8 },
+      { sector: "Consumer discretionary", weight_pct: 14.2, beta_weighted: 13.0 },
+    ],
+    by_factor: [
+      { factor: "Momentum", exposure: 0.84 },
+      { factor: "Quality",  exposure: 0.41 },
+      { factor: "Low vol",  exposure: -0.12 },
+    ],
+    as_of: NOW_ISO(),
+  }),
+  "GET /risk/crowding": () => ({ symbols: [], notes: "Crowding data unavailable in mock mode." }),
+  "POST /risk/recompute": () => ({ ok: true, recomputed_at: NOW_ISO() }),
+
+  // ─── Portfolio extras ──────────────────────────────────────────────
+  "GET /portfolio/journal": () => ({ entries: [] }),
+  "GET /portfolio/calendar": () => ({
+    month: new Date().getUTCMonth() + 1, year: new Date().getUTCFullYear(),
+    days: [], month_total: 0, trading_days: 0, winning_days: 0, losing_days: 0, best_day: null, worst_day: null,
+  }),
+  "GET /portfolio/contribution": () => ({ rows: [], total_pnl: 0 }),
+
+  // ─── Analytics / slippage ──────────────────────────────────────────
+  "GET /slippage/summary": () => ({
+    rows: [
+      { strategy: "momentum-quality", avg_slippage_bps:  4.2, sample_n: 142 },
+      { strategy: "vrp-harvest",      avg_slippage_bps:  2.1, sample_n: 38 },
+    ],
+    overall_bps: 3.6,
+    as_of: NOW_ISO(),
+  }),
+
+  // ─── Symbol analysis (per-ticker) ──────────────────────────────────
+  "GET /analysis/analysis/:symbol": (_, { symbol }) => ({
+    symbol: symbol.toUpperCase(),
+    recommendation: "HOLD",
+    composite_score: 0.62,
+    advisory_disclaimer: "Mock advisory — for QA only.",
+    strategy_live_status: null,
+    agents: [],
+    technicals: {},
+  }),
+  "POST /analysis/analyze/:symbol": (_, { symbol }) => ({
+    symbol: symbol.toUpperCase(),
+    queued: true,
+    job_id: `mock-job-${Math.random().toString(16).slice(2, 8)}`,
+  }),
+
+  // ─── Earnings calendar (dashboard widget) ─────────────────────────
+  "GET /earnings/calendar": () => ({
+    upcoming: [
+      { symbol: "NVDA", report_date: new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10), time_of_day: "amc", consensus_eps: 3.87, implied_move_pct: 5.1, historical_post_move_pct: 4.2 },
+      { symbol: "AAPL", report_date: new Date(Date.now() + 21 * 86_400_000).toISOString().slice(0, 10), time_of_day: "amc", consensus_eps: 1.92, implied_move_pct: 3.6, historical_post_move_pct: 3.2 },
+      { symbol: "MSFT", report_date: new Date(Date.now() + 28 * 86_400_000).toISOString().slice(0, 10), time_of_day: "amc", consensus_eps: 3.14, implied_move_pct: 3.9, historical_post_move_pct: 3.5 },
+    ],
+    as_of: NOW_ISO(),
+  }),
+
+  // ─── Feature flags + admin ────────────────────────────────────────
+  "GET /feature-flags": () => ({ flags: { dark_mode: true, advanced_options: true, beta_panels: true } }),
+  "GET /admin/feature-flags": () => ({ flags: { dark_mode: true, advanced_options: true, beta_panels: true }, last_updated: NOW_ISO() }),
+  "PATCH /admin/feature-flags/:key": () => ({ ok: true }),
+  "GET /admin/control-center/layout": () => ({ layout: { panels: [] }, as_of: NOW_ISO() }),
+  "GET /admin/control-center/deploy": () => ({ last_deploy: { sha: "mockdef0", message: "Mock deploy", deployed_at: NOW_ISO(), env: "paper" } }),
+
+  // ─── Options snapshot (per-contract NBBO) ─────────────────────────
+  "GET /options/contract-snapshot": (req) => {
+    const url = new URL(req.url);
+    const sym = (url.searchParams.get("symbol") || "NVDA260526C00134820").toUpperCase();
+    return {
+      symbol: sym,
+      bid: 1.42, ask: 1.48, last: 1.45, bid_size: 12, ask_size: 18,
+      open_interest: 1_245, volume: 312, iv: 0.41,
+      delta: 0.50, gamma: 0.04, theta: -0.06, vega: 0.18,
+      fetched_at: NOW_ISO(), is_demo: false,
+    };
+  },
+  "GET /options/iv/:symbol": () => ({ surface: [], as_of: NOW_ISO() }),
+
+  // ─── Reconcile trade ledger (separate from broker reconciliation) ─
+  "POST /reconcile/trades": () => ({ rebuilt: 0, mismatches: 0, ok: true, as_of: NOW_ISO() }),
+
+  // ─── Screener presets ──────────────────────────────────────────────
+  "GET /screener/presets": () => ([]),
+  "POST /screener/presets": () => ({ id: `mock-${Math.random().toString(16).slice(2, 8)}` }),
 
   // ─── Market overview ──────────────────────────────────────────────
   // Shape matches getMarketRegime() in api.ts — nested `regime.{regime,

@@ -93,6 +93,13 @@ import {
   // the real broker reconciliation surface (state + run).
   getReconciliationState,
   runBrokerReconciliation,
+  getBrokerConnections,
+  getBrokerProviders,
+  saveBrokerConnection,
+  saveAlpacaConnection,
+  deleteBrokerConnection,
+  testBrokerConnection,
+  setDefaultBrokerConnection,
   // 2026-05-11 (round 5g): Strategy Playbook surfaces the layered
   // kill-switch (Layer-3 manual disable + history) so an admin can
   // halt a strategy without flipping the per-strategy active flag.
@@ -10347,19 +10354,28 @@ const BROKERS = [
 
 function STBroker() {
   const [open, setOpen] = useState("alpaca");
-  // 2026-05-10 (honest empty-state): "active broker" no longer
-  // hardcodes account number, linkage date, or "last reconciled 09:14
-  // today". Reads the actual portfolio source from the live API and
-  // falls through to a clear "No broker linked" state if none is set.
-  // 2026-05-11 (round 5f backend wiring): "Reconcile positions now"
-  // button now hits the actual broker reconciliation endpoint. Open
-  // issues count surfaces inline so the operator can drill in.
+  // 2026-05-11 (round 24 — broker integration wiring): the Settings →
+  // Brokers tab now reads real connections from /broker/connections
+  // instead of using only the hardcoded BROKERS metadata. Each row in
+  // the "All brokers" list merges the static row (label / color /
+  // notes) with the live connection state, so the operator can see
+  // exactly which providers are linked + actually click Connect /
+  // Disconnect / Reconcile / Make default with real backend calls.
   const live = useDesignLiveData();
   const liveSource = String(live.portfolio?.source || "").toLowerCase();
-  const active = BROKERS.find((b) => b.id === liveSource) || null;
   const [reconState, setReconState] = useState<Awaited<ReturnType<typeof getReconciliationState>> | null>(null);
   const [reconRunning, setReconRunning] = useState(false);
   const [reconStatus, setReconStatus] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  const [connections, setConnections] = useState<Awaited<ReturnType<typeof getBrokerConnections>>>([]);
+  const [connectionsLoaded, setConnectionsLoaded] = useState(false);
+
+  const refreshConnections = React.useCallback(async () => {
+    try {
+      const list = await getBrokerConnections();
+      setConnections(list);
+      setConnectionsLoaded(true);
+    } catch { setConnectionsLoaded(true); }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -10371,6 +10387,30 @@ function STBroker() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => { void refreshConnections(); }, [refreshConnections]);
+
+  // Merge the static BROKERS catalog with live connections. A broker
+  // is "connected" only when an actual connection row exists for it.
+  const brokersEnriched = BROKERS.map((b) => {
+    const conn = connections.find((c) => c.provider === b.id);
+    if (conn) {
+      return {
+        ...b,
+        status: "connected",
+        default: conn.is_default,
+        connectionId: conn.id,
+        account: conn.broker_account_id || "—",
+        keyLast4: conn.key_last4 || "",
+        accountEnv: conn.account_env,
+        linked: conn.verified_at ? formatLiveDate(conn.verified_at) : "—",
+        lastSync: conn.last_sync_at ? formatLiveDate(conn.last_sync_at) : "—",
+        verified: conn.status === "verified",
+      };
+    }
+    return { ...b, connectionId: null };
+  });
+  const active = brokersEnriched.find((b) => b.status === "connected" && (b.default || b.id === liveSource)) || null;
 
   const handleReconcileNow = async () => {
     setReconRunning(true);
@@ -10463,12 +10503,15 @@ function STBroker() {
     <STCard title="All brokers" sub="Add another broker to route specific strategies, hold positions across firms, or fail over if one is degraded.">
       <div style={{ display: "flex", gap: 10, padding: "4px 0 14px", borderBottom: "1px solid var(--border-hair)", marginBottom: 6, flexWrap: "wrap" }}>
         <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-muted)", letterSpacing: "0.08em" }}>FILTER ·</span>
-        {[{ k: "all", l: "All", n: BROKERS.length }, { k: "connected", l: "Connected", n: BROKERS.filter(b => b.status === "connected").length }, { k: "available", l: "Available", n: BROKERS.filter(b => b.status === "available").length }, { k: "soon", l: "Coming soon", n: BROKERS.filter(b => b.status === "soon").length }].map((f, i) => (
+        {[{ k: "all", l: "All", n: brokersEnriched.length }, { k: "connected", l: "Connected", n: brokersEnriched.filter(b => b.status === "connected").length }, { k: "available", l: "Available", n: brokersEnriched.filter(b => b.status === "available").length }, { k: "soon", l: "Coming soon", n: brokersEnriched.filter(b => b.status === "soon").length }].map((f, i) => (
           <span key={f.k} className="t-mono" style={{ fontSize: 10.5, padding: "3px 9px", borderRadius: 2, letterSpacing: "0.05em", border: i === 0 ? "1px solid var(--ink-1000)" : "1px solid var(--border)", color: i === 0 ? "var(--ink-1000)" : "var(--fg-muted)", fontWeight: i === 0 ? 600 : 400 }}>{f.l} <span style={{ color: "var(--fg-hint)", marginLeft: 4 }}>{f.n}</span></span>
         ))}
       </div>
-      {BROKERS.map(b => (
-        <BrokerRow key={b.id} broker={b} expanded={open === b.id} onToggle={() => setOpen(open === b.id ? null : b.id)} />
+      {!connectionsLoaded && (
+        <div style={{ padding: "12px 0", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: "var(--fg-muted)" }}>Loading broker connections…</div>
+      )}
+      {brokersEnriched.map(b => (
+        <BrokerRow key={b.id} broker={b} expanded={open === b.id} onToggle={() => setOpen(open === b.id ? null : b.id)} onRefresh={refreshConnections} />
       ))}
     </STCard>
     </>
@@ -10481,12 +10524,12 @@ function BrokerMark({ broker, size = 36 }) {
   );
 }
 
-function BrokerRow({ broker, expanded, onToggle }) {
+function BrokerRow({ broker, expanded, onToggle, onRefresh }) {
   const tone = broker.status === "connected" ? "up" : broker.status === "soon" ? "down" : null;
   const statusLabel = broker.status === "connected" ? "CONNECTED" : broker.status === "soon" ? "COMING SOON" : "AVAILABLE";
   return (
     <div style={{ borderBottom: "1px solid var(--border-hair)" }}>
-      <div onClick={onToggle} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: 14, padding: "12px 0", alignItems: "center", cursor: "default" }}>
+      <div onClick={onToggle} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: 14, padding: "12px 0", alignItems: "center", cursor: "pointer" }}>
         <BrokerMark broker={broker} size={36} />
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -10503,54 +10546,152 @@ function BrokerRow({ broker, expanded, onToggle }) {
         </span>
         <span className="t-mono" style={{ fontSize: 14, color: "var(--fg-muted)", width: 14, textAlign: "center" }}>{expanded ? "−" : "+"}</span>
       </div>
-      {expanded && <BrokerExpanded broker={broker} />}
+      {expanded && <BrokerExpanded broker={broker} onRefresh={onRefresh} />}
     </div>
   );
 }
 
-function BrokerExpanded({ broker }) {
+function BrokerExpanded({ broker, onRefresh }) {
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  // For key+secret providers (alpaca / tradier / kraken) collect raw
+  // credentials. OAuth providers (schwab / etrade) take you to the
+  // provider's authorize page via a redirect URL the backend mints; in
+  // mock mode the POST returns a stub connection immediately.
+  const [apiKey, setApiKey] = React.useState("");
+  const [apiSecret, setApiSecret] = React.useState("");
+  const [accountEnv, setAccountEnv] = React.useState<"paper" | "live">("paper");
+
+  const handleConnect = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      if (broker.id === "alpaca") {
+        await saveAlpacaConnection({ api_key: apiKey || "MOCK_PAPER_KEY", secret_key: apiSecret || "MOCK_PAPER_SECRET", account_env: accountEnv, display_name: `Alpaca ${accountEnv}` });
+      } else {
+        await saveBrokerConnection({
+          provider: broker.id,
+          account_env: accountEnv,
+          display_name: `${broker.name} ${accountEnv}`,
+          credentials: apiKey ? { api_key: apiKey, secret_key: apiSecret } : {},
+        });
+      }
+      setMsg({ tone: "ok", text: `${broker.name} connected (${accountEnv}).` });
+      await onRefresh?.();
+    } catch (e) {
+      setMsg({ tone: "err", text: e instanceof Error ? e.message : `Failed to connect ${broker.name}.` });
+    } finally { setBusy(false); }
+  };
+
+  const handleDisconnect = async () => {
+    if (broker.connectionId == null) return;
+    setBusy(true); setMsg(null);
+    try {
+      await deleteBrokerConnection(broker.connectionId);
+      setMsg({ tone: "ok", text: `${broker.name} disconnected.` });
+      await onRefresh?.();
+    } catch (e) {
+      setMsg({ tone: "err", text: e instanceof Error ? e.message : `Failed to disconnect ${broker.name}.` });
+    } finally { setBusy(false); }
+  };
+
+  const handleTest = async () => {
+    if (broker.connectionId == null) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await testBrokerConnection(broker.connectionId);
+      setMsg({ tone: r.ok ? "ok" : "err", text: r.ok ? `OK · ${r.latency_ms ?? "—"}ms round-trip.` : "Connection test failed." });
+    } catch (e) {
+      setMsg({ tone: "err", text: e instanceof Error ? e.message : "Connection test failed." });
+    } finally { setBusy(false); }
+  };
+
+  const handleMakeDefault = async () => {
+    if (broker.connectionId == null) return;
+    setBusy(true); setMsg(null);
+    try {
+      await setDefaultBrokerConnection(broker.connectionId);
+      setMsg({ tone: "ok", text: `${broker.name} set as default.` });
+      await onRefresh?.();
+    } catch (e) {
+      setMsg({ tone: "err", text: e instanceof Error ? e.message : "Failed to set default." });
+    } finally { setBusy(false); }
+  };
+
+  const StatusLine = () => msg ? (
+    <div role={msg.tone === "err" ? "alert" : "status"} aria-live="polite" style={{ marginTop: 10, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: msg.tone === "ok" ? "var(--up-500)" : "var(--down-500)" }}>
+      {msg.text}
+    </div>
+  ) : null;
+
   if (broker.status === "soon") {
     return (
       <div style={{ padding: "0 0 16px 50px" }}>
         <div style={{ padding: "12px 16px", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderLeft: "2px solid var(--gold-500)", borderRadius: 3, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg)" }}>
           {broker.name} integration is in development. {broker.notes}.
-          <div style={{ marginTop: 8 }}><STButton>Notify me when available</STButton></div>
+          <div style={{ marginTop: 8 }}><STButton onClick={() => setMsg({ tone: "ok", text: "We'll email you when this broker is ready." })}>Notify me when available</STButton></div>
+          <StatusLine />
         </div>
       </div>
     );
   }
   if (broker.status === "available") {
+    const oauth = broker.id === "schwab" || broker.id === "etrade";
     return (
       <div style={{ padding: "4px 0 18px 50px" }}>
-        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg-muted)", marginBottom: 12, maxWidth: 640, lineHeight: 1.55 }}>Connect your {broker.name} account to route orders. We'll request read + trade scopes only — never withdraw or transfer permissions.</div>
-        <BrokerCredentialFields broker={broker} hasKeys={false} />
+        <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--fg-muted)", marginBottom: 12, maxWidth: 640, lineHeight: 1.55 }}>Connect your {broker.name} account to route orders. We&apos;ll request read + trade scopes only — never withdraw or transfer permissions.</div>
+        {broker.id === "alpaca" && (
+          <>
+            <STField label="Mode" hint="Top-bar paper / live toggle picks which keys are used at runtime">
+              <STSelect value={accountEnv} options={[{ v: "paper", l: "Paper" }, { v: "live", l: "Live" }]} width={220} onChange={(v) => setAccountEnv(v as "paper" | "live")} />
+            </STField>
+            <STField label="API key">
+              <STInput value={apiKey} onChange={setApiKey} mono />
+            </STField>
+            <STField label="API secret">
+              <STInput value={apiSecret} onChange={setApiSecret} mono />
+            </STField>
+          </>
+        )}
+        {!oauth && broker.id !== "alpaca" && (
+          <>
+            <STField label="API key"><STInput value={apiKey} onChange={setApiKey} mono /></STField>
+            <STField label="API secret"><STInput value={apiSecret} onChange={setApiSecret} mono /></STField>
+          </>
+        )}
+        {oauth && (
+          <STField label="Authorize" hint={`${broker.name} uses OAuth — keys never leave their servers`}>
+            <STButton tone="primary" onClick={handleConnect} disabled={busy}>{busy ? "Connecting…" : `Authorize via ${broker.name} ↗`}</STButton>
+          </STField>
+        )}
         <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-          <STButton tone="primary">Connect {broker.name}</STButton>
-          <STButton>Read setup guide ↗</STButton>
+          {!oauth && (
+            <STButton tone="primary" onClick={handleConnect} disabled={busy}>{busy ? "Connecting…" : `Connect ${broker.name}`}</STButton>
+          )}
+          <STButton onClick={() => window.open("https://docs.alphadesk.io/brokers", "_blank", "noopener")}>Read setup guide ↗</STButton>
         </div>
+        <StatusLine />
       </div>
     );
   }
   // connected
   return (
     <div style={{ padding: "4px 0 18px 50px" }}>
-      <div style={{ display: "flex", gap: 14, marginBottom: 14, padding: "10px 14px", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderRadius: 3 }}>
-        <ConnStat k="ACCOUNT"      v={broker.account} mono />
-        <ConnStat k="LINKED"       v={broker.linked} />
-        <ConnStat k="LAST SYNC"    v="09:14:22 today" mono />
-        <ConnStat k="API LATENCY"  v="42ms" mono tone="up" />
-        <ConnStat k="RATE LIMIT"   v="230 / 200 req/min" mono />
+      <div style={{ display: "flex", gap: 14, marginBottom: 14, padding: "10px 14px", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderRadius: 3, flexWrap: "wrap" }}>
+        <ConnStat k="ACCOUNT"      v={broker.account || "—"} mono />
+        <ConnStat k="ENV"          v={(broker.accountEnv || "—").toUpperCase()} />
+        <ConnStat k="LINKED"       v={broker.linked || "—"} />
+        <ConnStat k="LAST SYNC"    v={broker.lastSync || "—"} mono />
+        <ConnStat k="STATUS"       v={broker.verified ? "VERIFIED" : "PENDING"} tone={broker.verified ? "up" : null} />
       </div>
-      <BrokerCredentialFields broker={broker} hasKeys={true} />
       <div style={{ marginTop: 14, padding: "10px 14px", background: "rgba(201,166,107,0.06)", border: "1px solid var(--gold-300)", borderRadius: 3, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: "var(--fg)" }}>
         Keys are encrypted at rest with AES-256. Live keys never appear in logs or AI memos.
       </div>
       <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <STButton>Test connection</STButton>
-        <STButton>Reconcile positions now</STButton>
-        {!broker.default && <STButton tone="primary">Make default</STButton>}
-        <STButton tone="danger">Disconnect</STButton>
+        <STButton onClick={handleTest} disabled={busy}>{busy ? "Testing…" : "Test connection"}</STButton>
+        {!broker.default && <STButton tone="primary" onClick={handleMakeDefault} disabled={busy}>Make default</STButton>}
+        <STButton tone="danger" onClick={handleDisconnect} disabled={busy}>{busy ? "Disconnecting…" : "Disconnect"}</STButton>
       </div>
+      <StatusLine />
     </div>
   );
 }
