@@ -23,9 +23,24 @@ from core.time import market_now, market_today
 log = logging.getLogger(__name__)
 
 _CLAUDE_PROMPT_CACHE_VERSION = "v2-news-regime-expert"
-_MARKET_REGIME_CACHE_TTL_SECONDS = 120
-_MARKET_REGIME_ERROR_CACHE_TTL_SECONDS = 30
 _market_regime_cache: tuple[float, str] | None = None
+
+
+def _market_regime_cache_ttl_s() -> int:
+    """Iter-28: TTL for the cached market-regime indicator.
+
+    Promoted from a hardcoded module constant to ``core.config`` so ops
+    can tune cache aggression without a redeploy. Read at call time so
+    monkeypatch/env overrides take effect during the same process.
+    """
+    from core.config import settings as _settings
+    return int(_settings.MARKET_REGIME_CACHE_TTL_SECONDS)
+
+
+def _market_regime_error_cache_ttl_s() -> int:
+    """Iter-28: TTL for the negative-cache on market-regime fetch failures."""
+    from core.config import settings as _settings
+    return int(_settings.MARKET_REGIME_ERROR_CACHE_TTL_SECONDS)
 
 
 # Round-4 CLUSTER 4 #15: scrub FMP API keys out of any error string we log.
@@ -1505,12 +1520,22 @@ def _build_tail_risk_signals(
 # "no signal" value (None for floats, 0 for ints) so the screener never
 # crashes a calendar entry over a flaky data source.
 
-# Cache TTL for analyst PT lookups (1h per symbol — FMP changes <hourly).
-_PT_CHANGES_CACHE_TTL_SECONDS = 3600
+# Cache TTLs for analyst PT lookups and news sentiment. Iter-28 promoted
+# these from hardcoded module constants to ``core.config`` so ops can tune
+# without a redeploy. Defaults preserved at 3600 / 900.
 
-# Cache TTL for news sentiment (15min — sentiment can shift fast around
-# breaking headlines, but Newsdata cache key is symbol-shared).
-_NEWS_SENTIMENT_CACHE_TTL_SECONDS = 900
+def _pt_changes_cache_ttl_s() -> int:
+    """Iter-28: TTL for analyst PT lookups (default 1h — FMP changes <hourly)."""
+    from core.config import settings as _settings
+    return int(_settings.PT_CHANGES_CACHE_TTL_SECONDS)
+
+
+def _news_sentiment_cache_ttl_s() -> int:
+    """Iter-28: TTL for news sentiment (default 15min — sentiment can shift
+    fast around breaking headlines, but Newsdata cache key is symbol-shared).
+    """
+    from core.config import settings as _settings
+    return int(_settings.NEWS_SENTIMENT_CACHE_TTL_SECONDS)
 
 
 async def _compute_sector_cohort_momentum(symbol: str) -> float | None:
@@ -1592,7 +1617,7 @@ async def _fetch_analyst_pt_changes_24h(symbol: str) -> int:
                         symbol=sym, status=resp.status_code,
                     ),
                 )
-                await cache_set(cache_k, 0, ttl_seconds=_PT_CHANGES_CACHE_TTL_SECONDS)
+                await cache_set(cache_k, 0, ttl_seconds=_pt_changes_cache_ttl_s())
                 return 0
             data = resp.json()
     except Exception as e:  # noqa: BLE001
@@ -1606,7 +1631,7 @@ async def _fetch_analyst_pt_changes_24h(symbol: str) -> int:
         return 0
 
     if not isinstance(data, list):
-        await cache_set(cache_k, 0, ttl_seconds=_PT_CHANGES_CACHE_TTL_SECONDS)
+        await cache_set(cache_k, 0, ttl_seconds=_pt_changes_cache_ttl_s())
         return 0
 
     bullish_terms = ("buy", "outperform", "overweight", "upgrade", "positive", "strong buy")
@@ -1625,7 +1650,7 @@ async def _fetch_analyst_pt_changes_24h(symbol: str) -> int:
             net += 1
         elif any(t in action_raw for t in bearish_terms):
             net -= 1
-    await cache_set(cache_k, net, ttl_seconds=_PT_CHANGES_CACHE_TTL_SECONDS)
+    await cache_set(cache_k, net, ttl_seconds=_pt_changes_cache_ttl_s())
     return net
 
 
@@ -1702,7 +1727,7 @@ async def _compute_news_sentiment_24h(symbol: str) -> float | None:
         recent.append(art)
 
     if not recent:
-        await cache_set(cache_k, "none", ttl_seconds=_NEWS_SENTIMENT_CACHE_TTL_SECONDS)
+        await cache_set(cache_k, "none", ttl_seconds=_news_sentiment_cache_ttl_s())
         return None
 
     # Path 1: API-provided sentiment — average of the per-article scores.
@@ -1733,7 +1758,7 @@ async def _compute_news_sentiment_24h(symbol: str) -> float | None:
         avg = float(sum(string_scores) / len(string_scores))
         # Clamp defensively.
         avg = max(-1.0, min(1.0, avg))
-        await cache_set(cache_k, avg, ttl_seconds=_NEWS_SENTIMENT_CACHE_TTL_SECONDS)
+        await cache_set(cache_k, avg, ttl_seconds=_news_sentiment_cache_ttl_s())
         return avg
 
     # Path 2: keyword polarity fallback.
@@ -1748,7 +1773,7 @@ async def _compute_news_sentiment_24h(symbol: str) -> float | None:
         raw += sum(1 for w in bullish_words if w in text)
         raw -= sum(1 for w in bearish_words if w in text)
     score = max(-1.0, min(1.0, raw / max(len(recent), 1)))
-    await cache_set(cache_k, score, ttl_seconds=_NEWS_SENTIMENT_CACHE_TTL_SECONDS)
+    await cache_set(cache_k, score, ttl_seconds=_news_sentiment_cache_ttl_s())
     return float(score)
 
 
@@ -3021,9 +3046,9 @@ async def _load_market_regime() -> str:
     if _market_regime_cache is not None:
         cached_at, cached_value = _market_regime_cache
         ttl = (
-            _MARKET_REGIME_ERROR_CACHE_TTL_SECONDS
+            _market_regime_error_cache_ttl_s()
             if cached_value.startswith("Unavailable")
-            else _MARKET_REGIME_CACHE_TTL_SECONDS
+            else _market_regime_cache_ttl_s()
         )
         if now - cached_at < ttl:
             return cached_value

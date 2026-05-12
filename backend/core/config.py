@@ -395,6 +395,19 @@ class Settings(BaseSettings):
     FMP_CALENDAR_CACHE_TTL_SECONDS: int = 900
     FMP_RESCUE_CACHE_TTL_SECONDS: int = 900
 
+    # --- Earnings screener cache TTLs (iter-28 ops-tunable knobs) ---
+    # Promoted from hardcoded module-level constants in
+    # ``services.earnings_screener`` so ops can tune cache aggression
+    # without a redeploy. Defaults match the historic hardcoded values.
+    # TTL for the cached market regime indicator (earnings screener context).
+    MARKET_REGIME_CACHE_TTL_SECONDS: int = 120
+    # TTL for negative-cache on market regime fetch failures.
+    MARKET_REGIME_ERROR_CACHE_TTL_SECONDS: int = 30
+    # TTL for price-target changes cache (per ticker).
+    PT_CHANGES_CACHE_TTL_SECONDS: int = 3600
+    # TTL for news sentiment cache (per ticker).
+    NEWS_SENTIMENT_CACHE_TTL_SECONDS: int = 900
+
     # --- Rate-limit caps (Batch U — A-6 through A-9) ---
     RATE_LIMIT_FULL_RESEARCH_MAX: int = 5
     RATE_LIMIT_FULL_RESEARCH_WINDOW_SECONDS: float = 600.0
