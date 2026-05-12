@@ -5036,12 +5036,11 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
         <section style={{ background: "var(--bg)", padding: isNarrow ? "14px 14px 18px" : "18px 24px 20px", display: "flex", flexDirection: "column", gap: 12, minHeight: 0, minWidth: 0, overflowY: "auto", overflowX: "hidden" }}>
           <TradeHeader t={t} />
           <ChartToolbar range={range} setRange={setRange} chartMode={chartMode} setChartMode={setChartMode} overlays={overlays} setOverlays={setOverlays} />
-          {/* Chart capped so the TradeContextRail + TradeIntelGrid have
-            * room. On a 1080p monitor the chart gets ~440px, the
-            * context rail ~70px, and the intel grid ~280px. Shorter
-            * viewports get a smaller chart via the 38vh floor; the
-            * section is overflow-y:auto so nothing is clipped. */}
-          <div style={{ flex: "0 0 auto", height: "min(38vh, 440px)", minHeight: 240, display: "flex" }}>
+          {/* Chart fills the upper portion; the TradeChartStrip below
+            * holds chart-only context (volume, liquidity, levels, price
+            * action). Regime / IV-rank / setup-readiness moved out —
+            * they're symbol-level, not chart-level. */}
+          <div style={{ flex: "0 0 auto", height: "min(46vh, 520px)", minHeight: 280, display: "flex" }}>
             {/* 2026-05-10 (chart wiring): live OHLCV from /api/v1/market/bars
              * via the real lightweight-charts engine, replacing the design's
              * hand-rolled SVG. ChartPane owns its own indicators + drawing
@@ -5057,8 +5056,7 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
               chartOrderPlacement={chartOrderPlacement}
             />
           </div>
-          <TradeContextRail t={t} regime={live.regime} />
-          <TradeIntelGrid t={t} regime={live.regime} />
+          <TradeChartStrip t={t} positions={symPositions} />
         </section>
 
         {/* RIGHT — collapsible, pushes (in-grid) */}
@@ -5666,6 +5664,165 @@ function HeroChart({ t, range, chartMode, overlays, limitPx, stopPx, side }) {
 // + Tier 2 (setup qualification) context the operator needs BEFORE
 // pulling the trigger. Each cell renders an em-dash when the data
 // isn't loaded — never fabricates a value.
+// 2026-05-12 (Trade Chart Strip): chart-context dashboard under the
+// chart. Three columns of microstructure data that's specifically
+// about what's happening on the active chart — volume, liquidity,
+// price action, and key levels. Regime / IV rank / setup gates
+// moved off the trade page itself because they're symbol-level
+// context, not chart-level.
+//
+//  ┌─ Session price action ─┬─ Volume + flow ─────────┬─ Liquidity + levels ──┐
+//  │ Open / Last / Δ         │ Today volume / rel ADV   │ Spread $ + %           │
+//  │ High · Low (range)      │ Volume profile POC       │ Top-of-book sizes      │
+//  │ Range % consumed        │ VAH / VAL                │ AVWAP (prior close)    │
+//  │ Prev close              │ Cum δ volume             │ Day H · L (vs last)    │
+//  │ 52w range               │ Large prints (cnt · $)   │ Avg position entry     │
+//  └─────────────────────────┴──────────────────────────┴────────────────────────┘
+function TradeChartStrip({ t, positions }) {
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+  const opt = t?.optionsSummary || {};
+
+  // Session price action — read from the ticker-context envelope
+  // because `t.chg` / `t.pct` are derived from a different shape
+  // (the WS-fed `useMarketStore.quotes` cache) which sometimes loses
+  // the `changePct` / `change` fields on cold-start. The envelope is
+  // populated by getTickerContext and is the most reliable source for
+  // change + range info.
+  const ctxQ = t?.tickerContext?.quote?.value || {};
+  const last = num(t?.px);
+  const open = num(ctxQ.open);
+  const high = num(ctxQ.high);
+  const low  = num(ctxQ.low);
+  const change = num(ctxQ.change) ?? num(t?.chg);
+  const changePct = num(ctxQ.changePct) ?? num(ctxQ.change_pct) ?? num(t?.pct);
+  // Prev close = today's last minus today's change. The `close` field
+  // on a real-time quote is the CURRENT price, not yesterday's close;
+  // `regular_close_price` is what the backend emits when extended-hours
+  // data is available, otherwise we back it out from change.
+  const prevClose = num(ctxQ.regular_close_price)
+    ?? (last != null && change != null ? +(last - change).toFixed(2) : null);
+  const dayRange = high != null && low != null ? high - low : null;
+  const dayRangePct = dayRange != null && last ? (dayRange / last) * 100 : null;
+  const rangeConsumed = high != null && low != null && last != null && dayRange && dayRange > 0
+    ? ((last - low) / dayRange) * 100
+    : null;
+  const range52 = t?.range52;
+
+  // Volume + flow — todays prints + profile + cumulative delta.
+  const vol = num(t?.vol);
+  const avgVol = num(t?.avgVol);
+  const relVol = num(opt.relative_volume_today) ?? (vol && avgVol ? vol / avgVol : null);
+  const poc = num(opt.poc);
+  const vah = num(opt.vah);
+  const val = num(opt.val);
+  const cumDelta = num(opt.cum_delta_today);
+  const printsCnt = num(opt.large_print_count_today);
+  const printsNotional = num(opt.large_print_notional_today);
+
+  // Liquidity + levels — spread, top of book, AVWAP, position context.
+  const bid = num(t?.bid);
+  const ask = num(t?.ask);
+  const spread = num(t?.spread) ?? (bid != null && ask != null ? ask - bid : null);
+  const spreadBps = spread != null && last ? (spread / last) * 10_000 : null;
+  const bidSize = num(t?.bidSize);
+  const askSize = num(t?.askSize);
+  const avwap = num(opt.anchored_vwap_prior_close);
+  const avwapDelta = avwap != null && last ? ((last - avwap) / avwap) * 100 : null;
+  const symPos = (Array.isArray(positions) ? positions : []).find((p) => p?.avgCost != null);
+  const avgEntry = num(symPos?.avgCost);
+  const entryDelta = avgEntry && last ? ((last - avgEntry) / avgEntry) * 100 : null;
+
+  // ─── Helpers ────────────────────────────────────────────────────
+  const fmt = (n, dec = 2, suffix = "") => n == null ? null : `${n.toFixed(dec)}${suffix}`;
+  const fmtSign = (n, dec = 2, suffix = "") => n == null ? null : `${n > 0 ? "+" : ""}${n.toFixed(dec)}${suffix}`;
+  const fmtCompact = (n) => {
+    if (n == null) return null;
+    const a = Math.abs(n);
+    const sign = n < 0 ? "-" : "";
+    if (a >= 1_000_000) return sign + (a / 1_000_000).toFixed(1) + "M";
+    if (a >= 1_000)      return sign + (a / 1_000).toFixed(1) + "K";
+    return n.toFixed(0);
+  };
+
+  const cardStyle = {
+    background: "var(--ink-100)",
+    border: "1px solid var(--border)",
+    borderRadius: 3,
+    padding: "10px 12px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    minWidth: 0,
+  };
+  const rowStyle = { display: "grid", gridTemplateColumns: "auto 1fr", gap: 8, alignItems: "baseline", padding: "3px 0", borderBottom: "1px solid var(--border-hair)" };
+  const labelStyle = { fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)" };
+  const subStyle = { marginLeft: 5, color: "var(--fg-hint)", fontSize: 10.5 };
+  const valueMono = { fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: 12, color: "var(--ink-1000)", textAlign: "right" };
+  const dash = { ...valueMono, color: "var(--fg-muted)" };
+  const Row = ({ label, sub, v, tone }) => (
+    <div style={rowStyle}>
+      <span style={labelStyle}>{label}{sub ? <span style={subStyle}>{sub}</span> : null}</span>
+      <span style={{
+        ...(v == null ? dash : valueMono),
+        color: v == null ? "var(--fg-muted)" : tone === "up" ? "var(--up-500)" : tone === "down" ? "var(--down-500)" : "var(--ink-1000)",
+      }}>{v == null ? "—" : v}</span>
+    </div>
+  );
+
+  return (
+    <div style={{
+      flex: "0 0 auto",
+      display: "grid",
+      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+      gap: 10,
+      marginTop: 4,
+    }} aria-label="Trade chart strip">
+      {/* ── Col 1 · Session price action ─────────────────────── */}
+      <div style={cardStyle}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+          <span className="t-label" style={{ fontSize: 8.5 }}>Session price action</span>
+          <span className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)" }}>intraday</span>
+        </div>
+        <Row label="Last" sub={changePct != null ? `${changePct > 0 ? "+" : ""}${changePct.toFixed(2)}%` : null} v={fmt(last, 2)} tone={changePct != null ? (changePct >= 0 ? "up" : "down") : null} />
+        <Row label="Open" v={fmt(open, 2)} />
+        <Row label="High · Low" v={high != null && low != null ? `${high.toFixed(2)} · ${low.toFixed(2)}` : null} />
+        <Row label="Day range" sub="$ / %" v={dayRange != null && dayRangePct != null ? `${dayRange.toFixed(2)} / ${dayRangePct.toFixed(2)}%` : null} />
+        <Row label="Range used" sub="from low" v={rangeConsumed == null ? null : `${rangeConsumed.toFixed(0)}%`} />
+        <Row label="Prev close" sub={change != null ? fmtSign(change, 2) : null} v={fmt(prevClose, 2)} />
+        <Row label="52w range" v={range52 ? `${range52[0].toFixed(2)} · ${range52[1].toFixed(2)}` : null} />
+      </div>
+
+      {/* ── Col 2 · Volume + flow ────────────────────────────── */}
+      <div style={cardStyle}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+          <span className="t-label" style={{ fontSize: 8.5 }}>Volume + flow</span>
+          <span className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)" }}>session · profile</span>
+        </div>
+        <Row label="Volume" sub="today" v={vol == null ? null : fmtCompact(vol)} />
+        <Row label="Rel vol" sub="vs 20d ADV" v={relVol == null ? null : `${relVol.toFixed(2)}×`} tone={relVol != null ? (relVol >= 1 ? "up" : null) : null} />
+        <Row label="Volume POC" v={fmt(poc, 2)} />
+        <Row label="VAH · VAL" v={vah != null && val != null ? `${vah.toFixed(2)} · ${val.toFixed(2)}` : null} />
+        <Row label="Cum δ vol" sub="bid-pull vs ask-pull" v={cumDelta == null ? null : `${cumDelta > 0 ? "+" : ""}${fmtCompact(cumDelta)}`} tone={cumDelta != null ? (cumDelta >= 0 ? "up" : "down") : null} />
+        <Row label="Large prints" sub="> $10K · count · $" v={printsCnt == null || printsNotional == null ? null : `${printsCnt} · $${fmtCompact(printsNotional)}`} />
+      </div>
+
+      {/* ── Col 3 · Liquidity + levels ──────────────────────── */}
+      <div style={cardStyle}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+          <span className="t-label" style={{ fontSize: 8.5 }}>Liquidity + levels</span>
+          <span className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)" }}>quote · context</span>
+        </div>
+        <Row label="Spread" sub="$ · bps" v={spread == null ? null : `$${spread.toFixed(2)} · ${spreadBps == null ? "—" : spreadBps.toFixed(1) + "bps"}`} />
+        <Row label="Top of book" sub="bid × ask sz" v={bidSize == null && askSize == null ? null : `${bidSize ?? "—"} × ${askSize ?? "—"}`} />
+        <Row label="AVWAP" sub="prior close · Δ%" v={avwap == null ? null : `${avwap.toFixed(2)} · ${avwapDelta == null ? "—" : (avwapDelta > 0 ? "+" : "") + avwapDelta.toFixed(2) + "%"}`} tone={avwapDelta != null ? (avwapDelta >= 0 ? "up" : "down") : null} />
+        <Row label="Day high" sub={high != null && last != null ? `${((high - last) / last * 100 >= 0 ? "+" : "")}${(((high - last) / last) * 100).toFixed(2)}% away` : null} v={fmt(high, 2)} />
+        <Row label="Day low" sub={low != null && last != null ? `${(((low - last) / last) * 100 >= 0 ? "+" : "")}${(((low - last) / last) * 100).toFixed(2)}% away` : null} v={fmt(low, 2)} />
+        <Row label="Avg entry" sub={symPos ? `${symPos.quantity}sh · ${entryDelta == null ? "" : (entryDelta > 0 ? "+" : "") + entryDelta.toFixed(2) + "%"}` : "no position"} v={fmt(avgEntry, 2)} tone={entryDelta != null ? (entryDelta >= 0 ? "up" : "down") : null} />
+      </div>
+    </div>
+  );
+}
+
 // 2026-05-12 (Trade Intel Panel): three-column grid filling the space
 // below the chart. Implements Tier 2 (vol surface + setup
 // qualification) and Tier 3 (microstructure) panels from
@@ -5680,6 +5837,10 @@ function HeroChart({ t, range, chartMode, overlays, limitPx, stopPx, side }) {
 //  │ 25Δ skew (pp)           │ Large prints (cnt / $)  │ Jade lizard        │
 //  │ Expected next move      │ Relative volume         │ Calendar spread    │
 //  └─────────────────────────┴─────────────────────────┴────────────────────┘
+//
+// 2026-05-12 (rev): replaced under-chart placement with the
+// chart-focused TradeChartStrip; TradeIntelGrid + TradeContextRail
+// kept as dead code in case a separate "intel" page wants them.
 function TradeIntelGrid({ t, regime }) {
   const opt = t?.optionsSummary || {};
   const num = (v) => {
