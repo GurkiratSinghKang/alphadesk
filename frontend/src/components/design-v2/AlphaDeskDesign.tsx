@@ -4987,7 +4987,30 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
     : orderStage === "ready" ? `Confirm ${side} order →`
     : orderStage === "success" ? "Order submitted"
     : `Stage ${isOption ? `${side} to open` : `${side} order`} →`;
-  const stageDisabled = orderStage === "previewing" || orderStage === "submitting";
+  // 2026-05-11 (iter1 audit P1.2/P1.3/P1.4): the previous gate only
+  // blocked clicks while the preview round-trip was in flight. With
+  // the mock backend responding in <100ms, an operator who
+  // double-clicked Stage would flash through `ready` and submit
+  // straight to the broker without confirmation. Hard-block at three
+  // additional points:
+  //   1. Invalid qty (≤0 or > 1M). The form alert already calls this
+  //      out, but the staging endpoint shouldn't see it at all.
+  //   2. Invalid option contracts when on the Options tab.
+  //   3. Notional exceeds account equity (no-leverage client guard
+  //      separate from the server-side risk preview).
+  //   4. Risk % > 1 — the policy cap the Risk preview tests against.
+  const accountEquity = Number(live.portfolio?.equity || 0);
+  const invalidQty = !isOption && (!Number.isFinite(qty) || qty <= 0 || qty > 1_000_000);
+  const invalidContracts = isOption && asset === "option" && (!Number.isFinite(contracts) || contracts <= 0 || contracts > 10_000);
+  const overEquity = accountEquity > 0 && Number(notional || 0) > accountEquity;
+  const overRiskCap = Number(riskPct || 0) > 1;
+  const stageDisabled =
+    orderStage === "previewing" ||
+    orderStage === "submitting" ||
+    invalidQty ||
+    invalidContracts ||
+    overEquity ||
+    overRiskCap;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: "var(--border)" }}>
@@ -5023,7 +5046,7 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
               <a onClick={() => setLeftCollapsed(true)} title="Collapse"
                  style={{ fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--fg-muted)", cursor: "default", padding: "2px 6px", border: "1px solid var(--border-hair)", borderRadius: 2 }}>◂ close</a>
             </div>
-            {isOption ? (<OptionsOrderBookPanel />) : (<><OrderBookPanel symbol={t.sym} last={t.px} bid={t.bid} ask={t.ask} bidSize={t.bidSize} askSize={t.askSize} quoteTs={t.quoteTs} /><TimeAndSalesPanel symbol={t.sym} last={t.px} bid={t.bid} ask={t.ask} bidSize={t.bidSize} askSize={t.askSize} /></>)}
+            {isOption ? (<OptionsOrderBookPanel />) : (<><OrderBookPanel symbol={t.sym} last={t.px} bid={t.bid} ask={t.ask} bidSize={t.bidSize} askSize={t.askSize} quoteTs={t.quoteTs} onPickPrice={(px) => { setOrderType("limit"); setLimitPx(+px.toFixed(2)); }} /><TimeAndSalesPanel symbol={t.sym} last={t.px} bid={t.bid} ask={t.ask} bidSize={t.bidSize} askSize={t.askSize} /></>)}
           </aside>
         )}
 
@@ -5990,7 +6013,12 @@ function OrderTicket(p) {
           inputMode="numeric"
           min="1"
           max="1000000"
-          value={p.qty}
+          // 2026-05-11 (iter1 audit P2.6): typing a leading char while
+          // the existing value is 0 used to render "0100" in the DOM.
+          // Render empty when the controlled value is 0 so the user
+          // sees what they typed instead of the stale prefix.
+          value={p.qty || ""}
+          placeholder="0"
           onChange={(e) => {
             const next = Math.floor(+e.target.value);
             // Allow 0 transiently (user is mid-typing) but reject negatives.
@@ -6037,10 +6065,15 @@ function OrderTicket(p) {
       {/* Stop-loss % is the operator-defined protective stop. Validate
         * inline so a typo doesn't get clamped silently — staging the
         * order would still reject it server-side, but the inline
-        * feedback short-circuits a wasted preview round-trip. */}
-      <Field label="Stop loss · % of entry">
+        * feedback short-circuits a wasted preview round-trip.
+        * 2026-05-11 (iter1 audit P2.7): MARKET orders don't have a
+        * known entry price until they fill, so showing a "≈ $X.XX"
+        * stop reference computed against a stale `limitPx` reads as
+        * misleading certainty. Use a "% of fill" label + a "—" hint
+        * for MARKET; keep the precise reference for LIMIT/STOP. */}
+      <Field label={p.orderType === "market" ? "Stop loss · % of fill" : "Stop loss · % of entry"}>
         <input
-          aria-label="Stop loss percent of entry"
+          aria-label={p.orderType === "market" ? "Stop loss percent of fill" : "Stop loss percent of entry"}
           aria-invalid={p.stopPct < 0 || p.stopPct >= 100}
           inputMode="decimal"
           value={p.stopPct.toFixed(1)}
@@ -6050,7 +6083,7 @@ function OrderTicket(p) {
             borderColor: (p.stopPct < 0 || p.stopPct >= 100) ? "var(--down-500)" : inputStyle.border?.includes("border") ? undefined : undefined,
           }}
         />
-        <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", marginLeft: 8, alignSelf: "center" }}>≈ {p.stopPx.toFixed(2)}</span>
+        <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", marginLeft: 8, alignSelf: "center" }}>{p.orderType === "market" ? "≈ — (set after fill)" : `≈ ${p.stopPx.toFixed(2)}`}</span>
       </Field>
       {(p.stopPct < 0 || p.stopPct >= 100) && (
         <div role="alert" style={{ marginTop: -6, marginBottom: 8, fontFamily: "var(--font-ui)", fontSize: 10.5, color: "var(--down-500)" }}>
@@ -6099,8 +6132,12 @@ function RiskPreviewCard({ notional, riskDollars, riskPct, stopPx, isOption }) {
       <RiskRow label="Risk · $" v={fmtMoney(riskDollars, { dec: 0 })} tone="down" />
       {/* Risk is always a downside number — render it unsigned (no leading
         * "+") so "+0.00%" doesn't read like a gain. fmtPct adds a "+" on
-        * any positive value, which is correct for P&L but wrong for risk. */}
-      <RiskRow label="Risk · % equity" v={`${riskPct.toFixed(2)}%`} tone={riskPct > 1 ? "down" : "up"} />
+        * any positive value, which is correct for P&L but wrong for risk.
+        * 2026-05-11 (iter1 audit P1.5): the tone for an under-cap risk
+        * used to be "up" (gain green), which mis-read as P&L. Risk is
+        * downside even when small — leave it un-toned, and only flip
+        * red when the policy cap is exceeded. */}
+      <RiskRow label="Risk · % equity" v={`${riskPct.toFixed(2)}%`} tone={riskPct > 1 ? "down" : undefined} />
       {!isOption && <RiskRow label="Stop · price" v={"$" + stopPx.toFixed(2)} />}
       {/* 2026-05-10 (round 2 honest empty-state): the previous card
        * showed hardcoded "Reward target +8.0%" and "R:R 2.0×" for
@@ -6391,7 +6428,14 @@ function OptionsOrderBookPanel({ optStrike, optType, spot }: { optStrike?: numbe
   );
 }
 
-function OrderBookPanel({ symbol, last, bid, ask, bidSize, askSize, quoteTs }) {
+/**
+ * 2026-05-11 (iter1 audit BOOK-1 regression): the previous fix wired
+ * BookRow.onClick to fill the limit price, but PR #201 refactored
+ * the panel to use `useMarketDepth` and dropped the `onClickPrice`
+ * prop in the process. Re-thread `onPickPrice` from TradePage and
+ * pass it down to every BookRow so the click-to-fill UX is restored.
+ */
+function OrderBookPanel({ symbol, last, bid, ask, bidSize, askSize, quoteTs, onPickPrice }: { symbol?: string; last?: number; bid?: number; ask?: number; bidSize?: number; askSize?: number; quoteTs?: number; onPickPrice?: (px: number) => void }) {
   const mid = Number(last || 0);
   const symUpper = String(symbol || "").toUpperCase();
   const quoteFallback = React.useMemo(() => {
@@ -6456,7 +6500,7 @@ function OrderBookPanel({ symbol, last, bid, ask, bidSize, askSize, quoteTs }) {
           No ask levels published.
         </div>
       )}
-      {askLevels.map((a, i) => <BookRow key={"a" + i} side="ask" px={a.px} sz={a.sz} maxSz={maxSz} />)}
+      {askLevels.map((a, i) => <BookRow key={"a" + i} side="ask" px={a.px} sz={a.sz} maxSz={maxSz} onClick={onPickPrice} />)}
       <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", padding: "7px 10px", background: "var(--bg-elev-1)", borderTop: "1px solid var(--border-hair)", borderBottom: "1px solid var(--border-hair)", alignItems: "center" }}>
         <span className="t-mono" style={{ color: "var(--up-500)", fontSize: 10 }}>▲ {last.toFixed(2)}</span>
         <span className="t-mono" style={{ color: "var(--ink-1000)", textAlign: "center", fontSize: 11, padding: "0 8px" }}>${last.toFixed(2)}</span>
@@ -6467,7 +6511,7 @@ function OrderBookPanel({ symbol, last, bid, ask, bidSize, askSize, quoteTs }) {
           No bid levels published.
         </div>
       )}
-      {bidLevels.map((b, i) => <BookRow key={"b" + i} side="bid" px={b.px} sz={b.sz} maxSz={maxSz} />)}
+      {bidLevels.map((b, i) => <BookRow key={"b" + i} side="bid" px={b.px} sz={b.sz} maxSz={maxSz} onClick={onPickPrice} />)}
       <div style={{ padding: "7px 10px", display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--fg-muted)", borderTop: "1px solid var(--border-hair)" }}>
         <span>{footerLabel}</span><span>{isL2 ? `${askLevels.length + bidLevels.length} levels` : "best bid/ask only"}</span>
       </div>
