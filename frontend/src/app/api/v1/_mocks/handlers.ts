@@ -353,7 +353,18 @@ const HANDLERS: Record<string, MockHandler> = {
     ],
     as_of: NOW_ISO(),
   }),
-  "GET /strategies/contribution": () => ({ rows: [], total_pnl: 0 }),
+  "GET /strategies/contribution": () => ({
+    as_of: NOW_ISO(),
+    total_today: -1_840.22,
+    total_mtd: 9_240.10,
+    total_lifetime: 28_410.55,
+    contributions: [
+      { strategy_id: "momentum-quality", strategy_name: "Momentum × Quality", today_pnl: -940.50, mtd_pnl: 4_120.55, total_pnl: 12_840.18, invested: 99_420.00, closed_count: 38 },
+      { strategy_id: "vrp-harvest",      strategy_name: "VRP harvest",         today_pnl: -312.00, mtd_pnl: 1_840.20, total_pnl:  5_120.40, invested: 28_540.00, closed_count: 22 },
+      { strategy_id: "earnings-options", strategy_name: "Earnings IV crush",   today_pnl:  187.40, mtd_pnl:   980.10, total_pnl:  4_240.55, invested: 11_840.00, closed_count: 17 },
+      { strategy_id: "pairs-trading",    strategy_name: "Pairs trading",       today_pnl: -812.12, mtd_pnl:  -612.40, total_pnl: -3_420.50, invested: 32_410.00, closed_count: 12 },
+    ],
+  }),
   "GET /strategies/admin/alloc-capital": () => ({ allocations: [] }),
   "PATCH /strategies/admin/alloc-capital": () => ({ ok: true }),
   "GET /strategies/admin/kill-switch-thresholds": () => ({
@@ -475,6 +486,42 @@ const HANDLERS: Record<string, MockHandler> = {
   // ─── Screener presets ──────────────────────────────────────────────
   "GET /screener/presets": () => ([]),
   "POST /screener/presets": () => ({ id: `mock-${Math.random().toString(16).slice(2, 8)}` }),
+
+  // ─── Misc filler so the DATA UNAVAILABLE banner stays quiet ───────
+  "GET /market-overview/sectors": () => ({
+    sectors: [
+      { sector: "Information technology", change_pct: 1.4, ytd_pct: 18.2, leader: "NVDA",  leader_change_pct: 2.1 },
+      { sector: "Communication services", change_pct: 0.8, ytd_pct: 14.0, leader: "META",  leader_change_pct: 1.6 },
+      { sector: "Consumer discretionary", change_pct: -0.3, ytd_pct: 4.1,  leader: "AMZN",  leader_change_pct: -0.5 },
+      { sector: "Financials",             change_pct: 0.4, ytd_pct: 7.6,  leader: "JPM",   leader_change_pct: 0.9 },
+      { sector: "Energy",                 change_pct: -0.9, ytd_pct: -2.4, leader: "XOM",   leader_change_pct: -1.4 },
+    ],
+    as_of: NOW_ISO(),
+  }),
+  "GET /notifications/preferences": () => ({ preferences: [] }),
+  "PATCH /notifications/preferences/:type": () => ({ ok: true }),
+  "POST /notifications/:id/read": () => ({ ok: true }),
+  "POST /notifications/read-all": () => ({ ok: true }),
+  "POST /auth/refresh": () => ({ ok: true, expires_at: new Date(Date.now() + 3600_000).toISOString() }),
+  "POST /auth/2fa/enroll": () => ({ ok: true, secret: "MOCKSECRET" }),
+  "POST /auth/2fa/verify": () => ({ ok: true }),
+  "POST /auth/2fa/disable": () => ({ ok: true }),
+  "POST /auth/change-password": () => ({ ok: true }),
+  "POST /auth/logout-all": () => ({ ok: true }),
+  "GET /trades/halt": () => ({ halted: false, scope: "global" }),
+  "POST /trades/halt": () => ({ halted: true, scope: "global", halted_at: NOW_ISO() }),
+
+  // Watchlists shape v2 — getEnrichedWatchlist consumer
+  "GET /watchlists/:id": (_, { id }) => ({
+    id: Number(id) || 1,
+    name: "Default",
+    items: [
+      { symbol: "NVDA", note: null },
+      { symbol: "AAPL", note: null },
+      { symbol: "MSFT", note: null },
+      { symbol: "SPY",  note: null },
+    ],
+  }),
 
   // ─── Market overview ──────────────────────────────────────────────
   // Shape matches getMarketRegime() in api.ts — nested `regime.{regime,
