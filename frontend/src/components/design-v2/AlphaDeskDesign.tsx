@@ -11788,19 +11788,55 @@ function STToggle({ on, onChange }) {
   );
 }
 
-function STButton({ children, tone = "default" }) {
+// 2026-05-12 (iter 27 — broker default wiring): STButton previously
+// destructured only { children, tone } and dropped every other prop,
+// which silently broke every `onClick` handler upstream (Test
+// connection / Disconnect / Make default / etc. — iter 24 wired the
+// API calls but the clicks never fired). Now passes onClick + disabled
+// + data-testid through to a real <button> when onClick is present,
+// falling back to the original <span> for decorative usages.
+function STButton({ children, tone = "default", onClick, disabled, ...rest }: {
+  children: React.ReactNode;
+  tone?: "default" | "primary" | "danger";
+  onClick?: () => void;
+  disabled?: boolean;
+  [key: string]: unknown;
+}) {
   const tones = {
     default: { bg: "var(--bg-elev-1)", color: "var(--ink-1000)", border: "var(--border)" },
     primary: { bg: "rgba(201,166,107,0.15)", color: "var(--brand)", border: "var(--brand)" },
     danger:  { bg: "rgba(201,75,75,0.10)", color: "var(--down-500)", border: "var(--down-500)" },
   };
   const t = tones[tone];
+  const baseStyle: React.CSSProperties = {
+    display: "inline-block", padding: "6px 14px",
+    background: t.bg, color: t.color, border: `1px solid ${t.border}`,
+    borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12,
+  };
+  if (typeof onClick === "function") {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        {...(rest as React.ButtonHTMLAttributes<HTMLButtonElement>)}
+        style={{
+          ...baseStyle,
+          cursor: disabled ? "wait" : "pointer",
+          opacity: disabled ? 0.6 : 1,
+        }}
+      >
+        {children}
+      </button>
+    );
+  }
   return (
-    <span style={{
-      display: "inline-block", padding: "6px 14px",
-      background: t.bg, color: t.color, border: `1px solid ${t.border}`,
-      borderRadius: 3, fontFamily: "var(--font-ui)", fontSize: 12, cursor: "default",
-    }}>{children}</span>
+    <span
+      {...(rest as React.HTMLAttributes<HTMLSpanElement>)}
+      style={{ ...baseStyle, cursor: "default" }}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -12178,7 +12214,11 @@ const BROKERS = [
   { id: "robinhood",name: "Robinhood",              mark: "R",  color: "#8FE100", asset: "US equities · options · crypto",   since: "2013", status: "soon",      notes: "Awaiting public API · target Q4 2026" },
 ];
 
-function STBroker() {
+// 2026-05-12 (iter 27 — active broker selection): exported so the
+// SetActiveBroker test (src/__tests__/design-v2/SetActiveBroker.test.tsx)
+// can mount the broker settings card in isolation, the same way iter 25
+// + iter 26 export STPreferences / STTrading.
+export function STBroker() {
   const [open, setOpen] = useState("alpaca");
   // 2026-05-11 (round 24 — broker integration wiring): the Settings →
   // Brokers tab now reads real connections from /broker/connections
@@ -12187,8 +12227,23 @@ function STBroker() {
   // notes) with the live connection state, so the operator can see
   // exactly which providers are linked + actually click Connect /
   // Disconnect / Reconcile / Make default with real backend calls.
+  //
+  // 2026-05-12 (iter 27 — active broker selection): the "default"
+  // flag on each enriched row is now driven by
+  // `UserSettingsV2.default_broker_connection_id` (read via
+  // useUserPreferences) rather than the per-connection
+  // `BrokerConnection.is_default` column. That makes the user's
+  // settings the canonical source of truth for "which broker should
+  // route my orders". The "Make default" button calls
+  // `setActiveBroker(connectionId)` which PATCHes the user-settings
+  // field optimistically. The previous backend POST to
+  // `/broker/connections/:id/default` still fires (it updates the
+  // per-connection flag the backend uses for some legacy code paths),
+  // but the UI reads the user-settings field.
   const live = useDesignLiveData();
   const liveSource = String(live.portfolio?.source || "").toLowerCase();
+  const { settings, setActiveBroker, saveError: settingsError } = useUserPreferences();
+  const { toast } = useToast();
   const [reconState, setReconState] = useState<Awaited<ReturnType<typeof getReconciliationState>> | null>(null);
   const [reconRunning, setReconRunning] = useState(false);
   const [reconStatus, setReconStatus] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
@@ -12216,15 +12271,38 @@ function STBroker() {
 
   useEffect(() => { void refreshConnections(); }, [refreshConnections]);
 
+  // Surface user-settings PATCH failures as a toast. The optimistic
+  // rollback in useUserPreferences puts the "Active" badge back on
+  // the prior broker automatically. Same pattern as iter 25/26.
+  const lastSettingsErrorRef = React.useRef<Error | null>(null);
+  React.useEffect(() => {
+    if (settingsError && settingsError !== lastSettingsErrorRef.current) {
+      lastSettingsErrorRef.current = settingsError;
+      toast({ type: "error", message: `Couldn't set default broker: ${settingsError.message}` });
+    }
+    if (!settingsError) lastSettingsErrorRef.current = null;
+  }, [settingsError, toast]);
+
+  // Iter 27 — the user-settings field is the canonical "active
+  // broker". We fall back to the legacy per-connection is_default flag
+  // only when the user-settings field is still null (fresh accounts
+  // that have never explicitly chosen a default). That keeps existing
+  // single-broker installs working unchanged.
+  const userDefaultConnectionId = settings?.default_broker_connection_id ?? null;
+
   // Merge the static BROKERS catalog with live connections. A broker
   // is "connected" only when an actual connection row exists for it.
   const brokersEnriched = BROKERS.map((b) => {
     const conn = connections.find((c) => c.provider === b.id);
     if (conn) {
+      const isUserDefault =
+        userDefaultConnectionId != null
+          ? conn.id === userDefaultConnectionId
+          : conn.is_default;
       return {
         ...b,
         status: "connected",
-        default: conn.is_default,
+        default: isUserDefault,
         connectionId: conn.id,
         account: conn.broker_account_id || "—",
         keyLast4: conn.key_last4 || "",
@@ -12236,7 +12314,45 @@ function STBroker() {
     }
     return { ...b, connectionId: null };
   });
+  // "Active" still falls back to liveSource so the top "Active broker"
+  // card keeps rendering before the connections list arrives. The
+  // user-settings field is preferred — operators who explicitly chose
+  // a default see that broker as Active even if liveSource is from
+  // a different provider during a transition.
   const active = brokersEnriched.find((b) => b.status === "connected" && (b.default || b.id === liveSource)) || null;
+
+  // Iter 27 — "Make default" handler. Calls the user-settings PATCH
+  // (which is the new source of truth) AND the legacy backend POST
+  // (which keeps BrokerConnection.is_default in sync for any backend
+  // consumer still reading that column). The user-settings call owns
+  // the optimistic flip + rollback; the legacy POST is fire-and-forget
+  // best-effort. Toast confirms the switch.
+  const handleMakeDefault = React.useCallback(
+    async (broker: { connectionId: number | null; name: string }) => {
+      if (broker.connectionId == null) return;
+      try {
+        await setActiveBroker(broker.connectionId);
+        // Refresh connections so the legacy is_default flag mirrors
+        // the user-settings choice if/when the backend POST below
+        // updates it. The optimistic flip already happened in
+        // useUserPreferences.
+        toast({ type: "success", message: `Default broker set to ${broker.name}` });
+        // Best-effort legacy sync — old code paths may still read
+        // BrokerConnection.is_default, so keep them in step. Swallow
+        // errors here because the user-settings PATCH already
+        // succeeded and that's the canonical store.
+        try {
+          await setDefaultBrokerConnection(broker.connectionId);
+          await refreshConnections();
+        } catch { /* legacy POST is best-effort */ }
+      } catch {
+        // The user-settings PATCH rolled back the cache for us, so
+        // the row that briefly showed "Active" reverts. The toast
+        // effect above surfaces the error via saveError.
+      }
+    },
+    [setActiveBroker, refreshConnections, toast],
+  );
 
   const handleReconcileNow = async () => {
     setReconRunning(true);
@@ -12337,7 +12453,14 @@ function STBroker() {
         <div style={{ padding: "12px 0", fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: "var(--fg-muted)" }}>Loading broker connections…</div>
       )}
       {brokersEnriched.map(b => (
-        <BrokerRow key={b.id} broker={b} expanded={open === b.id} onToggle={() => setOpen(open === b.id ? null : b.id)} onRefresh={refreshConnections} />
+        <BrokerRow
+          key={b.id}
+          broker={b}
+          expanded={open === b.id}
+          onToggle={() => setOpen(open === b.id ? null : b.id)}
+          onRefresh={refreshConnections}
+          onMakeDefault={handleMakeDefault}
+        />
       ))}
     </STCard>
     </>
@@ -12350,18 +12473,32 @@ function BrokerMark({ broker, size = 36 }) {
   );
 }
 
-function BrokerRow({ broker, expanded, onToggle, onRefresh }) {
+function BrokerRow({ broker, expanded, onToggle, onRefresh, onMakeDefault }) {
   const tone = broker.status === "connected" ? "up" : broker.status === "soon" ? "down" : null;
   const statusLabel = broker.status === "connected" ? "CONNECTED" : broker.status === "soon" ? "COMING SOON" : "AVAILABLE";
+  // Iter 27 — the user-settings-default broker gets an ACTIVE badge
+  // next to the row header (in addition to the existing DEFAULT badge
+  // — kept for backwards-compat in tests + visual continuity). The
+  // ACTIVE badge specifically reflects `default_broker_connection_id`
+  // and updates optimistically when "Make default" is clicked.
+  const isActive = broker.status === "connected" && broker.default;
   return (
-    <div style={{ borderBottom: "1px solid var(--border-hair)" }}>
+    <div style={{ borderBottom: "1px solid var(--border-hair)" }} data-testid={`broker-row-${broker.id}`}>
       <div onClick={onToggle} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: 14, padding: "12px 0", alignItems: "center", cursor: "pointer" }}>
         <BrokerMark broker={broker} size={36} />
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 16, color: "var(--ink-1000)" }}>{broker.name}</span>
             <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)" }}>· est {broker.since}</span>
-            {broker.default && <span className="t-mono" style={{ fontSize: 9, padding: "1px 5px", border: "1px solid var(--brand)", color: "var(--brand)", borderRadius: 2, letterSpacing: "0.06em", fontWeight: 600 }}>DEFAULT</span>}
+            {isActive && (
+              <span
+                data-testid={`broker-active-badge-${broker.id}`}
+                className="t-mono"
+                style={{ fontSize: 9, padding: "1px 5px", border: "1px solid var(--brand)", color: "var(--brand)", borderRadius: 2, letterSpacing: "0.06em", fontWeight: 600 }}
+              >
+                ACTIVE
+              </span>
+            )}
           </div>
           <div style={{ marginTop: 2, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12.5, color: "var(--fg-muted)" }}>{broker.asset}</div>
           <div style={{ marginTop: 2, fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--fg-hint)" }}>{broker.notes}</div>
@@ -12372,12 +12509,12 @@ function BrokerRow({ broker, expanded, onToggle, onRefresh }) {
         </span>
         <span className="t-mono" style={{ fontSize: 14, color: "var(--fg-muted)", width: 14, textAlign: "center" }}>{expanded ? "−" : "+"}</span>
       </div>
-      {expanded && <BrokerExpanded broker={broker} onRefresh={onRefresh} />}
+      {expanded && <BrokerExpanded broker={broker} onRefresh={onRefresh} onMakeDefault={onMakeDefault} />}
     </div>
   );
 }
 
-function BrokerExpanded({ broker, onRefresh }) {
+function BrokerExpanded({ broker, onRefresh, onMakeDefault }) {
   const [busy, setBusy] = React.useState(false);
   const [msg, setMsg] = React.useState<{ tone: "ok" | "err"; text: string } | null>(null);
   // For key+secret providers (alpaca / tradier / kraken) collect raw
@@ -12431,13 +12568,17 @@ function BrokerExpanded({ broker, onRefresh }) {
     } finally { setBusy(false); }
   };
 
+  // Iter 27 — delegate to the STBroker-level handler so the user-
+  // settings PATCH is the canonical source of truth. The parent owns
+  // the optimistic flip, toast, and legacy backend POST sync; we just
+  // surface a local inline status so the user sees a confirmation
+  // beside the button as well as the toast.
   const handleMakeDefault = async () => {
     if (broker.connectionId == null) return;
     setBusy(true); setMsg(null);
     try {
-      await setDefaultBrokerConnection(broker.connectionId);
+      await onMakeDefault?.(broker);
       setMsg({ tone: "ok", text: `${broker.name} set as default.` });
-      await onRefresh?.();
     } catch (e) {
       setMsg({ tone: "err", text: e instanceof Error ? e.message : "Failed to set default." });
     } finally { setBusy(false); }
@@ -12514,7 +12655,16 @@ function BrokerExpanded({ broker, onRefresh }) {
       </div>
       <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
         <STButton onClick={handleTest} disabled={busy}>{busy ? "Testing…" : "Test connection"}</STButton>
-        {!broker.default && <STButton tone="primary" onClick={handleMakeDefault} disabled={busy}>Make default</STButton>}
+        {!broker.default && (
+          <STButton
+            tone="primary"
+            data-testid={`broker-make-default-${broker.id}`}
+            onClick={handleMakeDefault}
+            disabled={busy}
+          >
+            Make default
+          </STButton>
+        )}
         <STButton tone="danger" onClick={handleDisconnect} disabled={busy}>{busy ? "Disconnecting…" : "Disconnect"}</STButton>
       </div>
       <StatusLine />
