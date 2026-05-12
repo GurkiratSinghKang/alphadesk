@@ -96,23 +96,24 @@ const HANDLERS: Record<string, MockHandler> = {
   }),
 
   // ─── Portfolio ────────────────────────────────────────────────────
+  // The api.ts `getPortfolioSummary` wrapper maps snake_case wire keys
+  // (`buying_power`, `total_market_value`, etc.) into camelCase FE
+  // shape. The earlier mock returned camelCase directly, so every
+  // wrapped field came back undefined — Dashboard read "Buy pwr $0"
+  // and the realized-P&L cell was em-dashed.
   "GET /portfolio/summary": () => ({
     equity: 284_512.41,
     cash: 87_320.10,
-    buyingPower: 174_640.20,
-    totalMarketValue: 197_192.31,
-    unrealizedPnl: 12_840.18,
-    unrealizedPnlPct: 6.96,
-    realizedPnlToday: -1_840.22,
-    positionsCount: 8,
-    dayPnl: -1_840.22,
-    dayPnlPct: -0.64,
-    // is_demo + source intentionally NOT set to "demo" — those flags trigger
-    // WsStatusBanner's "LIMITED DATA · broker unavailable" pill, which we
-    // don't want polluting snapshots. Mocks are demo by definition; no point
-    // signalling that to the chrome.
-    lastUpdated: NOW_ISO(),
+    buying_power: 174_640.20,
+    total_market_value: 197_192.31,
+    unrealized_pnl: 12_840.18,
+    unrealized_pnl_pct: 6.96,
+    realized_pnl_today: -1_840.22,
+    positions_count: 8,
+    day_pnl: -1_840.22,
+    last_updated: NOW_ISO(),
     source: "alpaca",
+    is_demo: false,
   }),
   "GET /portfolio/greeks": () => ({
     netDelta: 124.6, netGamma: 0.18, netTheta: -84.10, netVega: 312.40,
