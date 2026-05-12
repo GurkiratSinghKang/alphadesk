@@ -203,6 +203,23 @@ async function hardenPageForVisualDiff(page) {
   await page.evaluate(() => document.fonts?.ready);
 }
 
+async function waitForCaseReady(page, item) {
+  if (item.name === "strategies-earnings-desktop") {
+    await page
+      .locator('[data-slot="earnings-detail-panel"]')
+      .first()
+      .waitFor({ state: "visible", timeout: 10_000 })
+      .catch(() => {});
+    await page
+      .waitForFunction(
+        () => !document.body.textContent?.includes("Loading detail"),
+        null,
+        { timeout: 10_000 },
+      )
+      .catch(() => {});
+  }
+}
+
 function compareImages({ baseline, current, diff, args }) {
   const script = path.join(__dirname, "visual_compare.py");
   const result = spawnSync(
@@ -1030,6 +1047,7 @@ async function main() {
         // long before the network does.
       }
       await page.waitForTimeout(1_500);
+      await waitForCaseReady(page, item);
       await hardenPageForVisualDiff(page);
       await page.screenshot({
         path: current,

@@ -30,6 +30,8 @@ ok()    { printf "  \033[32m✓\033[0m %s\n" "$1"; PASS=$((PASS+1)); }
 fail()  { printf "  \033[31m✗\033[0m %s\n" "$1"; FAIL=$((FAIL+1)); }
 skip()  { printf "  \033[33m~\033[0m %s\n" "$1"; SKIPPED=$((SKIPPED+1)); }
 heading(){ printf "\n\033[1m%s\033[0m\n" "$1"; }
+contains() { grep -q -- "$1" <<< "$2"; }
+contains_re() { grep -qE -- "$1" <<< "$2"; }
 
 
 heading "===== Audit 2026-05-11 post-merge smoke ====="
@@ -58,7 +60,7 @@ skip "log-side check (requires SSH to backend logs; covered by backend/core/test
 # ─── BUG-065: demo state-picker gated to non-prod ───────────────────
 heading "BUG-065 — DEMO state-picker chips not visible on prod /login"
 login_html=$(curl -sSL "$BASE_URL/login")
-if echo "$login_html" | grep -qE 'magic-sent.*twofa.*recovery'; then
+if contains_re 'magic-sent.*twofa.*recovery' "$login_html"; then
   fail "DEMO STATE PICKER chips still rendered on /login (BUG-065 regressed)"
 else
   ok "no DEMO state-picker chips on /login"
@@ -68,7 +70,7 @@ fi
 heading "BUG-067 (partial) — strict CSP shipping as Report-Only"
 csp_ro=$(curl -sSI "$BASE_URL/login" | grep -i '^content-security-policy-report-only:')
 if [ -n "$csp_ro" ]; then
-  if echo "$csp_ro" | grep -q "strict-dynamic"; then
+  if contains "strict-dynamic" "$csp_ro"; then
     ok "Content-Security-Policy-Report-Only header present with 'strict-dynamic'"
   else
     fail "Report-Only header present but missing 'strict-dynamic' (BUG-067 partial regressed)"
@@ -95,11 +97,12 @@ heading "BUG-058 — POST /trades/orders requires review_id"
 orders_code=$(curl -sS -X POST "$BASE_URL/api/v1/trades/orders" \
   -b "$COOKIE" \
   -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: smoke-bug-058-missing-review' \
   -H "Origin: $BASE_URL" \
-  -d '{"legs":[{"symbol":"SPY","side":"buy","qty":1,"order_type":"market"}]}' \
+  -d '{"legs":[{"symbol":"SPY","side":"buy","qty":1,"order_type":"market"}],"confirm":true,"mode":"paper"}' \
   -o /tmp/smoke-orders.json -w "%{http_code}")
 if [ "$orders_code" = "428" ]; then
-  ok "bare POST /trades/orders returns 428 (Precondition Required)"
+  ok "confirmed POST /trades/orders without review_id returns 428 (Precondition Required)"
   if grep -q '"order_review_required"' /tmp/smoke-orders.json 2>/dev/null; then
     ok "error code is 'order_review_required'"
   else
@@ -108,7 +111,7 @@ if [ "$orders_code" = "428" ]; then
 elif [ "$orders_code" = "200" ] || [ "$orders_code" = "201" ]; then
   fail "BUG-058 REGRESSED — bare POST /trades/orders returned $orders_code; a live order may have fired!"
 else
-  fail "unexpected status $orders_code (expected 428)"
+  fail "unexpected status $orders_code (expected 428 for missing review_id)"
 fi
 
 # ─── BUG-088: support ticket intake works ───────────────────────────
@@ -146,12 +149,12 @@ fi
 # ─── BUG-068: /welcome KPI strip is em-dashes by default ────────────
 heading "BUG-068 — /welcome KPI strip shows em-dashes (no fabricated numbers)"
 welcome_html=$(curl -sSL "$BASE_URL/welcome")
-if echo "$welcome_html" | grep -qE 'OPERATORS.{0,1000}284'; then
+if contains_re 'OPERATORS.{0,1000}284' "$welcome_html"; then
   fail "BUG-068 REGRESSED — /welcome shows literal '284 OPERATORS' (securities marketing fraud risk)"
 else
   ok "/welcome KPI strip does not advertise '284 OPERATORS'"
 fi
-if echo "$welcome_html" | grep -qE '\+18\.2%'; then
+if contains_re '\+18\.2%' "$welcome_html"; then
   fail "BUG-068 REGRESSED — /welcome shows literal '+18.2% YTD'"
 else
   ok "/welcome no longer shows '+18.2% YTD' headline number"
@@ -161,7 +164,7 @@ fi
 heading "BUG-083 — skip-to-content link present on public routes"
 for path in "/login" "/about" "/pricing" "/welcome"; do
   body=$(curl -sSL "$BASE_URL$path")
-  if echo "$body" | grep -q 'href="#main-content"'; then
+  if contains 'href="#main-content"' "$body"; then
     ok "$path has skip-to-content link to #main-content"
   else
     fail "$path missing skip-to-content link (BUG-083 regressed on this route)"

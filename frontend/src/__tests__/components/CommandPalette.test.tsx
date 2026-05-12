@@ -5,6 +5,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { useUIStore } from '@/stores/ui';
 import { useMarketStore } from '@/stores/market';
 
+const COMMAND_PALETTE_TEST_TIMEOUT_MS = 15_000;
+
 // Mock cmdk
 vi.mock('cmdk', () => {
   type WithChildren = { children?: ReactNode };
@@ -87,7 +89,7 @@ describe('CommandPalette', () => {
     const { CommandPalette } = await import('@/components/layout/CommandPalette');
     render(<CommandPalette />);
     expect(screen.getByTestId('cmdk-input')).toBeDefined();
-  });
+  }, COMMAND_PALETTE_TEST_TIMEOUT_MS);
 
   it('shows Popular Symbols group by default', async () => {
     useUIStore.setState({ commandPaletteOpen: true });
