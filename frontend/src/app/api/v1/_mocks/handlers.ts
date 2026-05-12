@@ -181,6 +181,28 @@ const HANDLERS: Record<string, MockHandler> = {
     },
   ],
   "GET /trades/orders": () => [],
+  // Order preview + place — these are the POST endpoints the stage-
+  // order pill hits. Mock-mode returns a synthetic "all checks
+  // passed" preview with a freshly minted review_id; placing then
+  // echoes back a mock order id. Without these the staging button
+  // 404s and the operator never sees the success state.
+  "POST /trades/orders/preview": () => ({
+    review_id: `mock-review-${Math.random().toString(16).slice(2, 10)}`,
+    can_submit: true,
+    expires_at: new Date(Date.now() + 30_000).toISOString(),
+    checks: [
+      { code: "ticket_shape",       label: "Ticket parses cleanly",            passed: true,  detail: "All fields present" },
+      { code: "quote_fresh",        label: "Quote fresh (< 5s)",               passed: true,  detail: "Spread within $0.05 of NBBO" },
+      { code: "risk_under_cap",     label: "Risk under 1% account cap",         passed: true,  detail: "Position sized inside policy" },
+      { code: "halt_status",        label: "No trading halt",                   passed: true },
+      { code: "policy_strategy",    label: "Strategy policy",                   passed: true,  detail: "Manual ticket — bypass allowed" },
+    ],
+  }),
+  "POST /trades/orders": () => ({
+    id: `mock-${Math.random().toString(16).slice(2, 10)}`,
+    status: "accepted",
+    submitted_at: NOW_ISO(),
+  }),
   "GET /trades/alerts": () => [],
   "GET /trades/history": () => [],
 
