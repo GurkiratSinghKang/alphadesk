@@ -2305,10 +2305,27 @@ function SearchBar({ onPick }) {
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fg-hint)" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
         <input
           ref={ref}
+          // 2026-05-11 (iter3 audit a11y P1.1): unlabelled input read in SR as
+          // a generic "edit text" — operators using a screen reader couldn't
+          // tell what the search did. Named via aria-label; placeholder
+          // already provides the visual cue.
+          aria-label="Search ticker, strategy, or command"
           value={q}
           onChange={(e) => { setQ(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 120)}
+          // 2026-05-11 (iter3 audit symbol P2.1): pressing Enter used
+          // to do nothing. If the operator typed a ticker, route to it
+          // on Enter; if there's at least one suggestion, pick the
+          // first one. Either way the search becomes operable from
+          // the keyboard alone.
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              const pickSym = results[0]?.sym || q.trim().toUpperCase();
+              if (pickSym) { onPick(pickSym); setOpen(false); setQ(""); }
+            }
+          }}
           placeholder="Search ticker, strategy, or command…"
           style={{ flex: 1, minWidth: 0, height: 32, background: "transparent", border: 0, color: "var(--ink-1000)", fontFamily: "var(--font-ui)", fontSize: 13, outline: "none" }}
         />
@@ -3791,6 +3808,13 @@ function useLiveTicker(sym) {
   const f = live.tickerFundamentals?.symbol === upper ? live.tickerFundamentals : null;
   const opt = ctx?.optionsSummary?.value || null;
   const last = quoteLast(q);
+  // 2026-05-11 (iter3 audit symbol P1.2): when the backend can't
+  // resolve a symbol (e.g. `?symbol=ZZZZ`), the spread on `MOCK_TICKER`
+  // below would supply fake $100 fields and the operator would never
+  // know they were staging against a fabricated price. Flag the
+  // symbol as unknown so callers (and the page-level banner) can
+  // refuse to render an actionable order.
+  const isUnknown = !q && !ctx && !f && !live.loading;
   const bid = Number(q?.bid ?? 0);
   const ask = Number(q?.ask ?? 0);
   const bidSize = Number.isFinite(Number(q?.bidSize)) ? Number(q?.bidSize) : null;
@@ -3831,6 +3855,7 @@ function useLiveTicker(sym) {
     fundamentals: f,
     optionsSummary: opt,
     isDemo: q?.is_demo === true || q?.source === "demo" || f?.isDemo === true || freshnessIsDemo(ctx?.quote),
+    isUnknown,
   };
 }
 
@@ -5104,6 +5129,11 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
   // chain. Clicking threw "Select a live option contract from the
   // chain before staging an order." Block the click instead.
   const optionWithoutContract = asset === "option" && !selectedOptionContract?.symbol;
+  // 2026-05-11 (iter3 audit symbol P1.2): hard-block staging when
+  // the symbol isn't a real ticker. Otherwise the operator would
+  // see MOCK_TICKER's $100 fields and could submit a real order
+  // against fabricated data.
+  const unknownSymbol = Boolean(t.isUnknown);
   const stageDisabled =
     orderStage === "previewing" ||
     orderStage === "submitting" ||
@@ -5112,11 +5142,39 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
     overEquity ||
     overRiskCap ||
     insaneStop ||
-    optionWithoutContract;
+    optionWithoutContract ||
+    unknownSymbol;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: "var(--border)" }}>
       <MetricRibbon t={t} compact={isNarrow} />
+      {/* 2026-05-11 (iter3 audit symbol P1.2): when ?symbol= points
+          at a ticker the backend doesn't know, surface a banner so
+          the operator sees the warning + understands the Stage
+          button is disabled. */}
+      {unknownSymbol && (
+        <div
+          role="alert"
+          style={{
+            background: "var(--tint-down-2)",
+            borderTop: "1px solid var(--down-500)",
+            borderBottom: "1px solid var(--down-500)",
+            padding: "10px 14px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            fontFamily: "var(--font-ui)",
+            fontSize: 12,
+            color: "var(--down-500)",
+          }}
+        >
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--down-500)" }} />
+          <span>
+            Symbol <span className="t-mono" style={{ color: "var(--ink-1000)" }}>{t.sym}</span> not found in the backend.
+            Order staging is disabled — pick a real ticker to continue.
+          </span>
+        </div>
+      )}
       <div style={{
         display: "grid",
         gridTemplateColumns: isNarrow
@@ -5402,71 +5460,123 @@ function ChartToolbar({ range, setRange, chartMode, setChartMode, overlays, setO
   const modes = [{ id: "candle", label: "Bars" }, { id: "line", label: "Line" }];
   const [open, setOpen] = useState(false);
   const onCount = Object.values(overlays).filter(Boolean).length;
+  // 2026-05-11 (iter3 audit a11y P1.3/P1.4): all of range chips,
+  // mode chips, the indicators trigger, the menu items, and the
+  // clear/done links used to be <a onClick> with cursor:"default"
+  // and no href. Keyboard users couldn't activate any of them
+  // because <a> without href is not focusable for Enter/Space.
+  // Promoted to real <button> elements with type="button" + a
+  // pointer cursor so the chart toolbar is keyboard-operable.
+  // Indicators dropdown also gets aria-haspopup, aria-expanded,
+  // and an Esc-to-close handler.
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+  const chipBtn = (active: boolean, extra: React.CSSProperties = {}): React.CSSProperties => ({
+    all: "unset" as const,
+    boxSizing: "border-box",
+    cursor: "pointer",
+    color: active ? "var(--ink-1000)" : "var(--fg-muted)",
+    background: active ? "var(--bg)" : "transparent",
+    padding: "4px 10px", borderRadius: 2,
+    textAlign: "center" as const,
+    transition: "background 120ms",
+    ...extra,
+  });
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, position: "relative" }}>
       <div style={{ display: "flex", gap: 8 }}>
-        <div style={{ display: "flex", gap: 1, background: "var(--ink-100)", border: "1px solid var(--border-hair)", borderRadius: 3, padding: 2 }}>
+        <div role="radiogroup" aria-label="Chart range" style={{ display: "flex", gap: 1, background: "var(--ink-100)", border: "1px solid var(--border-hair)", borderRadius: 3, padding: 2 }}>
           {ranges.map(r => (
-            <a key={r} onClick={() => setRange(r)} style={{
-              fontFamily: "var(--font-mono)", fontSize: 10.5,
-              color: range === r ? "var(--ink-1000)" : "var(--fg-muted)",
-              background: range === r ? "var(--bg)" : "transparent",
-              padding: "4px 10px", borderRadius: 2, cursor: "default", letterSpacing: "0.04em", minWidth: 28, textAlign: "center"
-            }}>{r}</a>
+            <button
+              key={r}
+              type="button"
+              role="radio"
+              aria-checked={range === r}
+              onClick={() => setRange(r)}
+              style={chipBtn(range === r, { fontFamily: "var(--font-mono)", fontSize: 10.5, letterSpacing: "0.04em", minWidth: 28 })}
+            >{r}</button>
           ))}
         </div>
-        <div style={{ display: "flex", gap: 1, background: "var(--ink-100)", border: "1px solid var(--border-hair)", borderRadius: 3, padding: 2 }}>
+        <div role="radiogroup" aria-label="Chart series mode" style={{ display: "flex", gap: 1, background: "var(--ink-100)", border: "1px solid var(--border-hair)", borderRadius: 3, padding: 2 }}>
           {modes.map(m => (
-            <a key={m.id} onClick={() => setChartMode(m.id)} style={{
-              fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase",
-              color: chartMode === m.id ? "var(--ink-1000)" : "var(--fg-muted)",
-              background: chartMode === m.id ? "var(--bg)" : "transparent",
-              padding: "4px 10px", borderRadius: 2, cursor: "default"
-            }}>{m.label}</a>
+            <button
+              key={m.id}
+              type="button"
+              role="radio"
+              aria-checked={chartMode === m.id}
+              onClick={() => setChartMode(m.id)}
+              style={chipBtn(chartMode === m.id, { fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase" })}
+            >{m.label}</button>
           ))}
         </div>
       </div>
-      <a onClick={() => setOpen(o => !o)} style={{
-        display: "inline-flex", alignItems: "center", gap: 8,
-        fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase",
-        color: open ? "var(--ink-1000)" : "var(--fg-muted)",
-        background: open ? "var(--ink-100)" : "transparent",
-        border: "1px solid var(--border)", padding: "5px 12px", borderRadius: 3, cursor: "default"
-      }}>
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen(o => !o)}
+        style={{
+          all: "unset",
+          display: "inline-flex", alignItems: "center", gap: 8,
+          fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase",
+          color: open ? "var(--ink-1000)" : "var(--fg-muted)",
+          background: open ? "var(--ink-100)" : "transparent",
+          border: "1px solid var(--border)", padding: "5px 12px", borderRadius: 3, cursor: "pointer",
+        }}
+      >
         <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--brand)" }} />
         Indicators <span className="t-mono" style={{ fontSize: 9.5, letterSpacing: "0.04em", color: "var(--fg-hint)" }}>{onCount}</span>
         <span style={{ fontSize: 8, marginLeft: 2, color: "var(--fg-hint)" }}>{open ? "▲" : "▼"}</span>
-      </a>
+      </button>
       {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 30,
-          width: 280, background: "var(--bg-elev-2)", border: "1px solid var(--border)", borderRadius: 4,
-          boxShadow: "var(--shadow-2)", maxHeight: 360, overflow: "auto"
-        }}>
+        <div
+          ref={dropdownRef}
+          role="menu"
+          aria-label="Chart indicators"
+          style={{
+            position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 30,
+            width: 280, background: "var(--bg-elev-2)", border: "1px solid var(--border)", borderRadius: 4,
+            boxShadow: "var(--shadow-2)", maxHeight: 360, overflow: "auto"
+          }}
+        >
           {OVERLAY_GROUPS.map(g => (
             <div key={g.group} style={{ borderBottom: "1px solid var(--border-hair)" }}>
               <div className="t-label" style={{ padding: "9px 12px 4px", fontSize: 8.5 }}>{g.group}</div>
               {g.items.map(it => {
                 const on = overlays[it.key];
                 return (
-                  <a key={it.key} onClick={() => setOverlays(o => ({ ...o, [it.key]: !o[it.key] }))} style={{
-                    display: "flex", alignItems: "center", gap: 9, padding: "6px 12px", cursor: "default",
-                    background: on ? "var(--ink-100)" : "transparent",
-                  }}>
+                  <button
+                    key={it.key}
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={!!on}
+                    onClick={() => setOverlays(o => ({ ...o, [it.key]: !o[it.key] }))}
+                    style={{
+                      all: "unset",
+                      display: "flex", alignItems: "center", gap: 9, padding: "6px 12px",
+                      width: "calc(100% - 24px)", cursor: "pointer",
+                      background: on ? "var(--ink-100)" : "transparent",
+                    }}
+                  >
                     <span style={{
                       width: 12, height: 12, border: "1px solid " + (on ? it.dot : "var(--border)"),
                       background: on ? it.dot : "transparent", borderRadius: 2, display: "inline-flex",
                       alignItems: "center", justifyContent: "center", color: "var(--bg)", fontSize: 9, lineHeight: 1
                     }}>{on ? "✓" : ""}</span>
                     <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: on ? "var(--ink-1000)" : "var(--ink-900)" }}>{it.label}</span>
-                  </a>
+                  </button>
                 );
               })}
             </div>
           ))}
           <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 10 }}>
-            <a onClick={() => setOverlays(Object.fromEntries(OVERLAY_GROUPS.flatMap(g => g.items).map(it => [it.key, false])))} style={{ color: "var(--fg-muted)", cursor: "default" }}>clear all</a>
-            <a onClick={() => setOpen(false)} style={{ color: "var(--brand)", cursor: "default" }}>done</a>
+            <button type="button" onClick={() => setOverlays(Object.fromEntries(OVERLAY_GROUPS.flatMap(g => g.items).map(it => [it.key, false])))} style={{ all: "unset", color: "var(--fg-muted)", cursor: "pointer" }}>clear all</button>
+            <button type="button" onClick={() => setOpen(false)} style={{ all: "unset", color: "var(--brand)", cursor: "pointer" }}>done</button>
           </div>
         </div>
       )}
@@ -6366,20 +6476,39 @@ function AssetTabs({ asset, setAsset }) {
   // no hover/focus affordance, no aria-selected. Promoted to role=tab
   // buttons with a real pointer cursor + hover background, and a
   // keyboard-focus ring so the tab strip is operable without a mouse.
+  // 2026-05-11 (iter3 audit a11y P1.2): added ArrowLeft/Right/Home/End
+  // keyboard navigation per the WAI-ARIA tabs pattern. Focus
+  // automatically transfers between tabs as the operator arrows.
+  const tabRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
+  const onKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    const i = tabs.findIndex(x => x.id === asset);
+    let nextIndex = -1;
+    if (e.key === "ArrowRight") nextIndex = (i + 1) % tabs.length;
+    else if (e.key === "ArrowLeft") nextIndex = (i - 1 + tabs.length) % tabs.length;
+    else if (e.key === "Home") nextIndex = 0;
+    else if (e.key === "End") nextIndex = tabs.length - 1;
+    if (nextIndex >= 0) {
+      e.preventDefault();
+      setAsset(tabs[nextIndex].id);
+      tabRefs.current[nextIndex]?.focus();
+    }
+  };
   return (
     <div>
       <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 18, color: "var(--ink-1000)", letterSpacing: "-0.02em", lineHeight: 1, marginBottom: 12 }}>Stage order</div>
       <div role="tablist" aria-label="Asset class" style={{ display: "grid", gridTemplateColumns: `repeat(${tabs.length}, 1fr)`, borderBottom: "1px solid var(--border)" }}>
-        {tabs.map(tab => {
+        {tabs.map((tab, idx) => {
           const on = asset === tab.id;
           return (
             <button
               key={tab.id}
+              ref={(el) => { tabRefs.current[idx] = el; }}
               role="tab"
               type="button"
               aria-selected={on}
               tabIndex={on ? 0 : -1}
               onClick={() => setAsset(tab.id)}
+              onKeyDown={onKeyDown}
               style={{
                 all: "unset",
                 textAlign: "center", padding: "9px 6px",
@@ -7016,9 +7145,18 @@ function OrderBookPanel({ symbol, last, bid, ask, bidSize, askSize, quoteTs, onP
 function BookRow({ side, px, sz, maxSz, onClick }: { side: "bid" | "ask"; px: number; sz: number; maxSz: number; onClick?: (px: number) => void }) {
   const fill = side === "bid" ? "var(--tint-up-2)" : "var(--tint-down-2)";
   const text = side === "bid" ? "var(--up-500)" : "var(--down-500)";
+  // 2026-05-11 (iter3 audit a11y P2.6): the row used to read in a
+  // screen reader as a concatenated string like "100134.81" because
+  // the three cells (size, price, size) were unlabelled spans. The
+  // aria-label below names what the row represents — "Bid $134.81,
+  // size 100" / "Click to fill limit at $134.81" — so SR users can
+  // identify and activate a price level.
+  const verb = onClick ? "Click to fill limit at" : (side === "bid" ? "Bid" : "Ask");
+  const ariaLabel = `${side === "bid" ? "Bid" : "Ask"} $${px.toFixed(2)}, size ${sz.toLocaleString()}${onClick ? "." : ""}${onClick ? " " + verb + " $" + px.toFixed(2) : ""}`;
   return (
     <div
       role={onClick ? "button" : undefined}
+      aria-label={onClick ? ariaLabel : undefined}
       tabIndex={onClick ? 0 : undefined}
       onClick={onClick ? () => onClick(px) : undefined}
       onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(px); } } : undefined}
