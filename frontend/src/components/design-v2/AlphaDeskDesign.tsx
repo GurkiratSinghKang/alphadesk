@@ -5027,11 +5027,21 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
           </aside>
         )}
 
-        {/* CENTER — chart hero */}
-        <section style={{ background: "var(--bg)", padding: isNarrow ? "14px 14px 18px" : "18px 24px 20px", display: "flex", flexDirection: "column", gap: 12, minHeight: 0, minWidth: 0, overflow: "hidden" }}>
+        {/* CENTER — chart hero + intel grid */}
+        {/* 2026-05-12 (Trade Intel Panel): section was overflow:hidden,
+          * which clipped the new intel grid on shorter viewports.
+          * Switched to overflow-y:auto so the operator can scroll the
+          * column when the chart + rails + intel grid together exceed
+          * available height. */}
+        <section style={{ background: "var(--bg)", padding: isNarrow ? "14px 14px 18px" : "18px 24px 20px", display: "flex", flexDirection: "column", gap: 12, minHeight: 0, minWidth: 0, overflowY: "auto", overflowX: "hidden" }}>
           <TradeHeader t={t} />
           <ChartToolbar range={range} setRange={setRange} chartMode={chartMode} setChartMode={setChartMode} overlays={overlays} setOverlays={setOverlays} />
-          <div style={{ flex: 1, minHeight: 320, display: "flex" }}>
+          {/* Chart capped so the TradeContextRail + TradeIntelGrid have
+            * room. On a 1080p monitor the chart gets ~440px, the
+            * context rail ~70px, and the intel grid ~280px. Shorter
+            * viewports get a smaller chart via the 38vh floor; the
+            * section is overflow-y:auto so nothing is clipped. */}
+          <div style={{ flex: "0 0 auto", height: "min(38vh, 440px)", minHeight: 240, display: "flex" }}>
             {/* 2026-05-10 (chart wiring): live OHLCV from /api/v1/market/bars
              * via the real lightweight-charts engine, replacing the design's
              * hand-rolled SVG. ChartPane owns its own indicators + drawing
@@ -5048,6 +5058,7 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
             />
           </div>
           <TradeContextRail t={t} regime={live.regime} />
+          <TradeIntelGrid t={t} regime={live.regime} />
         </section>
 
         {/* RIGHT — collapsible, pushes (in-grid) */}
@@ -5655,6 +5666,193 @@ function HeroChart({ t, range, chartMode, overlays, limitPx, stopPx, side }) {
 // + Tier 2 (setup qualification) context the operator needs BEFORE
 // pulling the trigger. Each cell renders an em-dash when the data
 // isn't loaded — never fabricates a value.
+// 2026-05-12 (Trade Intel Panel): three-column grid filling the space
+// below the chart. Implements Tier 2 (vol surface + setup
+// qualification) and Tier 3 (microstructure) panels from
+// trading_information_architecture_and_edge.md so the operator can
+// answer "is this a buyable / sellable setup right now?" without
+// jumping pages.
+//
+//  ┌─ Vol surface ──────────┬─ Microstructure ──────┬─ Setup gates ───────┐
+//  │ IV rank · bar           │ POC / VAH / VAL         │ Short put          │
+//  │ IV / 30d HV ratio       │ Anchored VWAP           │ Bull put spread    │
+//  │ ATM term σ              │ Cum δ volume            │ Iron condor        │
+//  │ 25Δ skew (pp)           │ Large prints (cnt / $)  │ Jade lizard        │
+//  │ Expected next move      │ Relative volume         │ Calendar spread    │
+//  └─────────────────────────┴─────────────────────────┴────────────────────┘
+function TradeIntelGrid({ t, regime }) {
+  const opt = t?.optionsSummary || {};
+  const num = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const pct = (v, ratio = 100) => {
+    const n = num(v);
+    return n == null ? null : n <= 2 ? n * ratio : n;
+  };
+
+  const ivRank = (() => { const n = optionIvPercent(opt.iv_rank); return n == null ? null : Math.max(0, Math.min(100, n)); })();
+  const ivCurrent = pct(opt.current_iv);
+  const hv30 = num(opt.historical_vol_30d ?? opt.hv_30d);
+  const ivOverHv = ivCurrent != null && hv30 ? ivCurrent / hv30 : null;
+  const atmFront = pct(opt.atm_iv_front);
+  const atmBack  = pct(opt.atm_iv_back);
+  const atmSigma = num(opt.atm_term_sigma);
+  const skew25 = num(opt.put_call_skew_25d_pp);
+  const expMove = num(opt.expected_move_pct);
+
+  const poc = num(opt.poc);
+  const vah = num(opt.vah);
+  const val = num(opt.val);
+  const avwap = num(opt.anchored_vwap_prior_close);
+  const avwapDelta = avwap != null && num(t?.px) ? ((t.px - avwap) / avwap) * 100 : null;
+  const cumDelta = num(opt.cum_delta_today);
+  const printsCnt = num(opt.large_print_count_today);
+  const printsNotional = num(opt.large_print_notional_today);
+  const relVol = num(opt.relative_volume_today);
+
+  const regimeKey = String(regime?.regime?.regime || "").toLowerCase();
+  const regimeOk = !regimeKey.includes("risk_off") && !regimeKey.includes("stress") && !regimeKey.includes("bear");
+  const regimeStrong = regimeKey.includes("risk_on") || regimeKey.includes("bull") || regimeKey.includes("trend");
+
+  // Setup readiness — derived from regime + IV rank gates per the
+  // trading-IA doc Part 3. The note column shows the active gate so
+  // the operator can see why a setup is qualified or not.
+  const setups = (() => {
+    if (ivRank == null) return [];
+    const gate = (id, label, structure, ok, why) => ({ id, label, structure, ok, why });
+    return [
+      gate("short-put",   "Short put",         "30-45 DTE · 15-30Δ",   ivRank >= 30 && regimeOk,                                `IV rank ${ivRank.toFixed(0)} ≥ 30 · regime ${regimeOk ? "ok" : "red"}`),
+      gate("bull-put",    "Bull put spread",   "Short 20-30Δ + long 5-10Δ", ivRank >= 35 && regimeStrong,                        `IV rank ${ivRank.toFixed(0)} ≥ 35 · regime ${regimeStrong ? "strong" : "soft"}`),
+      gate("iron-condor", "Iron condor",       "30-45 DTE · wings 5Δ", ivRank >= 50 && !regimeStrong && regimeOk,                `IV rank ${ivRank.toFixed(0)} ≥ 50 · range-bound only`),
+      gate("jade-lizard", "Jade lizard",       "Short put + short call spread", ivRank >= 40 && regimeOk && (skew25 != null && skew25 > 1.5), `IV rank ${ivRank.toFixed(0)} ≥ 40 · skew ${skew25 != null ? skew25.toFixed(1) + "pp" : "—"}`),
+      gate("calendar",    "Calendar spread",   "Sell front · buy back", atmSigma != null && atmSigma > 1.0,                       `Front IV ${atmSigma != null ? atmSigma.toFixed(2) + "σ" : "—"} ${atmSigma != null && atmSigma > 1 ? "rich vs back" : "flat"}`),
+      gate("earnings-iv", "Earnings IV crush", "Short strangle · defined-risk", ivRank >= 70 && expMove != null && expMove > 4,    `IV rank ${ivRank.toFixed(0)} ≥ 70 · move ${expMove != null ? "±" + expMove.toFixed(1) + "%" : "—"}`),
+    ];
+  })();
+
+  // ─── Cell primitives ────────────────────────────────────────────
+  const cardStyle = {
+    background: "var(--ink-100)",
+    border: "1px solid var(--border)",
+    borderRadius: 3,
+    padding: "10px 12px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 7,
+    minWidth: 0,
+  };
+  const titleStyle = { fontSize: 8.5 };
+  const rowStyle = { display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "baseline", padding: "3px 0", borderBottom: "1px solid var(--border-hair)" };
+  const labelStyle = { fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)" };
+  const valueMono = { fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: 12, color: "var(--ink-1000)" };
+  const dash = { ...valueMono, color: "var(--fg-muted)" };
+  const fmt = (n, dec = 2, suffix = "") => n == null ? null : `${n.toFixed(dec)}${suffix}`;
+  const fmtCompact = (n) => {
+    if (n == null) return null;
+    const a = Math.abs(n);
+    if (a >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+    if (a >= 1_000)      return (n / 1_000).toFixed(1) + "K";
+    return n.toFixed(0);
+  };
+  const Row = ({ label, v, sub }) => (
+    <div style={rowStyle}>
+      <span style={labelStyle}>{label}{sub ? <span style={{ marginLeft: 5, color: "var(--fg-hint)", fontSize: 10.5 }}>{sub}</span> : null}</span>
+      <span style={v == null ? dash : valueMono}>{v == null ? "—" : v}</span>
+    </div>
+  );
+
+  return (
+    <div style={{
+      flex: "1 1 auto",
+      minHeight: 0,
+      display: "grid",
+      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+      gap: 10,
+      marginTop: 4,
+      overflowY: "auto",
+    }} aria-label="Trade intel">
+      {/* ── Col 1 · Vol surface ───────────────────────────────── */}
+      <div style={cardStyle}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+          <span className="t-label" style={titleStyle}>Vol surface</span>
+          <span className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)" }}>Tier 2 · qualification</span>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <span style={labelStyle}>IV rank
+            <span style={{ marginLeft: 6, ...valueMono }}>{ivRank == null ? "—" : `${ivRank.toFixed(0)} / 100`}</span>
+          </span>
+          {ivRank != null && (
+            <div aria-hidden style={{ height: 5, background: "var(--bg-elev-1)", borderRadius: 2, position: "relative", overflow: "hidden" }}>
+              <div style={{ position: "absolute", inset: 0, width: `${ivRank}%`, background: ivRank >= 50 ? "var(--brand)" : ivRank >= 30 ? "var(--gold-300)" : "var(--fg-muted)" }} />
+            </div>
+          )}
+        </div>
+        <Row label="IV / 30d HV" v={fmt(ivOverHv, 2, "×")} />
+        <Row label="ATM term" sub="front vs back σ" v={atmSigma == null ? null : (atmSigma > 0.4 ? "+" : "") + atmSigma.toFixed(2) + "σ"} />
+        <Row label="25Δ skew" sub="put / call risk-rev" v={skew25 == null ? null : (skew25 > 0 ? "+" : "") + skew25.toFixed(1) + "pp"} />
+        <Row label="Expected move" sub="next event" v={expMove == null ? null : `±${expMove.toFixed(1)}%`} />
+        <Row label="Front · Back IV" v={atmFront == null || atmBack == null ? null : `${atmFront.toFixed(1)}% · ${atmBack.toFixed(1)}%`} />
+      </div>
+
+      {/* ── Col 2 · Microstructure ────────────────────────────── */}
+      <div style={cardStyle}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+          <span className="t-label" style={titleStyle}>Microstructure</span>
+          <span className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)" }}>Tier 3 · execution</span>
+        </div>
+        <Row label="Volume POC" sub="today" v={fmt(poc, 2, "")} />
+        <Row label="VAH / VAL" v={vah == null || val == null ? null : `${vah.toFixed(2)} · ${val.toFixed(2)}`} />
+        <Row label="Anchored VWAP" sub="prior close" v={avwap == null ? null : `${avwap.toFixed(2)} · ${avwapDelta == null ? "" : ((avwapDelta > 0 ? "+" : "") + avwapDelta.toFixed(2) + "%")}`} />
+        <Row label="Cum δ volume" sub="bid-pull vs ask-pull" v={cumDelta == null ? null : (cumDelta > 0 ? "+" : "") + fmtCompact(cumDelta)} />
+        <Row label="Large prints" sub="> $10K notional" v={printsCnt == null || printsNotional == null ? null : `${printsCnt} · $${fmtCompact(printsNotional)}`} />
+        <Row label="Relative volume" sub="today / 20d ADV" v={relVol == null ? null : `${relVol.toFixed(2)}×`} />
+      </div>
+
+      {/* ── Col 3 · Setup readiness ──────────────────────────── */}
+      <div style={cardStyle}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+          <span className="t-label" style={titleStyle}>Setup readiness</span>
+          <span className="t-mono" style={{ fontSize: 9.5, color: "var(--fg-hint)" }}>{setups.filter((s) => s.ok).length} of {setups.length} qualified</span>
+        </div>
+        {setups.length === 0 ? (
+          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 12.5 }}>
+            IV rank unknown — setup gates locked.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {setups.map((s) => (
+              <div key={s.id} style={{
+                display: "grid",
+                gridTemplateColumns: "auto 1fr",
+                gap: 8,
+                padding: "5px 0",
+                borderBottom: "1px solid var(--border-hair)",
+                opacity: s.ok ? 1 : 0.62,
+              }}>
+                <span aria-hidden style={{
+                  width: 7, height: 7, borderRadius: "50%",
+                  marginTop: 4,
+                  background: s.ok ? "var(--up-500)" : "var(--fg-muted)",
+                  boxShadow: s.ok ? "0 0 6px var(--up-500)" : "none",
+                }} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+                  <span style={{
+                    fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13,
+                    color: s.ok ? "var(--ink-1000)" : "var(--fg-dim)",
+                    fontWeight: 500,
+                  }}>{s.label} <span style={{ fontFamily: "var(--font-mono)", fontStyle: "normal", fontSize: 10, color: "var(--fg-hint)", marginLeft: 4 }}>{s.structure}</span></span>
+                  <span style={{ fontFamily: "var(--font-ui)", fontSize: 10, color: "var(--fg-muted)" }}>{s.why}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TradeContextRail({ t, regime }) {
   const ivRank = (() => {
     const raw = optionIvPercent(t?.optionsSummary?.iv_rank);
