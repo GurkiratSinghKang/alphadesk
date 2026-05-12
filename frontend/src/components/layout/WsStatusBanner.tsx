@@ -180,6 +180,12 @@ export function WsStatusBanner() {
   // connecting (initial handshake, no prior success) — muted so it doesn't
   // scream at users on the first paint; it reads as readiness context, not
   // an app-wide failure.
+  //
+  // In mock-mode (NEXT_PUBLIC_ENABLE_MOCKS=1) there is no WS server, so
+  // wsStatus is pinned at "connecting" forever and this banner becomes a
+  // permanent strip across the top of every screen. Suppress it in that
+  // mode — the rest of the page is honest about what's loaded.
+  if (process.env.NEXT_PUBLIC_ENABLE_MOCKS === "1") return null;
   return (
     <div
       role="status"

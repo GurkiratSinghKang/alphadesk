@@ -5075,11 +5075,14 @@ function MetricRibbon({ t, compact = false }) {
 // ─── compact center header ───────────────────────────────────────────────────
 
 function TradeHeader({ t }) {
+  // IV is intentionally absent here — the top MetricRibbon already exposes
+  // "IV · IV rank" with the more informative rank pair, and duplicating it
+  // on the secondary header just made both columns more cluttered with
+  // em-dashes when the symbol's options data wasn't loaded.
   const stats = [
     { k: "Market cap", v: t.mcap },
     { k: "Beta", v: t.beta == null ? "—" : t.beta.toFixed(2) },
     { k: "P/E", v: t.pe == null ? "—" : t.pe.toFixed(1) },
-    { k: "IV", v: t.iv == null ? "—" : `${t.iv.toFixed(1)}%` },
     { k: "Source", v: t.isDemo ? "demo" : "live" },
   ];
   return (
@@ -5715,7 +5718,10 @@ function RiskPreviewCard({ notional, riskDollars, riskPct, stopPx, isOption }) {
       <div className="t-label" style={{ marginBottom: 10 }}>Risk preview</div>
       <RiskRow label="Notional" v={fmtMoney(notional, { dec: 0 })} />
       <RiskRow label="Risk · $" v={fmtMoney(riskDollars, { dec: 0 })} tone="down" />
-      <RiskRow label="Risk · % equity" v={fmtPct(riskPct, 2)} tone={riskPct > 1 ? "down" : "up"} />
+      {/* Risk is always a downside number — render it unsigned (no leading
+        * "+") so "+0.00%" doesn't read like a gain. fmtPct adds a "+" on
+        * any positive value, which is correct for P&L but wrong for risk. */}
+      <RiskRow label="Risk · % equity" v={`${riskPct.toFixed(2)}%`} tone={riskPct > 1 ? "down" : "up"} />
       {!isOption && <RiskRow label="Stop · price" v={"$" + stopPx.toFixed(2)} />}
       {/* 2026-05-10 (round 2 honest empty-state): the previous card
        * showed hardcoded "Reward target +8.0%" and "R:R 2.0×" for
@@ -5726,7 +5732,7 @@ function RiskPreviewCard({ notional, riskDollars, riskPct, stopPx, isOption }) {
       <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border-hair)", display: "flex", flexDirection: "column", gap: 5 }}>
         <Check ok={riskPct <= 1} warn={riskPct > 1 && riskPct <= 2} label={riskPct <= 1 ? "Risk under 1% account cap" : "Risk above 1% account cap"} />
         <Check ok label="Quote and position data loaded from backend" />
-        <Check warn label="Strategy policy checks unavailable in this design panel" />
+        <Check warn label="Strategy + broker policy checks run when you stage the order" />
       </div>
     </div>
   );

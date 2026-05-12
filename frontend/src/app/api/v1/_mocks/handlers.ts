@@ -61,6 +61,30 @@ function quoteFor(symbol: string) {
 const HANDLERS: Record<string, MockHandler> = {
   // ─── Auth / user ──────────────────────────────────────────────────
   "GET /auth/session": () => ({ user: { email: "operator@local.dev", id: "op_1", role: "operator" }, expires_at: NOW_ISO() }),
+
+  // ─── Notifications / news / watchlists / CSP-report ──────────────
+  // These endpoints don't carry useful mock-mode payloads (no real
+  // events to surface) but the FE polls them on every dashboard route.
+  // Without stubs they'd 404 and the "DATA UNAVAILABLE" banner would
+  // light up with phantom backend failures that the operator can't act
+  // on. Each shape mirrors what the real api.ts wrapper expects:
+  // - getNotifications → `NotificationV2[]` (raw array)
+  // - getMarketNews    → `{articles: [...]}` (the wrapper returns `.articles`)
+  // - getWatchlistsV2  → `WatchlistV2[]` (raw array)
+  // - getUserWatchlist → `{symbols, as_of}` (mapped to camelCase by the wrapper)
+  // Returning the wrong shape crashes the FE consumer and silently
+  // wipes the live quote / portfolio state, so we mirror the wire
+  // contract carefully here.
+  "GET /notifications": () => [],
+  "GET /news/market": () => ({ articles: [] }),
+  "GET /news/symbol/:symbol": () => ({ articles: [] }),
+  "GET /watchlists": () => [],
+  "GET /user/watchlist": () => ({ symbols: ["NVDA", "AAPL", "MSFT", "SPY"], as_of: NOW_ISO() }),
+  // CSP-report is a write-only endpoint; the browser POSTs violation
+  // reports here per the `report-uri` directive in the proxy. Accept
+  // and discard so the page isn't peppered with 404s from policy
+  // checks the operator never sees.
+  "POST /security/csp-report": () => ({ ok: true }),
   "GET /user/me": () => ({
     id: "op_1",
     email: "operator@local.dev",
@@ -93,6 +117,29 @@ const HANDLERS: Record<string, MockHandler> = {
   "GET /portfolio/greeks": () => ({
     netDelta: 124.6, netGamma: 0.18, netTheta: -84.10, netVega: 312.40,
     betaWeightedDelta: 142.3, byPosition: [],
+  }),
+
+  // ─── Risk dashboard ──────────────────────────────────────────────
+  // LiveDataProvider polls /risk/dashboard on every authenticated
+  // route (it's outside the `shouldLoadRiskExtras` gate). Without a
+  // stub the trade page reports a phantom 404 in the DATA UNAVAILABLE
+  // banner even though nothing on the page consumes the response.
+  "GET /risk/dashboard": () => ({
+    portfolio_beta: 1.12,
+    sharpe_ratio: 1.34,
+    sortino_ratio: 1.82,
+    current_drawdown_pct: -2.4,
+    max_drawdown_pct: -8.1,
+    var_95: -3240.12,
+    var_99: -5_018.40,
+    total_portfolio_value: 284_512.41,
+    total_invested: 197_192.31,
+    daily_pnl: -1_840.22,
+    weekly_pnl: 4_120.55,
+    monthly_pnl: 9_240.10,
+    position_count: 8,
+    as_of: NOW_ISO(),
+    estimated: false,
   }),
   "GET /portfolio/performance": () => ({
     period: "30d",
@@ -162,6 +209,9 @@ const HANDLERS: Record<string, MockHandler> = {
     vix:  Array.from({ length: 30 }, (_, i) => 14 + Math.sin(i / 2) * 1.2),
   }),
   "GET /market/quotes/:symbol": (_, { symbol }) => quoteFor(symbol),
+  // Some callers still reach for the singular form; alias both so the
+  // mock backend doesn't 404 and pollute the DATA UNAVAILABLE banner.
+  "GET /market/quote/:symbol": (_, { symbol }) => quoteFor(symbol),
   // Level-2 ladder for the order-book panel. Returns 10 levels per side
   // around the seeded last price; sizes alternate venue+size so the depth
   // bars render with realistic variance. The shape mirrors backend
@@ -202,12 +252,17 @@ const HANDLERS: Record<string, MockHandler> = {
     session_label: "REGULAR",
   }),
   // Synthetic OHLCV bars — 350 of them — keeps the chart engine happy.
+  // Wire shape mirrors the backend response: each bar is a top-level object
+  // in the response array with snake_case keys (`timestamp`, `open`, `high`,
+  // `low`, `close`, `volume`) so api.ts `getBars` can map without coercing
+  // single-letter keys. The previous shape `{t,o,h,l,c,v}` produced NaN
+  // timestamps and an empty chart on the trade page.
   "GET /market/bars/:symbol": (_, { symbol }) => {
     const sym = symbol.toUpperCase();
     const seed = SEED_PRICES[sym] ?? 100;
     const now = Date.now();
-    const bars = Array.from({ length: 350 }, (_, i) => {
-      const t = now - (349 - i) * 3600_000;
+    return Array.from({ length: 350 }, (_, i) => {
+      const ts = now - (349 - i) * 3600_000;
       const drift = Math.sin(i / 12) * (seed * 0.04);
       const wobble = Math.sin(i / 3) * (seed * 0.008);
       const o = seed + drift;
@@ -215,12 +270,14 @@ const HANDLERS: Record<string, MockHandler> = {
       const h = Math.max(o, c) + Math.abs(wobble) * 0.4;
       const l = Math.min(o, c) - Math.abs(wobble) * 0.4;
       return {
-        t: Math.floor(t / 1000),
-        o: +o.toFixed(2), h: +h.toFixed(2), l: +l.toFixed(2), c: +c.toFixed(2),
-        v: 1_200_000 + Math.round(Math.abs(wobble) * 90_000),
+        timestamp: new Date(ts).toISOString(),
+        open: +o.toFixed(2),
+        high: +h.toFixed(2),
+        low: +l.toFixed(2),
+        close: +c.toFixed(2),
+        volume: 1_200_000 + Math.round(Math.abs(wobble) * 90_000),
       };
     });
-    return { symbol: sym, timeframe: "1h", bars };
   },
 
   // ─── Strategies index ─────────────────────────────────────────────
