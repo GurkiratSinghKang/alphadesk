@@ -3808,13 +3808,18 @@ function useLiveTicker(sym) {
   const f = live.tickerFundamentals?.symbol === upper ? live.tickerFundamentals : null;
   const opt = ctx?.optionsSummary?.value || null;
   const last = quoteLast(q);
-  // 2026-05-11 (iter3 audit symbol P1.2): when the backend can't
-  // resolve a symbol (e.g. `?symbol=ZZZZ`), the spread on `MOCK_TICKER`
-  // below would supply fake $100 fields and the operator would never
-  // know they were staging against a fabricated price. Flag the
-  // symbol as unknown so callers (and the page-level banner) can
-  // refuse to render an actionable order.
-  const isUnknown = !q && !ctx && !f && !live.loading;
+  // 2026-05-11 (iter3 audit symbol P1.2 / iter4 degrade-P1.2): when
+  // the backend can't resolve a symbol — either 404 or an empty 200
+  // body like `{}` or `{ symbol: "FAKE" }` with no price fields — the
+  // spread on `MOCK_TICKER` below would supply fake $100 fields and
+  // the operator would never know they were staging against a
+  // fabricated price. Iter3's `!q` check failed for empty objects
+  // (they're truthy in JS), so iter4 strengthens the test to require
+  // at least one real price field before treating the symbol as
+  // resolved.
+  const hasQuote = !!q && (q.last != null || q.bid != null || q.ask != null || q.close != null);
+  const hasFund = !!f && !!(f.symbol || f.name);
+  const isUnknown = !hasQuote && !ctx && !hasFund && !live.loading;
   const bid = Number(q?.bid ?? 0);
   const ask = Number(q?.ask ?? 0);
   const bidSize = Number.isFinite(Number(q?.bidSize)) ? Number(q?.bidSize) : null;
@@ -5124,6 +5129,12 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
   // moment the print prints. Block stops above 50% so we don't waste
   // a preview round-trip on an obviously broken protective stop.
   const insaneStop = !isOption && (stopPct >= 50 || stopPct < 0);
+  // 2026-05-11 (iter4 audit P1.1): a negative `limitPx` (typed via
+  // DecimalInput) used to slide through every gate — the Risk
+  // preview showed negative dollars and the Stage button stayed
+  // enabled until the payload builder rejected on click. Block at
+  // the gate so the operator never sees the "under budget ✓" lie.
+  const nonPositiveLimit = !isOption && orderType !== "market" && (!Number.isFinite(limitPx) || limitPx <= 0);
   // 2026-05-11 (iter2 audit P2.1): on the Options tab the Stage button
   // was enabled even before the operator picked a contract from the
   // chain. Clicking threw "Select a live option contract from the
@@ -5142,6 +5153,7 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
     overEquity ||
     overRiskCap ||
     insaneStop ||
+    nonPositiveLimit ||
     optionWithoutContract ||
     unknownSymbol;
 
@@ -5242,8 +5254,16 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
           <TradeChartStrip t={t} positions={symPositions} />
         </section>
 
-        {/* RIGHT — collapsible, pushes (in-grid) */}
-        {!isNarrow && (rightCollapsed ? (
+        {/* RIGHT — collapsible, pushes (in-grid)
+            2026-05-11 (iter4 audit P1.2): the `!isNarrow` outer guard
+            used to hide the ENTIRE rail below 900px — no Buy/Sell, no
+            Quantity, no Limit, no Stage button. Operators on mobile
+            or split-screen couldn't trade at all. Now the rail
+            renders in every viewport; the grid stacks it below the
+            chart on narrow, and the collapsed-strip variant only
+            applies on wide layouts (no horizontal space to collapse
+            on mobile). */}
+        {(!isNarrow && rightCollapsed) ? (
           <aside style={{ background: "var(--bg-elev-1)", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 14, gap: 10 }}>
             <a onClick={() => setRightCollapsed(false)} title="Open stage order"
                style={{ fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--fg-muted)", cursor: "default", writingMode: "vertical-rl", padding: "10px 0" }}>
@@ -5251,9 +5271,11 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
             </a>
           </aside>
         ) : (
-        <aside style={{ background: "var(--bg-elev-1)", overflow: "auto", padding: "18px 20px 20px", display: "flex", flexDirection: "column", gap: 14, position: "relative" }}>
-          <a onClick={() => setRightCollapsed(true)} title="Collapse"
-             style={{ position: "absolute", top: 14, right: 14, fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--fg-muted)", cursor: "default", padding: "2px 6px", border: "1px solid var(--border-hair)", borderRadius: 2, zIndex: 2 }}>close ▸</a>
+        <aside style={{ background: "var(--bg-elev-1)", overflow: "auto", padding: isNarrow ? "18px 16px 20px" : "18px 20px 20px", display: "flex", flexDirection: "column", gap: 14, position: "relative" }}>
+          {!isNarrow && (
+            <a onClick={() => setRightCollapsed(true)} title="Collapse"
+               style={{ position: "absolute", top: 14, right: 14, fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--fg-muted)", cursor: "default", padding: "2px 6px", border: "1px solid var(--border-hair)", borderRadius: 2, zIndex: 2 }}>close ▸</a>
+          )}
           <AssetTabs asset={asset} setAsset={setAsset} />
           {asset === "stock" && <OrderTicket {...{ side, setSide, qty, setQty, orderType, setOrderType, limitPx, setLimitPx, stopPct, setStopPct, notional, stopPx, riskDollars, riskPct, accountEquity: live.portfolio?.equity || 0 }} />}
           {asset === "option" && <>
@@ -5339,7 +5361,7 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
           )}
           <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 12, color: "var(--fg-muted)", textAlign: "center", marginTop: -8 }}>Reviewed against regime + risk policy</div>
         </aside>
-        ))}
+        )}
       </div>
     </div>
   );
@@ -6683,7 +6705,11 @@ function OrderTicket(p) {
         <DecimalInput
           aria-label={p.orderType === "market" ? "Stop loss percent of fill" : "Stop loss percent of entry"}
           aria-invalid={p.stopPct < 0 || p.stopPct >= 100}
-          decimals={1}
+          // 2026-05-11 (iter4 audit P1.5): decimals=1 rounded 49.99
+          // → 50.0 on blur, which silently flipped the >= 50 stage
+          // gate. Bumping to 2 keeps the operator's intent visible
+          // and lets them sit just under the boundary.
+          decimals={2}
           value={p.stopPct}
           onChange={p.setStopPct}
           style={{
@@ -6817,12 +6843,17 @@ function OptionChainPanel({ symbol, spot, optStrike, setOptStrike, optType, setO
       .catch((err) => {
         if (cancelled) return;
         setChain(null);
-        // 2026-05-11 (trade-audit OPTIONS-6): surface a friendly message
-        // instead of the raw `API 404: Not Found` thrown by apiFetch.
+        // 2026-05-11 (trade-audit OPTIONS-6 / iter4 degrade-P1.1): the
+        // friendly fallback used to match only 404 / "not found", so a
+        // 500 / 502 / timeout leaked the raw `API 500: Internal Server
+        // Error` into the chain card. Broaden to match any HTTP status,
+        // any fetch/network/timeout signal — and otherwise default to
+        // the friendly copy. Operators never need to see HTTP statuses.
         const raw = String(err?.message || "");
-        const friendly = /404|not\s*found/i.test(raw)
+        const hostile = /^API \d{3}:|404|not\s*found|fetch|network|timeout|abort/i.test(raw);
+        const friendly = hostile || !raw
           ? `Options chain unavailable for ${symbol} right now.`
-          : raw || "Options chain unavailable.";
+          : raw;
         setError(friendly);
       })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -6942,8 +6973,16 @@ function OptionForm(p) {
     return out.length ? out : ["Next monthly · ~30d"];
   }, []);
   const [expiry, setExpiry] = useState(expiries[0]);
-  const [strikeText, setStrikeText] = useState(String(p.optStrike || ""));
-  useEffect(() => { setStrikeText(String(p.optStrike || "")); }, [p.optStrike]);
+  // 2026-05-11 (iter4 audit P1.4): use `??` not `||` so the input
+  // doesn't blank out when state is `0` — operators may want to type
+  // through zero on the way to e.g. "0.5" for sub-$1 strikes.
+  const [strikeText, setStrikeText] = useState(String(p.optStrike ?? ""));
+  // 2026-05-11 (iter4 audit P1.3): track whether the user typed
+  // something that contained illegal chars (minus sign, letters)
+  // so we can surface aria-invalid + an inline alert instead of
+  // silently absolute-valuing or ignoring.
+  const [strikeInvalid, setStrikeInvalid] = useState(false);
+  useEffect(() => { setStrikeText(String(p.optStrike ?? "")); }, [p.optStrike]);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 10 }}>
@@ -6958,12 +6997,20 @@ function OptionForm(p) {
       <Field label="Strike · type">
         <input
           aria-label="Option strike"
+          aria-invalid={strikeInvalid || undefined}
           inputMode="decimal"
           value={strikeText}
           onChange={(e) => {
+            const raw = e.target.value;
             // Keep digits + one dot; let the user type partial values
             // (e.g. "145.") before committing to optStrike.
-            const cleaned = e.target.value.replace(/[^\d.]/g, "");
+            const cleaned = raw.replace(/[^\d.]/g, "");
+            // 2026-05-11 (iter4 audit P1.3): flag invalid when the
+            // operator typed minus, letters, or anything else that
+            // got stripped. The form previously silently absolute-
+            // valued -50 → 50; now the input reads as invalid until
+            // the operator corrects it.
+            setStrikeInvalid(raw.length > 0 && cleaned !== raw);
             // Allow only one dot.
             const parts = cleaned.split(".");
             const normalized = parts.length > 1 ? `${parts[0]}.${parts.slice(1).join("")}` : cleaned;
@@ -6971,13 +7018,22 @@ function OptionForm(p) {
             const n = parseFloat(normalized);
             if (Number.isFinite(n)) p.setOptStrike(n);
           }}
-          style={{ ...inputStyle, flex: 1 }}
+          style={{
+            ...inputStyle,
+            flex: 1,
+            borderColor: strikeInvalid ? "var(--down-500)" : inputStyle.border?.includes("border") ? undefined : undefined,
+          }}
         />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginLeft: 6, flex: 1 }}>
           <button onClick={() => p.setOptType("call")} style={optTypeBtn(p.optType === "call")}>Call</button>
           <button onClick={() => p.setOptType("put")}  style={optTypeBtn(p.optType === "put")}>Put</button>
         </div>
       </Field>
+      {strikeInvalid && (
+        <div role="alert" style={{ marginTop: -6, marginBottom: 8, fontFamily: "var(--font-ui)", fontSize: 10.5, color: "var(--down-500)" }}>
+          Strike must be a positive number (digits + optional decimal).
+        </div>
+      )}
       <Field label="Contracts">
         <input aria-label="Option contracts" type="number" inputMode="numeric" min="1" max="10000" value={p.contracts} onChange={(e) => p.setContracts(+e.target.value || 0)} style={inputStyle} />
         <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", marginLeft: 8, alignSelf: "center" }}>limit {p.limitPx.toFixed(2)}</span>
