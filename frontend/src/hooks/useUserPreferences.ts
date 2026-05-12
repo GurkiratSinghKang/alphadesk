@@ -40,6 +40,16 @@
  * card and the Trading defaults card make a single network round-trip
  * on first load + the Trade panel reads its defaults without an extra
  * fetch.
+ *
+ * Iter 27 — Active broker selection.
+ * The hook now also exposes `setActiveBroker(connectionId)` which patches
+ * the *root-level* `default_broker_connection_id` column on
+ * UserSettingsV2 (NOT a nested key under `appearance`). The Settings →
+ * Broker card uses this to flip which broker connection is the user's
+ * default. The internal mutation was generalised from "merge into
+ * appearance" to "merge an arbitrary UserSettingsV2Patch into the cache"
+ * so root-level fields and nested appearance fields both go through the
+ * same optimistic update + rollback path.
  */
 
 import { useCallback } from "react";
@@ -136,6 +146,13 @@ function pickAppearance(
 }
 
 export interface UseUserPreferencesResult {
+  /**
+   * The full UserSettingsV2 row, or undefined while the initial fetch is
+   * in flight. Exposed for callers (Settings → Broker) that need to read
+   * root-level fields like `default_broker_connection_id`. Most callers
+   * should use the `preferences` field instead.
+   */
+  settings: UserSettingsV2 | undefined;
   /** Parsed appearance preferences, or null while the initial fetch is in flight. */
   preferences: UserAppearancePreferences | null;
   /** True while the initial GET is in flight. */
@@ -164,6 +181,14 @@ export interface UseUserPreferencesResult {
    * `updatePreference`, so callers get identical behaviour.
    */
   updateTradingDefault: (key: string, value: unknown) => Promise<void>;
+  /**
+   * Iter 27 — convenience for the Settings → Broker card. PATCHes the
+   * root-level `default_broker_connection_id` field (NOT a nested
+   * appearance key). Goes through the same mutation + optimistic update
+   * + rollback as the other helpers. Pass `null` to clear the active
+   * broker (no default selected).
+   */
+  setActiveBroker: (connectionId: number | null) => Promise<void>;
 }
 
 /**
@@ -181,36 +206,39 @@ export function useUserPreferences(): UseUserPreferencesResult {
     retry: 1,
   });
 
+  // Iter 27 — the mutation now accepts a full UserSettingsV2Patch so
+  // callers can target root-level fields (e.g. default_broker_connection_id)
+  // as well as the nested `appearance` blob. `updatePreference` and
+  // `updateTradingDefault` still own the merge logic for their respective
+  // shapes; this mutation just persists whatever patch they hand it.
   const mutation = useMutation<
     UserSettingsV2,
     Error,
-    { key: string; value: unknown },
+    UserSettingsV2Patch,
     { previous: UserSettingsV2 | undefined }
   >({
-    mutationFn: async ({ key, value }) => {
-      const current = queryClient.getQueryData<UserSettingsV2>(USER_SETTINGS_V2_QUERY_KEY);
-      const existing = (current?.appearance ?? {}) as Record<string, unknown>;
-      const patch: UserSettingsV2Patch = {
-        appearance: { ...existing, [key]: value },
-      };
-      return patchUserSettingsV2(patch);
-    },
-    onMutate: async ({ key, value }) => {
+    mutationFn: async (patch) => patchUserSettingsV2(patch),
+    onMutate: async (patch) => {
       // Cancel any in-flight refetch so it doesn't clobber our optimistic update.
       await queryClient.cancelQueries({ queryKey: USER_SETTINGS_V2_QUERY_KEY });
       const previous = queryClient.getQueryData<UserSettingsV2>(USER_SETTINGS_V2_QUERY_KEY);
       if (previous) {
-        const existing = (previous.appearance ?? {}) as Record<string, unknown>;
+        // Shallow-merge the patch into the cached row. Appearance is the
+        // only nested object the patch can target, and the callers (in
+        // updatePreference / updateTradingDefault) already pre-merge the
+        // appearance blob before handing it to this mutation, so a
+        // shallow merge here is correct.
         queryClient.setQueryData<UserSettingsV2>(USER_SETTINGS_V2_QUERY_KEY, {
           ...previous,
-          appearance: { ...existing, [key]: value },
+          ...patch,
         });
       }
       return { previous };
     },
     onError: (_err, _vars, context) => {
-      // Roll back to the snapshot we took in onMutate so the dropdown
-      // reverts to its prior value when the PATCH 4xx/5xxs.
+      // Roll back to the snapshot we took in onMutate so the UI reverts
+      // (dropdown to prior value, "Active" badge back to prior broker)
+      // when the PATCH 4xx/5xxs.
       if (context?.previous) {
         queryClient.setQueryData(USER_SETTINGS_V2_QUERY_KEY, context.previous);
       }
@@ -224,11 +252,18 @@ export function useUserPreferences(): UseUserPreferencesResult {
 
   const updatePreference = useCallback(
     async (key: string, value: unknown) => {
-      // Fire and let the caller catch — the mutation itself owns the
-      // optimistic update + rollback so callers don't have to.
-      await mutation.mutateAsync({ key, value });
+      // Read the current appearance blob off the cache and merge our key
+      // into it before handing the merged shape to the mutation. We do
+      // the merge here (rather than inside the mutation) so callers that
+      // queue up multiple updates in flight still see each one's prior
+      // state — the cache snapshot is the latest optimistic value.
+      const current = queryClient.getQueryData<UserSettingsV2>(USER_SETTINGS_V2_QUERY_KEY);
+      const existing = (current?.appearance ?? {}) as Record<string, unknown>;
+      await mutation.mutateAsync({
+        appearance: { ...existing, [key]: value },
+      });
     },
-    [mutation],
+    [mutation, queryClient],
   );
 
   const updateTradingDefault = useCallback(
@@ -243,12 +278,25 @@ export function useUserPreferences(): UseUserPreferencesResult {
       const existingTradingDefaults =
         (existingAppearance.tradingDefaults as Record<string, unknown> | undefined) ?? {};
       const merged = { ...existingTradingDefaults, [key]: value };
-      await mutation.mutateAsync({ key: "tradingDefaults", value: merged });
+      await mutation.mutateAsync({
+        appearance: { ...existingAppearance, tradingDefaults: merged },
+      });
     },
     [mutation, queryClient],
   );
 
+  const setActiveBroker = useCallback(
+    async (connectionId: number | null) => {
+      // Root-level patch — does NOT merge through `appearance`. The
+      // backend stores `default_broker_connection_id` as a column on
+      // UserSettings, separate from the JSON appearance blob.
+      await mutation.mutateAsync({ default_broker_connection_id: connectionId });
+    },
+    [mutation],
+  );
+
   return {
+    settings: query.data,
     preferences: pickAppearance(query.data),
     isLoading: query.isLoading,
     isSaving: mutation.isPending,
@@ -256,5 +304,6 @@ export function useUserPreferences(): UseUserPreferencesResult {
     saveError: mutation.error,
     updatePreference,
     updateTradingDefault,
+    setActiveBroker,
   };
 }
