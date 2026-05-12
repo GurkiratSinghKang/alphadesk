@@ -163,6 +163,17 @@ vi.mock('@/lib/api', async (importOriginal) => {
     // button. Backend returns 204 (void) on success.
     markNotificationRead: vi.fn().mockResolvedValue(undefined),
     markAllNotificationsRead: vi.fn().mockResolvedValue(undefined),
+    // Iter 24: AlertsPage now reads /api/v1/user/me to branch the empty
+    // state on `is_demo_seed`. Default to a real-operator profile so the
+    // pre-existing alerts/notifications tests don't accidentally hit the
+    // demo-seed branch. Tests that need the demo-seed branch override
+    // via vi.mocked(getCurrentUser).mockResolvedValue or pre-seed the
+    // React Query cache directly.
+    getCurrentUser: vi.fn().mockResolvedValue({
+      username: 'operator',
+      role: 'user',
+      is_demo_seed: false,
+    }),
     getTickerFundamentals: vi.fn().mockResolvedValue({
       symbol: 'SPY',
       name: 'SPDR S&P 500 ETF Trust',
