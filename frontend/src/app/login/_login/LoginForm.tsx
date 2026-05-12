@@ -6,6 +6,11 @@ import { ArrowRight, CircleNotch, Eye, EyeClosed, WarningCircle } from "@phospho
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+// Iter 25 — post-login redirect honours the user's saved landing-page
+// preference. The whitelist + getter live in useUserPreferences so the
+// Settings page and the redirect agree on what paths are allowed.
+import { getUserSettingsV2 } from "@/lib/api";
+import { resolveLandingPath } from "@/hooks/useUserPreferences";
 
 /**
  * LoginForm (private to /login)
@@ -218,7 +223,28 @@ export default function LoginForm() {
               : {},
           })
         );
-        window.location.assign("/");
+
+        // Iter 25 — honour the user's saved landing-page preference.
+        // Previously this hard-coded "/", overriding whatever the user
+        // had picked in Settings → Preferences. We GET /user/settings
+        // and read `appearance.landingPage`, falling back to "/" if
+        // (a) the request fails, (b) the field is missing, or (c) the
+        // saved value isn't on the route whitelist. The whitelist is
+        // defence-in-depth: `appearance` is a freeform JSON blob, so a
+        // compromised account could otherwise stash an external URL
+        // and the LoginForm would dutifully navigate there post-login.
+        let landing: string = "/";
+        try {
+          const settings = await getUserSettingsV2();
+          const candidate = (settings?.appearance as Record<string, unknown> | null | undefined)?.landingPage;
+          landing = resolveLandingPath(candidate);
+        } catch {
+          // Settings fetch failed — sign-in already succeeded, so we
+          // still want to land the user somewhere useful rather than
+          // bouncing them back to the login form. Default to "/".
+          landing = "/";
+        }
+        window.location.assign(landing);
       } catch {
         setError("Sign-in failed before the desk could verify you. Refresh and retry; if it persists, email support@tradingalpha.net.");
       } finally {
