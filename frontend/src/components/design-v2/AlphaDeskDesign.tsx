@@ -193,6 +193,10 @@ import { useMarketDepth } from "@/hooks/useMarketDepth";
 // silently no-ops when no ToastProvider is mounted (tests, SSR
 // hydration race) so it's safe to call unconditionally.
 import { useToast } from "@/hooks/useToast";
+// Iter 25 — Settings → Preferences now round-trips to
+// /api/v1/user/settings via useUserPreferences(). See the hook for the
+// optimistic-update + rollback story.
+import { useUserPreferences } from "@/hooks/useUserPreferences";
 
 const TWEAK_DEFAULTS = {
   page: "dashboard",
@@ -11477,9 +11481,38 @@ function STInput({ value, mono, width = "100%" }) {
   );
 }
 
+// Iter 25 — STSelect is now fully controlled. Prior to this it rendered
+// with ``defaultValue`` only, which meant the Preferences page kept
+// every dropdown uncontrolled — picks vanished on navigation, the
+// "changes save automatically" header was a lie, and parent components
+// couldn't reflect an externally-changed value (the theme select didn't
+// snap back when ``onTheme`` normalised "system" → "dark"). The new
+// implementation:
+//   • ``value`` + ``onChange`` together form a fully-controlled select.
+//   • A no-onChange call site falls through an internal useState shim so
+//     existing read-only call sites stay interactive (the user can
+//     visually change the dropdown even though no parent persists it).
+//     The shim seeds from the ``value`` prop on every change of that
+//     prop, so when a controlled parent later wires up onChange it Just
+//     Works.
 function STSelect({ value, options, width = 240, onChange }) {
+  const isControlled = typeof onChange === "function";
+  const [internal, setInternal] = useState(value);
+  // Mirror the latest ``value`` prop into the shim so a parent that
+  // reads an async source (React Query, etc.) can still drive the
+  // visible value even before it wires onChange.
+  React.useEffect(() => { setInternal(value); }, [value]);
+  const current = isControlled ? value : internal;
+  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const next = e.target.value;
+    if (isControlled) {
+      onChange(next);
+    } else {
+      setInternal(next);
+    }
+  };
   return (
-    <select defaultValue={value} onChange={(e) => onChange?.(e.target.value)} style={{
+    <select value={current} onChange={handleChange} style={{
       width, padding: "7px 10px",
       fontFamily: "var(--font-ui)", fontSize: 12.5,
       color: "var(--ink-1000)", background: "var(--bg-elev-1)",
@@ -11583,31 +11616,155 @@ function STProfile() {
   );
 }
 
-function STPreferences({ theme = "dark", onTheme }) {
+// Iter 25 — Preferences now persists to /api/v1/user/settings via
+// useUserPreferences(). The five selects below all flow through
+// updatePreference(key, value) which optimistically merges into the
+// React Query cache. A small "Saved" / "Saving" / "Couldn't save"
+// indicator next to the card title replaces the prior unconditional
+// "changes save automatically" header claim — so the UI now tells the
+// user whether the network round-trip actually succeeded.
+//
+// Landing-page values map to the route whitelist in
+// useUserPreferences.ts (ALLOWED_LANDING_PATHS). We keep the user-facing
+// labels editorial ("Dashboard") and store the route literal underneath
+// so the LoginForm post-login redirect can compare against the whitelist
+// without an extra layer of mapping.
+// Exported for iter 25 tests — see
+// src/__tests__/design-v2/SettingsPreferencesPersist.test.tsx. The full
+// SettingsPage isn't exported because mounting it pulls in the whole
+// AlphaDeskDesign tree (sidebar, ticker rail, etc.); exporting just the
+// preferences card keeps the test surface tight.
+export function STPreferences({ theme = "dark", onTheme }) {
+  const { preferences, isSaving, justSaved, saveError, updatePreference } = useUserPreferences();
+  const { toast } = useToast();
+  // Local copy of justSaved so the badge can flash + auto-clear after
+  // ~1.5s. React Query's mutation.isSuccess sticks around until the next
+  // mutation, which would leave "Saved" pinned indefinitely.
+  const [recentlySaved, setRecentlySaved] = useState(false);
+  React.useEffect(() => {
+    if (!justSaved) return;
+    setRecentlySaved(true);
+    const id = window.setTimeout(() => setRecentlySaved(false), 1500);
+    return () => window.clearTimeout(id);
+  }, [justSaved]);
+
+  // Surface failures via the existing toast hook so the user knows
+  // their click didn't stick. The optimistic rollback in
+  // useUserPreferences puts the dropdown back to its prior value.
+  const lastErrorRef = React.useRef<Error | null>(null);
+  React.useEffect(() => {
+    if (saveError && saveError !== lastErrorRef.current) {
+      lastErrorRef.current = saveError;
+      toast({ type: "error", message: `Couldn't save preference: ${saveError.message}` });
+    }
+    if (!saveError) lastErrorRef.current = null;
+  }, [saveError, toast]);
+
+  const handleUpdate = (key: string, value: unknown) => {
+    // Fire-and-forget — the hook owns optimistic update + rollback and
+    // exposes errors via saveError, which the effect above relays to
+    // the toast. Swallow the rejection here so we don't trip the
+    // browser's unhandled-promise console warning.
+    void updatePreference(key, value).catch(() => undefined);
+  };
+
+  // Derive the visible value for each select with a sensible fallback so
+  // the dropdown is never blank during the initial load.
+  const timezone = (preferences?.timezone as string | undefined) ?? "America/New_York";
+  const density = (preferences?.density as string | undefined) ?? "dense";
+  const numberFormat = (preferences?.numberFormat as string | undefined) ?? "us";
+  const landingPage = (preferences?.landingPage as string | undefined) ?? "/";
+
   return (
-    <STCard title="Preferences" sub="Per-user display preferences. These don't affect strategy execution.">
+    <STCard
+      title="Preferences"
+      sub="Per-user display preferences. These don't affect strategy execution."
+    >
+      {/* Inline save-state indicator. Sits inside the card so the user
+       * sees it right next to the dropdowns instead of having to glance
+       * up to the page header. */}
+      <div
+        data-testid="st-preferences-save-state"
+        style={{
+          marginBottom: 8,
+          fontFamily: "var(--font-mono)",
+          fontSize: 10.5,
+          letterSpacing: "0.04em",
+          minHeight: 14,
+          color: saveError
+            ? "var(--down-500)"
+            : isSaving || recentlySaved
+              ? "var(--brand)"
+              : "var(--fg-hint)",
+        }}
+      >
+        {saveError
+          ? `Couldn't save · ${saveError.message}`
+          : isSaving
+            ? "Saving…"
+            : recentlySaved
+              ? "Saved"
+              : "Changes save automatically"}
+      </div>
       <STField label="Timezone" hint="Used everywhere except market session times (always ET)">
-        <STSelect value="America/Los_Angeles" options={[
-          { v: "America/Los_Angeles", l: "America / Los Angeles · PT" },
-          { v: "America/New_York", l: "America / New York · ET" },
-          { v: "America/Chicago", l: "America / Chicago · CT" },
-          { v: "Europe/London", l: "Europe / London · BST" },
-          { v: "Asia/Tokyo", l: "Asia / Tokyo · JST" },
-        ]} width={300} />
+        <STSelect
+          value={timezone}
+          onChange={(v) => handleUpdate("timezone", v)}
+          options={[
+            { v: "America/Los_Angeles", l: "America / Los Angeles · PT" },
+            { v: "America/New_York", l: "America / New York · ET" },
+            { v: "America/Chicago", l: "America / Chicago · CT" },
+            { v: "Europe/London", l: "Europe / London · BST" },
+            { v: "Asia/Tokyo", l: "Asia / Tokyo · JST" },
+          ]}
+          width={300}
+        />
       </STField>
       <STField label="Density" hint="Comfortable adds breathing room · Dense fits more on screen">
-        <STSelect value="dense" options={[{ v: "comfortable", l: "Comfortable" }, { v: "dense", l: "Dense" }]} width={180} />
+        <STSelect
+          value={density}
+          onChange={(v) => handleUpdate("density", v)}
+          options={[{ v: "comfortable", l: "Comfortable" }, { v: "dense", l: "Dense" }]}
+          width={180}
+        />
       </STField>
       <STField label="Theme" hint="System follows OS · Dark is the default authoring theme">
-        <STSelect value={theme} onChange={(v) => onTheme?.(v === "system" ? "dark" : v)} options={[{ v: "dark", l: "Dark" }, { v: "system", l: "System" }, { v: "light", l: "Light · beta" }]} width={180} />
+        <STSelect
+          value={theme}
+          onChange={(v) => {
+            // Theme stays driven by the existing parent prop so the
+            // ThemeProvider receives the change immediately. We mirror
+            // the choice into appearance.theme so a fresh page load
+            // can re-hydrate from the server (TWEAK_DEFAULTS still
+            // covers the first-paint case before the GET resolves).
+            onTheme?.(v === "system" ? "dark" : v);
+            handleUpdate("theme", v);
+          }}
+          options={[{ v: "dark", l: "Dark" }, { v: "system", l: "System" }, { v: "light", l: "Light · beta" }]}
+          width={180}
+        />
       </STField>
       <STField label="Number format" hint="$1,234.56 vs $1.234,56 · affects display only, never calculations">
-        <STSelect value="us" options={[{ v: "us", l: "1,234.56 · US" }, { v: "eu", l: "1.234,56 · EU" }]} width={180} />
+        <STSelect
+          value={numberFormat}
+          onChange={(v) => handleUpdate("numberFormat", v)}
+          options={[{ v: "us", l: "1,234.56 · US" }, { v: "eu", l: "1.234,56 · EU" }]}
+          width={180}
+        />
       </STField>
       <STField label="Default landing page" hint="Where AlphaDesk opens after login">
-        <STSelect value="dashboard" options={[
-          { v: "dashboard", l: "Dashboard" }, { v: "watchlists", l: "Watchlists" }, { v: "trade", l: "Trade" },
-        ]} width={220} />
+        <STSelect
+          value={landingPage}
+          onChange={(v) => handleUpdate("landingPage", v)}
+          options={[
+            { v: "/", l: "Dashboard" },
+            { v: "/watchlists", l: "Watchlists" },
+            { v: "/trade", l: "Trade" },
+            { v: "/strategies", l: "Strategies" },
+            { v: "/alerts", l: "Alerts" },
+          ]}
+          width={220}
+        />
       </STField>
     </STCard>
   );
