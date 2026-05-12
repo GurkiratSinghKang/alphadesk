@@ -19,6 +19,11 @@ import { useCurrentUser } from "@/hooks/useQueries";
 // BUG-070 follow-up (audit 2026-05-11): read WS-fed quote ticks from
 // useMarketStore instead of REST-fetching every page change.
 import { useMarketStore } from "@/stores/market";
+// Iter 24 (audit 2026-05-11): AlertsPage empty-state CTAs branch off the
+// same demo-seed selector iter 19 wired into the dashboard, so the
+// "Connect your broker" prompt and the alerts empty state stay in sync
+// for brand-new operators.
+import { selectIsDemoSeedAccount } from "@/app/(dashboard)/_desk/selectors";
 import { env } from "@/env";
 import { clearPersistedStores } from "@/lib/auth/clearPersistedStores";
 import {
@@ -9148,6 +9153,25 @@ const AlertsPage = () => {
   const live = useDesignLiveData();
   const { toast } = useToast();
 
+  // Iter 24 (audit 2026-05-11): the AlertsPage empty state used to render
+  // a debug counter ("Backend stream empty — Notifications endpoint: 0 ·
+  // orders endpoint: 0 · news endpoint: 0") that helped engineers triage
+  // but confused brand-new operators who needed to know what action to
+  // take. We now branch on the same demo-seed signal iter 19 wired into
+  // the dashboard, plus the operator's price-alert rule count, to pick
+  // one of three orientations:
+  //   - demo seed (no broker)  → "Connect your broker to see live orders"
+  //   - broker + no rules      → "Set up alert rules" (informational —
+  //                              no rules page exists yet)
+  //   - broker + rules + quiet → "All quiet — no alerts in the last 24h"
+  // The original debug counter stays available behind
+  // ``NEXT_PUBLIC_ALERTS_DEBUG=true`` so engineers can re-enable it when
+  // triaging without diffing the file.
+  const currentUser = useCurrentUser();
+  const isDemoSeed = selectIsDemoSeedAccount(currentUser.data);
+  const priceAlertRules = (live.alerts || []).length;
+  const showAlertsDebug = process.env.NEXT_PUBLIC_ALERTS_DEBUG === "true";
+
   // Iter 22 (2026-05-11): wire mark-as-read mutations on /alerts so
   // unread notifications actually drain. Each unread notification row
   // gets a "Mark read" button that fires the backend POST and flips
@@ -9393,10 +9417,102 @@ const AlertsPage = () => {
           );
         })}
         {filtered.length === 0 && (
-          <div style={{ marginTop: 26, padding: "34px 20px", border: "1px solid var(--border)", background: "var(--ink-100)", borderRadius: 4 }}>
-            <div className="t-label">Backend stream empty</div>
-            <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 20, color: "var(--ink-1000)" }}>No alerts returned for this filter.</div>
-            <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--fg-muted)" }}>Notifications endpoint: {(live.notifications || []).length} · orders endpoint: {(live.orders || []).length} · news endpoint: {(live.marketNews || []).length}</div>
+          <div
+            data-testid="alerts-empty-state"
+            data-alerts-empty-variant={isDemoSeed ? "demo-seed" : priceAlertRules === 0 ? "no-rules" : "quiet"}
+            style={{ marginTop: 26, padding: "34px 20px", border: "1px solid var(--border)", background: "var(--ink-100)", borderRadius: 4 }}
+          >
+            {isDemoSeed ? (
+              <>
+                <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>NO BROKER CONNECTED</div>
+                <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 22, color: "var(--ink-1000)", letterSpacing: "-0.015em", lineHeight: 1.1 }}>
+                  Connect your broker to see live orders
+                </div>
+                <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--fg-muted)", lineHeight: 1.5, maxWidth: 520 }}>
+                  Your desk is still on demo data. Once a broker is wired,
+                  fills, working-order changes, and risk events show up here
+                  the moment the backend sees them.
+                </div>
+                <a
+                  href="/settings"
+                  data-testid="alerts-empty-connect-broker"
+                  style={{
+                    display: "inline-block",
+                    marginTop: 16,
+                    padding: "8px 14px",
+                    fontFamily: "var(--font-ui)",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: "0.12em",
+                    textTransform: "uppercase",
+                    color: "var(--brand)",
+                    background: "var(--brand-tint)",
+                    border: "1px solid var(--brand)",
+                    borderRadius: 3,
+                    textDecoration: "none",
+                  }}
+                >
+                  Connect broker →
+                </a>
+              </>
+            ) : priceAlertRules === 0 ? (
+              <>
+                <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>NO ALERT RULES</div>
+                <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 22, color: "var(--ink-1000)", letterSpacing: "-0.015em", lineHeight: 1.1 }}>
+                  Set up your first alert rule
+                </div>
+                <div
+                  data-testid="alerts-empty-no-rules-detail"
+                  style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--fg-muted)", lineHeight: 1.5, maxWidth: 520 }}
+                >
+                  Broker fills and market news will still flow here, but you
+                  haven't subscribed to any price triggers yet. A dedicated
+                  rules editor is on the way — for now, the rail on the right
+                  lists what subscribes once the rules endpoint ships.
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="t-eyebrow-italic" style={{ color: "var(--brand)", letterSpacing: "0.2em" }}>ALL QUIET</div>
+                <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 22, color: "var(--ink-1000)", letterSpacing: "-0.015em", lineHeight: 1.1 }}>
+                  No alerts in the last 24h
+                </div>
+                <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 14, color: "var(--fg-muted)", lineHeight: 1.5, maxWidth: 520 }}>
+                  Broker, alert rules, and news feed are all wired. Nothing
+                  has tripped a rule recently. New events will appear here as
+                  soon as the backend reports them.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { if (typeof window !== "undefined") window.location.reload(); }}
+                  data-testid="alerts-empty-refresh"
+                  style={{
+                    marginTop: 16,
+                    padding: "6px 12px",
+                    fontFamily: "var(--font-ui)",
+                    fontSize: 10.5,
+                    fontWeight: 600,
+                    letterSpacing: "0.14em",
+                    textTransform: "uppercase",
+                    color: "var(--fg-muted)",
+                    background: "transparent",
+                    border: "1px solid var(--border)",
+                    borderRadius: 3,
+                    cursor: "pointer",
+                  }}
+                >
+                  Refresh
+                </button>
+              </>
+            )}
+            {showAlertsDebug && (
+              <div
+                data-testid="alerts-empty-debug"
+                style={{ marginTop: 16, paddingTop: 12, borderTop: "1px dashed var(--border-hair)", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-hint)", lineHeight: 1.5 }}
+              >
+                Backend stream empty · Notifications endpoint: {(live.notifications || []).length} · orders endpoint: {(live.orders || []).length} · news endpoint: {(live.marketNews || []).length}
+              </div>
+            )}
           </div>
         )}
       </section>
