@@ -30,6 +30,16 @@
  * `updatePreference(key, value)` which merges into the existing object.
  * That keeps us forward-compatible if a future iter adds, say, a
  * "currency" or "decimals" preference without needing to bump this hook.
+ *
+ * Iter 26 — Trading defaults persistence.
+ * The same hook now exposes `updateTradingDefault(key, value)` which
+ * persists under `appearance.tradingDefaults` so Settings → Trading
+ * defaults can save the order ticket pre-fill values (order type,
+ * time-in-force, sizing mode, confirm toggles, cost basis). Sharing the
+ * `["user-settings-v2"]` cache key with iter 25 means the Preferences
+ * card and the Trading defaults card make a single network round-trip
+ * on first load + the Trade panel reads its defaults without an extra
+ * fetch.
  */
 
 import { useCallback } from "react";
@@ -77,12 +87,37 @@ export function resolveLandingPath(candidate: unknown): AllowedLandingPath {
   return isAllowedLandingPath(candidate) ? candidate : "/";
 }
 
+/**
+ * Iter 26 — Trading defaults persistence shape.
+ *
+ * Stored as a nested object under `appearance.tradingDefaults`. Six
+ * controls on Settings → Trading defaults populate this blob; the Trade
+ * panel reads it on mount to pre-fill the order ticket. All values
+ * mirror the on-screen STSelect / STToggle option literals (no
+ * translation layer — the order ticket consumes the raw `v` from each
+ * select), so adding a new option only needs the STTrading + ticket
+ * sites updated. Unknown keys are tolerated — the hook merges into the
+ * existing blob rather than replacing it, so a forward-compatible field
+ * (e.g. a future "defaultStopPct") can be added without bumping this
+ * interface.
+ */
+export interface UserTradingDefaults {
+  defaultOrderType?: "market" | "limit" | "stop" | "stop-limit";
+  defaultTimeInForce?: "day" | "gtc" | "ioc" | "fok";
+  defaultSizing?: "risk" | "notional" | "shares";
+  confirmMarketOrders?: boolean;
+  confirmLargeOrders?: boolean;
+  defaultCostBasis?: "fifo" | "lifo" | "spec" | "avg";
+  [key: string]: unknown;
+}
+
 export interface UserAppearancePreferences {
   timezone?: string;
   density?: "comfortable" | "dense";
   theme?: "dark" | "light" | "system";
   numberFormat?: "us" | "eu";
   landingPage?: string;
+  tradingDefaults?: UserTradingDefaults;
   [key: string]: unknown;
 }
 
@@ -121,6 +156,14 @@ export interface UseUserPreferencesResult {
    * rolls back on failure.
    */
   updatePreference: (key: string, value: unknown) => Promise<void>;
+  /**
+   * Iter 26 — convenience for the Trading defaults card. Merges
+   * `{ [key]: value }` into `appearance.tradingDefaults`, preserving
+   * sibling keys (so flipping one toggle doesn't drop the others).
+   * Goes through the same mutation + optimistic update + rollback as
+   * `updatePreference`, so callers get identical behaviour.
+   */
+  updateTradingDefault: (key: string, value: unknown) => Promise<void>;
 }
 
 /**
@@ -188,6 +231,23 @@ export function useUserPreferences(): UseUserPreferencesResult {
     [mutation],
   );
 
+  const updateTradingDefault = useCallback(
+    async (key: string, value: unknown) => {
+      // Read the current tradingDefaults sub-blob off the cache and
+      // merge our key into it. We can't go through updatePreference
+      // directly because that would replace the entire tradingDefaults
+      // object — we want a per-key merge so unrelated trading defaults
+      // survive the PATCH.
+      const current = queryClient.getQueryData<UserSettingsV2>(USER_SETTINGS_V2_QUERY_KEY);
+      const existingAppearance = (current?.appearance ?? {}) as Record<string, unknown>;
+      const existingTradingDefaults =
+        (existingAppearance.tradingDefaults as Record<string, unknown> | undefined) ?? {};
+      const merged = { ...existingTradingDefaults, [key]: value };
+      await mutation.mutateAsync({ key: "tradingDefaults", value: merged });
+    },
+    [mutation, queryClient],
+  );
+
   return {
     preferences: pickAppearance(query.data),
     isLoading: query.isLoading,
@@ -195,5 +255,6 @@ export function useUserPreferences(): UseUserPreferencesResult {
     justSaved: mutation.isSuccess && !mutation.isPending,
     saveError: mutation.error,
     updatePreference,
+    updateTradingDefault,
   };
 }

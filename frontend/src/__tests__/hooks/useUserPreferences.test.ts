@@ -188,6 +188,103 @@ describe("useUserPreferences — updatePreference", () => {
   });
 });
 
+describe("useUserPreferences — updateTradingDefault (iter 26)", () => {
+  it("PATCHes appearance.tradingDefaults with the merged sub-blob", async () => {
+    vi.spyOn(api, "getUserSettingsV2").mockResolvedValue({
+      ...baseSettings,
+      appearance: {
+        ...(baseSettings.appearance ?? {}),
+        tradingDefaults: {
+          defaultOrderType: "limit",
+          defaultTimeInForce: "day",
+        },
+      },
+    });
+    const patchSpy = vi
+      .spyOn(api, "patchUserSettingsV2")
+      .mockImplementation(async (patch: api.UserSettingsV2Patch) => ({
+        ...baseSettings,
+        appearance: { ...(baseSettings.appearance ?? {}), ...(patch.appearance ?? {}) },
+      }));
+
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(() => useUserPreferences(), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(async () => {
+      await result.current.updateTradingDefault("defaultOrderType", "market");
+    });
+
+    expect(patchSpy).toHaveBeenCalledTimes(1);
+    const arg = patchSpy.mock.calls[0]?.[0];
+    // Existing trading defaults preserved + defaultOrderType replaced.
+    expect(arg?.appearance).toMatchObject({
+      tradingDefaults: {
+        defaultOrderType: "market",
+        defaultTimeInForce: "day",
+      },
+    });
+  });
+
+  it("seeds tradingDefaults blob from scratch when none exists yet", async () => {
+    vi.spyOn(api, "getUserSettingsV2").mockResolvedValue({
+      ...baseSettings,
+      appearance: { timezone: "America/New_York" }, // no tradingDefaults key
+    });
+    const patchSpy = vi
+      .spyOn(api, "patchUserSettingsV2")
+      .mockImplementation(async (patch: api.UserSettingsV2Patch) => ({
+        ...baseSettings,
+        appearance: { ...(baseSettings.appearance ?? {}), ...(patch.appearance ?? {}) },
+      }));
+
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(() => useUserPreferences(), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(async () => {
+      await result.current.updateTradingDefault("defaultCostBasis", "lifo");
+    });
+
+    const arg = patchSpy.mock.calls[0]?.[0];
+    expect(arg?.appearance).toMatchObject({
+      tradingDefaults: { defaultCostBasis: "lifo" },
+    });
+  });
+
+  it("preserves sibling appearance keys when updating tradingDefaults", async () => {
+    vi.spyOn(api, "getUserSettingsV2").mockResolvedValue(baseSettings);
+    const patchSpy = vi
+      .spyOn(api, "patchUserSettingsV2")
+      .mockImplementation(async (patch: api.UserSettingsV2Patch) => ({
+        ...baseSettings,
+        appearance: { ...(baseSettings.appearance ?? {}), ...(patch.appearance ?? {}) },
+      }));
+
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(() => useUserPreferences(), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(async () => {
+      await result.current.updateTradingDefault("defaultSizing", "notional");
+    });
+
+    // The hook's mutation merges into the existing appearance blob
+    // before PATCHing, so the body carries every sibling key untouched
+    // alongside the new tradingDefaults blob. We assert here that
+    // updating tradingDefaults didn't drop or overwrite the iter 25
+    // preference keys (timezone, density, numberFormat, landingPage).
+    const arg = patchSpy.mock.calls[0]?.[0];
+    expect(arg?.appearance).toMatchObject({
+      timezone: "America/New_York",
+      density: "comfortable",
+      numberFormat: "us",
+      landingPage: "/watchlists",
+      tradingDefaults: { defaultSizing: "notional" },
+    });
+  });
+});
+
 describe("resolveLandingPath", () => {
   it("returns each whitelisted path unchanged", () => {
     for (const p of ALLOWED_LANDING_PATHS) {

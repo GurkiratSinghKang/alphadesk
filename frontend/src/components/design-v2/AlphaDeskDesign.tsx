@@ -4853,6 +4853,12 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
   const [side, setSide] = useState("buy");
   const [qty, setQty] = useState(1);
   const [orderType, setOrderType] = useState("limit");
+  // Iter 26 — time-in-force is now per-ticket state seeded from the
+  // user's saved Trading defaults (Settings → Trading defaults →
+  // "Default time-in-force"). Previously the payload hardcoded
+  // ``time_in_force: "day"`` in two places, ignoring whatever the
+  // operator picked in settings.
+  const [tif, setTif] = useState("day");
   const [limitPx, setLimitPx] = useState(0);
   const [stopPct, setStopPct] = useState(4.0);
   const [optStrike, setOptStrike] = useState(140);
@@ -4875,6 +4881,30 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
   const [stagedOrder, setStagedOrder] = useState(null);
   const [orderError, setOrderError] = useState("");
   const [orderSuccess, setOrderSuccess] = useState("");
+
+  // Iter 26 — hydrate orderType / tif from the user's saved Trading
+  // defaults once the React Query GET resolves. We deliberately do this
+  // *once* via a ref guard so a later refetch (or another tab editing
+  // the same row) can't yank the operator's choice out from under them
+  // mid-ticket. The Trade panel becomes the source of truth for these
+  // two values from the moment the user first sees the page; Settings →
+  // Trading defaults only seeds the initial values.
+  const { preferences: userPrefs } = useUserPreferences();
+  const tradingDefaultsHydrated = React.useRef(false);
+  React.useEffect(() => {
+    if (tradingDefaultsHydrated.current) return;
+    if (!userPrefs) return; // still loading
+    const td = (userPrefs.tradingDefaults as Record<string, unknown> | undefined) ?? {};
+    const savedOrderType = td.defaultOrderType;
+    const savedTif = td.defaultTimeInForce;
+    if (typeof savedOrderType === "string" && savedOrderType.length > 0) {
+      setOrderType(savedOrderType);
+    }
+    if (typeof savedTif === "string" && savedTif.length > 0) {
+      setTif(savedTif);
+    }
+    tradingDefaultsHydrated.current = true;
+  }, [userPrefs]);
 
   useEffect(() => {
     if (t.px > 0) setLimitPx(t.px);
@@ -4907,7 +4937,7 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
     setStagedOrder(null);
     setOrderError("");
     setOrderSuccess("");
-  }, [asset, side, qty, orderType, limitPx, stopPct, optStrike, optType, selectedOptionContract?.symbol, contracts, t.sym]);
+  }, [asset, side, qty, orderType, tif, limitPx, stopPct, optStrike, optType, selectedOptionContract?.symbol, contracts, t.sym]);
 
   const buildOrderPayload = () => {
     const symbol = String(t.sym || sym || "SPY").trim().toUpperCase();
@@ -4930,7 +4960,9 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
         side,
         type: orderType,
         quantity,
-        time_in_force: "day",
+        // Iter 26 — TIF flows from the operator's saved Trading defaults
+        // (hydrated once on mount, then ticket-state from there).
+        time_in_force: tif,
         strategy: "manual",
         route_intent: "broker_order_review",
         quote_at_fill_ts: quoteSnapshot?.timestamp ?? Date.now() / 1000,
@@ -4967,7 +4999,9 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
         side,
         type: orderType,
         quantity,
-        time_in_force: "day",
+        // Iter 26 — same as the stock branch above, TIF flows from
+        // saved Trading defaults instead of hardcoded "day".
+        time_in_force: tif,
         strategy: "manual",
         route_intent: "broker_order_review",
       };
@@ -11661,17 +11695,37 @@ function STSelect({ value, options, width = 240, onChange }) {
   );
 }
 
-function STToggle({ on }) {
-  const [v, setV] = useState(on);
+// Iter 26 — STToggle now supports a controlled mode that mirrors the
+// STSelect pattern: when an ``onChange`` callback is supplied the toggle
+// is fully controlled and clicking fires the callback with the next
+// boolean. Existing call sites pass only ``on`` so the local-state shim
+// keeps them visually interactive without persistence. The "cursor:
+// pointer" change reflects the toggle now does something when clicked
+// in the persisted call sites — the read-only shim still flips
+// optimistically so the design comp behaves correctly under tests that
+// click without wiring a parent.
+function STToggle({ on, onChange }) {
+  const isControlled = typeof onChange === "function";
+  const [internal, setInternal] = useState(on);
+  React.useEffect(() => { setInternal(on); }, [on]);
+  const current = isControlled ? on : internal;
+  const handleClick = () => {
+    const next = !current;
+    if (isControlled) {
+      onChange(next);
+    } else {
+      setInternal(next);
+    }
+  };
   return (
-    <button onClick={() => setV(x => !x)} style={{
+    <button onClick={handleClick} style={{
       width: 38, height: 20, borderRadius: 10,
-      background: v ? "var(--up-500)" : "var(--bg-elev-1)",
-      border: "1px solid var(--border)", padding: 0, position: "relative", cursor: "default",
+      background: current ? "var(--up-500)" : "var(--bg-elev-1)",
+      border: "1px solid var(--border)", padding: 0, position: "relative", cursor: "pointer",
       transition: "background 150ms",
     }}>
       <span style={{
-        position: "absolute", top: 1, left: v ? 19 : 1, width: 16, height: 16, borderRadius: "50%",
+        position: "absolute", top: 1, left: current ? 19 : 1, width: 16, height: 16, borderRadius: "50%",
         background: "var(--ink-1000)", boxShadow: "0 1px 3px rgba(0,0,0,0.4)", transition: "left 150ms",
       }} />
     </button>
@@ -11908,28 +11962,145 @@ export function STPreferences({ theme = "dark", onTheme }) {
   );
 }
 
-function STTrading() {
+// Iter 26 — Trading defaults persists to /api/v1/user/settings via the
+// same useUserPreferences() hook iter 25 introduced. All six controls
+// (order type, TIF, sizing, two confirm toggles, cost basis) now flow
+// through updateTradingDefault(key, value) which optimistically merges
+// into appearance.tradingDefaults. Prior to this each STSelect /
+// STToggle rendered with a hardcoded literal and no onChange — picks
+// vanished on navigation and the Trade panel ticket never saw them.
+//
+// The Trade panel reads these defaults on mount (orderType + TIF — the
+// only two the ticket form currently exposes) so the operator's saved
+// preference is the initial form value rather than the hardcoded
+// "limit" / "day".
+//
+// Exported for iter 26 tests — see
+// src/__tests__/design-v2/SettingsTradingPersist.test.tsx. Same pattern
+// as STPreferences: just the card is exported so tests don't have to
+// mount the whole AlphaDeskDesign tree.
+export function STTrading() {
+  const { preferences, isSaving, justSaved, saveError, updateTradingDefault } = useUserPreferences();
+  const { toast } = useToast();
+  const [recentlySaved, setRecentlySaved] = useState(false);
+  React.useEffect(() => {
+    if (!justSaved) return;
+    setRecentlySaved(true);
+    const id = window.setTimeout(() => setRecentlySaved(false), 1500);
+    return () => window.clearTimeout(id);
+  }, [justSaved]);
+
+  // Surface failures via the toast hook so the user knows their click
+  // didn't stick. The optimistic rollback in useUserPreferences puts
+  // the dropdown back to its prior value.
+  const lastErrorRef = React.useRef<Error | null>(null);
+  React.useEffect(() => {
+    if (saveError && saveError !== lastErrorRef.current) {
+      lastErrorRef.current = saveError;
+      toast({ type: "error", message: `Couldn't save trading default: ${saveError.message}` });
+    }
+    if (!saveError) lastErrorRef.current = null;
+  }, [saveError, toast]);
+
+  const handleUpdate = (key: string, value: unknown) => {
+    void updateTradingDefault(key, value).catch(() => undefined);
+  };
+
+  // Derive the visible value for each control with a sensible fallback
+  // so the inputs are never blank during the initial load. Fallbacks
+  // mirror the previous hardcoded design-comp values so the page looks
+  // identical to a first-time user before they touch anything.
+  const td = (preferences?.tradingDefaults as Record<string, unknown> | undefined) ?? {};
+  const orderType = (td.defaultOrderType as string | undefined) ?? "limit";
+  const tif = (td.defaultTimeInForce as string | undefined) ?? "day";
+  const sizing = (td.defaultSizing as string | undefined) ?? "risk";
+  const confirmMarket = (typeof td.confirmMarketOrders === "boolean" ? td.confirmMarketOrders : true);
+  const confirmLarge = (typeof td.confirmLargeOrders === "boolean" ? td.confirmLargeOrders : true);
+  const costBasis = (td.defaultCostBasis as string | undefined) ?? "fifo";
+
   return (
-    <>
     <STCard title="Trading defaults" sub="Pre-fill values on the order ticket. The strategy book overrides these per playbook.">
+      <div
+        data-testid="st-trading-save-state"
+        style={{
+          marginBottom: 8,
+          fontFamily: "var(--font-mono)",
+          fontSize: 10.5,
+          letterSpacing: "0.04em",
+          minHeight: 14,
+          color: saveError
+            ? "var(--down-500)"
+            : isSaving || recentlySaved
+              ? "var(--brand)"
+              : "var(--fg-hint)",
+        }}
+      >
+        {saveError
+          ? `Couldn't save · ${saveError.message}`
+          : isSaving
+            ? "Saving…"
+            : recentlySaved
+              ? "Saved"
+              : "Changes save automatically"}
+      </div>
       <STField label="Default order type" hint="What loads when you open the ticker">
-        <STSelect value="limit" options={[
-          { v: "market", l: "Market" }, { v: "limit", l: "Limit" }, { v: "stop", l: "Stop" }, { v: "stop-limit", l: "Stop-limit" },
-        ]} width={220} />
+        <STSelect
+          value={orderType}
+          onChange={(v) => handleUpdate("defaultOrderType", v)}
+          options={[
+            { v: "market", l: "Market" },
+            { v: "limit", l: "Limit" },
+            { v: "stop", l: "Stop" },
+            { v: "stop-limit", l: "Stop-limit" },
+          ]}
+          width={220}
+        />
       </STField>
-      <STField label="Default time-in-force"><STSelect value="day" options={[{ v: "day", l: "Day" }, { v: "gtc", l: "GTC" }, { v: "ioc", l: "IOC" }, { v: "fok", l: "FOK" }]} width={180} /></STField>
+      <STField label="Default time-in-force">
+        <STSelect
+          value={tif}
+          onChange={(v) => handleUpdate("defaultTimeInForce", v)}
+          options={[
+            { v: "day", l: "Day" },
+            { v: "gtc", l: "GTC" },
+            { v: "ioc", l: "IOC" },
+            { v: "fok", l: "FOK" },
+          ]}
+          width={180}
+        />
+      </STField>
       <STField label="Default sizing" hint="How the ticket interprets blank size field">
-        <STSelect value="risk" options={[
-          { v: "risk", l: "% of equity at risk · 0.50%" }, { v: "notional", l: "Notional dollars · $5,000" }, { v: "shares", l: "Fixed shares · 100" },
-        ]} width={300} />
+        <STSelect
+          value={sizing}
+          onChange={(v) => handleUpdate("defaultSizing", v)}
+          options={[
+            { v: "risk", l: "% of equity at risk · 0.50%" },
+            { v: "notional", l: "Notional dollars · $5,000" },
+            { v: "shares", l: "Fixed shares · 100" },
+          ]}
+          width={300}
+        />
       </STField>
-      <STField label="Confirm market orders" hint="Show a confirmation dialog before any market order"><STToggle on={true} /></STField>
-      <STField label="Confirm orders > $25k" hint="Always confirm large orders regardless of type"><STToggle on={true} /></STField>
+      <STField label="Confirm market orders" hint="Show a confirmation dialog before any market order">
+        <STToggle on={confirmMarket} onChange={(v) => handleUpdate("confirmMarketOrders", v)} />
+      </STField>
+      <STField label="Confirm orders > $25k" hint="Always confirm large orders regardless of type">
+        <STToggle on={confirmLarge} onChange={(v) => handleUpdate("confirmLargeOrders", v)} />
+      </STField>
       <STField label="Cost basis method" hint="Used for tax-lot accounting on sells">
-        <STSelect value="fifo" options={[{ v: "fifo", l: "FIFO · first in, first out" }, { v: "lifo", l: "LIFO" }, { v: "spec", l: "Specific identification" }, { v: "avg", l: "Average cost" }]} width={300} />
+        <STSelect
+          value={costBasis}
+          onChange={(v) => handleUpdate("defaultCostBasis", v)}
+          options={[
+            { v: "fifo", l: "FIFO · first in, first out" },
+            { v: "lifo", l: "LIFO" },
+            { v: "spec", l: "Specific identification" },
+            { v: "avg", l: "Average cost" },
+          ]}
+          width={300}
+        />
       </STField>
     </STCard>
-    </>
   );
 }
 
