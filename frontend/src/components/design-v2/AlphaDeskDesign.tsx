@@ -5139,7 +5139,8 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
   };
 
   const stageButtonLabel =
-    orderStage === "previewing" ? "Previewing order..."
+    asset === "builder" ? "Multi-leg staging — coming soon"
+    : orderStage === "previewing" ? "Previewing order..."
     : orderStage === "submitting" ? "Submitting order..."
     : orderStage === "ready" ? `Confirm ${side} order →`
     : orderStage === "success" ? "Order submitted"
@@ -5183,6 +5184,13 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
   // see MOCK_TICKER's $100 fields and could submit a real order
   // against fabricated data.
   const unknownSymbol = Boolean(t.isUnknown);
+  // 2026-05-12 (iter5 audit WF9): builder mode's payload builder
+  // doesn't know how to serialize multi-leg structures yet. The
+  // staged-click used to surface "Select Stock or Option" — a
+  // confusing error since the operator IS on an asset tab. Block
+  // the button until multi-leg staging is wired so the label tells
+  // the truth ("Multi-leg staging — coming soon").
+  const builderMode = asset === "builder";
   const stageDisabled =
     orderStage === "previewing" ||
     orderStage === "submitting" ||
@@ -5193,7 +5201,8 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
     insaneStop ||
     nonPositiveLimit ||
     optionWithoutContract ||
-    unknownSymbol;
+    unknownSymbol ||
+    builderMode;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: "var(--border)" }}>
@@ -5235,15 +5244,26 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
         minHeight: 0,
         position: "relative"
       }}>
-        {/* LEFT — slim rail plus optional book column. The panel is in-flow so it never covers the chart. */}
+        {/* LEFT — slim rail plus optional book column. The panel is in-flow so it never covers the chart.
+            2026-05-12 (iter5 audit P1.5): rail toggles used to be inert
+            `<a onClick cursor:default>` — keyboard tab skipped them and
+            SR couldn't tell they were actionable. Promoted to real
+            `<button>` with pointer cursor + aria-expanded so the rail
+            is operable for every input method. */}
         {!isNarrow && <aside style={{ background: "var(--bg)", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 14, gap: 10 }}>
-          <a onClick={() => setLeftCollapsed(c => !c)} title={leftCollapsed ? "Open book" : "Collapse"}
-             style={{ fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--fg-muted)", cursor: "default", writingMode: "vertical-rl", transform: "rotate(180deg)", padding: "10px 0" }}>
+          <button
+            type="button"
+            onClick={() => setLeftCollapsed(c => !c)}
+            title={leftCollapsed ? "Open book" : "Collapse book"}
+            aria-expanded={!leftCollapsed}
+            aria-controls="trade-book-panel"
+            style={{ all: "unset", fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--fg-muted)", cursor: "pointer", writingMode: "vertical-rl", transform: "rotate(180deg)", padding: "10px 0" }}
+          >
             {leftCollapsed ? "▸" : "◂"} &nbsp; {isOption ? "Options book" : "Order book · L2"}
-          </a>
+          </button>
         </aside>}
         {!isNarrow && !leftCollapsed && (
-          <aside style={{
+          <aside id="trade-book-panel" aria-label={isOption ? "Options book" : "Order book"} style={{
             minWidth: 0,
             background: "var(--pill-bg)",
             backdropFilter: "blur(14px) saturate(140%)",
@@ -5253,8 +5273,8 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
           }}>
             <div style={{ position: "sticky", top: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "var(--pill-bg)", borderBottom: "1px solid var(--border-hair)", backdropFilter: "blur(8px)" }}>
               <span className="t-label" style={{ fontSize: 8.5 }}>{isOption ? "Options · book" : "Order book · L2"}</span>
-              <a onClick={() => setLeftCollapsed(true)} title="Collapse"
-                 style={{ fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--fg-muted)", cursor: "default", padding: "2px 6px", border: "1px solid var(--border-hair)", borderRadius: 2 }}>◂ close</a>
+              <button type="button" onClick={() => setLeftCollapsed(true)} title="Collapse book"
+                 style={{ all: "unset", fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--fg-muted)", cursor: "pointer", padding: "2px 6px", border: "1px solid var(--border-hair)", borderRadius: 2 }}>◂ close</button>
             </div>
             {isOption ? (<OptionsOrderBookPanel optStrike={optStrike} optType={optType} spot={t.px} />) : (<><OrderBookPanel symbol={t.sym} last={t.px} bid={t.bid} ask={t.ask} bidSize={t.bidSize} askSize={t.askSize} quoteTs={t.quoteTs} onPickPrice={(px) => { setOrderType("limit"); setLimitPx(+px.toFixed(2)); }} /><TimeAndSalesPanel symbol={t.sym} last={t.px} bid={t.bid} ask={t.ask} bidSize={t.bidSize} askSize={t.askSize} /></>)}
           </aside>
@@ -5303,16 +5323,32 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
             on mobile). */}
         {(!isNarrow && rightCollapsed) ? (
           <aside style={{ background: "var(--bg-elev-1)", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 14, gap: 10 }}>
-            <a onClick={() => setRightCollapsed(false)} title="Open stage order"
-               style={{ fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--fg-muted)", cursor: "default", writingMode: "vertical-rl", padding: "10px 0" }}>
+            <button
+              type="button"
+              onClick={() => setRightCollapsed(false)}
+              title="Open stage order"
+              aria-expanded={false}
+              aria-controls="trade-stage-panel"
+              style={{ all: "unset", fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--fg-muted)", cursor: "pointer", writingMode: "vertical-rl", padding: "10px 0" }}
+            >
               ◂ &nbsp; Stage order
-            </a>
+            </button>
           </aside>
         ) : (
-        <aside style={{ background: "var(--bg-elev-1)", overflow: "auto", padding: isNarrow ? "18px 16px 20px" : "18px 20px 20px", display: "flex", flexDirection: "column", gap: 14, position: "relative" }}>
+        <aside
+          id="trade-stage-panel"
+          aria-label="Stage order"
+          style={{ background: "var(--bg-elev-1)", overflow: "auto", padding: isNarrow ? "18px 16px 20px" : "18px 20px 20px", display: "flex", flexDirection: "column", gap: 14, position: "relative" }}
+        >
           {!isNarrow && (
-            <a onClick={() => setRightCollapsed(true)} title="Collapse"
-               style={{ position: "absolute", top: 14, right: 14, fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--fg-muted)", cursor: "default", padding: "2px 6px", border: "1px solid var(--border-hair)", borderRadius: 2, zIndex: 2 }}>close ▸</a>
+            <button
+              type="button"
+              onClick={() => setRightCollapsed(true)}
+              title="Collapse stage order"
+              aria-expanded={true}
+              aria-controls="trade-stage-panel"
+              style={{ all: "unset", position: "absolute", top: 14, right: 14, fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--fg-muted)", cursor: "pointer", padding: "2px 6px", border: "1px solid var(--border-hair)", borderRadius: 2, zIndex: 2 }}
+            >close ▸</button>
           )}
           <AssetTabs asset={asset} setAsset={setAsset} />
           {asset === "stock" && <OrderTicket {...{ side, setSide, qty, setQty, orderType, setOrderType, limitPx, setLimitPx, stopPct, setStopPct, notional, stopPx, riskDollars, riskPct, accountEquity: live.portfolio?.equity || 0 }} />}
@@ -5333,8 +5369,13 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
             style={{
               marginTop: 4,
               height: 46,
-              background: side === "buy" ? "var(--up-500)" : "var(--down-500)",
-              color: "var(--up-on)",
+              // 2026-05-12 (iter5 audit P1.9): disabled Stage stayed
+              // green and just dropped to opacity 0.72 — read as "armed
+              // and ready to fire". That's hazardous for a button that
+              // submits real orders. Disabled state now uses neutral
+              // surface + muted text so the operator sees it's blocked.
+              background: stageDisabled ? "var(--ink-300)" : (side === "buy" ? "var(--up-500)" : "var(--down-500)"),
+              color: stageDisabled ? "var(--fg-muted)" : "var(--up-on)",
               border: 0,
               borderRadius: 4,
               fontFamily: "var(--font-ui)",
@@ -5343,7 +5384,16 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
               letterSpacing: "0.14em",
               textTransform: "uppercase",
               cursor: stageDisabled ? "not-allowed" : "pointer",
-              opacity: stageDisabled ? 0.72 : 1,
+              opacity: stageDisabled ? 0.85 : 1,
+              // 2026-05-12 (iter5 audit WF5): on narrow viewports, the
+              // Stage button used to fall below ~10 scrolls of content.
+              // Make it sticky to the bottom of the rail-aside (which
+              // is itself the in-flow last grid row on mobile) so the
+              // operator can always see the action even mid-scroll.
+              position: isNarrow ? "sticky" : "static",
+              bottom: isNarrow ? 8 : "auto",
+              zIndex: isNarrow ? 2 : "auto",
+              boxShadow: isNarrow ? "0 -10px 20px -10px rgba(0,0,0,0.65)" : "none",
             }}
           >
             {stageButtonLabel}
@@ -6527,10 +6577,15 @@ function TradeContextRail({ t, regime }) {
 // ─── asset tabs ──────────────────────────────────────────────────────────────
 
 function AssetTabs({ asset, setAsset }) {
+  // 2026-05-12 (iter5 audit P1.11): on mobile (375px) the third tab's
+  // label "Options builder" with 0.18em tracking exceeded its cell
+  // width and forced every tab onto its own row. Use a shorter
+  // alt-label on narrow viewports so the tab strip stays one line.
+  const isNarrowVP = useIsNarrowViewport(640);
   const tabs = [
     { id: "stock",   label: "Stocks" },
     { id: "option",  label: "Options" },
-    { id: "builder", label: "Options builder" },
+    { id: "builder", label: isNarrowVP ? "Builder" : "Options builder" },
   ];
   // 2026-05-11 (trade-audit OPTIONS-11): tabs were <a> with cursor:default,
   // no hover/focus affordance, no aria-selected. Promoted to role=tab
@@ -6572,11 +6627,18 @@ function AssetTabs({ asset, setAsset }) {
               style={{
                 all: "unset",
                 textAlign: "center", padding: "9px 6px",
-                fontFamily: "var(--font-ui)", fontSize: 9.5, fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase",
+                fontFamily: "var(--font-ui)", fontSize: 9.5, fontWeight: 600,
+                // Tighten letter-spacing on narrow viewports so the
+                // labels fit in one row even with subpixel rounding.
+                letterSpacing: isNarrowVP ? "0.08em" : "0.18em",
+                textTransform: "uppercase",
                 color: on ? "var(--ink-1000)" : "var(--fg-muted)",
                 borderBottom: on ? "2px solid var(--brand)" : "2px solid transparent", marginBottom: -1,
                 background: on ? "var(--bg-elev-2)" : "transparent",
                 cursor: "pointer",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
                 transition: "background 120ms, color 120ms",
               }}
               onMouseEnter={(e) => { if (!on) (e.currentTarget as HTMLElement).style.background = "var(--bg-elev-1)"; }}
@@ -6702,15 +6764,30 @@ function OrderTicket(p) {
         </div>
       )}
       <Field label="Order type">
-        <div style={{ display: "flex", gap: 4, flex: 1 }}>
-          {["market", "limit", "stop"].map(tp => (
-            <button key={tp} onClick={() => p.setOrderType(tp)} style={{
-              flex: 1, fontFamily: "var(--font-ui)", fontSize: 10.5, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase",
-              color: p.orderType === tp ? "var(--ink-1000)" : "var(--fg-muted)",
-              background: p.orderType === tp ? "var(--bg-elev-2)" : "transparent",
-              border: "1px solid var(--border)", padding: "7px 0", borderRadius: 3, cursor: "default"
-            }}>{tp}</button>
-          ))}
+        <div role="radiogroup" aria-label="Order type" style={{ display: "flex", gap: 4, flex: 1 }}>
+          {["market", "limit", "stop"].map(tp => {
+            const on = p.orderType === tp;
+            return (
+              <button
+                key={tp}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => p.setOrderType(tp)}
+                style={{
+                  flex: 1, fontFamily: "var(--font-ui)", fontSize: 10.5, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase",
+                  color: on ? "var(--ink-1000)" : "var(--fg-muted)",
+                  background: on ? "var(--bg-elev-2)" : "transparent",
+                  // 2026-05-12 (iter5 audit P1.3): chip cursor was
+                  // `default` so the operator couldn't tell the row
+                  // was interactive. Use pointer; the on/off bg
+                  // tells them the current selection.
+                  border: "1px solid var(--border)", padding: "7px 0", borderRadius: 3, cursor: "pointer",
+                  transition: "background 120ms, color 120ms",
+                }}
+              >{tp}</button>
+            );
+          })}
         </div>
       </Field>
       {p.orderType === "limit" && (
@@ -6781,10 +6858,13 @@ function OrderTicket(p) {
               <span>{sliderMin}</span><span>{fmtN(sliderMax)} sh · 10% equity</span>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 4, marginTop: 8 }}>
+              {/* 2026-05-12 (iter5 audit P1.3): quick-qty chips were
+                  cursor:default and gave zero hover feedback. Pointer
+                  cursor + type=button + a hover background lift. */}
               {[100, 250, 500].map(n => (
-                <button key={n} onClick={() => p.setQty(n)} style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "5px 0", color: "var(--fg-muted)", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderRadius: 2, cursor: "default" }}>{n}</button>
+                <button key={n} type="button" onClick={() => p.setQty(n)} style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "5px 0", color: "var(--fg-muted)", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderRadius: 2, cursor: "pointer", transition: "background 120ms" }}>{n}</button>
               ))}
-              <button onClick={() => p.setQty(Math.max(1, Math.floor((p.accountEquity || 0) * 0.005 / Math.max(0.01, p.limitPx - p.stopPx))))} style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "5px 0", color: "var(--brand)", background: "var(--brand-tint)", border: "1px solid rgba(201,166,107,0.35)", borderRadius: 2, cursor: "default" }}>0.5% R</button>
+              <button type="button" onClick={() => p.setQty(Math.max(1, Math.floor((p.accountEquity || 0) * 0.005 / Math.max(0.01, p.limitPx - p.stopPx))))} style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "5px 0", color: "var(--brand)", background: "var(--brand-tint)", border: "1px solid rgba(201,166,107,0.35)", borderRadius: 2, cursor: "pointer", transition: "background 120ms" }}>0.5% R</button>
             </div>
           </div>
         );
@@ -6930,7 +7010,21 @@ function OptionChainPanel({ symbol, spot, optStrike, setOptStrike, optType, setO
     <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 4 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "10px 12px 8px", borderBottom: "1px solid var(--border-hair)" }}>
         <span className="t-label">Option chain</span>
-        <select aria-label="Option expiry" value={activeExpiry} onChange={(e) => setExpiry(e.target.value)} style={{ background: "var(--ink-100)", border: "1px solid var(--border-hair)", color: "var(--ink-1000)", fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "2px 6px", borderRadius: 2, outline: "none" }}>
+        <select
+          aria-label="Option expiry"
+          value={activeExpiry}
+          // 2026-05-12 (iter5 audit WF3): switching to a new expiry
+          // used to leave `selectedOptionContract` pointing at the
+          // prior expiry's contract — operator could stage a contract
+          // that no longer existed in the visible chain. Clear the
+          // selection on expiry change so the operator must explicitly
+          // re-pick from the new chain.
+          onChange={(e) => {
+            setExpiry(e.target.value);
+            setSelectedOptionContract?.(null);
+          }}
+          style={{ background: "var(--ink-100)", border: "1px solid var(--border-hair)", color: "var(--ink-1000)", fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "2px 6px", borderRadius: 2, outline: "none" }}
+        >
           {expiries.length === 0 && <option value="">No expiry</option>}
           {expiries.map(x => <option key={x} value={x}>{x}</option>)}
         </select>
@@ -7388,15 +7482,40 @@ function GreeksStrip({ spot = 0, strike = 0, optType = "call", iv, contracts = 1
   return (
     <div>
       <div className="t-label" style={{ marginBottom: 8 }}>Greeks · per contract</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 5 }}>
-        {greeks.map(g => (
-          <div key={g.sym} style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 3, padding: "7px 4px", textAlign: "center" }}>
-            <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--gold-300)", lineHeight: 1 }}>{g.sym}</div>
-            <div className="t-mono" style={{ fontSize: 11, color: "var(--ink-1000)", marginTop: 4 }}>{g.v}</div>
-          </div>
-        ))}
-      </div>
-      <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-hint)" }}>{caption}</div>
+      {/* 2026-05-12 (iter5 audit P1.10): when there are no inputs yet,
+          the previous render was a 5-column grid of bordered "—"
+          tiles — off-brand vs the rest of the system's editorial gold-
+          italic empty states, and the eye lands on 5 hollow boxes
+          instead of the absent data. Collapse to a single italic-gold
+          line when inputs are missing; show the 5-tile grid only when
+          we have something to display. */}
+      {haveInputs ? (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 5 }}>
+          {greeks.map(g => (
+            <div key={g.sym} style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 3, padding: "7px 4px", textAlign: "center" }}>
+              <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13, color: "var(--gold-300)", lineHeight: 1 }}>{g.sym}</div>
+              <div className="t-mono" style={{ fontSize: 11, color: "var(--ink-1000)", marginTop: 4 }}>{g.v}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{
+          padding: "10px 12px",
+          background: "var(--bg)",
+          border: "1px solid var(--border)",
+          borderRadius: 3,
+          fontFamily: "var(--font-display)",
+          fontStyle: "italic",
+          fontSize: 12.5,
+          color: "var(--gold-300)",
+          lineHeight: 1.4,
+        }}>
+          Pick a strike to compute Δ Γ Θ V ρ.
+        </div>
+      )}
+      {haveInputs && (
+        <div style={{ marginTop: 6, fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 11.5, color: "var(--fg-hint)" }}>{caption}</div>
+      )}
       {haveInputs && contracts > 1 && (
         <div style={{ marginTop: 2, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-muted)" }}>Multiply by {contracts} × 100 sh for position greeks.</div>
       )}
@@ -7612,14 +7731,22 @@ if (typeof window !== "undefined") Object.assign(window, { HeroChart, ChartToolb
 
 const inputStyle = {
   flex: 1, background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 3,
-  padding: "0 12px", height: 36, color: "var(--ink-1000)", fontFamily: "var(--font-mono)", fontSize: 13, outline: "none", minWidth: 0
+  // 2026-05-12 (iter5 audit P1.2): keep the visual rest state quiet
+  // (no outline by default) but drop the blanket `outline:none` so
+  // the browser's `:focus-visible` ring renders for keyboard users.
+  // The class `.trade-input` (added in globals via the className on
+  // each input) layers a gold focus shadow on top.
+  padding: "0 12px", height: 36, color: "var(--ink-1000)", fontFamily: "var(--font-mono)", fontSize: 13, minWidth: 0
 };
 const tradeBtnStyle = (kind, on) => ({
   height: 38, fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase",
   color: kind === "buy" ? "var(--up-500)" : "var(--down-500)",
   background: on ? (kind === "buy" ? "var(--tint-up-2)" : "var(--tint-down-2)") : "transparent",
   border: `1px solid ${kind === "buy" ? "var(--tint-up-3)" : "var(--tint-down-3)"}`,
-  borderRadius: 3, cursor: "default", lineHeight: 1.05
+  // 2026-05-12 (iter5 audit P1.1): Buy/Sell are the two highest-stakes
+  // buttons on the page; `cursor:default` made them feel inert. Use
+  // pointer cursor; the on/off background already telegraphs state.
+  borderRadius: 3, cursor: "pointer", lineHeight: 1.05,
 });
 /**
  * 2026-05-11 (iter2 audit P0): the numeric inputs in OrderTicket and
@@ -18128,7 +18255,16 @@ export function AlphaDeskDesignApp({ initialPage = "dashboard", initialSymbol = 
   }, [t.theme]);
 
   const onNav = navigate;
-  const onPickTicker = (s) => navigate("ticker", { ticker: s });
+  // 2026-05-12 (iter5 audit WF4): when the operator is already on
+  // /trade and uses the TopBar search to flip to a new symbol, route
+  // them to /trade?symbol=X instead of /symbols/X. The old behaviour
+  // dropped every staged ticket field and forced two extra clicks
+  // back to the trading desk. From the dashboard or any non-trade
+  // page, /symbols/X is still the right destination.
+  const onPickTicker = (s) => {
+    if (page === "trade") navigate("trade", { ticker: s });
+    else navigate("ticker", { ticker: s });
+  };
 
   // Keyboard shortcuts: ⌘D dashboard · ⌘R watchlists · ⌘J trade · ⌘K palette
   // Suppressed while typing in form fields.
