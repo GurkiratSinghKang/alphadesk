@@ -32,6 +32,13 @@ import {
   getMarketNews,
   getMorningBrief,
   getNotifications,
+  // 2026-05-11 (iter 22): wire mark-as-read + mark-all-read on the
+  // AlertsPage so unread badges actually drain. Backend exposed POST
+  // /api/v1/notifications/{id}/read and /api/v1/notifications/read-all
+  // for ages, but the FE never called them — the bell would accumulate
+  // 50+ items the operator had already triaged.
+  markAllNotificationsRead,
+  markNotificationRead,
   getOptionsChain,
   getPriceAlerts,
   getQuote,
@@ -176,6 +183,11 @@ import type {
 // Symbol routes consume `HeroChartWired` instead.
 import HeroChartWired from "./_wired/HeroChartWired";
 import { useMarketDepth } from "@/hooks/useMarketDepth";
+// 2026-05-11 (iter 22): /alerts uses the toast hook to surface
+// success / failure feedback on mark-as-read mutations. The hook
+// silently no-ops when no ToastProvider is mounted (tests, SSR
+// hydration race) so it's safe to call unconditionally.
+import { useToast } from "@/hooks/useToast";
 
 const TWEAK_DEFAULTS = {
   page: "dashboard",
@@ -227,6 +239,14 @@ const LiveDataContext = React.createContext({
   adminLayout: null,
   adminLastDeploy: null,
   error: null,
+  // 2026-05-11 (iter 22): notification mark-as-read mutations exposed
+  // through the LiveDataContext so the AlertsPage can flip rows
+  // optimistically without owning its own notification state. The
+  // provider replaces these no-ops with the real mutators that call
+  // /api/v1/notifications/{id}/read and /api/v1/notifications/read-all
+  // and revert local state on API failure.
+  markNotificationReadLocal: async (_id: number) => {},
+  markAllNotificationsReadLocal: async () => {},
 });
 
 function compactVolume(v) {
@@ -615,6 +635,59 @@ function LiveDataProvider({ symbol, page, children }) {
     };
   }, [symbol, page, canonicalPositionSymbolsKey]);
 
+  // 2026-05-11 (iter 22): mark-as-read mutators. The AlertsPage clicks
+  // a row or the header "Mark all read" button → we (a) flip the local
+  // state optimistically so the UI feels instant, (b) fire the POST,
+  // (c) revert on failure so the bell badge doesn't false-positive.
+  // Notifications live inside this provider so the mutators have to
+  // hang off the context value the AlertsPage already reads via
+  // `useDesignLiveData()`.
+  const markNotificationReadLocal = React.useCallback(async (id: number) => {
+    let prevNotifications;
+    setState((prev) => {
+      prevNotifications = prev.notifications;
+      return {
+        ...prev,
+        notifications: (prev.notifications || []).map((n) =>
+          n.id === id ? { ...n, read: true } : n,
+        ),
+      };
+    });
+    try {
+      await markNotificationRead(id);
+    } catch (err) {
+      // Revert: API failed, so the badge must keep showing the unread
+      // count. Skip the revert if the row no longer exists (the
+      // notifications list refreshed between the optimistic write and
+      // the failure — the new list is authoritative).
+      setState((prev) => ({
+        ...prev,
+        notifications: prevNotifications || prev.notifications,
+      }));
+      throw err;
+    }
+  }, []);
+
+  const markAllNotificationsReadLocal = React.useCallback(async () => {
+    let prevNotifications;
+    setState((prev) => {
+      prevNotifications = prev.notifications;
+      return {
+        ...prev,
+        notifications: (prev.notifications || []).map((n) => ({ ...n, read: true })),
+      };
+    });
+    try {
+      await markAllNotificationsRead();
+    } catch (err) {
+      setState((prev) => ({
+        ...prev,
+        notifications: prevNotifications || prev.notifications,
+      }));
+      throw err;
+    }
+  }, []);
+
   const value = React.useMemo(() => ({
     ...state,
     refreshedAt: portfolioSnapshotAt ? new Date(portfolioSnapshotAt).toISOString() : state.refreshedAt,
@@ -623,7 +696,9 @@ function LiveDataProvider({ symbol, page, children }) {
     orders: portfolioSnapshotAt ? canonicalOrders : [],
     portfolioSnapshotAt,
     portfolioSnapshotSource,
-  }), [state, portfolioSnapshotAt, portfolioSnapshotSource, canonicalPortfolio, canonicalPositions, canonicalOrders]);
+    markNotificationReadLocal,
+    markAllNotificationsReadLocal,
+  }), [state, portfolioSnapshotAt, portfolioSnapshotSource, canonicalPortfolio, canonicalPositions, canonicalOrders, markNotificationReadLocal, markAllNotificationsReadLocal]);
 
   return <LiveDataContext.Provider value={value}>{children}</LiveDataContext.Provider>;
 }
@@ -9071,6 +9146,17 @@ const AnalyticsPage = () => {
 const AlertsPage = () => {
   const [filter, setFilter] = useState("all");
   const live = useDesignLiveData();
+  const { toast } = useToast();
+
+  // Iter 22 (2026-05-11): wire mark-as-read mutations on /alerts so
+  // unread notifications actually drain. Each unread notification row
+  // gets a "Mark read" button that fires the backend POST and flips
+  // the row tone optimistically. The header gets a "Mark all read"
+  // button that hits the bulk endpoint. Both mutators live on the
+  // LiveDataContext so the cell can swap in optimistic state and
+  // revert if the API fails.
+  const markNotificationReadLocal = live.markNotificationReadLocal;
+  const markAllNotificationsReadLocal = live.markAllNotificationsReadLocal;
 
   // Iter 21 (audit 2026-05-11): /alerts rows rendered a non-clickable
   // `<a style={{cursor:"default"}}>Open →</a>` with no href / onClick.
@@ -9098,6 +9184,10 @@ const AlertsPage = () => {
       symbol,
       orderId,
       href: buildAlertRowHref({ kindGroup: "notification", symbol, orderId, link: typeof n?.link === "string" ? n.link : null }),
+      // Iter 22: carry the backend id + read flag so per-row mark-read
+      // knows which id to POST and whether to render the affordance.
+      notificationId: typeof n.id === "number" ? n.id : Number(n.id),
+      read: !!n.read,
     };
   });
   const orderRows = (live.orders || []).slice(0, 8).map((o) => {
@@ -9145,15 +9235,79 @@ const AlertsPage = () => {
     { id: "week",      label: "Earlier this week" },
   ];
 
+  // Iter 22: unread notification count drives the "Mark all read"
+  // button enablement. We count off the live state (not the filtered
+  // rows) so the button reflects the true outstanding work even when
+  // the operator has filtered to a non-notification view.
+  const unreadNotificationCount = (live.notifications || []).filter((n) => !n.read).length;
+
+  const handleMarkOneRead = async (notificationId: number) => {
+    if (!Number.isFinite(notificationId)) return;
+    try {
+      await markNotificationReadLocal(notificationId);
+    } catch (err) {
+      // Optimistic update was reverted inside the provider. Surface a
+      // toast so the operator knows the click didn't take. Console
+      // also for the dev tools.
+      // eslint-disable-next-line no-console
+      console.warn("[alerts] markNotificationRead failed", err);
+      toast({ type: "error", message: "Couldn't mark notification read. Please retry." });
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    if (unreadNotificationCount === 0) return;
+    const draining = unreadNotificationCount;
+    try {
+      await markAllNotificationsReadLocal();
+      toast({ type: "success", message: `${draining} notification${draining === 1 ? "" : "s"} marked read` });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("[alerts] markAllNotificationsRead failed", err);
+      toast({ type: "error", message: "Couldn't mark notifications read. Please retry." });
+    }
+  };
+
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", height: "100%", overflow: "hidden", gap: 1, background: "var(--border)" }}>
       <section style={{ background: "var(--bg)", overflow: "auto", padding: "24px 32px 60px" }}>
-        <div style={{ paddingBottom: 18, borderBottom: "1px solid var(--border-hair)" }}>
-          <div className="t-label">Alerts</div>
-          <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 44, color: "var(--ink-1000)", letterSpacing: "-0.025em", lineHeight: 1, marginTop: 6 }}>Things that need you</div>
-          <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14 }}>
-            Live notification stream, recent broker orders, and market news. Empty backend channels stay empty instead of using design filler.
+        <div style={{ paddingBottom: 18, borderBottom: "1px solid var(--border-hair)", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+          <div>
+            <div className="t-label">Alerts</div>
+            <div style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 44, color: "var(--ink-1000)", letterSpacing: "-0.025em", lineHeight: 1, marginTop: 6 }}>Things that need you</div>
+            <div style={{ marginTop: 8, fontFamily: "var(--font-display)", fontStyle: "italic", color: "var(--fg-muted)", fontSize: 14 }}>
+              Live notification stream, recent broker orders, and market news. Empty backend channels stay empty instead of using design filler.
+            </div>
           </div>
+          {/* Iter 22: bulk mark-all-read. The button is rendered always
+              (so the layout is stable) but disabled when there's nothing
+              to drain. Backend POST hits /api/v1/notifications/read-all. */}
+          <button
+            type="button"
+            onClick={handleMarkAllRead}
+            disabled={unreadNotificationCount === 0}
+            data-testid="alerts-mark-all-read"
+            style={{
+              marginTop: 6,
+              padding: "6px 12px",
+              fontFamily: "var(--font-ui)",
+              fontSize: 10.5,
+              fontWeight: 600,
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+              color: unreadNotificationCount === 0 ? "var(--fg-hint)" : "var(--brand)",
+              background: "transparent",
+              border: `1px solid ${unreadNotificationCount === 0 ? "var(--border-hair)" : "var(--border)"}`,
+              borderRadius: 3,
+              cursor: unreadNotificationCount === 0 ? "default" : "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Mark all read
+            {unreadNotificationCount > 0 ? (
+              <span className="t-mono" style={{ marginLeft: 8, fontSize: 10, color: "var(--brand)" }}>{unreadNotificationCount}</span>
+            ) : null}
+          </button>
         </div>
 
         {/* filter chips */}
@@ -9181,8 +9335,15 @@ const AlertsPage = () => {
           return (
             <div key={g.id} style={{ marginTop: 22 }}>
               <div className="t-label" style={{ marginBottom: 8, color: "var(--fg-hint)" }}>{g.label}</div>
-              {list.map((a, i) => (
-                <div key={i} style={{ display: "grid", gridTemplateColumns: "auto auto auto 1fr auto", gap: 14, padding: "13px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
+              {list.map((a, i) => {
+                // Iter 22: notification rows render an extra "Mark read"
+                // affordance when unread. Non-notification rows (orders,
+                // news) get a placeholder so the grid columns stay
+                // aligned across the entire list.
+                const isNotification = a.kindGroup === "notification";
+                const showMarkRead = isNotification && !a.read && Number.isFinite(a.notificationId);
+                return (
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "auto auto auto 1fr auto auto", gap: 14, padding: "13px 0", borderBottom: "1px solid var(--border-hair)", alignItems: "baseline" }}>
                   <span className="t-mono" style={{ fontSize: 11, color: "var(--fg-hint)", letterSpacing: "0.04em", minWidth: 90 }}>{a.ts}</span>
                   <StatusDot tone={a.tone === "up" ? "up" : a.tone === "down" ? "down" : "neutral"} size={6} />
                   <Chip tone="muted">{a.kind}</Chip>
@@ -9199,8 +9360,35 @@ const AlertsPage = () => {
                   ) : (
                     <span aria-hidden="true" />
                   )}
+                  {showMarkRead ? (
+                    <button
+                      type="button"
+                      onClick={() => handleMarkOneRead(a.notificationId)}
+                      data-testid={`alerts-mark-read-${a.notificationId}`}
+                      aria-label="Mark notification read"
+                      style={{
+                        fontFamily: "var(--font-ui)",
+                        fontSize: 10,
+                        fontWeight: 600,
+                        letterSpacing: "0.14em",
+                        textTransform: "uppercase",
+                        color: "var(--fg-muted)",
+                        background: "transparent",
+                        border: "1px solid var(--border-hair)",
+                        borderRadius: 3,
+                        padding: "3px 8px",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Mark read
+                    </button>
+                  ) : (
+                    <span aria-hidden="true" />
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           );
         })}

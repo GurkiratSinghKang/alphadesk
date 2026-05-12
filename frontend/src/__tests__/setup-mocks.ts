@@ -158,6 +158,11 @@ vi.mock('@/lib/api', async (importOriginal) => {
     getMarketNews: vi.fn().mockResolvedValue([]),
     getMorningBrief: vi.fn().mockResolvedValue(null),
     getNotifications: vi.fn().mockResolvedValue([]),
+    // Iter 22: mark-as-read mutations. AlertsPage calls these from
+    // the per-row "Mark read" button and the header "Mark all read"
+    // button. Backend returns 204 (void) on success.
+    markNotificationRead: vi.fn().mockResolvedValue(undefined),
+    markAllNotificationsRead: vi.fn().mockResolvedValue(undefined),
     getTickerFundamentals: vi.fn().mockResolvedValue({
       symbol: 'SPY',
       name: 'SPDR S&P 500 ETF Trust',
