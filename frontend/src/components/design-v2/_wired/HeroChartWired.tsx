@@ -116,15 +116,25 @@ export default function HeroChartWired({
   const [loadingMore, setLoadingMore] = useState(false);
   useEffect(() => {
     // Reset when the symbol or range flips — older extensions don't
-    // apply to a fresh timeframe.
+    // apply to a fresh timeframe. 2026-05-11: depend on `range` (not
+    // just `timeframe`) so that switching 1M↔3M (both → 1H) still
+    // resets the extension counter and the operator sees the intended
+    // window, not the stretched 3M cache.
     setExtension(0);
-  }, [sym, timeframe]);
+  }, [sym, range, timeframe]);
 
   const effectiveLimit = Math.min(limit + extension, 5000);
 
   const { data, isLoading, isError, refetch } = useQuery({
-    // Include effectiveLimit so growing the window triggers a fetch.
-    queryKey: ["design-hero-bars", sym, timeframe, effectiveLimit],
+    // 2026-05-11 (iter1 audit chart-P1): include `range` in the
+    // queryKey so chips with the same (timeframe, limit) but a
+    // different operator intent (1M vs 3M both → 1H/limit-dependent
+    // collapse) still produce a fresh cache entry. Without `range`,
+    // the chips visually no-op even though the state flips, because
+    // TanStack returns the cached result for the matching key. The
+    // hint to also call `refetch()` on range change keeps the wire
+    // chatter honest while the operator scrubs through ranges.
+    queryKey: ["design-hero-bars", sym, range, timeframe, effectiveLimit],
     queryFn: ({ signal }) =>
       getBars(sym, timeframe, effectiveLimit, {
         signal,
