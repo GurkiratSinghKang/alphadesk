@@ -614,6 +614,30 @@ const HANDLERS: Record<string, MockHandler> = {
             expected_move: +(seed * 0.025).toFixed(2),
             expected_move_pct: 2.5,
             put_call_skew: 1.18,
+            // 2026-05-12 (Trade Intel Panel): vol-surface fields the
+            // /trade intel grid renders below the chart. Front/back IV
+            // come from the term structure (30d ATM vs 60d ATM); skew
+            // is the 25-delta put/call risk reversal (positive = put
+            // skew rich). Numbers are deterministic per-symbol so QA
+            // snapshots stay stable.
+            atm_iv_front: ivPct / 100,
+            atm_iv_back:  (ivPct - 1.4) / 100,
+            atm_term_sigma: +((Math.sin(sym.length) * 1.6).toFixed(2)),
+            put_call_skew_25d_pp: +((Math.sin(sym.length * 1.7) * 4 + 2.1).toFixed(1)),
+            iv_history_30d_avg: (ivPct + 4) / 100,
+            // Microstructure (Tier 3 / execution data per the trading-IA
+            // doc): volume profile, anchored VWAP, cumulative delta,
+            // large-print detection. Production wires these from the
+            // intraday tape; the mock derives stable values per symbol.
+            poc:  +(seed * 0.998).toFixed(2),
+            vah:  +(seed * 1.006).toFixed(2),
+            val:  +(seed * 0.988).toFixed(2),
+            anchored_vwap_prior_close: +(seed * 1.001).toFixed(2),
+            cum_delta_today: Math.round(((sym.length * 137) % 9_000_000) - 4_500_000),
+            large_print_count_today: 18 + (sym.length % 9),
+            large_print_notional_today: 4_120_500 + (sym.length * 84_000),
+            relative_volume_today: +((0.6 + ((sym.length * 13) % 70) / 100).toFixed(2)),
+            adv_20d: 31_000_000,
           },
           freshness,
         },
