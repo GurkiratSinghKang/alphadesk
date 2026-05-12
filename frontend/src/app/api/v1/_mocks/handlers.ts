@@ -302,6 +302,71 @@ const HANDLERS: Record<string, MockHandler> = {
     }
     return { symbols: out, generated_at: NOW_ISO() };
   },
+  // Options chain: keeps the Options tab from rendering "API 404: Not
+  // Found" in the chain table. Builds a deterministic 7-strike grid
+  // around the seeded spot, with plausible bid/ask, iv, oi, and
+  // greeks values that the FE mapper (api.ts getOptionsChain) can
+  // pass through unchanged.
+  "GET /options/chain/:symbol": (req, { symbol }) => {
+    const sym = symbol.toUpperCase();
+    const spot = SEED_PRICES[sym] ?? 100;
+    const url = new URL(req.url);
+    const requestedExpiry = url.searchParams.get("expiry");
+    const today = new Date();
+    const expirations = [14, 42, 70, 105].map((days) =>
+      new Date(today.getTime() + days * 86_400_000).toISOString().slice(0, 10),
+    );
+    const expiry = requestedExpiry || expirations[0];
+    const daysToExp = Math.max(1, Math.round((new Date(expiry).getTime() - today.getTime()) / 86_400_000));
+    const tenor = Math.sqrt(daysToExp / 365);
+    const strikes = Array.from({ length: 7 }, (_, i) => Math.round((spot - 12 + i * 4) * 100) / 100);
+    const contracts: Array<Record<string, unknown>> = [];
+    for (const k of strikes) {
+      for (const side of ["call", "put"] as const) {
+        const inMoney = side === "call" ? spot - k : k - spot;
+        const intrinsic = Math.max(0, inMoney);
+        const extrinsic = Math.max(0.05, 4.5 * tenor + Math.abs(spot - k) * 0.04 * tenor);
+        const mid = +(intrinsic + extrinsic).toFixed(2);
+        const halfSpread = Math.max(0.03, mid * 0.012);
+        const bid = Math.max(0.01, +(mid - halfSpread).toFixed(2));
+        const ask = +(mid + halfSpread).toFixed(2);
+        const delta = side === "call"
+          ? Math.max(0.02, Math.min(0.98, 0.5 + (spot - k) / (spot * 0.18)))
+          : Math.min(-0.02, Math.max(-0.98, -0.5 + (spot - k) / (spot * 0.18)));
+        const iv = 0.28 + Math.abs(spot - k) / spot * 0.6 + tenor * 0.05;
+        contracts.push({
+          symbol: `${sym}${expiry.replace(/-/g, "").slice(2)}${side === "call" ? "C" : "P"}${String(Math.round(k * 1000)).padStart(8, "0")}`,
+          underlying: sym,
+          option_type: side,
+          expiry,
+          strike: k,
+          bid,
+          ask,
+          last: mid,
+          volume: 80 + Math.round(Math.abs(spot - k) * 12),
+          open_interest: 1200 + Math.round(Math.abs(spot - k) * 90),
+          iv: +iv.toFixed(4),
+          delta: +delta.toFixed(3),
+          gamma: +(0.04 / Math.max(0.5, Math.abs(spot - k))).toFixed(4),
+          theta: -+(extrinsic / daysToExp).toFixed(4),
+          vega: +(spot * 0.01 * tenor).toFixed(4),
+        });
+      }
+    }
+    return {
+      underlying: sym,
+      spot_price: spot,
+      expirations,
+      contracts,
+      fetched_at: NOW_ISO(),
+      is_demo: false,
+      total_call_volume: contracts.filter(c => c.option_type === "call").reduce((s, c) => s + (c.volume as number), 0),
+      total_put_volume: contracts.filter(c => c.option_type === "put").reduce((s, c) => s + (c.volume as number), 0),
+      call_put_volume_ratio: 1.05,
+      total_call_oi: contracts.filter(c => c.option_type === "call").reduce((s, c) => s + (c.open_interest as number), 0),
+      total_put_oi: contracts.filter(c => c.option_type === "put").reduce((s, c) => s + (c.open_interest as number), 0),
+    };
+  },
   "GET /market/quotes/:symbol": (_, { symbol }) => quoteFor(symbol),
   // Some callers still reach for the singular form; alias both so the
   // mock backend doesn't 404 and pollute the DATA UNAVAILABLE banner.

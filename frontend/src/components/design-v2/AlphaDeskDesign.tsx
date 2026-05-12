@@ -4794,7 +4794,11 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
         quote_at_fill_ts: quoteSnapshot?.timestamp ?? Date.now() / 1000,
       };
       if (orderType === "limit") payload.price = entryPrice;
-      if (orderType === "stop") payload.stop_price = Number(stopPx);
+      // STOP order: send the operator-specified trigger price (held in
+      // `limitPx`), not the protective `stopPx` which is computed from
+      // the stop-loss % field and is a downstream risk control, not a
+      // stop-on-touch trigger.
+      if (orderType === "stop") payload.stop_price = entryPrice;
       return payload;
     }
 
@@ -5943,9 +5947,28 @@ function OrderTicket(p) {
         <button onClick={() => p.setSide("sell")} style={tradeBtnStyle("sell", p.side === "sell")}>Sell</button>
       </div>
       <Field label="Quantity">
-        <input aria-label="Share quantity" type="number" inputMode="numeric" min="1" max="1000000" value={p.qty} onChange={(e) => p.setQty(+e.target.value || 0)} style={inputStyle} />
+        <input
+          aria-label="Share quantity"
+          aria-invalid={p.qty <= 0 || p.qty > 1_000_000}
+          type="number"
+          inputMode="numeric"
+          min="1"
+          max="1000000"
+          value={p.qty}
+          onChange={(e) => {
+            const next = Math.floor(+e.target.value);
+            // Allow 0 transiently (user is mid-typing) but reject negatives.
+            p.setQty(Number.isFinite(next) && next >= 0 ? next : 0);
+          }}
+          style={inputStyle}
+        />
         <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", marginLeft: 8, alignSelf: "center" }}>≈ {fmtMoney(p.notional, { dec: 0 })}</span>
       </Field>
+      {(p.qty <= 0 || p.qty > 1_000_000) && (
+        <div role="alert" style={{ marginTop: -6, marginBottom: 8, fontFamily: "var(--font-ui)", fontSize: 10.5, color: "var(--down-500)" }}>
+          Quantity must be between 1 and 1,000,000 shares.
+        </div>
+      )}
       <Field label="Order type">
         <div style={{ display: "flex", gap: 4, flex: 1 }}>
           {["market", "limit", "stop"].map(tp => (
@@ -5963,23 +5986,68 @@ function OrderTicket(p) {
           <input aria-label="Limit price" type="number" inputMode="decimal" min="0.01" step="0.01" value={p.limitPx.toFixed(2)} onChange={(e) => p.setLimitPx(+e.target.value || 0)} style={inputStyle} />
         </Field>
       )}
+      {/* STOP orders need their own trigger price input. The previous
+        * UI hid the Limit-price field and reused the protective-stop
+        * value (`stopPx`) as the order's trigger, which was both
+        * invisible to the operator and semantically wrong. Reuse the
+        * `limitPx` state but relabel it for the STOP context — the
+        * payload builder maps it to `stop_price`. */}
+      {p.orderType === "stop" && (
+        <Field label="Stop trigger price">
+          <input aria-label="Stop trigger price" type="number" inputMode="decimal" min="0.01" step="0.01" value={p.limitPx.toFixed(2)} onChange={(e) => p.setLimitPx(+e.target.value || 0)} style={inputStyle} />
+          <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", marginLeft: 8, alignSelf: "center" }}>fires market order on touch</span>
+        </Field>
+      )}
+      {/* Stop-loss % is the operator-defined protective stop. Validate
+        * inline so a typo doesn't get clamped silently — staging the
+        * order would still reject it server-side, but the inline
+        * feedback short-circuits a wasted preview round-trip. */}
       <Field label="Stop loss · % of entry">
-        <input aria-label="Stop loss percent of entry" inputMode="decimal" value={p.stopPct.toFixed(1)} onChange={(e) => p.setStopPct(+e.target.value || 0)} style={inputStyle} />
+        <input
+          aria-label="Stop loss percent of entry"
+          aria-invalid={p.stopPct < 0 || p.stopPct >= 100}
+          inputMode="decimal"
+          value={p.stopPct.toFixed(1)}
+          onChange={(e) => p.setStopPct(+e.target.value || 0)}
+          style={{
+            ...inputStyle,
+            borderColor: (p.stopPct < 0 || p.stopPct >= 100) ? "var(--down-500)" : inputStyle.border?.includes("border") ? undefined : undefined,
+          }}
+        />
         <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", marginLeft: 8, alignSelf: "center" }}>≈ {p.stopPx.toFixed(2)}</span>
       </Field>
-      <div style={{ marginTop: 12, padding: "12px 12px", background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4 }}>
-        <div className="t-label" style={{ marginBottom: 8 }}>Position sizer</div>
-        <input aria-label="Position size slider" type="range" min="50" max="600" step="25" value={p.qty} onChange={(e) => p.setQty(+e.target.value)} style={{ width: "100%", accentColor: "var(--gold-500)" }} />
-        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-hint)", marginTop: 4 }}>
-          <span>50</span><span>600 sh</span>
+      {(p.stopPct < 0 || p.stopPct >= 100) && (
+        <div role="alert" style={{ marginTop: -6, marginBottom: 8, fontFamily: "var(--font-ui)", fontSize: 10.5, color: "var(--down-500)" }}>
+          Stop-loss percent must be between 0 and 100.
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 4, marginTop: 8 }}>
-          {[100, 250, 500].map(n => (
-            <button key={n} onClick={() => p.setQty(n)} style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "5px 0", color: "var(--fg-muted)", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderRadius: 2, cursor: "default" }}>{n}</button>
-          ))}
-          <button onClick={() => p.setQty(Math.max(1, Math.floor((p.accountEquity || 0) * 0.005 / Math.max(0.01, p.limitPx - p.stopPx))))} style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "5px 0", color: "var(--brand)", background: "var(--brand-tint)", border: "1px solid rgba(201,166,107,0.35)", borderRadius: 2, cursor: "default" }}>0.5% R</button>
-        </div>
-      </div>
+      )}
+      {(() => {
+        // Dynamic slider max — derived from the account's 1% notional cap
+        // at the current entry price, so the slider scales with the
+        // operator's actual buying power instead of being clamped at a
+        // hardcoded 600 shares.
+        const eq = Math.max(1, p.accountEquity || 0);
+        const px = Math.max(0.01, p.limitPx || 1);
+        const sliderMax = Math.max(100, Math.min(1_000_000, Math.round((eq * 0.10) / px / 25) * 25));
+        const sliderMin = 1;
+        const sizerQty = Math.max(sliderMin, Math.min(sliderMax, p.qty));
+        const fmtN = (n) => n.toLocaleString();
+        return (
+          <div style={{ marginTop: 12, padding: "12px 12px", background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4 }}>
+            <div className="t-label" style={{ marginBottom: 8 }}>Position sizer</div>
+            <input aria-label="Position size slider" type="range" min={sliderMin} max={sliderMax} step="1" value={sizerQty} onChange={(e) => p.setQty(+e.target.value)} style={{ width: "100%", accentColor: "var(--gold-500)" }} />
+            <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--fg-hint)", marginTop: 4 }}>
+              <span>{sliderMin}</span><span>{fmtN(sliderMax)} sh · 10% equity</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 4, marginTop: 8 }}>
+              {[100, 250, 500].map(n => (
+                <button key={n} onClick={() => p.setQty(n)} style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "5px 0", color: "var(--fg-muted)", background: "var(--bg-elev-1)", border: "1px solid var(--border)", borderRadius: 2, cursor: "default" }}>{n}</button>
+              ))}
+              <button onClick={() => p.setQty(Math.max(1, Math.floor((p.accountEquity || 0) * 0.005 / Math.max(0.01, p.limitPx - p.stopPx))))} style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "5px 0", color: "var(--brand)", background: "var(--brand-tint)", border: "1px solid rgba(201,166,107,0.35)", borderRadius: 2, cursor: "default" }}>0.5% R</button>
+            </div>
+          </div>
+        );
+      })()}
       <RiskPreviewCard notional={p.notional} riskDollars={p.riskDollars} riskPct={p.riskPct} stopPx={p.stopPx} />
     </div>
   );
