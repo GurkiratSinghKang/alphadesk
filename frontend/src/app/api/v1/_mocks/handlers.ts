@@ -161,6 +161,7 @@ const HANDLERS: Record<string, MockHandler> = {
       symbol: "NVDA", side: "long", quantity: 250,
       avg_cost: 128.40, current_price: 134.82,
       unrealized_pnl: 1605, market_value: 33_705,
+      stop_loss: 122.85, take_profit: 142.50,
       sector: "Information technology",
       strategy: "momentum-quality",
     },
@@ -194,13 +195,26 @@ const HANDLERS: Record<string, MockHandler> = {
   "GET /strategies/admin/risk-monitor": () => ({ status: "ok", breaches: [], lastCheckedAt: NOW_ISO() }),
 
   // ─── Market overview ──────────────────────────────────────────────
+  // Shape matches getMarketRegime() in api.ts — nested `regime.{regime,
+  // label, confidence, vix_level, description, indicators}`. The old
+  // flat shape `{state, confidence, vix, ...}` made the TradeContext
+  // rail read em-dashes because `regime.regime?.regime` was undefined.
   "GET /market-overview/regime": () => ({
-    state: "bull · low-vol",
-    confidence: 0.72,
-    vix: 13.84,
-    breadth: 0.58,
-    fearGreed: 64,
-    asOf: NOW_ISO(),
+    regime: {
+      regime: "risk_on_trend",
+      label: "Risk On · Trend",
+      confidence: 0.72,
+      vix_level: 13.84,
+      description: "Vol compressed, breadth strong, credit firm. Setups gated open.",
+      indicators: {
+        vix: 13.84,
+        breadth_above_50dma: 0.58,
+        hy_spread_bps: 312,
+        fear_greed: 64,
+      },
+    },
+    as_of: NOW_ISO(),
+    is_demo: false,
   }),
   "GET /market-overview/indices/sparklines": () => ({
     spy:  Array.from({ length: 30 }, (_, i) => 535 + Math.sin(i / 4) * 4 + i * 0.05),
@@ -208,6 +222,86 @@ const HANDLERS: Record<string, MockHandler> = {
     iwm:  Array.from({ length: 30 }, (_, i) => 215 + Math.sin(i / 5) * 3 - i * 0.02),
     vix:  Array.from({ length: 30 }, (_, i) => 14 + Math.sin(i / 2) * 1.2),
   }),
+  // /tickers/context drives the per-symbol envelope the trade page
+  // reads for IV rank, expected move, earnings, and the ticker quote
+  // freshness chip. Returns the envelope shape `mapTickerContext`
+  // expects: each section wrapped in `{value, freshness}`.
+  // /tickers/{sym}/fundamentals fills the metric ribbon's 52w range +
+  // Volume / ADV + IV cells and TradeHeader's market cap / beta / P/E
+  // row. Returns the snake_case wire shape `mapTickerFundamentals`
+  // expects.
+  "GET /tickers/:symbol/fundamentals": (_, { symbol }) => {
+    const sym = symbol.toUpperCase();
+    const last = SEED_PRICES[sym] ?? 100;
+    return {
+      symbol: sym,
+      name: sym === "NVDA" ? "Nvidia" : sym === "AAPL" ? "Apple" : sym === "MSFT" ? "Microsoft" : sym,
+      sector: "Information technology",
+      industry: "Semiconductors",
+      market_cap: 3_286_000_000_000,
+      shares_outstanding: 24_400_000_000,
+      pe_ratio: 34.8,
+      eps_ttm: 3.87,
+      dividend_yield: 0.0,
+      beta: 1.18,
+      fifty_two_week_high: +(last * 1.22).toFixed(2),
+      fifty_two_week_low: +(last * 0.72).toFixed(2),
+      avg_volume_30d: 31_000_000,
+      description: null,
+      fetched_at: NOW_ISO(),
+      is_demo: false,
+    };
+  },
+  "GET /tickers/context": (req) => {
+    const url = new URL(req.url);
+    const symbols = (url.searchParams.get("symbols") || "")
+      .split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
+    const freshness = {
+      observed_at: NOW_ISO(),
+      as_of: NOW_ISO(),
+      source_updated_at: NOW_ISO(),
+      expires_at: null,
+      stale_after_seconds: 60,
+      quality: "fresh" as const,
+      source: "mock",
+      schema_version: 1,
+      is_demo: false,
+    };
+    const out: Record<string, unknown> = {};
+    for (const sym of symbols) {
+      const seed = SEED_PRICES[sym] ?? 100;
+      const ivPct = 30 + ((sym.length * 7) % 25); // deterministic 30–55%
+      const ivRank = 35 + ((sym.length * 11) % 50); // deterministic 35–84
+      const hv30 = ivPct - 6;
+      out[sym] = {
+        symbol: sym,
+        quote: { value: { ...quoteFor(sym), name: sym }, freshness },
+        options_summary: {
+          value: {
+            current_iv: ivPct / 100,
+            iv_rank: ivRank / 100,
+            iv_percentile: (ivRank + 5) / 100,
+            historical_vol_30d: hv30,
+            expected_move: +(seed * 0.025).toFixed(2),
+            expected_move_pct: 2.5,
+            put_call_skew: 1.18,
+          },
+          freshness,
+        },
+        earnings: {
+          value: {
+            next_earnings_date: new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10),
+            days_until: 14,
+            historical_post_move_pct: 4.2,
+            implied_move_pct: 5.1,
+          },
+          freshness,
+        },
+        warnings: [],
+      };
+    }
+    return { symbols: out, generated_at: NOW_ISO() };
+  },
   "GET /market/quotes/:symbol": (_, { symbol }) => quoteFor(symbol),
   // Some callers still reach for the singular form; alias both so the
   // mock backend doesn't 404 and pollute the DATA UNAVAILABLE banner.
@@ -251,18 +345,34 @@ const HANDLERS: Record<string, MockHandler> = {
     next_open: new Date(Date.now() + 18 * 3600_000).toISOString(),
     session_label: "REGULAR",
   }),
-  // Synthetic OHLCV bars — 350 of them — keeps the chart engine happy.
-  // Wire shape mirrors the backend response: each bar is a top-level object
-  // in the response array with snake_case keys (`timestamp`, `open`, `high`,
-  // `low`, `close`, `volume`) so api.ts `getBars` can map without coercing
-  // single-letter keys. The previous shape `{t,o,h,l,c,v}` produced NaN
-  // timestamps and an empty chart on the trade page.
-  "GET /market/bars/:symbol": (_, { symbol }) => {
+  // Synthetic OHLCV bars. Honors the `?limit=` query param so the
+  // Trade page's ALL range (~2k weekly bars) actually paints multi-year
+  // history instead of getting clamped at 350. Honors `?timeframe=` to
+  // size each bar's interval correctly so the date axis isn't squashed.
+  // Wire shape mirrors the backend: snake_case `{timestamp, open, high,
+  // low, close, volume}` per bar.
+  "GET /market/bars/:symbol": (req, { symbol }) => {
     const sym = symbol.toUpperCase();
     const seed = SEED_PRICES[sym] ?? 100;
+    const url = new URL(req.url);
+    const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 350, 1), 5000);
+    const tf = url.searchParams.get("timeframe") || "1h";
+    const intervalMs = (() => {
+      switch (tf) {
+        case "1min": return 60_000;
+        case "5min": return 5 * 60_000;
+        case "15min": return 15 * 60_000;
+        case "1h": return 3600_000;
+        case "4h": return 4 * 3600_000;
+        case "1d": return 24 * 3600_000;
+        case "1w": return 7 * 24 * 3600_000;
+        case "1mo": return 30 * 24 * 3600_000;
+        default: return 3600_000;
+      }
+    })();
     const now = Date.now();
-    return Array.from({ length: 350 }, (_, i) => {
-      const ts = now - (349 - i) * 3600_000;
+    return Array.from({ length: limit }, (_, i) => {
+      const ts = now - (limit - 1 - i) * intervalMs;
       const drift = Math.sin(i / 12) * (seed * 0.04);
       const wobble = Math.sin(i / 3) * (seed * 0.008);
       const o = seed + drift;

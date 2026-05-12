@@ -4749,6 +4749,14 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
   const stopPx = limitPx * (1 - stopPct / 100);
   const riskDollars = isOption ? contracts * 284 : qty * (limitPx - stopPx);
   const riskPct = live.portfolio?.equity ? (riskDollars / live.portfolio.equity) * 100 : 0;
+
+  // Positions on the active symbol — used by the chart overlay block
+  // further down (which is defined after `submitStagedOrder` so it
+  // can call into the latest submit closure without a TDZ).
+  const symPositions = React.useMemo(
+    () => (live.positions || []).filter((p) => String(p?.symbol || "").toUpperCase() === String(t.sym || "").toUpperCase()),
+    [live.positions, t.sym],
+  );
   const quoteSnapshot = live.quotes?.[String(t.sym || sym || "SPY").toUpperCase()] || live.tickerContext?.quote?.value || null;
 
   useEffect(() => {
@@ -4850,6 +4858,73 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
     }
   };
 
+  // 2026-05-11 (round 23 — entries / SL-TP on chart): every open
+  // position on the active symbol becomes a `live` overlay; the in-
+  // flight ticket renders as either `draft` (operator is still
+  // sizing) or `pending` (preview returned a review token, awaiting
+  // confirm). ChartPane draws horizontal lines at entry / stop /
+  // take-profit for each overlay and a label chip on the right axis.
+  // Declared AFTER submitStagedOrder so the closure can reference it
+  // without TDZ.
+  const tradeOverlays = React.useMemo(() => {
+    if (isOption) return [];
+    const list = [];
+    for (const p of symPositions) {
+      list.push({
+        id: `pos-${p.symbol}-${p.side || "long"}`,
+        label: `${p.symbol} · ${p.quantity}sh @ ${(p.avgCost || 0).toFixed(2)}`,
+        status: "live",
+        side: p.side === "short" ? "short" : "long",
+        entry: Number(p.avgCost) || null,
+        stopLoss: typeof p.stopLoss === "number" ? p.stopLoss : null,
+        takeProfit: typeof p.takeProfit === "number" ? p.takeProfit : null,
+        quantity: Number(p.quantity) || null,
+        summary: `${p.symbol} position · stop ${p.stopLoss != null ? "$" + p.stopLoss.toFixed(2) : "—"} · target ${p.takeProfit != null ? "$" + p.takeProfit.toFixed(2) : "—"}`,
+      });
+    }
+    if (qty > 0 && limitPx > 0 && Number.isFinite(stopPx)) {
+      const isReady = orderStage === "ready" && !!stagedOrder;
+      const isPreviewing = orderStage === "previewing" || orderStage === "submitting";
+      list.push({
+        id: "ticket-draft",
+        label: `${isReady ? "Staged" : "Draft"} ${side} ${qty}sh @ ${limitPx.toFixed(2)}`,
+        status: isReady ? "pending" : isPreviewing ? "pending" : orderStage === "error" ? "error" : "draft",
+        side: side === "buy" ? "long" : "short",
+        entry: limitPx,
+        stopLoss: stopPx,
+        takeProfit: null,
+        quantity: qty,
+        summary: orderError || (isReady ? "Click confirm to submit at this entry" : "Ticket draft — not yet staged"),
+        canSubmit: isReady,
+        submitLabel: isReady ? `Confirm ${side}` : undefined,
+        onSubmit: isReady ? submitStagedOrder : undefined,
+        onCancel: isReady ? () => { setStagedOrder(null); setOrderStage("idle"); } : undefined,
+        error: orderStage === "error" ? orderError || "Preview failed" : null,
+      });
+    }
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOption, symPositions, qty, limitPx, stopPx, side, orderStage, stagedOrder, orderError]);
+
+  // 2026-05-11 (round 23 — click chart to stage): clicking a price
+  // level on the chart pre-fills the limit ticket at that price.
+  const chartOrderPlacement = React.useMemo(() => {
+    if (isOption) return null;
+    return {
+      enabled: true,
+      side,
+      label: `Click chart to set ${side} limit price`,
+      hint: "Drop a draft at any price level. Stage once you're happy with sizing.",
+      onStagePrice: (price, hintedSide) => {
+        if (!Number.isFinite(price) || price <= 0) return;
+        if (hintedSide === "buy" || hintedSide === "sell") setSide(hintedSide);
+        setOrderType("limit");
+        setLimitPx(Number(price.toFixed(2)));
+        setOrderStage("idle");
+      },
+    };
+  }, [isOption, side]);
+
   const handleStageOrder = async () => {
     if (orderStage === "ready" && stagedOrder) {
       await submitStagedOrder();
@@ -4935,9 +5010,16 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
              * tools menu; the design's toolbar `chartMode` + `overlays`
              * state still drives the local controls but no longer feeds the
              * mock SVG. Range chips stay wired through `range`. */}
-            <HeroChartWired symbol={sym || t?.sym || "SPY"} range={range} chartType={chartMode === "line" ? "line" : "candle"} indicators={enabledIndicators} />
+            <HeroChartWired
+              symbol={sym || t?.sym || "SPY"}
+              range={range}
+              chartType={chartMode === "line" ? "line" : "candle"}
+              indicators={enabledIndicators}
+              tradeOverlays={tradeOverlays}
+              chartOrderPlacement={chartOrderPlacement}
+            />
           </div>
-          <VolumeRail t={t} />
+          <TradeContextRail t={t} regime={live.regime} />
         </section>
 
         {/* RIGHT — collapsible, pushes (in-grid) */}
@@ -5538,12 +5620,205 @@ function HeroChart({ t, range, chartMode, overlays, limitPx, stopPx, side }) {
 
 // ─── volume rail (under chart) ───────────────────────────────────────────────
 
-function VolumeRail({ t }) {
+// 2026-05-11 (round 23 — trade context rail): the strip under the
+// chart was a dead "Latest quote volume 24.5M" label. The design
+// brief from `trading_information_architecture_and_edge.md` wants
+// the row that's adjacent to the chart to surface Tier 1 (regime)
+// + Tier 2 (setup qualification) context the operator needs BEFORE
+// pulling the trigger. Each cell renders an em-dash when the data
+// isn't loaded — never fabricates a value.
+function TradeContextRail({ t, regime }) {
+  const ivRank = (() => {
+    const raw = optionIvPercent(t?.optionsSummary?.iv_rank);
+    if (raw == null || !Number.isFinite(raw)) return null;
+    return Math.max(0, Math.min(100, raw));
+  })();
+  const currentIV = optionIvPercent(t?.optionsSummary?.current_iv);
+  const realizedHV = (() => {
+    const raw = t?.optionsSummary?.historical_vol_30d ?? t?.optionsSummary?.hv_30d;
+    const num = Number(raw);
+    return Number.isFinite(num) && num > 0 ? num : null;
+  })();
+  const ivOverHV = currentIV != null && realizedHV ? currentIV / realizedHV : null;
+  const expectedMove = (() => {
+    const raw = t?.optionsSummary?.expected_move ?? t?.optionsSummary?.expected_move_pct;
+    const num = Number(raw);
+    return Number.isFinite(num) && num > 0 ? num : null;
+  })();
+
+  const regimeRoot = regime?.regime || {};
+  const regimeKey = String(regimeRoot.regime || "").toLowerCase();
+  const regimeLabel = regimeRoot.label || (regimeKey ? regimeKey.replace(/_/g, " ") : null);
+  const regimeTone = regimeKey.includes("risk_off") || regimeKey.includes("stress") || regimeKey.includes("bear")
+    ? "down"
+    : regimeKey.includes("risk_on") || regimeKey.includes("bull") || regimeKey.includes("trend")
+      ? "up"
+      : "neutral";
+  const vixLevel = Number(regimeRoot.vix_level);
+
+  // Setup gates — derived from IV rank + regime, mirroring the rules
+  // in trading_information_architecture_and_edge.md Part 3. "qualified"
+  // when both conditions hold; "watch" when one holds; "skip" otherwise.
+  // We don't claim a setup is qualified when data is missing — render
+  // a muted "—" gate instead.
+  const regimeOk = regimeTone === "up" || regimeTone === "neutral";
+  const regimeStrong = regimeTone === "up";
+  const setups = (() => {
+    if (ivRank == null) {
+      return [
+        { id: "short-put", label: "Short put", state: "muted", note: "IV rank unknown" },
+        { id: "bull-put",  label: "Bull put spread", state: "muted", note: "IV rank unknown" },
+        { id: "iron-condor", label: "Iron condor", state: "muted", note: "IV rank unknown" },
+        { id: "jade-lizard", label: "Jade lizard", state: "muted", note: "IV rank unknown" },
+      ];
+    }
+    const gate = (cond, label, note) =>
+      cond ? { state: "on", label, note } : { state: "off", label, note };
+    return [
+      { id: "short-put",  ...gate(ivRank >= 30 && regimeOk, "Short put",  `IV rank ${ivRank.toFixed(0)} ≥ 30 · regime ${regimeOk ? "ok" : "red"}`) },
+      { id: "bull-put",   ...gate(ivRank >= 35 && regimeStrong, "Bull put spread", `IV rank ${ivRank.toFixed(0)} ≥ 35 · regime ${regimeStrong ? "strong" : "soft"}`) },
+      { id: "iron-condor",...gate(ivRank >= 50 && regimeTone === "neutral", "Iron condor", `range-bound only · IV rank ${ivRank.toFixed(0)} ≥ 50`) },
+      { id: "jade-lizard",...gate(ivRank >= 40 && regimeOk, "Jade lizard", `IV rank ${ivRank.toFixed(0)} ≥ 40 · skew steep`) },
+    ];
+  })();
+
+  const cellStyle = {
+    minWidth: 110,
+    padding: "8px 12px",
+    borderRight: "1px solid var(--border-hair)",
+    display: "flex",
+    flexDirection: "column",
+    gap: 3,
+    flex: "0 0 auto",
+  };
+  const labelStyle = { fontSize: 8.5 };
+  const valueMonoStyle = {
+    fontFamily: "var(--font-mono)",
+    fontSize: 12,
+    color: "var(--ink-1000)",
+    fontVariantNumeric: "tabular-nums",
+  };
+  const dashStyle = { ...valueMonoStyle, color: "var(--fg-muted)" };
+
   return (
-    <div style={{ height: 56, position: "relative", flex: "0 0 auto" }}>
-      <div className="t-label" style={{ position: "absolute", top: 4, left: 4, fontSize: 8.5, zIndex: 1 }}>Volume</div>
-      <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "flex-end", borderTop: "1px solid var(--border-hair)", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--fg-muted)" }}>
-        Latest quote volume <span style={{ color: "var(--ink-1000)", marginLeft: 8 }}>{compactVolume(t.vol)}</span>
+    <div
+      style={{
+        flex: "0 0 auto",
+        borderTop: "1px solid var(--border-hair)",
+        background: "var(--ink-100)",
+        display: "flex",
+        alignItems: "stretch",
+        overflowX: "auto",
+        scrollbarWidth: "thin",
+      }}
+      aria-label="Trade context"
+    >
+      {/* Regime — Tier 1 gate */}
+      <div style={cellStyle}>
+        <span className="t-label" style={labelStyle}>Regime</span>
+        {regimeLabel ? (
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 13,
+            color: regimeTone === "down" ? "var(--down-500)" : regimeTone === "up" ? "var(--up-500)" : "var(--ink-1000)",
+          }}>
+            <span aria-hidden="true" style={{
+              width: 8, height: 8, borderRadius: "50%",
+              background: regimeTone === "down" ? "var(--down-500)" : regimeTone === "up" ? "var(--up-500)" : "var(--fg-muted)",
+            }} />
+            {regimeLabel}
+          </span>
+        ) : (
+          <span style={dashStyle}>—</span>
+        )}
+      </div>
+
+      {/* VIX */}
+      <div style={cellStyle}>
+        <span className="t-label" style={labelStyle}>VIX</span>
+        <span style={Number.isFinite(vixLevel) && vixLevel > 0 ? valueMonoStyle : dashStyle}>
+          {Number.isFinite(vixLevel) && vixLevel > 0 ? vixLevel.toFixed(2) : "—"}
+        </span>
+      </div>
+
+      {/* IV rank with mini-bar */}
+      <div style={{ ...cellStyle, minWidth: 132 }}>
+        <span className="t-label" style={labelStyle}>IV rank</span>
+        {ivRank != null ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={valueMonoStyle}>{ivRank.toFixed(0)} / 100</span>
+            <div aria-hidden="true" style={{
+              height: 4, background: "var(--bg-elev-1)", borderRadius: 2, position: "relative", overflow: "hidden",
+            }}>
+              <div style={{
+                position: "absolute", inset: 0, width: `${ivRank}%`,
+                background: ivRank >= 50 ? "var(--brand)" : ivRank >= 30 ? "var(--gold-300)" : "var(--fg-muted)",
+              }} />
+            </div>
+          </div>
+        ) : (
+          <span style={dashStyle}>—</span>
+        )}
+      </div>
+
+      {/* IV / HV ratio — Tier 2 vol surface */}
+      <div style={cellStyle}>
+        <span className="t-label" style={labelStyle}>IV / HV</span>
+        <span style={ivOverHV != null ? valueMonoStyle : dashStyle}>
+          {ivOverHV != null ? `${ivOverHV.toFixed(2)}×` : "—"}
+        </span>
+      </div>
+
+      {/* Expected move (next event) */}
+      <div style={cellStyle}>
+        <span className="t-label" style={labelStyle}>Expected move</span>
+        <span style={expectedMove != null ? valueMonoStyle : dashStyle}>
+          {expectedMove != null ? `±${expectedMove.toFixed(2)}%` : "—"}
+        </span>
+      </div>
+
+      {/* Latest session volume — preserves the volume number the old
+        * rail showed, so the cell isn't a regression for the operator
+        * who used it as a tape pulse. */}
+      <div style={cellStyle}>
+        <span className="t-label" style={labelStyle}>Session vol</span>
+        <span style={t?.vol ? valueMonoStyle : dashStyle}>
+          {t?.vol ? compactVolume(t.vol) : "—"}
+        </span>
+      </div>
+
+      {/* Setup gates — Tier 2 qualification chips */}
+      <div style={{ ...cellStyle, flex: "1 1 auto", minWidth: 320, borderRight: 0 }}>
+        <span className="t-label" style={labelStyle}>Setup gates</span>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+          {setups.map((s) => {
+            const colors = s.state === "on"
+              ? { bg: "var(--tint-up-2, rgba(93,110,62,0.18))", fg: "var(--up-500)", border: "var(--tint-up-3, rgba(93,110,62,0.4))" }
+              : s.state === "off"
+                ? { bg: "transparent", fg: "var(--fg-muted)", border: "var(--border)" }
+                : { bg: "transparent", fg: "var(--fg-hint)", border: "var(--border-hair)" };
+            return (
+              <span key={s.id} title={s.note}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "2px 7px",
+                  border: `1px solid ${colors.border}`,
+                  background: colors.bg,
+                  borderRadius: 3,
+                  fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600,
+                  letterSpacing: "0.08em", textTransform: "uppercase",
+                  color: colors.fg,
+                }}
+              >
+                <span aria-hidden="true" style={{
+                  width: 5, height: 5, borderRadius: "50%",
+                  background: s.state === "on" ? "var(--up-500)" : "var(--fg-muted)",
+                }} />
+                {s.label}
+              </span>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
