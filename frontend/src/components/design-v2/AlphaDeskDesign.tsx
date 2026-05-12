@@ -5004,13 +5004,26 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
   const invalidContracts = isOption && asset === "option" && (!Number.isFinite(contracts) || contracts <= 0 || contracts > 10_000);
   const overEquity = accountEquity > 0 && Number(notional || 0) > accountEquity;
   const overRiskCap = Number(riskPct || 0) > 1;
+  // 2026-05-11 (iter2 audit preview-P1): a 99% stop on a $134 stock
+  // collapses to a $1.35 stop price — Risk·$ drops to ~$1k, Risk·%
+  // shows 0.47% (passes the cap), but the order would liquidate the
+  // moment the print prints. Block stops above 50% so we don't waste
+  // a preview round-trip on an obviously broken protective stop.
+  const insaneStop = !isOption && (stopPct >= 50 || stopPct < 0);
+  // 2026-05-11 (iter2 audit P2.1): on the Options tab the Stage button
+  // was enabled even before the operator picked a contract from the
+  // chain. Clicking threw "Select a live option contract from the
+  // chain before staging an order." Block the click instead.
+  const optionWithoutContract = asset === "option" && !selectedOptionContract?.symbol;
   const stageDisabled =
     orderStage === "previewing" ||
     orderStage === "submitting" ||
     invalidQty ||
     invalidContracts ||
     overEquity ||
-    overRiskCap;
+    overRiskCap ||
+    insaneStop ||
+    optionWithoutContract;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: "var(--border)" }}>
@@ -5046,7 +5059,7 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
               <a onClick={() => setLeftCollapsed(true)} title="Collapse"
                  style={{ fontFamily: "var(--font-ui)", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--fg-muted)", cursor: "default", padding: "2px 6px", border: "1px solid var(--border-hair)", borderRadius: 2 }}>◂ close</a>
             </div>
-            {isOption ? (<OptionsOrderBookPanel />) : (<><OrderBookPanel symbol={t.sym} last={t.px} bid={t.bid} ask={t.ask} bidSize={t.bidSize} askSize={t.askSize} quoteTs={t.quoteTs} onPickPrice={(px) => { setOrderType("limit"); setLimitPx(+px.toFixed(2)); }} /><TimeAndSalesPanel symbol={t.sym} last={t.px} bid={t.bid} ask={t.ask} bidSize={t.bidSize} askSize={t.askSize} /></>)}
+            {isOption ? (<OptionsOrderBookPanel optStrike={optStrike} optType={optType} spot={t.px} />) : (<><OrderBookPanel symbol={t.sym} last={t.px} bid={t.bid} ask={t.ask} bidSize={t.bidSize} askSize={t.askSize} quoteTs={t.quoteTs} onPickPrice={(px) => { setOrderType("limit"); setLimitPx(+px.toFixed(2)); }} /><TimeAndSalesPanel symbol={t.sym} last={t.px} bid={t.bid} ask={t.ask} bidSize={t.bidSize} askSize={t.askSize} /></>)}
           </aside>
         )}
 
@@ -5103,7 +5116,7 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
             <OptionForm {...{ side, setSide, contracts, setContracts, optStrike, setOptStrike, optType, setOptType, orderType, setOrderType, limitPx, setLimitPx, spot: t.px, iv: t.iv }} />
             <GreeksStrip spot={t.px} strike={optStrike} optType={optType} iv={t.iv} contracts={contracts} />
             <PayoffPanel mode="single" spot={t.px} strike={optStrike} optType={optType} side={side} contracts={contracts} premium={limitPx} />
-            <RiskPreviewCard notional={notional} riskDollars={riskDollars} riskPct={riskPct} stopPx={stopPx} isOption />
+            <RiskPreviewCard notional={notional} riskDollars={riskDollars} riskPct={riskPct} stopPx={stopPx} isOption orderType={orderType} />
           </>}
           {asset === "builder" && <OptionBuilder strategy={builderStrategy} setStrategy={setBuilderStrategy} spot={t.px} iv={t.iv} />}
           <AIMemoPanel isOption={isOption} symbol={t.sym} />
@@ -5136,6 +5149,24 @@ const TradePage = ({ tweaks, sym = "NVDA", onPickTicker }) => {
               aria-live="polite"
               style={{ padding: "10px 12px", background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4, display: "flex", flexDirection: "column", gap: 7 }}
             >
+              {/* 2026-05-11 (iter2 audit P1.4): when staging an option,
+                  surface the OSI contract symbol + strike·side·expiry
+                  above the policy checks. Operators need to verify K,
+                  expiry, and call/put BEFORE clicking Confirm — the
+                  underlying ticker alone (NVDA) isn't enough. Stays a
+                  one-line t-mono summary so the layout doesn't shift. */}
+              {asset === "option" && selectedOptionContract?.symbol && (
+                <div
+                  className="t-mono"
+                  style={{ fontSize: 11, color: "var(--ink-1000)", letterSpacing: "0.02em", display: "flex", justifyContent: "space-between", gap: 8 }}
+                >
+                  <span style={{ color: "var(--gold-300)" }}>{String(selectedOptionContract.symbol)}</span>
+                  <span style={{ color: "var(--fg-muted)" }}>
+                    {String(optType || "").toUpperCase()} ${optStrike}
+                    {selectedOptionContract.expiry ? ` · ${selectedOptionContract.expiry}` : ""}
+                  </span>
+                </div>
+              )}
               {orderError && (
                 <div id="trade-order-alert" role="alert" style={{ fontFamily: "var(--font-ui)", fontSize: 11.5, color: "var(--down-500)", lineHeight: 1.35 }}>
                   {orderError}
@@ -6245,7 +6276,7 @@ function OrderTicket(p) {
       </Field>
       {p.orderType === "limit" && (
         <Field label="Limit price">
-          <input aria-label="Limit price" type="number" inputMode="decimal" min="0.01" step="0.01" value={p.limitPx.toFixed(2)} onChange={(e) => p.setLimitPx(+e.target.value || 0)} style={inputStyle} />
+          <DecimalInput aria-label="Limit price" min="0.01" step="0.01" value={p.limitPx} onChange={p.setLimitPx} style={inputStyle} />
         </Field>
       )}
       {/* STOP orders need their own trigger price input. The previous
@@ -6256,7 +6287,7 @@ function OrderTicket(p) {
         * payload builder maps it to `stop_price`. */}
       {p.orderType === "stop" && (
         <Field label="Stop trigger price">
-          <input aria-label="Stop trigger price" type="number" inputMode="decimal" min="0.01" step="0.01" value={p.limitPx.toFixed(2)} onChange={(e) => p.setLimitPx(+e.target.value || 0)} style={inputStyle} />
+          <DecimalInput aria-label="Stop trigger price" min="0.01" step="0.01" value={p.limitPx} onChange={p.setLimitPx} style={inputStyle} />
           <span className="t-mono" style={{ fontSize: 10, color: "var(--fg-hint)", marginLeft: 8, alignSelf: "center" }}>fires market order on touch</span>
         </Field>
       )}
@@ -6270,12 +6301,12 @@ function OrderTicket(p) {
         * misleading certainty. Use a "% of fill" label + a "—" hint
         * for MARKET; keep the precise reference for LIMIT/STOP. */}
       <Field label={p.orderType === "market" ? "Stop loss · % of fill" : "Stop loss · % of entry"}>
-        <input
+        <DecimalInput
           aria-label={p.orderType === "market" ? "Stop loss percent of fill" : "Stop loss percent of entry"}
           aria-invalid={p.stopPct < 0 || p.stopPct >= 100}
-          inputMode="decimal"
-          value={p.stopPct.toFixed(1)}
-          onChange={(e) => p.setStopPct(+e.target.value || 0)}
+          decimals={1}
+          value={p.stopPct}
+          onChange={p.setStopPct}
           style={{
             ...inputStyle,
             borderColor: (p.stopPct < 0 || p.stopPct >= 100) ? "var(--down-500)" : inputStyle.border?.includes("border") ? undefined : undefined,
@@ -6315,19 +6346,28 @@ function OrderTicket(p) {
           </div>
         );
       })()}
-      <RiskPreviewCard notional={p.notional} riskDollars={p.riskDollars} riskPct={p.riskPct} stopPx={p.stopPx} />
+      <RiskPreviewCard notional={p.notional} riskDollars={p.riskDollars} riskPct={p.riskPct} stopPx={p.stopPx} orderType={p.orderType} />
     </div>
   );
 }
 
 // ─── shared risk preview ─────────────────────────────────────────────────────
 
-function RiskPreviewCard({ notional, riskDollars, riskPct, stopPx, isOption }) {
+function RiskPreviewCard({ notional, riskDollars, riskPct, stopPx, isOption, orderType }) {
+  // 2026-05-11 (iter2 audit P1.3 / P2.4): sub-$1 tickets used to
+  // render Notional "$0" because fmtMoney's dec=0 truncated to whole
+  // dollars while Stop·price kept 2 decimals — inconsistent and
+  // looked unstaged. Use 2 decimals when the value is below $100,
+  // whole dollars above. Same treatment for Risk·$.
+  // MARKET orders have no known entry price — render Stop·price /
+  // Risk·$ as "—" instead of computing against a stale limit.
+  const isMarket = orderType === "market";
+  const moneyDec = (n: number) => (Math.abs(n) < 100 ? 2 : 0);
   return (
     <div style={{ marginTop: 12, padding: "12px 12px", background: "var(--ink-100)", border: "1px solid var(--border)", borderRadius: 4 }}>
       <div className="t-label" style={{ marginBottom: 10 }}>Risk preview</div>
-      <RiskRow label="Notional" v={fmtMoney(notional, { dec: 0 })} />
-      <RiskRow label="Risk · $" v={fmtMoney(riskDollars, { dec: 0 })} tone="down" />
+      <RiskRow label="Notional" v={fmtMoney(notional, { dec: moneyDec(notional) })} />
+      <RiskRow label="Risk · $" v={isMarket ? "—" : fmtMoney(riskDollars, { dec: moneyDec(riskDollars) })} tone="down" />
       {/* Risk is always a downside number — render it unsigned (no leading
         * "+") so "+0.00%" doesn't read like a gain. fmtPct adds a "+" on
         * any positive value, which is correct for P&L but wrong for risk.
@@ -6336,7 +6376,7 @@ function RiskPreviewCard({ notional, riskDollars, riskPct, stopPx, isOption }) {
         * downside even when small — leave it un-toned, and only flip
         * red when the policy cap is exceeded. */}
       <RiskRow label="Risk · % equity" v={`${riskPct.toFixed(2)}%`} tone={riskPct > 1 ? "down" : undefined} />
-      {!isOption && <RiskRow label="Stop · price" v={"$" + stopPx.toFixed(2)} />}
+      {!isOption && <RiskRow label="Stop · price" v={isMarket ? "—" : "$" + stopPx.toFixed(2)} />}
       {/* 2026-05-10 (round 2 honest empty-state): the previous card
        * showed hardcoded "Reward target +8.0%" and "R:R 2.0×" for
        * every order regardless of strategy / target. Reward and R:R
@@ -6377,12 +6417,19 @@ function OptionChainPanel({ symbol, spot, optStrike, setOptStrike, optType, setO
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // 2026-05-11 (iter2 audit P1.2): the panel filtered chain.calls /
+  // chain.puts by `c.expiry === activeExpiry` but the fetch was keyed
+  // only on symbol — so a different expiry pick produced a grid that
+  // filtered down to 0 rows (the backend only returns contracts for
+  // the first expiry until asked). Re-run the fetch when activeExpiry
+  // changes; cancel any in-flight prior fetch so stale chain data
+  // can't briefly flash back.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError("");
     setSelectedOptionContract?.(null);
-    getOptionsChain(symbol)
+    getOptionsChain(symbol, expiry || undefined)
       .then((next) => {
         if (cancelled) return;
         setChain(next);
@@ -6401,7 +6448,7 @@ function OptionChainPanel({ symbol, spot, optStrike, setOptStrike, optType, setO
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [symbol]);
+  }, [symbol, expiry]);
 
   const expiries = chain?.expirations || [];
   const activeExpiry = expiry || expiries[0] || "";
@@ -6560,7 +6607,7 @@ function OptionForm(p) {
         <select aria-label="Option order type" value={p.orderType} onChange={(e) => p.setOrderType(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
           <option value="market">Market</option><option value="limit">Limit</option>
         </select>
-        <input aria-label="Option limit price" type="number" inputMode="decimal" min="0.01" step="0.01" value={p.limitPx.toFixed(2)} onChange={(e) => p.setLimitPx(+e.target.value || 0)} style={{ ...inputStyle, flex: 1, marginLeft: 6 }} />
+        <DecimalInput aria-label="Option limit price" min="0.01" step="0.01" value={p.limitPx} onChange={p.setLimitPx} style={{ ...inputStyle, flex: 1, marginLeft: 6 }} />
       </Field>
     </div>
   );
@@ -7092,6 +7139,92 @@ const tradeBtnStyle = (kind, on) => ({
   border: `1px solid ${kind === "buy" ? "var(--tint-up-3)" : "var(--tint-down-3)"}`,
   borderRadius: 3, cursor: "default", lineHeight: 1.05
 });
+/**
+ * 2026-05-11 (iter2 audit P0): the numeric inputs in OrderTicket and
+ * OptionForm rendered their value as `p.limitPx.toFixed(2)` /
+ * `.toFixed(1)`. The browser-controlled formatting fought live
+ * keystrokes — typing "135" into a `value="0.00"` input ended at
+ * "0.01" because each char round-tripped through `+ "0.001"` → state=0
+ * → re-rendered as "0.00". Operators literally could not type the
+ * price they wanted.
+ *
+ * DecimalInput keeps a local string draft while focused (so the user
+ * sees what they type), commits a parsed numeric value to the parent
+ * on each change for live downstream updates (notional, risk%, etc.),
+ * and re-formats from the parent value on blur or when the parent
+ * value changes from outside (e.g. a chain-row click filling the mid).
+ */
+function DecimalInput({
+  value,
+  onChange,
+  decimals = 2,
+  showEmptyWhenZero = false,
+  ...rest
+}: {
+  value: number;
+  onChange: (next: number) => void;
+  decimals?: number;
+  showEmptyWhenZero?: boolean;
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange">) {
+  const numeric = Number.isFinite(value) ? value : 0;
+  const format = React.useCallback((n: number) => {
+    if (showEmptyWhenZero && n === 0) return "";
+    return n.toFixed(decimals);
+  }, [decimals, showEmptyWhenZero]);
+  const [draft, setDraft] = React.useState(() => format(numeric));
+  const [focused, setFocused] = React.useState(false);
+  // Re-sync the draft when the parent value changes from OUTSIDE (i.e.
+  // not via the live `onChange` we just emitted). We track the last
+  // numeric value we ourselves rendered to detect external updates.
+  const lastSeen = React.useRef(numeric);
+  React.useEffect(() => {
+    if (focused) return;
+    if (numeric !== lastSeen.current) {
+      lastSeen.current = numeric;
+      setDraft(format(numeric));
+    }
+  }, [numeric, focused, format]);
+  return (
+    <input
+      {...rest}
+      inputMode={rest.inputMode ?? "decimal"}
+      value={focused ? draft : format(numeric)}
+      onFocus={(e) => {
+        setFocused(true);
+        setDraft(format(numeric));
+        rest.onFocus?.(e);
+      }}
+      onChange={(e) => {
+        const next = e.target.value;
+        setDraft(next);
+        // Allow partial drafts like "1." or empty without forcing
+        // setLimitPx(0). Only commit when the draft parses.
+        if (next === "" || next === ".") {
+          onChange(0);
+          return;
+        }
+        const n = parseFloat(next);
+        if (Number.isFinite(n)) {
+          lastSeen.current = n;
+          onChange(n);
+        }
+      }}
+      onBlur={(e) => {
+        setFocused(false);
+        const n = parseFloat(draft);
+        if (Number.isFinite(n)) {
+          lastSeen.current = n;
+          setDraft(format(n));
+          onChange(n);
+        } else {
+          setDraft(format(numeric));
+        }
+        rest.onBlur?.(e);
+      }}
+    />
+  );
+}
+
 function Field({ label, children, value, sub }) {
   return (
     <div style={{ marginBottom: 10, display: "flex", flexDirection: "column", gap: 5 }}>
