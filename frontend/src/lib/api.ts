@@ -2279,8 +2279,16 @@ export async function getOptionsChain(symbol: string, expiration?: string): Prom
     typeof v === "number" && Number.isFinite(v) ? v : 0;
   const pickNullableNumber = (v: unknown): number | null =>
     typeof v === "number" && Number.isFinite(v) ? v : null;
+  // 2026-05-11 (iter4 audit degrade-P1.3): drop contracts whose strike
+  // isn't a positive finite number rather than letting `pickNumber`
+  // coerce them to 0 — a strike-0 row slipped past the consumer's
+  // `Number.isFinite` filter and showed a clickable "K=—" ghost row
+  // in the chain table. A malformed contract is unactionable; the
+  // honest UX is to omit it and let the empty-state copy fire.
+  const isValidStrike = (c: Record<string, unknown>): boolean =>
+    typeof c.strike === "number" && Number.isFinite(c.strike) && Number(c.strike) > 0;
   const calls = contracts
-    .filter((c) => c.option_type === "call")
+    .filter((c) => c.option_type === "call" && isValidStrike(c))
     .map((c) => ({
       symbol: (c.symbol as string) ?? "",
       expiry: (c.expiry as string) ?? "",
@@ -2300,7 +2308,7 @@ export async function getOptionsChain(symbol: string, expiration?: string): Prom
       volumeOiRatio: pickNullableNumber(c.volume_oi_ratio),
     }));
   const puts = contracts
-    .filter((c) => c.option_type === "put")
+    .filter((c) => c.option_type === "put" && isValidStrike(c))
     .map((c) => ({
       symbol: (c.symbol as string) ?? "",
       expiry: (c.expiry as string) ?? "",
