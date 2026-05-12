@@ -12,6 +12,9 @@ beforeEach(() => {
       SPY: { symbol: 'SPY', last: 679, bid: 678, ask: 680, change: 0, changePct: 0, volume: 1000000, high: 680, low: 678, open: 679, close: 679, timestamp: Date.now() },
     },
     watchlist: ['AAPL', 'SPY'],
+    // Iter 23: post-hydration state so the rows render rather than the
+    // loading skeleton.
+    hydrated: true,
   });
   useUIStore.setState({
     activePanels: { left: 'watchlist', center: 'chart', right: 'technical', bottom: 'trade' },

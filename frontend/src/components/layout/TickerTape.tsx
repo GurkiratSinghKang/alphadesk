@@ -1,11 +1,15 @@
 "use client";
 
 import { useMemo } from "react";
-import { useMarketStore, useQuotes } from "@/stores/market";
+import { useHydratedWatchlist, useQuotes } from "@/stores/market";
 import { cn } from "@/lib/utils";
 
 export function TickerTape() {
-  const watchlist = useMarketStore((s) => s.watchlist);
+  // Iter 23: gate on the hydration flag so the ticker doesn't paint the
+  // DEFAULT_WATCHLIST 10 mega-caps for ~200ms before the server reply
+  // overwrites with the user's actual symbols. `useHydratedWatchlist`
+  // returns both in one selector to avoid two subscriptions.
+  const { symbols: watchlist, isHydrating } = useHydratedWatchlist();
   // Wave 14 perf-audit-r3 P0 #3: `useQuotes(watchlist)` shallow-compares the
   // returned map so this component rerenders only when one of the watchlist
   // symbols actually changes, not on every unrelated quote tick.
@@ -32,7 +36,12 @@ export function TickerTape() {
   // strategy-detail harness regression post-R7.
   const tripled = useMemo(() => [...items, ...items, ...items], [items]);
 
-  if (items.length === 0) return null;
+  // Iter 23: render nothing while hydrating — the ticker's already an
+  // optional bar, and a 1-row skeleton flickering for 200ms is noisier
+  // than just waiting for real symbols. Once `hydrated` flips we either
+  // render the marquee (if we have quote data) or stay null (if items
+  // is empty), preserving the original empty-state behaviour.
+  if (isHydrating || items.length === 0) return null;
 
   return (
     <div

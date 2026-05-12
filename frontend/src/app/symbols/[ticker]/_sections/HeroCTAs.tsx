@@ -5,7 +5,7 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/useToast";
-import { useMarketStore } from "@/stores/market";
+import { useHydratedWatchlist, useMarketStore } from "@/stores/market";
 
 export interface HeroCTAsProps {
   symbol: string;
@@ -17,15 +17,18 @@ export function HeroCTAs({ symbol, className }: HeroCTAsProps) {
   const tradeHref = `/trade?symbol=${encodeURIComponent(symbol)}`;
   const agentsHref = `/strategies/trading-agents-research?symbol=${encodeURIComponent(upper)}`;
 
-  // Subscribe only to `watchlist` for re-render efficiency — selecting a
-  // primitive-array slice means this component rerenders only when the
-  // watchlist mutates, not on every quote tick.
-  const watchlist = useMarketStore((s) => s.watchlist);
+  // Iter 23: read watchlist + hydration flag together so the
+  // "Watch"/"Watching" toggle doesn't flash the wrong state during the
+  // ~200ms gap between mount and the WatchlistHydrator server reply.
+  // For a power user whose actual watchlist contains the current symbol,
+  // the pre-iter-23 button would render "Watch" (from DEFAULT_WATCHLIST)
+  // then snap to "Watching" once the real list lands.
+  const { symbols: watchlist, isHydrating } = useHydratedWatchlist();
   const addToWatchlist = useMarketStore((s) => s.addToWatchlist);
   const removeFromWatchlist = useMarketStore((s) => s.removeFromWatchlist);
   const { toast } = useToast();
 
-  const isWatching = watchlist.includes(upper);
+  const isWatching = !isHydrating && watchlist.includes(upper);
 
   const handleWatchClick = () => {
     if (isWatching) {
@@ -61,6 +64,12 @@ export function HeroCTAs({ symbol, className }: HeroCTAsProps) {
         type="button"
         onClick={handleWatchClick}
         aria-pressed={isWatching}
+        // Iter 23: disable + expose `data-loading` while WatchlistHydrator
+        // is in flight so an over-eager click can't toggle against the
+        // wrong (stale-default) baseline. Most cold loads settle in
+        // ~200ms so the disabled window is invisible in practice.
+        disabled={isHydrating}
+        data-loading={isHydrating ? "true" : undefined}
         data-watching={isWatching ? "true" : undefined}
       >
         {isWatching ? "Watching" : "Watch"}

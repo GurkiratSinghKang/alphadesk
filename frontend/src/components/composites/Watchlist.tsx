@@ -7,7 +7,7 @@ import { Check, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import PnLNumber from "@/components/primitives/PnLNumber";
 import { Sparkline } from "@/components/dashboard/Sparkline";
-import { useMarketStore, useQuote } from "@/stores/market";
+import { useMarketStore, useQuote, useHydratedWatchlist } from "@/stores/market";
 import { getBars } from "@/lib/api";
 
 /**
@@ -78,7 +78,12 @@ export interface WatchlistProps {
 
 export function Watchlist({ symbols, className }: WatchlistProps) {
   const router = useRouter();
-  const storeWatchlist = useMarketStore((s) => s.watchlist);
+  // Iter 23: read watchlist + hydration flag in one go. When the caller
+  // passes an explicit `symbols` prop the hydration gate does NOT apply
+  // — that path is read-only (e.g. a strategy-page-specific list) and
+  // bypasses the store entirely. The flag only gates the persisted-
+  // store-driven render.
+  const { symbols: storeWatchlist, isHydrating } = useHydratedWatchlist();
   const addToWatchlist = useMarketStore((s) => s.addToWatchlist);
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
@@ -229,16 +234,38 @@ export function Watchlist({ symbols, className }: WatchlistProps) {
         </form>
       ) : null}
 
-      <ul className="flex flex-col" role="list">
-        {list.map((symbol) => (
-          <WatchlistRow
-            key={symbol}
-            symbol={symbol}
-            selected={symbol === selectedSymbol}
-            onSelect={handleSelect}
-            sparkCloses={sparkData[symbol]}
-          />
-        ))}
+      <ul
+        className="flex flex-col"
+        role="list"
+        data-loading={!usesExternalSymbols && isHydrating ? "true" : undefined}
+      >
+        {!usesExternalSymbols && isHydrating ? (
+          // Iter 23: a 6-row pulse keeps the right-rail height stable
+          // while WatchlistHydrator's `/user/watchlist` round-trip is in
+          // flight, killing the DEFAULT_WATCHLIST flash on cold load.
+          // Match the row stride (h-12 + border-b) so the pulse-to-real
+          // transition doesn't jank the surrounding layout.
+          <li aria-busy="true" aria-label="Loading watchlist">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <span
+                key={i}
+                className="block h-12 border-b border-border-hair last:border-b-0 px-4 py-2"
+              >
+                <span className="block h-full w-full animate-pulse rounded bg-bg-elev-1" />
+              </span>
+            ))}
+          </li>
+        ) : (
+          list.map((symbol) => (
+            <WatchlistRow
+              key={symbol}
+              symbol={symbol}
+              selected={symbol === selectedSymbol}
+              onSelect={handleSelect}
+              sparkCloses={sparkData[symbol]}
+            />
+          ))
+        )}
       </ul>
     </div>
   );

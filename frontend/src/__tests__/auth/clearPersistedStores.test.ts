@@ -108,6 +108,10 @@ describe("clearPersistedStores — cross-user data-leak fix", () => {
     useMarketStore.setState({
       watchlist: ["LEAK", "USERA-ONLY"],
       selectedSymbol: "LEAK",
+      // Iter 23: the previous user's session left `hydrated` flipped
+      // true after WatchlistHydrator's reply. On logout we must reset
+      // it so the next login routes through the loading gate again.
+      hydrated: true,
       quotes: {
         LEAK: {
           symbol: "LEAK",
@@ -136,6 +140,9 @@ describe("clearPersistedStores — cross-user data-leak fix", () => {
     expect(after.quotes).toEqual({});
     expect(after.freshestTs).toBe(0);
     expect(after.groupSymbols).toEqual({ 1: "SPY", 2: "SPY", 3: "SPY", 4: "SPY" });
+    // Iter 23: hydration flag is reset so the next session's
+    // WatchlistHydrator gate fires again.
+    expect(after.hydrated).toBe(false);
   });
 
   it("resets useNotificationsStore to its zero state (no leaked unread alerts)", () => {

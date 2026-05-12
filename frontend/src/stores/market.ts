@@ -53,6 +53,20 @@ export type SymbolGroupId = 0 | 1 | 2 | 3 | 4;
 interface MarketState {
   quotes: Record<string, Quote>;
   watchlist: string[];
+  /**
+   * Iter 23: has `hydrateFromServer` finished settling at least once?
+   *
+   * Initial value is `false`. Flipped `true` after the hydration promise
+   * resolves OR rejects (success AND failure both count — we never want
+   * a stuck "loading" state). The unauth'd path also flips it immediately
+   * since no server fetch is expected. Consumers gate visible watchlist
+   * UI on this flag to kill the DEFAULT_WATCHLIST flash that happened
+   * during the ~200ms between mount and WatchlistHydrator's server reply.
+   *
+   * Reset back to `false` by `clearPersistedStores` on sign-out so the
+   * next login goes through the same gate.
+   */
+  hydrated: boolean;
   selectedSymbol: string;
   /**
    * Freshest quote timestamp seen, normalized to epoch milliseconds.
@@ -114,6 +128,7 @@ export const useMarketStore = create<MarketState>()(
     (set) => ({
       quotes: {},
       watchlist: DEFAULT_WATCHLIST,
+      hydrated: false,
       selectedSymbol: "SPY",
       freshestTs: 0,
       groupSymbols: { 1: "SPY", 2: "SPY", 3: "SPY", 4: "SPY" },
@@ -189,14 +204,32 @@ export const useMarketStore = create<MarketState>()(
           // per-browser fallback. The DataPipelineBridge already
           // rehydrated localStorage at this point so DEFAULT_WATCHLIST
           // is in place for first-time visitors.
+          //
+          // Iter 23: flip `hydrated` immediately so consumers gating
+          // visible UI on the flag don't sit in an indefinite skeleton
+          // on the public/login surfaces (no server fetch is expected
+          // here).
+          set({ hydrated: true });
           return;
         }
         try {
           const fresh = await apiGetUserWatchlist();
-          set({ watchlist: fresh.symbols });
+          // Iter 23: server is authoritative. If the user removed every
+          // symbol via another device the server returns `symbols: []`
+          // and the local persisted list should be wiped — not preserved.
+          // The previous behaviour kept stale local on empty because the
+          // assign-through happened regardless; we now assign + flip the
+          // hydrated flag in one setState so the empty-wins semantics are
+          // explicit (and there's no race where consumers observe
+          // hydrated=true while watchlist is still the stale local copy).
+          set({ watchlist: fresh.symbols, hydrated: true });
         } catch (err) {
           // Server unreachable on boot — keep the local copy so the
-          // watchlist panel doesn't go blank on a transient outage.
+          // watchlist panel doesn't go blank on a transient outage. But
+          // still flip `hydrated` to true so consumers come out of the
+          // loading skeleton; an infinite loading state on a 5xx is a
+          // worse UX than showing the persisted (or default) list.
+          set({ hydrated: true });
           // eslint-disable-next-line no-console -- intentional diagnostic
           console.warn("[watchlist] hydrate failed; using local copy", err);
         }
@@ -409,6 +442,29 @@ export function useQuotes(symbols: readonly string[]): Record<string, Quote> {
       }
       return out;
     })
+  );
+}
+
+/**
+ * Iter 23: subscribe to both the watchlist symbols and the hydration
+ * flag in one selector. Returns `{ symbols, isHydrating }` so consumers
+ * can gate visible UI on `isHydrating` without each one duplicating the
+ * flag-plus-watchlist plumbing.
+ *
+ * `isHydrating` is `true` until `hydrateFromServer` has settled at least
+ * once (success or failure). Use this to render a skeleton or a
+ * `data-loading="true"` attr instead of letting the DEFAULT_WATCHLIST
+ * flash for ~200ms before the server reply lands.
+ */
+export function useHydratedWatchlist(): {
+  symbols: string[];
+  isHydrating: boolean;
+} {
+  return useMarketStore(
+    useShallow((s) => ({
+      symbols: s.watchlist,
+      isHydrating: !s.hydrated,
+    })),
   );
 }
 

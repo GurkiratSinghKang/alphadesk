@@ -93,6 +93,11 @@ export function clearPersistedStores(): void {
     useMarketStore.setState({
       quotes: {},
       watchlist: DEFAULT_WATCHLIST,
+      // Iter 23: reset the hydration flag so the next login routes
+      // through WatchlistHydrator again. Leaving it `true` post-logout
+      // would cause the next user's first paint to see the stale
+      // DEFAULT_WATCHLIST without a skeleton, defeating the gate.
+      hydrated: false,
       selectedSymbol: "SPY",
       freshestTs: 0,
       groupSymbols: { 1: "SPY", 2: "SPY", 3: "SPY", 4: "SPY" },
