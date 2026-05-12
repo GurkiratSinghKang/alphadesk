@@ -575,6 +575,15 @@ function LiveDataProvider({ symbol, page, children }) {
           read: !!n.read_at,
           title: n.title,
           body: n.body,
+          // Iter 21 (audit 2026-05-11): preserve the routing fields so
+          // /alerts can build a real `<a href>` per row. Backend
+          // NotificationV2 carries `link` today; once backend starts
+          // emitting symbol / order_id on the wire we already capture
+          // them (the helpers fall back to optional fields).
+          link: (n as Record<string, unknown>).link ?? null,
+          symbol: (n as Record<string, unknown>).symbol ?? null,
+          ticker: (n as Record<string, unknown>).ticker ?? null,
+          order_id: (n as Record<string, unknown>).order_id ?? null,
         })) : [],
         userWatchlist: userWatchlistR.status === "fulfilled" ? userWatchlistR.value : null,
         watchlists,
@@ -8930,27 +8939,63 @@ const AlertsPage = () => {
   const [filter, setFilter] = useState("all");
   const live = useDesignLiveData();
 
-  const notificationRows = (live.notifications || []).map((n) => ({
-    tone: n.read ? "neutral" : "up",
-    kind: n.type || "notification",
-    ts: formatLiveDate(n.ts),
-    text: [n.title, n.body].filter(Boolean).join(" · ") || "Backend notification",
-    group: "today",
-  }));
-  const orderRows = (live.orders || []).slice(0, 8).map((o) => ({
-    tone: String(o.status || "").toLowerCase().includes("fill") ? "up" : "neutral",
-    kind: "trade",
-    ts: formatLiveDate(o.submitted_at || o.filled_at || o.created_at),
-    text: `${orderSymbol(o)} ${o.status || "order"} · ${orderLegSummary(o)}${o.strategy ? ` · ${o.strategy}` : ""}`,
-    group: "today",
-  }));
-  const newsRows = (live.marketNews || []).slice(0, 6).map((n) => ({
-    tone: n.sentiment === "bearish" ? "down" : n.sentiment === "bullish" ? "up" : "neutral",
-    kind: "news",
-    ts: formatLiveDate(n.published_at || n.datetime || n.created_at),
-    text: n.title || n.headline || "Backend market news",
-    group: "today",
-  }));
+  // Iter 21 (audit 2026-05-11): /alerts rows rendered a non-clickable
+  // `<a style={{cursor:"default"}}>Open →</a>` with no href / onClick.
+  // Operators could read notifications / orders / news but every click
+  // was a no-op. We now compute a real destination per row at row-build
+  // time and render an anchor with `href` so the link works without JS
+  // (Next.js does the client-side hop on click). Rows that don't have a
+  // valid destination (system messages with no symbol or order id) hide
+  // the "Open →" link entirely instead of rendering a dead one.
+  const notificationRows = (live.notifications || []).map((n) => {
+    const symbol = alertRowSymbol(n);
+    const orderId = alertRowOrderId(n);
+    return {
+      tone: n.read ? "neutral" : "up",
+      kind: n.type || "notification",
+      // Preserve the alert-page "kind" label coming off the backend type
+      // field while keeping a stable group key for the URL helper. Most
+      // backend notification.type values aren't `"notification"` (they
+      // are `fill` / `risk` / `agent` / `system`); we still treat them
+      // as the notification family for routing decisions.
+      kindGroup: "notification" as const,
+      ts: formatLiveDate(n.ts),
+      text: [n.title, n.body].filter(Boolean).join(" · ") || "Backend notification",
+      group: "today",
+      symbol,
+      orderId,
+      href: buildAlertRowHref({ kindGroup: "notification", symbol, orderId, link: typeof n?.link === "string" ? n.link : null }),
+    };
+  });
+  const orderRows = (live.orders || []).slice(0, 8).map((o) => {
+    const symbol = orderSymbol(o);
+    const orderId = o?.id ? String(o.id) : null;
+    return {
+      tone: String(o.status || "").toLowerCase().includes("fill") ? "up" : "neutral",
+      kind: "trade",
+      kindGroup: "order" as const,
+      ts: formatLiveDate(o.submitted_at || o.filled_at || o.created_at),
+      text: `${symbol} ${o.status || "order"} · ${orderLegSummary(o)}${o.strategy ? ` · ${o.strategy}` : ""}`,
+      group: "today",
+      symbol,
+      orderId,
+      href: buildAlertRowHref({ kindGroup: "order", symbol, orderId, link: null }),
+    };
+  });
+  const newsRows = (live.marketNews || []).slice(0, 6).map((n) => {
+    const symbol = alertRowSymbol(n);
+    return {
+      tone: n.sentiment === "bearish" ? "down" : n.sentiment === "bullish" ? "up" : "neutral",
+      kind: "news",
+      kindGroup: "news" as const,
+      ts: formatLiveDate(n.published_at || n.datetime || n.created_at),
+      text: n.title || n.headline || "Backend market news",
+      group: "today",
+      symbol,
+      orderId: null,
+      href: buildAlertRowHref({ kindGroup: "news", symbol, orderId: null, link: typeof n?.url === "string" ? n.url : null }),
+    };
+  });
   const all = [...notificationRows, ...orderRows, ...newsRows];
 
   const kinds = [
@@ -9009,7 +9054,18 @@ const AlertsPage = () => {
                   <StatusDot tone={a.tone === "up" ? "up" : a.tone === "down" ? "down" : "neutral"} size={6} />
                   <Chip tone="muted">{a.kind}</Chip>
                   <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 15, color: "var(--ink-900)", lineHeight: 1.45, letterSpacing: "-0.005em" }}>{a.text}</span>
-                  <a style={{ fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--brand)", cursor: "default" }}>Open →</a>
+                  {a.href ? (
+                    <a
+                      href={a.href}
+                      data-testid={`alerts-open-${a.kindGroup}`}
+                      {...(/^https?:/.test(a.href) ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                      style={{ fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--brand)", cursor: "pointer", textDecoration: "none" }}
+                    >
+                      Open →
+                    </a>
+                  ) : (
+                    <span aria-hidden="true" />
+                  )}
                 </div>
               ))}
             </div>
@@ -9053,6 +9109,70 @@ function orderLegSummary(order) {
     return order.legs.map((l) => `${l.side || ""} ${l.quantity || l.qty || ""} ${l.symbol || ""}`).join(" / ").trim();
   }
   return `${order?.side || ""} ${order?.quantity || order?.qty || ""}`.trim() || "broker order";
+}
+
+// Iter 21 (audit 2026-05-11): AlertsPage row → destination helpers.
+//
+// The /alerts surface streams three families of backend rows
+// (notifications, broker orders, market news), each carrying a slightly
+// different payload shape. We extract the routing fields with these
+// helpers so the URL builder doesn't have to know about backend
+// quirks. NotificationV2.link, when present, is a relative path the
+// backend chose; we use it as-is when nothing else is available.
+export function alertRowSymbol(row: unknown): string | null {
+  if (!row || typeof row !== "object") return null;
+  const r = row as Record<string, unknown>;
+  const candidates: unknown[] = [r.symbol, r.ticker];
+  // News rows occasionally arrive with an array of related tickers.
+  if (Array.isArray(r.symbols) && r.symbols.length) candidates.push(r.symbols[0]);
+  if (Array.isArray(r.tickers) && r.tickers.length) candidates.push(r.tickers[0]);
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim().toUpperCase();
+  }
+  return null;
+}
+
+export function alertRowOrderId(row: unknown): string | null {
+  if (!row || typeof row !== "object") return null;
+  const r = row as Record<string, unknown>;
+  const candidates: unknown[] = [r.order_id, r.orderId, r.order];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim();
+    if (typeof c === "number" && Number.isFinite(c)) return String(c);
+  }
+  return null;
+}
+
+export function buildAlertRowHref(row: {
+  kindGroup: "notification" | "order" | "news";
+  symbol?: string | null;
+  orderId?: string | null;
+  link?: string | null;
+}): string | null {
+  const symbol = row.symbol ? row.symbol.toUpperCase() : null;
+  if (row.kindGroup === "news") {
+    if (symbol) return `/symbols/${encodeURIComponent(symbol)}`;
+    // News articles without a ticker fall back to the article URL when
+    // the backend provided one. External links open in a new tab —
+    // handled by the render site (target=_blank for http(s)).
+    if (typeof row.link === "string" && /^https?:\/\//i.test(row.link)) return row.link;
+    return null;
+  }
+  if (row.kindGroup === "order") {
+    if (row.orderId) return `/trade?order=${encodeURIComponent(row.orderId)}`;
+    if (symbol) return `/trade?symbol=${encodeURIComponent(symbol)}`;
+    return null;
+  }
+  if (row.kindGroup === "notification") {
+    if (symbol) return `/symbols/${encodeURIComponent(symbol)}`;
+    if (row.orderId) return `/trade?order=${encodeURIComponent(row.orderId)}`;
+    // Backend may have already chosen an absolute link for this
+    // notification (e.g. /risk/exposure). Honour it. Reject http(s)
+    // external URLs unless they look like in-app navigations.
+    if (typeof row.link === "string" && row.link.startsWith("/")) return row.link;
+    return null;
+  }
+  return null;
 }
 
 // ─── shared style ────────────────────────────────────────────────────────────
