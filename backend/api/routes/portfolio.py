@@ -6,12 +6,58 @@ from datetime import datetime, date, timezone, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+
+from core.auth import require_auth
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Default fallback when no real broker equity is available (demo seed, broker
+# outage, or unconfigured account). Threaded through every "return %" computation
+# in this module so the denominator is real account equity whenever we have it,
+# and a stable 100k otherwise. Centralised here so we don't ever drift between
+# the demo-seed default and the broker-failure fallback.
+_DEFAULT_BASE_EQUITY: float = 100_000.0
+
+
+async def _resolve_base_equity(username: str | None) -> float:
+    """Return the user's real cached account equity, or 100k on failure.
+
+    Wraps ``api.routes.trades._get_account_equity_cached`` so every
+    performance code path here can use the user's actual equity as the
+    return-percentage denominator. Falls back to ``_DEFAULT_BASE_EQUITY``
+    (100_000) when:
+      * username is None (legacy unauthenticated callers, env-only path)
+      * the helper raises (broker unreachable, network blip)
+      * the helper returns 0.0 (no broker configured / demo-seed user)
+
+    Never raises — a denominator must not be able to 500 the /performance
+    endpoint.
+    """
+    if not username:
+        return _DEFAULT_BASE_EQUITY
+    try:
+        # Local import keeps this module from pulling the entire trades.py
+        # surface at import time and avoids any circular-import surprise.
+        from api.routes.trades import _get_account_equity_cached
+        equity = await _get_account_equity_cached(username)
+    except Exception:
+        logger.warning(
+            "Failed to fetch cached account equity for %s; falling back to "
+            "$%s denominator",
+            username, f"{_DEFAULT_BASE_EQUITY:,.0f}",
+            exc_info=True,
+        )
+        return _DEFAULT_BASE_EQUITY
+    if not equity or equity <= 0:
+        # Demo-seed users (no BrokerConnection row, no Alpaca creds) hit
+        # this branch — _get_account_equity returns 0.0. Don't log loudly
+        # for them; this is the steady-state for unconfigured accounts.
+        return _DEFAULT_BASE_EQUITY
+    return float(equity)
 
 
 def _et_day_key(value: Any) -> str:
@@ -198,7 +244,7 @@ def _demo_portfolio_summary() -> PortfolioSummary:
 def _compute_enhanced_metrics(
     daily_pnls: list[float],
     dates: list[str],
-    base_equity: float = 100_000,
+    base_equity: float = _DEFAULT_BASE_EQUITY,
 ) -> dict[str, Any]:
     """Compute daily returns, rolling Sharpe, drawdown detail, Calmar & Sortino.
 
@@ -228,7 +274,7 @@ def _compute_enhanced_metrics(
         }
 
     if not base_equity or base_equity <= 0:
-        base_equity = 100_000
+        base_equity = _DEFAULT_BASE_EQUITY
 
     # Convert dollar P&Ls to period returns (pnl / equity). We use a constant
     # ``base_equity`` denominator as a stable proxy for the account equity at
@@ -311,8 +357,17 @@ def _compute_enhanced_metrics(
     }
 
 
-def _demo_performance(period: str) -> PerformanceMetrics:
-    """Generate a demo equity curve and performance metrics."""
+def _demo_performance(
+    period: str,
+    base_equity: float | None = None,
+) -> PerformanceMetrics:
+    """Generate a demo equity curve and performance metrics.
+
+    ``base_equity`` is the denominator used for return percentages,
+    Sharpe / Sortino, and the drawdown peak. When ``None`` (legacy
+    callers / no auth context) we fall back to the module default so
+    legacy behavior is preserved bit-for-bit.
+    """
     import random
     import math
     rng = random.Random(42)
@@ -345,8 +400,11 @@ def _demo_performance(period: str) -> PerformanceMetrics:
     total_return = round(cumulative, 2)
 
     # Max drawdown against running PEAK EQUITY (base_equity + cumulative_pnl),
-    # not peak P&L.
-    base_equity = 100_000
+    # not peak P&L. ``base_equity`` is the user's real cached equity when the
+    # caller threaded it through; falls back to the module default for legacy
+    # un-authed callers (preserves byte-for-byte behavior for that path).
+    if not base_equity or base_equity <= 0:
+        base_equity = _DEFAULT_BASE_EQUITY
     peak_equity = base_equity
     max_dd = 0.0
     running = 0.0
@@ -401,7 +459,7 @@ def _build_performance_from_pnls(
     trade_pnls: list[float],
     total_trades: int,
     is_demo: bool = False,
-    base_equity: float = 100_000,
+    base_equity: float = _DEFAULT_BASE_EQUITY,
 ) -> PerformanceMetrics:
     """Build PerformanceMetrics from real P&L data (shared by ledger and DB paths)."""
     import math
@@ -430,7 +488,7 @@ def _build_performance_from_pnls(
     losses = [p for p in trade_pnls if p < 0]
 
     # Drawdown against running PEAK EQUITY, not peak P&L.
-    _base = base_equity if base_equity and base_equity > 0 else 100_000
+    _base = base_equity if base_equity and base_equity > 0 else _DEFAULT_BASE_EQUITY
     running = 0.0
     peak_equity = _base
     max_dd = 0.0
@@ -656,6 +714,7 @@ async def get_portfolio_summary() -> PortfolioSummary:
 @router.get("/performance", response_model=PerformanceMetrics)
 async def get_performance(
     period: str = Query("30d", description="Period: 7d, 30d, 90d, 1y, ytd, all"),
+    username: str = Depends(require_auth),
 ) -> PerformanceMetrics:
     """Compute portfolio performance metrics over a given period.
 
@@ -663,6 +722,14 @@ async def get_performance(
     1. Trade ledger (JSON file) for closed trade P&L history
     2. Database trades
     3. Demo data as absolute last resort
+
+    Iter-29: ``base_equity`` (the return-percentage denominator) is now
+    threaded from the user's real cached account equity via
+    ``_resolve_base_equity``. Previously every site here hardcoded
+    ``base_equity = 100_000``, so a $250k account saw ALL return
+    percentages diluted by 2.5x. Demo-seed users (no broker) and
+    broker-failure paths still fall back to the 100k default rather
+    than 500-ing the route.
 
     Batch E (2026-05-05) — P1-17: this endpoint and ``/pipeline/summary``
     must share a single source-of-truth for closed-trade metrics. The
@@ -678,6 +745,11 @@ async def get_performance(
     routing it through the shared helper.
     """
     from core.config import settings
+
+    # Resolve real account equity once at the top of the route so all
+    # three code paths (ledger / DB / demo) use the same denominator.
+    # Falls back to 100k on broker failure or for demo-seed users.
+    base_equity = await _resolve_base_equity(username)
 
     # --- Try trade ledger first (works even with SKIP_DB_INIT) ---
     try:
@@ -713,6 +785,7 @@ async def get_performance(
                 trade_pnls=all_pnls,
                 total_trades=len(closed),
                 is_demo=False,
+                base_equity=base_equity,
             )
     except Exception:
         logger.warning("Trade ledger performance computation failed", exc_info=True)
@@ -748,8 +821,10 @@ async def get_performance(
                 wins = returns_dollars[returns_dollars > 0]
                 losses = returns_dollars[returns_dollars < 0]
 
-                # Equity curve (cumulative P&L added to starting equity)
-                base_equity = 100_000  # TODO: thread actual account equity
+                # Equity curve (cumulative P&L added to starting equity).
+                # ``base_equity`` was resolved at the top of the route from
+                # the user's real cached Alpaca equity, with a 100k fallback
+                # for demo-seed accounts and broker failures.
                 cumulative = np.cumsum(returns_dollars)
                 equity_series = base_equity + cumulative
                 running_peak = np.maximum.accumulate(equity_series)
@@ -831,7 +906,7 @@ async def get_performance(
 
     # --- Absolute last resort: demo ---
     logger.warning("No real trade data available for performance, returning demo")
-    return _demo_performance(period)
+    return _demo_performance(period, base_equity=base_equity)
 
 
 # Slice-10 / BWD-1 (2026 design brief, Tastytrade signature):
