@@ -26,7 +26,7 @@ def flat_bars(bars: pd.DataFrame) -> Optional[pd.DataFrame]:
 
     idx_names = tuple(bars.index.names or ())
     if "symbol" in idx_names and "date" in idx_names:
-        frame = bars.reset_index().rename(columns={"date": "ts"})
+        frame = bars.reset_index().drop(columns=["ts"], errors="ignore").rename(columns={"date": "ts"})
     else:
         frame = bars.copy()
         if "ts" not in frame.columns and "ts_date" in frame.columns:

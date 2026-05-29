@@ -50,7 +50,10 @@ from .config import VCP_UNIVERSE_SEED, VCPBreakoutParams
 log = logging.getLogger("alphadesk.strategies.vcp_breakout")
 
 _NS = "vcp_breakout"
-_REQUIRED_LOOKBACK_DAYS = 470  # 200-SMA plus max rising-window gate + buffer
+_REQUIRED_LOOKBACK_DAYS = 650  # 200-SMA + 150-session rising-window gate needs
+# ~350 trading bars (351 SMA-room points); 470 calendar days only yields ~323
+# trading bars → ~124 SMA points < 151 required, so _stage2_check rejected every
+# symbol and the strategy never traded. 650 calendar days ≈ 464 trading bars.
 
 
 @register_strategy(

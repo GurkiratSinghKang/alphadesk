@@ -38,7 +38,12 @@ from .config import DEFAULT_UNIVERSE, KamaBreakoutParams
 log = logging.getLogger("alphadesk.strategies.kama_breakout")
 
 _NS = "kama_breakout"
-_REQUIRED_LOOKBACK_DAYS = 260
+# Must cover the entry gate's history requirement: ``trend_sma_period + 15``
+# trading bars (up to 200 + 15 = 215 at the max tunable SMA period). 260
+# calendar days only yields ~185 trading bars, so every symbol was perpetually
+# rejected as ``insufficient_history`` and the strategy never traded. 400
+# calendar days ≈ 276 trading bars — comfortably above 215 with holiday margin.
+_REQUIRED_LOOKBACK_DAYS = 400
 
 
 @dataclass
@@ -323,7 +328,7 @@ def _symbol_history(
             sub = bars.xs(sym, level="symbol")
         except KeyError:
             return None
-        sub = sub.reset_index().rename(columns={"date": "ts"})
+        sub = sub.reset_index().drop(columns=["ts"], errors="ignore").rename(columns={"date": "ts"})
     else:
         frame = bars.copy()
         if "ts" not in frame.columns and "ts_date" in frame.columns:

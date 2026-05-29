@@ -223,7 +223,7 @@ def _close_panel(
 
     idx_names = tuple(bars.index.names or ())
     if "symbol" in idx_names and "date" in idx_names:
-        frame = bars.reset_index()
+        frame = bars.reset_index().drop(columns=["ts"], errors="ignore")
         frame = frame.rename(columns={"date": "ts"})
     else:
         frame = bars.copy()
