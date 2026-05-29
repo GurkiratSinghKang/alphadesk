@@ -68,7 +68,7 @@ describe("AlphaDeskDesign trade ticket", () => {
       </QueryClientProvider>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /^market$/i }));
+    fireEvent.click(await screen.findByRole("radio", { name: /^market$/i }));
     fireEvent.click(await screen.findByRole("button", { name: /stage buy order/i }));
 
     await waitFor(() => expect(previewOrder).toHaveBeenCalledTimes(1));
