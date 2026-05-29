@@ -262,7 +262,28 @@ def _handle_explain(strategy_cls, args) -> int:
 
 def _write_result(result, path: Path) -> None:
     if path.suffix == ".json":
-        path.write_text(json.dumps(result.model_dump(mode="json"), indent=2, default=str))
+        # BacktestResult holds pandas objects (equity_curve DataFrame,
+        # daily_returns Series) that pydantic's model_dump(mode="json")
+        # cannot serialize — it raised PydanticSerializationError, so
+        # `backtest --out X.json` was broken for every strategy that produced
+        # a result. Build a JSON-safe payload explicitly: the equity curve
+        # goes out as records, the rest as their model dumps.
+        payload = {
+            "start": result.start.isoformat(),
+            "end": result.end.isoformat(),
+            "metrics": result.metrics,
+            "params": result.params,
+            "repro": result.repro.model_dump(mode="json"),
+            "trades": [t.model_dump(mode="json") for t in result.trades],
+            "signals_emitted": [s.model_dump(mode="json") for s in result.signals_emitted],
+            "equity_curve": result.equity_curve.reset_index().to_dict(orient="records"),
+            "audit_metadata": result.audit_metadata,
+            "warnings_by_asof": {
+                (d.isoformat() if hasattr(d, "isoformat") else str(d)): w
+                for d, w in result.warnings_by_asof.items()
+            },
+        }
+        path.write_text(json.dumps(payload, indent=2, default=str))
     elif path.suffix == ".parquet":
         # Write the equity_curve as parquet; metadata in a companion JSON
         result.equity_curve.to_parquet(path)
